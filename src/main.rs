@@ -1,4 +1,4 @@
-use actix_web::{web, App, HttpResponse, HttpRequest, HttpServer, middleware, cookie::Cookie};
+use actix_web::{web, App, HttpResponse, HttpRequest, HttpServer, middleware};
 use actix_web::get;
 use serde::Serialize;
 use mongodb::Client;
@@ -21,7 +21,11 @@ async fn view_user(path: web::Path<(String,)>, req: HttpRequest) -> Result<HttpR
 
     if let Some(cookie) = req.cookie("netsblox") {
         let requestor = cookie.value();
-        Ok(HttpResponse::Ok().json(User{username: requestor.to_string()}))
+        if requestor == username {  // FIXME: use actual auth
+            Ok(HttpResponse::Ok().json(User{username: username.to_string()}))
+        } else {
+            Ok(HttpResponse::Unauthorized().finish())
+        }
     } else {
         Ok(HttpResponse::Unauthorized().finish())
     }

@@ -1,10 +1,6 @@
-use actix_web::{web, App, HttpResponse, HttpRequest, HttpServer, middleware, cookie::Cookie};
-use actix_web::{get, post, delete, patch};
+use actix_web::{web, HttpResponse};
+use actix_web::{get, post};
 use mongodb::Database;
-use futures::stream::{TryStreamExt};
-use mongodb::bson::doc;
-use serde::{Serialize, Deserialize};
-use mongodb::options::FindOptions;
 
 #[post("/new")]
 async fn new_project(db: web::Data<Database>) -> Result<HttpResponse, std::io::Error> {

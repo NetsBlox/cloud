@@ -1,10 +1,8 @@
-use actix_web::{web, App, HttpResponse, HttpRequest, HttpServer, middleware, cookie::Cookie};
-use actix_web::{get, post, delete, patch};
+use actix_web::{web, HttpResponse, HttpRequest, cookie::Cookie};
+use actix_web::{get, post, patch};
 use mongodb::Database;
-use futures::stream::{TryStreamExt};
 use mongodb::bson::doc;
 use serde::{Serialize, Deserialize};
-use mongodb::options::FindOptions;
 
 #[derive(Serialize, Deserialize)]
 struct User {

@@ -1,14 +1,13 @@
-use actix_web::{web, App, HttpResponse, HttpRequest, HttpServer, middleware, cookie::Cookie};
-use actix_web::{get, post, delete};
+use actix_web::{web, HttpResponse};
+use actix_web::{get, post};
 use mongodb::Database;
-use futures::stream::{TryStreamExt};
 use mongodb::bson::doc;
 use serde::{Serialize, Deserialize};
-use mongodb::options::FindOptions;
 
 #[derive(Serialize, Deserialize)]
+#[serde(rename_all="camelCase")]
 struct ThinUser {
-    servicesHosts: Vec<ServiceHost>,
+    services_hosts: Vec<ServiceHost>,
 }
 
 #[derive(Serialize, Deserialize)]
@@ -47,7 +46,7 @@ async fn list_user_hosts(db: web::Data<Database>, path: web::Path<(String,)>) ->
     let result = collection.find_one(filter, None).await.expect("User not found");  // FIXME: status code
 
     if let Some(user) = result {
-        Ok(HttpResponse::Ok().json(user.servicesHosts))
+        Ok(HttpResponse::Ok().json(user.services_hosts))
     } else {
         Ok(HttpResponse::NotFound().finish())
     }

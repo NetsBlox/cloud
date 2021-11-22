@@ -1,6 +1,6 @@
-use actix_web::{web, HttpResponse, HttpRequest, cookie::Cookie};
+use actix_web::{web, HttpResponse, HttpRequest};
 use actix_web::{get, post, delete};
-use futures::stream::{TryStreamExt};
+use futures::stream::TryStreamExt;
 use mongodb::bson::doc;
 use serde::{Serialize, Deserialize};
 use mongodb::options::FindOptions;
@@ -14,8 +14,15 @@ struct Library {
     public: bool,
 }
 
+impl Library {
+    pub fn new(owner: String, name: String, public: bool, notes: Option<String>) -> Library {
+        Library{owner, name, notes: notes.unwrap_or("".to_string()), public}
+    }
+}
+
 #[get("/community")]
 async fn list_community_libraries(db: web::Data<Database>) -> Result<HttpResponse, std::io::Error> {
+    println!("listing community libraries");
     let collection = db.collection::<Library>("libraries");
 
     let options = FindOptions::builder().sort(doc! {"name": 1}).build();
@@ -89,7 +96,7 @@ async fn publish_user_library(db: web::Data<Database>, path: web::Path<(String,)
 #[post("/{owner}/{name}/unpublish")]
 async fn unpublish_user_library(db: web::Data<Database>, path: web::Path<(String,)>) -> Result<HttpResponse, std::io::Error> {
     // TODO: update the library info in the database
-    Ok(HttpResponse::Ok().finish())
+    unimplemented!();
 }
 
 pub fn config(cfg: &mut web::ServiceConfig) {
@@ -105,27 +112,61 @@ pub fn config(cfg: &mut web::ServiceConfig) {
 
 #[cfg(test)]
 mod tests {
-    use actix_web::test;
+    use super::*;
+    use actix_web::{test,http,App};
+
+    use mongodb::{Client,Database};
+    async fn init_database(libraries: std::vec::Vec<Library>) -> Result<Database, std::io::Error>{
+        let client = Client::with_uri_str("mongodb://127.0.0.1:27017/").await
+            .expect("Unable to connect to database");
+
+        // Seed the database
+        let database = client.database("netsblox-tests");
+        let collection = database.collection::<Library>("libraries");
+        collection.drop(None).await.expect("Unable to empty database");
+        collection.insert_many(libraries, None).await.expect("Unable to seed database");
+
+        Ok(database)
+    }
 
     #[actix_web::test]
     async fn test_list_community_libraries() {
-        //let req = test::TestRequest::default().app_data(MockDatabase);  // TODO: add mock database
-        unimplemented!();
+        let libraries = vec![
+            Library::new("brian".to_string(), "public example".to_string(), true, None),
+            Library::new("brian".to_string(), "private example".to_string(), false, None),
+        ];
+        let database = init_database(libraries).await.expect("Unable to initialize database");
+
+        // Run the test
+        let mut app = test::init_service(
+            App::new()
+            .app_data(web::Data::new(database))
+            .configure(config)
+        ).await;
+        let req = test::TestRequest::get()
+            .uri("/community")
+            .to_request();
+        let response = test::call_service(&mut app, req).await;
+
+        assert_eq!(response.status(), http::StatusCode::OK);
+        let pub_libs: std::vec::Vec<Library> = test::read_body_json(response).await;
+        assert_eq!(pub_libs.len(), 1);
+        assert_eq!(pub_libs[0].public, true);
     }
 
-    #[actix_web::test]
-    async fn test_list_community_libraries_only_public() {
-        unimplemented!();
-    }
+    //#[actix_web::test]
+    //async fn test_list_community_libraries_only_public() {
+        //unimplemented!();
+    //}
 
-    #[actix_web::test]
-    async fn test_list_user_libraries() {  // TODO: 403 if not allowed?
-        unimplemented!();
-    }
+    //#[actix_web::test]
+    //async fn test_list_user_libraries() {  // TODO: 403 if not allowed?
+        //unimplemented!();
+    //}
 
-    #[actix_web::test]
-    async fn test_get_user_library() {
-        // TODO: check the contents matches?
-        unimplemented!();
-    }
+    //#[actix_web::test]
+    //async fn test_get_user_library() {
+        //// TODO: check the contents matches?
+        //unimplemented!();
+    //}
 }
