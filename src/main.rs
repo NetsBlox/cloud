@@ -1,59 +1,47 @@
-use actix_web::{web, App, HttpResponse, HttpServer, middleware, get};
-use serde::{Serialize, Deserialize};
-use mongodb::{Client, Database};
-use mongodb::options::FindOptions;
-use mongodb::bson::doc;
-use futures::stream::{TryStreamExt};
+use actix_web::{web, App, HttpResponse, HttpRequest, HttpServer, middleware, cookie::Cookie};
+use actix_web::get;
+use serde::Serialize;
+use mongodb::Client;
+use env_logger;
+mod libraries;
+mod services_hosts;
+mod users;
+mod projects;
+mod database;
 
-#[derive(Serialize, Deserialize)]
-struct Library {
-    owner: String,
-    name: String,
-    notes: String,
+////////////// Users //////////////
+#[derive(Serialize)]
+struct User {
+    username: String,
 }
 
-impl Library {
-    fn new(owner: &str, name: &str, notes: &str) -> Library {
-        Library{
-            owner: owner.to_string(),
-            name: name.to_string(),
-            notes: notes.to_string()
-        }
+#[get("/users/{username}")]
+async fn view_user(path: web::Path<(String,)>, req: HttpRequest) -> Result<HttpResponse, std::io::Error> {
+    let username = path.into_inner().0;
+
+    if let Some(cookie) = req.cookie("netsblox") {
+        let requestor = cookie.value();
+        Ok(HttpResponse::Ok().json(User{username: requestor.to_string()}))
+    } else {
+        Ok(HttpResponse::Unauthorized().finish())
     }
-}
-
-struct AppState {
-    db: Database,
-}
-
-// TODO: add routes for projects, users, etc
-#[get("/libraries/community")]
-async fn list_community_libraries(data: web::Data<AppState>) -> Result<HttpResponse, std::io::Error> {
-    let collection = data.db.collection::<Library>("libraries");
-
-    let options = FindOptions::builder().sort(doc! {"name": 1}).build();
-    let mut cursor = collection.find(None, options).await.expect("Library list query failed");
-
-    let mut libraries = Vec::new();  // TODO: convert this to a stream?
-    while let Some(library) = cursor.try_next().await.expect("Could not fetch library") {
-        libraries.push(library);
-    }
-
-    Ok(HttpResponse::Ok().json(libraries))
-
-    // TODO: should I stream this back?
 }
 
 #[actix_web::main]
 async fn main() -> std::io::Result<()> {
     let client = Client::with_uri_str("mongodb://127.0.0.1:27017/").await.expect("Could not connect to mongodb.");
     let db = client.database("netsblox-tests");
+    env_logger::init_from_env(env_logger::Env::new().default_filter_or("info"));
 
     HttpServer::new(move || {
         App::new()
             .wrap(middleware::Logger::default())
-            .data(AppState{db: db.clone()})
-            .service(list_community_libraries)
+            .app_data(web::Data::new(db.clone()))
+            .service(web::scope("/libraries").configure(libraries::config))
+            .service(web::scope("/services-hosts").configure(services_hosts::config))
+            .service(web::scope("/users").configure(users::config))
+            .service(web::scope("/projects").configure(projects::config))
+
     })
     .bind("127.0.0.1:8080")?
     .run()
