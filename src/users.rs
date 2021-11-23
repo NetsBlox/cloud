@@ -1,12 +1,15 @@
 use actix_web::{web, HttpResponse, HttpRequest, cookie::Cookie};
 use actix_web::{get, post, patch};
 use mongodb::Database;
-use mongodb::bson::doc;
+use mongodb::bson::{doc,Bson};
 use serde::{Serialize, Deserialize};
 use jsonwebtoken::{encode,Header,EncodingKey};
 use std::time::SystemTime;
+use rustrict::CensorStr;
+use regex::Regex;
+use lazy_static::lazy_static;
 
-#[derive(Serialize, Deserialize)]
+#[derive(Serialize, Deserialize, Clone)]
 #[serde(rename_all="camelCase")]
 struct User {
     username: String,
@@ -17,10 +20,45 @@ struct User {
     linked_accounts: Vec<LinkedAccount>,
 }
 
-#[derive(Serialize, Deserialize)]
+impl Into<Bson> for User {
+    fn into(self) -> Bson {
+        Bson::Document(doc! {
+            "username": self.username,
+            "email": self.email,
+            "hash": self.hash,
+            "groupId": self.group_id,
+            "createdAt": self.created_at,
+            "linkedAccounts": Into::<Bson>::into(self.linked_accounts)
+        })
+    }
+}
+
+impl From<NewUser> for User {
+    fn from(user_data: NewUser) -> Self {
+        User{
+            username: user_data.username,
+            hash: user_data.hash,
+            email: user_data.email,
+            group_id: user_data.group_id,
+            created_at: SystemTime::now().duration_since(SystemTime::UNIX_EPOCH).unwrap().as_secs() as u32,
+            linked_accounts: std::vec::Vec::new(),
+        }
+    }
+}
+
+#[derive(Serialize, Deserialize, Clone)]
 struct LinkedAccount {
     username: String,
     strategy: String,  // TODO: migrate type -> strategy
+}
+
+impl Into<Bson> for LinkedAccount {
+    fn into(self) -> Bson {
+        Bson::Document(doc! {
+            "username": self.username,
+            "strategy": self.strategy,
+        })
+    }
 }
 
 #[derive(Serialize, Deserialize)]
@@ -42,11 +80,49 @@ impl UserCookie<'_> {
     }
 }
 
-// TODO: Check that the name doesn't contain profanity
+#[derive(Serialize, Deserialize)]
+struct NewUser {
+    username: String,
+    hash: String,
+    email: String,
+    group_id: Option<u32>,
+}
+
 #[post("/create")]
-async fn create_user(db: web::Data<Database>) -> Result<HttpResponse, std::io::Error> {
-    unimplemented!();
-    // TODO
+async fn create_user(db: web::Data<Database>, user_data: web::Json<NewUser>) -> Result<HttpResponse, std::io::Error> {
+    if is_valid_username(&user_data.username) {
+        let user = User::from(user_data.into_inner());
+        let collection = db.collection::<User>("users");
+        let query = doc!{"username": &user.username};
+        let update = doc!{"$setOnInsert": &user};
+        let options = mongodb::options::UpdateOptions::builder()
+            .upsert(true)
+            .build();
+        let result = collection.update_one(query, update, options).await;
+
+        match result {
+            Ok(update_result) => {
+                if update_result.matched_count == 0 {
+                    Ok(HttpResponse::Ok().body("User created"))
+                } else {
+                    Ok(HttpResponse::BadRequest().body("User already exists"))
+                }
+            },
+            Err(_) => {
+                // TODO: log the error
+                Ok(HttpResponse::InternalServerError().body("User creation failed"))
+            },
+        }
+    } else {
+        Ok(HttpResponse::BadRequest().body("Invalid username"))
+    }
+}
+
+fn is_valid_username(name: &str) -> bool {
+    lazy_static! {
+        static ref USERNAME_REGEX: Regex = Regex::new(r"^[a-zA-Z][a-zA-Z0-9_\-]+$").unwrap();
+    }
+    USERNAME_REGEX.is_match(name) && !name.is_inappropriate()
 }
 
 #[derive(Serialize, Deserialize)]
@@ -182,5 +258,30 @@ mod tests {
     #[actix_web::test]
     async fn test_delete_user_403() {
         unimplemented!();
+    }
+
+    #[test]
+    fn is_valid_username() {
+        assert!(super::is_valid_username("hello"));
+    }
+
+    #[test]
+    fn is_valid_username_leading_underscore() {
+        assert_eq!(super::is_valid_username("_hello"), false);
+    }
+
+    #[test]
+    fn is_valid_username_leading_dash() {
+        assert_eq!(super::is_valid_username("-hello"), false);
+    }
+
+    #[test]
+    fn is_valid_username_at_symbol() {
+        assert_eq!(super::is_valid_username("hello@gmail.com"), false);
+    }
+
+    #[test]
+    fn is_valid_username_vulgar() {
+        assert_eq!(super::is_valid_username("hell"), false);
     }
 }
