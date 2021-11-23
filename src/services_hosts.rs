@@ -7,6 +7,7 @@ use serde::{Serialize, Deserialize};
 #[derive(Serialize, Deserialize)]
 #[serde(rename_all="camelCase")]
 struct ThinUser {
+    username: String,
     services_hosts: Vec<ServiceHost>,
 }
 

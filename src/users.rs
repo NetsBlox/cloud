@@ -3,15 +3,18 @@ use actix_web::{get, post, patch};
 use mongodb::Database;
 use mongodb::bson::doc;
 use serde::{Serialize, Deserialize};
+use jsonwebtoken::{encode,Header,EncodingKey};
+use std::time::SystemTime;
 
 #[derive(Serialize, Deserialize)]
+#[serde(rename_all="camelCase")]
 struct User {
     username: String,
     email: String,
     hash: String,
-    groupId: Option<u32>,
-    createdAt: u32,
-    linkedAccounts: Vec<LinkedAccount>,
+    group_id: Option<u32>,
+    created_at: u32,
+    linked_accounts: Vec<LinkedAccount>,
 }
 
 #[derive(Serialize, Deserialize)]
@@ -20,6 +23,26 @@ struct LinkedAccount {
     strategy: String,  // TODO: migrate type -> strategy
 }
 
+#[derive(Serialize, Deserialize)]
+#[serde(rename_all="camelCase")]
+struct UserCookie<'a>{
+    username: &'a str,
+    //group_id: String,
+    issue_date: u64,
+    remember: bool,
+}
+
+impl UserCookie<'_> {
+    pub fn new<'a>(username: &'a str, remember: Option<bool>) -> UserCookie {
+        UserCookie {
+            username,
+            remember: remember.unwrap_or(false),
+            issue_date: SystemTime::now().duration_since(SystemTime::UNIX_EPOCH).unwrap().as_secs(),
+        }
+    }
+}
+
+// TODO: Check that the name doesn't contain profanity
 #[post("/create")]
 async fn create_user(db: web::Data<Database>) -> Result<HttpResponse, std::io::Error> {
     unimplemented!();
@@ -33,15 +56,23 @@ struct LoginCredentials {
 }
 
 #[post("/login")]
-async fn login(credentials: web::Json<LoginCredentials>) -> HttpResponse {
-    let host = "localhost:8080";  // TODO: configure via env variable
-    // TODO: sign this and stuff
-    let cookie = Cookie::build("netsblox", credentials.username.clone())
-        .domain(host)
-        .http_only(true)
-        .finish();
+async fn login(db: web::Data<Database>, credentials: web::Json<LoginCredentials>) -> HttpResponse {
+    let host = "localhost:8080";  // TODO: configure via env variable (config crate?)
+    // TODO: authenticate
+    let collection = db.collection::<User>("users");
+    let query = doc!{"username": &credentials.username, "hash": &credentials.password_hash};
+    if let Some(user) = collection.find_one(query, None).await.expect("Unable to retrieve user from database.") {
+        let cookie = UserCookie::new(&user.username, None);
+        let token = encode(&Header::default(), &cookie, &EncodingKey::from_secret("test".as_ref())).unwrap();  // TODO
+        let cookie = Cookie::build("netsblox", token)
+            .domain(host)
+            .http_only(true)
+            .finish();
 
-    HttpResponse::Ok().cookie(cookie).finish()
+        HttpResponse::Ok().cookie(cookie).finish()
+    } else {
+        HttpResponse::NotFound().finish()
+    }
 }
 
 #[post("/logout")]
@@ -103,3 +134,53 @@ pub fn config(cfg: &mut web::ServiceConfig) {
 }
 
 
+#[cfg(test)]
+mod tests {
+    #[actix_web::test]
+    async fn test_create_user() {
+        // TODO: check that it sets the cookie
+        unimplemented!();
+    }
+
+    #[actix_web::test]
+    async fn test_create_user_profane() {
+        unimplemented!();
+    }
+
+    #[actix_web::test]
+    async fn test_create_user_403() {  // group member
+        // TODO: check that it sets the cookie
+        unimplemented!();
+    }
+
+    #[actix_web::test]
+    async fn test_login() {
+        // TODO: check that it sets the cookie
+        unimplemented!();
+    }
+
+    #[actix_web::test]
+    async fn test_login_with_strategy() {
+        unimplemented!();
+    }
+
+    #[actix_web::test]
+    async fn test_login_with_strategy_403() {
+        unimplemented!();
+    }
+
+    #[actix_web::test]
+    async fn test_login_403() {
+        unimplemented!();
+    }
+
+    #[actix_web::test]
+    async fn test_delete_user() {
+        unimplemented!();
+    }
+
+    #[actix_web::test]
+    async fn test_delete_user_403() {
+        unimplemented!();
+    }
+}
