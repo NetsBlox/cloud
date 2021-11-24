@@ -88,6 +88,12 @@ struct NewUser {
     group_id: Option<u32>,
 }
 
+impl NewUser {
+    pub fn new(username: String, hash: String, email: String, group_id: Option<u32>) -> NewUser {
+        NewUser{username, hash, email, group_id}
+    }
+}
+
 #[post("/create")]
 async fn create_user(db: web::Data<Database>, user_data: web::Json<NewUser>) -> Result<HttpResponse, std::io::Error> {
     if is_valid_username(&user_data.username) {
@@ -147,10 +153,11 @@ async fn login(db: web::Data<Database>, credentials: web::Json<LoginCredentials>
 
         HttpResponse::Ok().cookie(cookie).finish()
     } else {
-        HttpResponse::NotFound().finish()
+        HttpResponse::Unauthorized().finish()
     }
 }
 
+// TODO: add middleware for logging in...
 #[post("/logout")]
 async fn logout() -> HttpResponse {
     unimplemented!();
@@ -212,27 +219,175 @@ pub fn config(cfg: &mut web::ServiceConfig) {
 
 #[cfg(test)]
 mod tests {
+    use super::*;
+    use actix_web::{test,http,App};
+    use mongodb::{Client,Database,Collection};
+
+    async fn init_database(name: &str, users: std::vec::Vec<User>) -> Result<(Database, Collection<User>), std::io::Error>{
+        let user_count = users.len();
+        let client = Client::with_uri_str("mongodb://127.0.0.1:27017/").await
+            .expect("Unable to connect to database");
+
+        // Seed the database
+        //let database = client.database("netsblox-tests");
+        //let collection = database.collection::<User>(&format!("users-{}", name));
+
+        let database_name = &format!("netsblox-tests-{}", name);
+        let database = client.database(database_name);
+        let collection = database.collection::<User>("users");
+        collection.delete_many(doc!{}, None).await.expect("Unable to empty database");
+
+        if user_count > 0 {
+            collection.insert_many(users, None).await.expect("Unable to seed database");
+            let count = collection.count_documents(doc!{}, None).await.expect("Unable to count docs");
+            assert_eq!(count, user_count as u64, "Expected {} docs but found {}", user_count, count);
+        }
+
+        Ok((database, collection))
+    }
+
     #[actix_web::test]
     async fn test_create_user() {
-        // TODO: check that it sets the cookie
-        unimplemented!();
+        let (database, collection) = init_database("create", vec![]).await.expect("Unable to seed database");
+
+        // Run the test
+        let mut app = test::init_service(
+            App::new()
+            .app_data(web::Data::new(database))
+            .configure(config)
+        ).await;
+
+        let user_data = NewUser::new("test".to_string(), "pwd_hash".to_string(), "test@gmail.com".to_string(), None);
+        let req = test::TestRequest::post()
+            .uri("/create")
+            .set_json(&user_data)
+            .to_request();
+
+        let response = test::call_service(&mut app, req).await;
+        let query = doc!{"username": user_data.username};
+        let result = collection.find_one(query, None).await.expect("Could not query for user");
+        assert!(result.is_some(), "User not found");
     }
 
     #[actix_web::test]
     async fn test_create_user_profane() {
-        unimplemented!();
+        let (database, collection) = init_database("create_profane", vec![]).await.expect("Unable to seed database");
+
+        // Run the test
+        let mut app = test::init_service(
+            App::new()
+            .app_data(web::Data::new(database))
+            .configure(config)
+        ).await;
+
+        let user_data = NewUser::new("hell".to_string(), "pwd_hash".to_string(), "test@gmail.com".to_string(), None);
+        let req = test::TestRequest::post()
+            .uri("/create")
+            .set_json(&user_data)
+            .to_request();
+
+        let response = test::call_service(&mut app, req).await;
+        assert_eq!(response.status(), http::StatusCode::BAD_REQUEST);
     }
 
-    #[actix_web::test]
-    async fn test_create_user_403() {  // group member
-        // TODO: check that it sets the cookie
-        unimplemented!();
-    }
+    //#[actix_web::test]
+    //async fn test_create_user_403() {  // group member
+        //let (database, collection) = init_database("create_403", vec![]).await.expect("Unable to seed database");
+
+        //// Run the test
+        //let mut app = test::init_service(
+            //App::new()
+            //.app_data(web::Data::new(database))
+            //.configure(config)
+        //).await;
+
+        //let user_data = NewUser::new(
+            //"hell".to_string(),
+            //"pwd_hash".to_string(),
+            //"test@gmail.com".to_string(),
+            //None  // TODO: set the group
+        //);
+        //let req = test::TestRequest::post()
+            //.uri("/create")
+            //.set_json(&user_data)
+            //.to_request();
+
+        //let response = test::call_service(&mut app, req).await;
+        //assert_eq!(response.status(), http::StatusCode::BAD_REQUEST);
+    //}
 
     #[actix_web::test]
     async fn test_login() {
-        // TODO: check that it sets the cookie
-        unimplemented!();
+        let user = User::from(NewUser::new("brian".to_string(), "pwd_hash".to_string(), "email".to_string(), None));
+        let (database, _) = init_database("login", vec![user]).await.expect("Unable to seed database");
+        // Run the test
+        let mut app = test::init_service(
+            App::new()
+            .app_data(web::Data::new(database))
+            .configure(config)
+        ).await;
+
+        let credentials = LoginCredentials {
+            username: "brian".to_string(),
+            password_hash: "pwd_hash".to_string(),
+        };
+        let req = test::TestRequest::post()
+            .uri("/login")
+            .set_json(&credentials)
+            .to_request();
+
+        let response = test::call_service(&mut app, req).await;
+        let cookie = response.headers().get(http::header::SET_COOKIE);
+        assert!(cookie.is_some());
+        let cookie_data = cookie.unwrap().to_str().unwrap();
+        assert!(cookie_data.starts_with("netsblox="));
+    }
+
+    #[actix_web::test]
+    async fn test_login_bad_pwd() {
+        let user = User::from(NewUser::new("brian".to_string(), "pwd_hash".to_string(), "email".to_string(), None));
+        let (database, _) = init_database("login_bad_pwd", vec![user]).await.expect("Unable to seed database");
+        // Run the test
+        let mut app = test::init_service(
+            App::new()
+            .app_data(web::Data::new(database))
+            .configure(config)
+        ).await;
+
+        let credentials = LoginCredentials {
+            username: "brian".to_string(),
+            password_hash: "wrong_hash".to_string(),
+        };
+        let req = test::TestRequest::post()
+            .uri("/login")
+            .set_json(&credentials)
+            .to_request();
+
+        let response = test::call_service(&mut app, req).await;
+        assert_eq!(response.status(), http::StatusCode::UNAUTHORIZED);
+    }
+
+    #[actix_web::test]
+    async fn test_login_403() {
+        let (database, _) = init_database("login_bad_user", vec![]).await.expect("Unable to seed database");
+        // Run the test
+        let mut app = test::init_service(
+            App::new()
+            .app_data(web::Data::new(database))
+            .configure(config)
+        ).await;
+
+        let credentials = LoginCredentials {
+            username: "nonExistentUser".to_string(),
+            password_hash: "pwd_hash".to_string(),
+        };
+        let req = test::TestRequest::post()
+            .uri("/login")
+            .set_json(&credentials)
+            .to_request();
+
+        let response = test::call_service(&mut app, req).await;
+        assert_eq!(response.status(), http::StatusCode::UNAUTHORIZED);
     }
 
     #[actix_web::test]
@@ -242,11 +397,6 @@ mod tests {
 
     #[actix_web::test]
     async fn test_login_with_strategy_403() {
-        unimplemented!();
-    }
-
-    #[actix_web::test]
-    async fn test_login_403() {
         unimplemented!();
     }
 
@@ -261,27 +411,27 @@ mod tests {
     }
 
     #[test]
-    fn is_valid_username() {
+    async fn test_is_valid_username() {
         assert!(super::is_valid_username("hello"));
     }
 
     #[test]
-    fn is_valid_username_leading_underscore() {
+    async fn test_is_valid_username_leading_underscore() {
         assert_eq!(super::is_valid_username("_hello"), false);
     }
 
     #[test]
-    fn is_valid_username_leading_dash() {
+    async fn test_is_valid_username_leading_dash() {
         assert_eq!(super::is_valid_username("-hello"), false);
     }
 
     #[test]
-    fn is_valid_username_at_symbol() {
+    async fn test_is_valid_username_at_symbol() {
         assert_eq!(super::is_valid_username("hello@gmail.com"), false);
     }
 
     #[test]
-    fn is_valid_username_vulgar() {
+    async fn test_is_valid_username_vulgar() {
         assert_eq!(super::is_valid_username("hell"), false);
     }
 }
