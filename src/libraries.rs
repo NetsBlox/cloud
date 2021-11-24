@@ -6,6 +6,8 @@ use mongodb::bson::doc;
 use serde::{Serialize, Deserialize};
 use mongodb::options::FindOptions;
 use crate::database::Database;
+use regex::Regex;
+use lazy_static::lazy_static;
 
 #[derive(Serialize, Deserialize)]
 struct LibraryMetadata {
@@ -97,9 +99,13 @@ async fn get_user_library(db: web::Data<Database>, path: web::Path<(String,Strin
 
 #[post("/{owner}/{name}")]
 async fn save_user_library(db: web::Data<Database>, path: web::Path<(String,String)>) -> Result<HttpResponse, std::io::Error> {
+    let (owner, name) = path.into_inner();
+    if !is_valid_name(&name) {
+        return Ok(HttpResponse::BadRequest().body("Invalid library name"));
+    }
+
     // TODO: authenticate
     let collection = db.collection::<LibraryMetadata>("libraries");
-    let (owner, name) = path.into_inner();
     let query = doc!{"owner": &owner, "name": &name};
     // TODO: get the library post data. What should this include? xml, notes, etc?
 
@@ -112,6 +118,13 @@ async fn save_user_library(db: web::Data<Database>, path: web::Path<(String,Stri
     } else {
         Ok(HttpResponse::Ok().finish())
     }
+}
+
+fn is_valid_name(name: &str) -> bool {
+    lazy_static! {
+        static ref LIBRARY_NAME: Regex = Regex::new(r"^[A-zÀ-ÿ0-9 _-]+$").unwrap();
+    }
+    LIBRARY_NAME.is_match(name) && !name.is_inappropriate()
 }
 
 fn is_approval_required(text: &str) -> bool {
@@ -181,8 +194,8 @@ pub fn config(cfg: &mut web::ServiceConfig) {
 mod tests {
     use super::*;
     use actix_web::{test,http,App};
-
     use mongodb::{Client,Database};
+
     async fn init_database(name: &str, libraries: std::vec::Vec<LibraryMetadata>) -> Result<Database, std::io::Error>{
         let library_count = libraries.len();
         let client = Client::with_uri_str("mongodb://127.0.0.1:27017/").await
@@ -365,5 +378,20 @@ mod tests {
     #[actix_web::test]
     async fn test_unpublish_user_library_403() {
         unimplemented!();
+    }
+
+    #[test]
+    async fn test_is_valid_name() {
+        assert!(is_valid_name("hello library"));
+    }
+
+    #[test]
+    async fn test_is_valid_name_diacritic() {
+        assert!(is_valid_name("hola libré"));
+    }
+
+    #[test]
+    async fn test_is_valid_name_weird_symbol() {
+        assert_eq!(is_valid_name("<hola libré>"), false);
     }
 }
