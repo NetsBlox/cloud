@@ -3,6 +3,7 @@ use actix_web::get;
 use serde::Serialize;
 use mongodb::Client;
 use env_logger;
+use actix_session::CookieSession;
 mod libraries;
 mod services_hosts;
 mod users;
@@ -39,6 +40,12 @@ async fn main() -> std::io::Result<()> {
 
     HttpServer::new(move || {
         App::new()
+            .wrap(
+                CookieSession::signed(&[1; 32])
+                  .domain("localhost:8080")
+                  .name("netsblox")
+                  .secure(true)
+            )  // FIXME: Set the key
             .wrap(middleware::Logger::default())
             .app_data(web::Data::new(db.clone()))
             .service(web::scope("/libraries").configure(libraries::config))

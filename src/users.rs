@@ -1,13 +1,13 @@
-use actix_web::{web, HttpResponse, HttpRequest, cookie::Cookie};
+use actix_web::{web, HttpResponse, HttpRequest};
 use actix_web::{get, post, patch};
 use mongodb::Database;
 use mongodb::bson::{doc,Bson};
 use serde::{Serialize, Deserialize};
-use jsonwebtoken::{encode,Header,EncodingKey};
 use std::time::SystemTime;
 use rustrict::CensorStr;
 use regex::Regex;
 use lazy_static::lazy_static;
+use actix_session::{CookieSession,Session};
 
 #[derive(Serialize, Deserialize, Clone)]
 #[serde(rename_all="camelCase")]
@@ -138,29 +138,21 @@ struct LoginCredentials {
 }
 
 #[post("/login")]
-async fn login(db: web::Data<Database>, credentials: web::Json<LoginCredentials>) -> HttpResponse {
-    let host = "localhost:8080";  // TODO: configure via env variable (config crate?)
+async fn login(db: web::Data<Database>, credentials: web::Json<LoginCredentials>, session: Session) -> HttpResponse {
     // TODO: authenticate
     let collection = db.collection::<User>("users");
     let query = doc!{"username": &credentials.username, "hash": &credentials.password_hash};
     if let Some(user) = collection.find_one(query, None).await.expect("Unable to retrieve user from database.") {
-        let cookie = UserCookie::new(&user.username, None);
-        let token = encode(&Header::default(), &cookie, &EncodingKey::from_secret("test".as_ref())).unwrap();  // TODO
-        let cookie = Cookie::build("netsblox", token)
-            .domain(host)
-            .http_only(true)
-            .finish();
-
-        HttpResponse::Ok().cookie(cookie).finish()
+        session.insert("username", &user.username).unwrap();
+        HttpResponse::Ok().finish()
     } else {
         HttpResponse::Unauthorized().finish()
     }
 }
-
-// TODO: add middleware for logging in...
 #[post("/logout")]
-async fn logout() -> HttpResponse {
-    unimplemented!();
+async fn logout(session: Session) -> HttpResponse {
+    session.purge();
+    HttpResponse::Ok().finish()
 }
 
 #[get("/whoami")]
@@ -323,6 +315,12 @@ mod tests {
         // Run the test
         let mut app = test::init_service(
             App::new()
+            .wrap(
+                CookieSession::signed(&[1; 32])
+                  .domain("localhost:8080")
+                  .name("netsblox")
+                  .secure(true)
+            )
             .app_data(web::Data::new(database))
             .configure(config)
         ).await;
@@ -398,6 +396,34 @@ mod tests {
     #[actix_web::test]
     async fn test_login_with_strategy_403() {
         unimplemented!();
+    }
+
+    #[actix_web::test]
+    async fn test_logout() {
+        let user = User::from(NewUser::new("brian".to_string(), "pwd_hash".to_string(), "email".to_string(), None));
+        let (database, _) = init_database("login", vec![user]).await.expect("Unable to seed database");
+        // Run the test
+        let mut app = test::init_service(
+            App::new()
+            .wrap(
+                CookieSession::signed(&[1; 32])
+                  .domain("localhost:8080")
+                  .name("netsblox")
+                  .secure(true)
+            )
+            .app_data(web::Data::new(database))
+            .configure(config)
+        ).await;
+
+        let req = test::TestRequest::post()
+            .uri("/logout")
+            .to_request();
+
+        let response = test::call_service(&mut app, req).await;
+        let cookie = response.headers().get(http::header::SET_COOKIE);
+        assert!(cookie.is_some());
+        let cookie_data = cookie.unwrap().to_str().unwrap();
+        assert!(cookie_data.starts_with("netsblox="));
     }
 
     #[actix_web::test]
