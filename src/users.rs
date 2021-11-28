@@ -137,6 +137,8 @@ struct LoginCredentials {
     password_hash: String,
 }
 
+// TODO: should we change the endpoints to /users/{id}
+// (post -> create; get -> view; patch -> update, delete -> delete)
 #[post("/login")]
 async fn login(db: web::Data<Database>, credentials: web::Json<LoginCredentials>, session: Session) -> HttpResponse {
     // TODO: authenticate
@@ -156,9 +158,8 @@ async fn logout(session: Session) -> HttpResponse {
 }
 
 #[get("/whoami")]
-async fn whoami(req: HttpRequest) -> Result<HttpResponse, std::io::Error> {
-    if let Some(cookie) = req.cookie("netsblox") {
-        let username = cookie.value();
+async fn whoami(session: Session) -> Result<HttpResponse, std::io::Error> {
+    if let Some(username) = session.get::<String>("username").unwrap() {
         Ok(HttpResponse::Ok().body(username.to_string()))
     } else {
         Ok(HttpResponse::Unauthorized().finish())
@@ -166,33 +167,93 @@ async fn whoami(req: HttpRequest) -> Result<HttpResponse, std::io::Error> {
 }
 
 #[post("/delete/{username}")]
-async fn delete_user() -> HttpResponse {
-    unimplemented!();
+async fn delete_user(db: web::Data<Database>, path: web::Path<(String,)>) -> Result<HttpResponse, std::io::Error> {
+    // TODO: check auth
+    let (username,) = path.into_inner();
+    let collection = db.collection::<User>("users");
+    let query = doc!{"username": username};
+    let result = collection.delete_one(query, None).await.unwrap();
+    if result.deleted_count > 0 {
+        Ok(HttpResponse::Ok().finish())
+    } else {
+        Ok(HttpResponse::NotFound().finish())
+    }
 }
 
 #[post("/password/{username}")]
 async fn reset_password() -> HttpResponse {
     unimplemented!();
+    // TODO: This will need to send an email...
+}
+
+#[derive(Deserialize)]
+struct PasswordChangeData {
+    password_hash: String,
 }
 
 #[patch("/password/{username}")]
-async fn change_password() -> HttpResponse {
-    unimplemented!();
+async fn change_password(db: web::Data<Database>, path: web::Path<(String,)>, data: web::Json<PasswordChangeData>) -> Result<HttpResponse, std::io::Error> {
+    let (username,) = path.into_inner();
+    let collection = db.collection::<User>("users");
+    let query = doc!{"username": username};
+    let update = doc!{"hash": &data.password_hash};
+    let result = collection.update_one(query, update, None).await.unwrap();
+    if result.modified_count > 0 {
+        Ok(HttpResponse::Ok().finish())
+    } else {
+        Ok(HttpResponse::NotFound().finish())
+    }
 }
 
 #[get("/view/{username}")]
-async fn view_user() -> HttpResponse {
-    unimplemented!();
+async fn view_user(db: web::Data<Database>, path: web::Path<(String,)>) -> Result<HttpResponse, std::io::Error> {
+    let (username,) = path.into_inner();
+    let collection = db.collection::<User>("users");
+    let query = doc!{"username": username};
+    if let Some(user) = collection.find_one(query, None).await.unwrap() {
+        // TODO: check auth
+        Ok(HttpResponse::Ok().finish())
+    } else {
+        Ok(HttpResponse::NotFound().finish())
+    }
 }
 
-#[post("/link/{username}")]
-async fn link_account() -> HttpResponse {
-    unimplemented!();
+#[derive(Deserialize)]
+struct StrategyCredentials {  // TODO: combine this with the basic login?
+    username: String,
+    password: String,
+}
+
+#[post("/link/{username}/{strategy}")]
+async fn link_account(db: web::Data<Database>, path: web::Path<(String, String)>, credentials: web::Json<StrategyCredentials>) -> Result<HttpResponse, std::io::Error> {
+    let (username, strategy) =  path.into_inner();
+    let collection = db.collection::<User>("users");
+    // TODO: add auth
+    // TODO: check if already used
+    let query = doc!{"username": &username};
+    let account = LinkedAccount{username, strategy};
+    let update = doc! {"$pull": {"linkedAccounts": &account}};
+    let result = collection.update_one(query, update, None).await.unwrap();
+    if result.matched_count == 0 {
+        Ok(HttpResponse::NotFound().finish())
+    } else {
+        Ok(HttpResponse::Ok().finish())
+    }
 }
 
 #[post("/unlink/{username}")]
-async fn unlink_account() -> HttpResponse {
-    unimplemented!();
+async fn unlink_account(db: web::Data<Database>, path: web::Path<(String,)>, account: web::Json<LinkedAccount>) -> Result<HttpResponse, std::io::Error> {
+    // TODO: add auth
+    let (username,) = path.into_inner();
+    let collection = db.collection::<User>("users");
+    let query = doc! {"username": username};
+    let update = doc! {"$pull": {"linkedAccounts": &account.into_inner()}};
+    let result = collection.update_one(query, update, None).await.unwrap();
+    if result.matched_count == 0 {
+        Ok(HttpResponse::NotFound().finish())
+    } else {
+        Ok(HttpResponse::Ok().finish())
+    }
 }
 
 pub fn config(cfg: &mut web::ServiceConfig) {
@@ -433,6 +494,21 @@ mod tests {
 
     #[actix_web::test]
     async fn test_delete_user_403() {
+        unimplemented!();
+    }
+
+    #[actix_web::test]
+    async fn test_link_account() {
+        unimplemented!();
+    }
+
+    #[actix_web::test]
+    async fn test_link_account_403() {
+        unimplemented!();
+    }
+
+    #[actix_web::test]
+    async fn test_link_account_duplicate() {
         unimplemented!();
     }
 

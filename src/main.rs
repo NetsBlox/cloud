@@ -9,6 +9,8 @@ mod services_hosts;
 mod users;
 mod projects;
 mod database;
+mod groups;
+mod friends;
 
 ////////////// Users //////////////
 #[derive(Serialize)]
@@ -35,7 +37,7 @@ async fn view_user(path: web::Path<(String,)>, req: HttpRequest) -> Result<HttpR
 #[actix_web::main]
 async fn main() -> std::io::Result<()> {
     let client = Client::with_uri_str("mongodb://127.0.0.1:27017/").await.expect("Could not connect to mongodb.");
-    let db = client.database("netsblox-tests");
+    let db = client.database("netsblox-tests");  // TODO: make a custom struct that wraps the collection fns
     env_logger::init_from_env(env_logger::Env::new().default_filter_or("info"));
 
     HttpServer::new(move || {
@@ -52,6 +54,8 @@ async fn main() -> std::io::Result<()> {
             .service(web::scope("/services-hosts").configure(services_hosts::config))
             .service(web::scope("/users").configure(users::config))
             .service(web::scope("/projects").configure(projects::config))
+            .service(web::scope("/groups").configure(groups::config))
+            .service(web::scope("/friends").configure(friends::config))
 
     })
     .bind("127.0.0.1:8080")?
