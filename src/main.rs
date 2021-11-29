@@ -8,6 +8,7 @@ mod libraries;
 mod services_hosts;
 mod users;
 mod projects;
+mod network;
 mod database;
 mod groups;
 mod friends;
@@ -56,6 +57,7 @@ async fn main() -> std::io::Result<()> {
             .service(web::scope("/projects").configure(projects::config))
             .service(web::scope("/groups").configure(groups::config))
             .service(web::scope("/friends").configure(friends::config))
+            .service(web::scope("/network").configure(network::config))
 
     })
     .bind("127.0.0.1:8080")?

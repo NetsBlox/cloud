@@ -5,12 +5,23 @@ use actix_web::{get, post};
 //   - send invite
 //   - view invites
 //   - respond to invite
+//
 //   - list online friends
 
 //   - list friends
 //   - remove friend
-#[get("/{owner}")]
+#[get("/{owner}/")]
 async fn list_friends() -> Result<HttpResponse, std::io::Error> {
+    unimplemented!();
+}
+
+#[get("/{owner}/online")]
+async fn list_online_friends() -> Result<HttpResponse, std::io::Error> {
+    unimplemented!();
+}
+
+#[get("/{owner}/unfriend/{username}")]
+async fn unfriend() -> Result<HttpResponse, std::io::Error> {
     unimplemented!();
 }
 
@@ -19,7 +30,7 @@ async fn list_invites() -> Result<HttpResponse, std::io::Error> {
     unimplemented!();
 }
 
-#[post("/{recipient}/invite/")]
+#[post("/{recipient}/invite/")]  // TODO: set the sender (not just the session)
 async fn send_invite() -> Result<HttpResponse, std::io::Error> {
     unimplemented!();
 }
