@@ -27,6 +27,7 @@ struct CollaborateResponse {
 
 #[post("/{recipient}/{id}")]
 async fn respond_to_invite(response: web::Json<CollaborateResponse>) -> Result<HttpResponse, std::io::Error> {
+    // TODO: ensure the project still exists?
     unimplemented!();
 }
 
@@ -37,3 +38,6 @@ pub fn config(cfg: &mut web::ServiceConfig) {
         .service(respond_to_invite);
 }
 
+#[cfg(test)]
+mod tests {
+}
