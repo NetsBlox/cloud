@@ -12,6 +12,7 @@ mod network;
 mod database;
 mod groups;
 mod friends;
+mod collaboration_invites;
 
 ////////////// Users //////////////
 #[derive(Serialize)]
@@ -58,6 +59,7 @@ async fn main() -> std::io::Result<()> {
             .service(web::scope("/groups").configure(groups::config))
             .service(web::scope("/friends").configure(friends::config))
             .service(web::scope("/network").configure(network::config))
+            .service(web::scope("/collaboration-invites").configure(collaboration_invites::config))
 
     })
     .bind("127.0.0.1:8080")?

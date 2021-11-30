@@ -204,7 +204,7 @@ mod tests {
         // Seed the database
         let database_name = &format!("netsblox-tests-{}", name);
         let database = client.database(database_name);
-        let collection = database.collection::<LibraryMetadata>("libraries");
+        let collection = database.collection::<LibraryMetadata>("libraries");  // FIXME: rename collection - not database
         collection.delete_many(doc!{}, None).await.expect("Unable to empty database");
         collection.insert_many(libraries, None).await.expect("Unable to seed database");
 

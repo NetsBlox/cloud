@@ -166,7 +166,7 @@ async fn whoami(session: Session) -> Result<HttpResponse, std::io::Error> {
     }
 }
 
-#[post("/delete/{username}")]
+#[post("/{username}/delete")]
 async fn delete_user(db: web::Data<Database>, path: web::Path<(String,)>) -> Result<HttpResponse, std::io::Error> {
     // TODO: check auth
     let (username,) = path.into_inner();
@@ -180,7 +180,7 @@ async fn delete_user(db: web::Data<Database>, path: web::Path<(String,)>) -> Res
     }
 }
 
-#[post("/password/{username}")]
+#[post("/{username}/password")]
 async fn reset_password() -> HttpResponse {
     unimplemented!();
     // TODO: This will need to send an email...
@@ -191,7 +191,7 @@ struct PasswordChangeData {
     password_hash: String,
 }
 
-#[patch("/password/{username}")]
+#[patch("/{username}/password")]
 async fn change_password(db: web::Data<Database>, path: web::Path<(String,)>, data: web::Json<PasswordChangeData>) -> Result<HttpResponse, std::io::Error> {
     let (username,) = path.into_inner();
     let collection = db.collection::<User>("users");
@@ -205,7 +205,7 @@ async fn change_password(db: web::Data<Database>, path: web::Path<(String,)>, da
     }
 }
 
-#[get("/view/{username}")]
+#[get("/{username}")]
 async fn view_user(db: web::Data<Database>, path: web::Path<(String,)>) -> Result<HttpResponse, std::io::Error> {
     let (username,) = path.into_inner();
     let collection = db.collection::<User>("users");
@@ -224,7 +224,7 @@ struct StrategyCredentials {  // TODO: combine this with the basic login?
     password: String,
 }
 
-#[post("/link/{username}/{strategy}")]
+#[post("/{username}/link/{strategy}")]
 async fn link_account(db: web::Data<Database>, path: web::Path<(String, String)>, credentials: web::Json<StrategyCredentials>) -> Result<HttpResponse, std::io::Error> {
     let (username, strategy) =  path.into_inner();
     let collection = db.collection::<User>("users");
@@ -241,7 +241,7 @@ async fn link_account(db: web::Data<Database>, path: web::Path<(String, String)>
     }
 }
 
-#[post("/unlink/{username}")]
+#[post("/{username}/unlink")]
 async fn unlink_account(db: web::Data<Database>, path: web::Path<(String,)>, account: web::Json<LinkedAccount>) -> Result<HttpResponse, std::io::Error> {
     // TODO: add auth
     let (username,) = path.into_inner();
@@ -256,6 +256,16 @@ async fn unlink_account(db: web::Data<Database>, path: web::Path<(String,)>, acc
     }
 }
 
+#[get("/{owner}/projects")]
+async fn list_user_projects() -> Result<HttpResponse, std::io::Error> {
+    unimplemented!();
+}
+
+#[get("/{owner}/projects/shared")]
+async fn list_shared_projects() -> Result<HttpResponse, std::io::Error> {
+    unimplemented!();
+}
+
 pub fn config(cfg: &mut web::ServiceConfig) {
     cfg
         .service(create_user)
@@ -266,7 +276,9 @@ pub fn config(cfg: &mut web::ServiceConfig) {
         .service(change_password)
         .service(view_user)
         .service(link_account)
-        .service(unlink_account);
+        .service(unlink_account)
+        .service(list_user_projects)
+        .service(list_shared_projects);
 }
 
 
@@ -467,7 +479,7 @@ mod tests {
         let mut app = test::init_service(
             App::new()
             .wrap(
-                CookieSession::signed(&[1; 32])
+                CookieSession::signed(&[0; 32])
                   .domain("localhost:8080")
                   .name("netsblox")
                   .secure(true)
