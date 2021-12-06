@@ -1,8 +1,8 @@
 pub mod topology;
 use topology::client::Client;
 
-use std::sync::{Arc,Mutex};
-use actix::{Actor, StreamHandler};
+use actix::prelude::*;
+use actix::{Actor, StreamHandler, Addr,AsyncContext,Handler};
 use crate::app_data::AppData;
 use actix_web_actors::ws;
 use actix_web::{web, HttpResponse, HttpRequest, Error};
@@ -12,21 +12,25 @@ use serde_json::Value;
 
 // TODO: how to handle pyblocks connections?
 //}
+// TODO: add a secret along with client ID
 
 #[derive(Deserialize)]
 #[serde(rename_all="camelCase")]
-struct ClientState {
-    role_id: String,
-    project_id: String,
-    owner: String,
-    token: Option<String>,
+struct SetClientState {
+    pub client_id: String,
+    pub role_id: String,
+    pub project_id: String,
+    pub token: Option<String>,
 }
 
 #[post("/{client}/state")]
-async fn set_client_state(data: web::Data<AppData>, state: web::Json<ClientState>) -> Result<HttpResponse, std::io::Error> {
-    // TODO: look up the client
-    // TODO: update the client's state
-    // TODO: add a client secret for access control
+async fn set_client_state(data: web::Data<AppData>, req: web::Json<SetClientState>) -> Result<HttpResponse, std::io::Error> {
+    // TODO: authenticate client secret
+    let username = None;  // FIXME
+    let state = topology::ClientState::new(req.project_id.clone(), req.role_id.clone(), username);
+    data.network.do_send(topology::SetClientState{id: req.client_id.clone(), state});
+    // TODO: look up the username
+    // TODO: add a client secret for access control?
     unimplemented!();
 }
 
@@ -45,12 +49,13 @@ struct ConnectClientBody {
 #[post("/connect")]
 async fn connect_client(data: web::Data<AppData>, req: HttpRequest, stream: web::Payload, state: web::Json<ConnectClientBody>) -> Result<HttpResponse, Error> {
     // TODO: ensure ID is unique?
-    // TODO: pass an Arc<Mutex<Client>> to the ws handler?
-    let client = Arc::new(Mutex::new(Client::new(state.id.clone())));
-    let handler = ClientMessageHandler{client};
+    let handler = WsSession{
+        client_id: state.id.clone(),
+        topology_addr: data.network.clone(),
+    };
     let resp = ws::start(handler, &req, stream);
-    let mut topology = data.network.lock().unwrap();
-    topology.add_client(client);
+    //let mut topology = data.network.lock().unwrap();
+    //topology.add_client(client);
     resp
 }
 
@@ -60,15 +65,48 @@ pub fn config(cfg: &mut web::ServiceConfig) {
         .service(connect_client);
 }
 
-struct ClientMessageHandler {
-    client: Arc<Mutex<Client>>,
+struct WsSession {
+    client_id: String,
+    topology_addr: Addr<topology::Topology>,
 }
 
-impl Actor for ClientMessageHandler {
+//impl WsSession {
+    //pub fn new(client_id: String) -> WsSession {
+        //WsSession{client_id}
+    //}
+//}
+
+impl Actor for WsSession {
     type Context = ws::WebsocketContext<Self>;
+
+    fn started(&mut self, ctx: &mut Self::Context) {
+        let addr = ctx.address();
+        self.topology_addr
+            .do_send(topology::AddClient {
+                id: self.client_id.clone(),
+                addr: addr.recipient(),
+            });
+    }
+
+    fn stopping(&mut self, _: &mut Self::Context) -> actix::Running {
+        // TODO: wait a little bit?
+        self.topology_addr
+            .do_send(topology::RemoveClient {
+                id: self.client_id.clone(),
+            });
+        actix::Running::Stop
+    }
+
 }
 
-impl StreamHandler<Result<ws::Message, ws::ProtocolError>> for ClientMessageHandler {
+impl Handler<topology::ClientMessage> for WsSession {
+    type Result = ();
+    fn handle(&mut self, msg: topology::ClientMessage, ctx: &mut Self::Context) {
+        ctx.text(msg.data.to_string());
+    }
+}
+
+impl StreamHandler<Result<ws::Message, ws::ProtocolError>> for WsSession {
     fn handle(&mut self, msg: Result<ws::Message, ws::ProtocolError>, ctx: &mut Self::Context) {
         match msg {
             Ok(ws::Message::Ping(msg)) => ctx.pong(&msg),
@@ -77,8 +115,9 @@ impl StreamHandler<Result<ws::Message, ws::ProtocolError>> for ClientMessageHand
                 println!("received {} message", v["type"]);
                 if let Value::String(msg_type) = &v["type"] {
                     println!("message type is {}", msg_type);
-                    let mut client = self.client.lock().unwrap();
-                    client.handle_msg(msg_type.to_string(), v);
+                    // TODO: send a message to the client?
+                    //let mut client = self.client.lock().unwrap();
+                    //client.handle_msg(msg_type.to_string(), v);
                 } else {
                     println!("Unexpected message type");
                 }
