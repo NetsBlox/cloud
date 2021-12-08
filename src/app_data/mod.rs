@@ -16,6 +16,7 @@ impl AppData {
     }
 
     pub fn collection<T>(&self, name: &str) -> Collection<T> {
+        let name = &(self.prefix.to_owned() + name);
         self.db.collection::<T>(name)
     }
 }
