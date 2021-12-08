@@ -13,7 +13,7 @@ pub struct Client {
 
 #[derive(Clone)]
 pub struct Topology {
-    clients: HashMap<String,Client>,
+    clients: HashMap<String, Client>,
 }
 
 impl Topology {
@@ -21,7 +21,29 @@ impl Topology {
         Topology{clients: HashMap::new()}
     }
 
-    pub fn resolve_address(&self, addr: String) -> Vec<&Client> {
+    fn resolve_address(&self, addr: &str) -> Vec<ClientState> {
+        let mut chunks = addr.split('@');
+        let role = chunks.next().unwrap();
+        if let Some(project) = chunks.next() {
+            if let Some(owner) = chunks.next() {
+                //self.projects.find_one(doc! {owner, project})
+                // TODO: send it to role@project@owner
+            } else {
+                let owner = project;
+                let project = role;
+                // TODO: send to project@owner
+            }
+        } else {
+            // TODO: send to the role using the current project/owner
+            // TODO: check for "everyone in room" or "others in room" (or resolve these on the
+            // client?)
+        }
+        unimplemented!();
+    }
+
+    pub fn get_clients_at(&self, addr: &str) -> Vec<&Client> {
+        let states = self.resolve_address(addr);
+        // TODO: look up the clients using the project_id, role_ids
         unimplemented!();
     }
 }
@@ -65,7 +87,7 @@ pub struct ClientState {
 #[derive(Message)]
 #[rtype(result="()")]
 pub struct SendMessage {
-    pub address: String,
+    pub addresses: Vec<String>,
     pub content: Value,
 }
 
@@ -104,8 +126,8 @@ impl Handler<SendMessage> for Topology {
 
     fn handle(&mut self, msg: SendMessage, ctx: &mut Context<Self>) -> Self::Result {
         let message = ClientMessage(msg.content);
-        let recipients = self.resolve_address(msg.address);
-        recipients.iter().for_each(|client| {
+        let recipients = msg.addresses.iter().flat_map(|address| self.get_clients_at(address));
+        recipients.for_each(|client| {
             client.addr.do_send(message.clone());
         });
         // TODO: resolve the address? Or should it already be resolved?

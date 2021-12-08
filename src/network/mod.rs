@@ -9,8 +9,7 @@ use serde::Deserialize;
 use serde_json::Value;
 
 // TODO: how to handle pyblocks connections?
-//}
-// TODO: add a secret along with client ID
+// TODO: add support for another type of state?
 
 #[derive(Deserialize)]
 #[serde(rename_all="camelCase")]
@@ -18,7 +17,7 @@ struct SetClientState {
     pub client_id: String,
     pub role_id: String,
     pub project_id: String,
-    pub token: Option<String>,
+    pub token: Option<String>,  // TODO: token for accessing the project; secret for controlling client
 }
 
 #[post("/{client}/state")]
@@ -28,7 +27,7 @@ async fn set_client_state(data: web::Data<AppData>, req: web::Json<SetClientStat
     let state = topology::ClientState::new(req.project_id.clone(), req.role_id.clone(), username);
     data.network.do_send(topology::SetClientState{id: req.client_id.clone(), state});
     // TODO: look up the username
-    // TODO: add a client secret for access control?
+    // TODO: add a client secret (and token) for access control?
     unimplemented!();
 }
 
@@ -41,19 +40,18 @@ enum ChannelType {
 #[derive(Deserialize)]
 struct ConnectClientBody {
     id: String,
-    channels: std::vec::Vec<ChannelType>,
+    secret: String,
 }
 
 #[post("/connect")]
 async fn connect_client(data: web::Data<AppData>, req: HttpRequest, stream: web::Payload, state: web::Json<ConnectClientBody>) -> Result<HttpResponse, Error> {
+    // TODO: validate client secret?
     // TODO: ensure ID is unique?
     let handler = WsSession{
         client_id: state.id.clone(),
         topology_addr: data.network.clone(),
     };
     let resp = ws::start(handler, &req, stream);
-    //let mut topology = data.network.lock().unwrap();
-    //topology.add_client(client);
     resp
 }
 
@@ -68,11 +66,41 @@ struct WsSession {
     topology_addr: Addr<topology::Topology>,
 }
 
-//impl WsSession {
-    //pub fn new(client_id: String) -> WsSession {
-        //WsSession{client_id}
-    //}
-//}
+impl WsSession {
+    pub fn handle_msg(&self, msg_type: &str, msg: Value) {
+        // TODO: handle message from client
+        match msg_type {
+            "message" => {
+                let dst_id = msg["dstId"].clone();
+                let addresses = match dst_id {
+                    Value::String(address) => vec![address],
+                    Value::Array(values) => values.iter()
+                        .filter(|v| v.is_string())
+                        .map(|v| v.to_string())
+                        .collect::<Vec<String>>(),
+                    _ => std::vec::Vec::new(),
+                };
+                self.topology_addr
+                    .do_send(topology::SendMessage {
+                        addresses,
+                        content: msg,
+                    });
+            },
+            "client-message" => {  // combine this with the above type?
+            },
+            "user-action" => {
+                // TODO: Record 
+            },
+            "project-response" => {  // TODO: move this to rest?
+            },
+            "request-actions" => {  // TODO: move this to REST?
+            },
+            _ => {
+                println!("unrecognized message type: {}", msg_type);
+            }
+        }
+    }
+}
 
 impl Actor for WsSession {
     type Context = ws::WebsocketContext<Self>;
@@ -112,10 +140,7 @@ impl StreamHandler<Result<ws::Message, ws::ProtocolError>> for WsSession {
                 let v: Value = serde_json::from_str(&text).unwrap();  // FIXME
                 println!("received {} message", v["type"]);
                 if let Value::String(msg_type) = &v["type"] {
-                    println!("message type is {}", msg_type);
-                    // TODO: send a message to the client?
-                    //let mut client = self.client.lock().unwrap();
-                    //client.handle_msg(msg_type.to_string(), v);
+                    self.handle_msg(&msg_type.to_string(), v);
                 } else {
                     println!("Unexpected message type");
                 }
