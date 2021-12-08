@@ -2,23 +2,27 @@ pub mod client;
 
 use actix::{Actor,Context,Handler};
 use actix::prelude::{Message,Recipient};
-use client::Client;
 use serde_json::Value;
+use std::collections::HashMap;
+
+#[derive(Clone)]
+pub struct Client {
+    pub id: String,
+    pub addr: Recipient<ClientMessage>,
+}
 
 #[derive(Clone)]
 pub struct Topology {
-    clients: std::vec::Vec<Client>,
+    clients: HashMap<String,Client>,
 }
 
 impl Topology {
     pub fn new() -> Topology {
-        Topology{clients: std::vec::Vec::new()}
+        Topology{clients: HashMap::new()}
     }
 
-    // TODO: what methods do we need here for sending messages?
-    // TODO: how do we need to be able to access the clients?
-    pub fn add_client(&mut self, client: Client) {
-        self.clients.push(client);
+    pub fn resolve_address(&self, addr: String) -> Vec<&Client> {
+        unimplemented!();
     }
 }
 
@@ -26,7 +30,7 @@ impl Actor for Topology {
     type Context = Context<Self>;
 }
 
-#[derive(Message)]
+#[derive(Message,Clone)]
 #[rtype(result="()")]
 pub struct ClientMessage (pub Value);
 
@@ -100,8 +104,10 @@ impl Handler<SendMessage> for Topology {
 
     fn handle(&mut self, msg: SendMessage, ctx: &mut Context<Self>) -> Self::Result {
         let message = ClientMessage(msg.content);
-        let recipients = self.clients.iter().filter(|client| client).collect();  // TODO: find the clients given the address
-        recipients.for_each(|client| client.addr.do_send(message));
+        let recipients = self.resolve_address(msg.address);
+        recipients.iter().for_each(|client| {
+            client.addr.do_send(message.clone());
+        });
         // TODO: resolve the address? Or should it already be resolved?
     }
 }

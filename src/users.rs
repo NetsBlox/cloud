@@ -1,4 +1,4 @@
-use actix_web::{web, HttpResponse, HttpRequest};
+use actix_web::{web, HttpResponse};
 use actix_web::{get, post, patch};
 use mongodb::Database;
 use mongodb::bson::{doc,Bson};
@@ -7,7 +7,8 @@ use std::time::SystemTime;
 use rustrict::CensorStr;
 use regex::Regex;
 use lazy_static::lazy_static;
-use actix_session::{CookieSession,Session};
+use actix_session::{Session};
+use crate::app_data::AppData;
 
 #[derive(Serialize, Deserialize, Clone)]
 #[serde(rename_all="camelCase")]
@@ -95,10 +96,10 @@ impl NewUser {
 }
 
 #[post("/create")]
-async fn create_user(db: web::Data<Database>, user_data: web::Json<NewUser>) -> Result<HttpResponse, std::io::Error> {
+async fn create_user(app: web::Data<AppData>, user_data: web::Json<NewUser>) -> Result<HttpResponse, std::io::Error> {
     if is_valid_username(&user_data.username) {
         let user = User::from(user_data.into_inner());
-        let collection = db.collection::<User>("users");
+        let collection = app.collection::<User>("users");
         let query = doc!{"username": &user.username};
         let update = doc!{"$setOnInsert": &user};
         let options = mongodb::options::UpdateOptions::builder()
@@ -140,9 +141,9 @@ struct LoginCredentials {
 // TODO: should we change the endpoints to /users/{id}
 // (post -> create; get -> view; patch -> update, delete -> delete)
 #[post("/login")]
-async fn login(db: web::Data<Database>, credentials: web::Json<LoginCredentials>, session: Session) -> HttpResponse {
+async fn login(app: web::Data<AppData>, credentials: web::Json<LoginCredentials>, session: Session) -> HttpResponse {
     // TODO: authenticate
-    let collection = db.collection::<User>("users");
+    let collection = app.collection::<User>("users");
     let query = doc!{"username": &credentials.username, "hash": &credentials.password_hash};
     if let Some(user) = collection.find_one(query, None).await.expect("Unable to retrieve user from database.") {
         session.insert("username", &user.username).unwrap();
@@ -167,10 +168,10 @@ async fn whoami(session: Session) -> Result<HttpResponse, std::io::Error> {
 }
 
 #[post("/{username}/delete")]
-async fn delete_user(db: web::Data<Database>, path: web::Path<(String,)>) -> Result<HttpResponse, std::io::Error> {
+async fn delete_user(app: web::Data<AppData>, path: web::Path<(String,)>) -> Result<HttpResponse, std::io::Error> {
     // TODO: check auth
     let (username,) = path.into_inner();
-    let collection = db.collection::<User>("users");
+    let collection = app.collection::<User>("users");
     let query = doc!{"username": username};
     let result = collection.delete_one(query, None).await.unwrap();
     if result.deleted_count > 0 {
@@ -192,9 +193,9 @@ struct PasswordChangeData {
 }
 
 #[patch("/{username}/password")]
-async fn change_password(db: web::Data<Database>, path: web::Path<(String,)>, data: web::Json<PasswordChangeData>) -> Result<HttpResponse, std::io::Error> {
+async fn change_password(app: web::Data<AppData>, path: web::Path<(String,)>, data: web::Json<PasswordChangeData>) -> Result<HttpResponse, std::io::Error> {
     let (username,) = path.into_inner();
-    let collection = db.collection::<User>("users");
+    let collection = app.collection::<User>("users");
     let query = doc!{"username": username};
     let update = doc!{"hash": &data.password_hash};
     let result = collection.update_one(query, update, None).await.unwrap();
@@ -206,9 +207,9 @@ async fn change_password(db: web::Data<Database>, path: web::Path<(String,)>, da
 }
 
 #[get("/{username}")]
-async fn view_user(db: web::Data<Database>, path: web::Path<(String,)>) -> Result<HttpResponse, std::io::Error> {
+async fn view_user(app: web::Data<AppData>, path: web::Path<(String,)>) -> Result<HttpResponse, std::io::Error> {
     let (username,) = path.into_inner();
-    let collection = db.collection::<User>("users");
+    let collection = app.collection::<User>("users");
     let query = doc!{"username": username};
     if let Some(user) = collection.find_one(query, None).await.unwrap() {
         // TODO: check auth
@@ -225,9 +226,9 @@ struct StrategyCredentials {  // TODO: combine this with the basic login?
 }
 
 #[post("/{username}/link/{strategy}")]
-async fn link_account(db: web::Data<Database>, path: web::Path<(String, String)>, credentials: web::Json<StrategyCredentials>) -> Result<HttpResponse, std::io::Error> {
+async fn link_account(app: web::Data<AppData>, path: web::Path<(String, String)>, credentials: web::Json<StrategyCredentials>) -> Result<HttpResponse, std::io::Error> {
     let (username, strategy) =  path.into_inner();
-    let collection = db.collection::<User>("users");
+    let collection = app.collection::<User>("users");
     // TODO: add auth
     // TODO: check if already used
     let query = doc!{"username": &username};
@@ -242,10 +243,10 @@ async fn link_account(db: web::Data<Database>, path: web::Path<(String, String)>
 }
 
 #[post("/{username}/unlink")]
-async fn unlink_account(db: web::Data<Database>, path: web::Path<(String,)>, account: web::Json<LinkedAccount>) -> Result<HttpResponse, std::io::Error> {
+async fn unlink_account(app: web::Data<AppData>, path: web::Path<(String,)>, account: web::Json<LinkedAccount>) -> Result<HttpResponse, std::io::Error> {
     // TODO: add auth
     let (username,) = path.into_inner();
-    let collection = db.collection::<User>("users");
+    let collection = app.collection::<User>("users");
     let query = doc! {"username": username};
     let update = doc! {"$pull": {"linkedAccounts": &account.into_inner()}};
     let result = collection.update_one(query, update, None).await.unwrap();
@@ -286,20 +287,17 @@ pub fn config(cfg: &mut web::ServiceConfig) {
 mod tests {
     use super::*;
     use actix_web::{test,http,App};
-    use mongodb::{Client,Database,Collection};
+    use mongodb::{Client,Collection};
+    use actix_session::CookieSession;
 
-    async fn init_database(name: &str, users: std::vec::Vec<User>) -> Result<(Database, Collection<User>), std::io::Error>{
+    async fn init_app_data(prefix: &'static str, users: std::vec::Vec<User>) -> Result<(AppData, Collection<User>), std::io::Error>{
         let user_count = users.len();
         let client = Client::with_uri_str("mongodb://127.0.0.1:27017/").await
             .expect("Unable to connect to database");
 
-        // Seed the database
-        //let database = client.database("netsblox-tests");
-        //let collection = database.collection::<User>(&format!("users-{}", name));
-
-        let database_name = &format!("netsblox-tests-{}", name);
-        let database = client.database(database_name);
-        let collection = database.collection::<User>("users");
+        let database = client.database("netsblox-tests");
+        let app = AppData::new(database, None, Some(prefix));
+        let collection = app.collection::<User>("users");
         collection.delete_many(doc!{}, None).await.expect("Unable to empty database");
 
         if user_count > 0 {
@@ -308,12 +306,12 @@ mod tests {
             assert_eq!(count, user_count as u64, "Expected {} docs but found {}", user_count, count);
         }
 
-        Ok((database, collection))
+        Ok((app, collection))
     }
 
     #[actix_web::test]
     async fn test_create_user() {
-        let (database, collection) = init_database("create", vec![]).await.expect("Unable to seed database");
+        let (database, collection) = init_app_data("create", vec![]).await.expect("Unable to seed database");
 
         // Run the test
         let mut app = test::init_service(
@@ -336,7 +334,7 @@ mod tests {
 
     #[actix_web::test]
     async fn test_create_user_profane() {
-        let (database, collection) = init_database("create_profane", vec![]).await.expect("Unable to seed database");
+        let (database, collection) = init_app_data("create_profane", vec![]).await.expect("Unable to seed database");
 
         // Run the test
         let mut app = test::init_service(
@@ -357,7 +355,7 @@ mod tests {
 
     //#[actix_web::test]
     //async fn test_create_user_403() {  // group member
-        //let (database, collection) = init_database("create_403", vec![]).await.expect("Unable to seed database");
+        //let (database, collection) = init_app_data("create_403", vec![]).await.expect("Unable to seed database");
 
         //// Run the test
         //let mut app = test::init_service(
@@ -384,7 +382,7 @@ mod tests {
     #[actix_web::test]
     async fn test_login() {
         let user = User::from(NewUser::new("brian".to_string(), "pwd_hash".to_string(), "email".to_string(), None));
-        let (database, _) = init_database("login", vec![user]).await.expect("Unable to seed database");
+        let (database, _) = init_app_data("login", vec![user]).await.expect("Unable to seed database");
         // Run the test
         let mut app = test::init_service(
             App::new()
@@ -417,7 +415,7 @@ mod tests {
     #[actix_web::test]
     async fn test_login_bad_pwd() {
         let user = User::from(NewUser::new("brian".to_string(), "pwd_hash".to_string(), "email".to_string(), None));
-        let (database, _) = init_database("login_bad_pwd", vec![user]).await.expect("Unable to seed database");
+        let (database, _) = init_app_data("login_bad_pwd", vec![user]).await.expect("Unable to seed database");
         // Run the test
         let mut app = test::init_service(
             App::new()
@@ -440,7 +438,7 @@ mod tests {
 
     #[actix_web::test]
     async fn test_login_403() {
-        let (database, _) = init_database("login_bad_user", vec![]).await.expect("Unable to seed database");
+        let (database, _) = init_app_data("login_bad_user", vec![]).await.expect("Unable to seed database");
         // Run the test
         let mut app = test::init_service(
             App::new()
@@ -474,7 +472,7 @@ mod tests {
     #[actix_web::test]
     async fn test_logout() {
         let user = User::from(NewUser::new("brian".to_string(), "pwd_hash".to_string(), "email".to_string(), None));
-        let (database, _) = init_database("login", vec![user]).await.expect("Unable to seed database");
+        let (database, _) = init_app_data("login", vec![user]).await.expect("Unable to seed database");
         // Run the test
         let mut app = test::init_service(
             App::new()

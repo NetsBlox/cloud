@@ -1,0 +1,22 @@
+use crate::network::topology::Topology;
+use mongodb::{Database,Collection};
+use actix::{Actor,Addr};
+
+pub struct AppData {
+    prefix: &'static str,
+    pub db: Database,
+    pub network: Addr<Topology>,
+}
+
+impl AppData {
+    pub fn new(db: Database, network: Option<Addr<Topology>>, prefix: Option<&'static str>) -> AppData {
+        let network = network.unwrap_or(Topology::new().start());
+        let prefix = prefix.unwrap_or("");
+        AppData{db, network, prefix}
+    }
+
+    pub fn collection<T>(&self, name: &str) -> Collection<T> {
+        self.db.collection::<T>(name)
+    }
+}
+

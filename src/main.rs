@@ -13,7 +13,7 @@ use app_data::AppData;
 use actix_web::{web, App, HttpResponse, HttpRequest, HttpServer, middleware};
 use actix_web::get;
 use serde::Serialize;
-use mongodb::{Client,Database,Collection};
+use mongodb::{Client};
 use env_logger;
 use actix_session::CookieSession;
 
@@ -54,7 +54,7 @@ async fn main() -> std::io::Result<()> {
                   .secure(true)
             )  // FIXME: Set the key
             .wrap(middleware::Logger::default())
-            .app_data(web::Data::new(AppData::new(db.clone(), None)))
+            .app_data(web::Data::new(AppData::new(db.clone(), None, None)))
             .service(web::scope("/libraries").configure(libraries::config))
             .service(web::scope("/services-hosts").configure(services_hosts::config))
             .service(web::scope("/users").configure(users::config))

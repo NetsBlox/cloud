@@ -1,7 +1,5 @@
 pub mod topology;
-use topology::client::Client;
 
-use actix::prelude::*;
 use actix::{Actor, StreamHandler, Addr,AsyncContext,Handler};
 use crate::app_data::AppData;
 use actix_web_actors::ws;
