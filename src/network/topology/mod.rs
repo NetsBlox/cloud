@@ -28,9 +28,7 @@ impl Actor for Topology {
 
 #[derive(Message)]
 #[rtype(result="()")]
-pub struct ClientMessage {
-    pub data: Value,  // TODO: define a trait for converting to a JSON message?
-}
+pub struct ClientMessage (pub Value);
 
 #[derive(Message)]
 #[rtype(result="()")]
@@ -100,8 +98,10 @@ impl Handler<SetClientState> for Topology {
 impl Handler<SendMessage> for Topology {
     type Result = ();
 
-    fn handle(&mut self, msg: SendMessage, _: &mut Context<Self>) -> Self::Result {
+    fn handle(&mut self, msg: SendMessage, ctx: &mut Context<Self>) -> Self::Result {
+        let message = ClientMessage(msg.content);
+        let recipients = self.clients.iter().filter(|client| client).collect();  // TODO: find the clients given the address
+        recipients.for_each(|client| client.addr.do_send(message));
         // TODO: resolve the address? Or should it already be resolved?
-        unimplemented!();
     }
 }

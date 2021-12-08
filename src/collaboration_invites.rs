@@ -1,5 +1,5 @@
 use actix_web::{web, HttpResponse, HttpRequest};
-use actix_web::{get, post, delete, patch};
+use actix_web::{get, post};
 use serde::Deserialize;
 
 #[get("/{recipient}/")]

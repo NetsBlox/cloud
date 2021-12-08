@@ -6,7 +6,7 @@ use actix::{Actor, StreamHandler, Addr,AsyncContext,Handler};
 use crate::app_data::AppData;
 use actix_web_actors::ws;
 use actix_web::{web, HttpResponse, HttpRequest, Error};
-use actix_web::{post};
+use actix_web::post;
 use serde::Deserialize;
 use serde_json::Value;
 
@@ -102,7 +102,7 @@ impl Actor for WsSession {
 impl Handler<topology::ClientMessage> for WsSession {
     type Result = ();
     fn handle(&mut self, msg: topology::ClientMessage, ctx: &mut Self::Context) {
-        ctx.text(msg.data.to_string());
+        ctx.text(msg.0.to_string());
     }
 }
 
