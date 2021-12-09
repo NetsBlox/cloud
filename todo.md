@@ -8,3 +8,17 @@
     - [ ] user-action
     - [ ] project-response
     - [ ] request-actions
+
+- [ ] user routes
+- [ ] network routes
+    - [ ] message passing
+- [ ] projects routes
+    - [ ] add blob support for main project data
+    - [ ] don't use hashing to store the data
+    - [ ] get project by name (open default role?)
+    - [ ] get project by name (entire project)
+
+- [ ] auth integration with services endpoint
+    - maybe the services endpoint should hit this one?
+
+- [ ] require login to send messages?
