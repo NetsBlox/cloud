@@ -8,7 +8,7 @@ pub struct Client {
 
 impl Client {
     pub fn new(id: String) -> Client {
-        Client{id}
+        Client { id }
     }
 
     fn send_msg(&self, msg: Value) {
@@ -20,29 +20,30 @@ impl Client {
             "message" => {
                 let addresses = match &msg["dstId"] {
                     Value::String(address) => vec![address.as_str()],
-                    Value::Array(values) => values.iter()
+                    Value::Array(values) => values
+                        .iter()
                         .filter(|v| v.is_string())
                         .map(|v| v.as_str().unwrap())
                         .collect::<Vec<&str>>(),
                     _ => std::vec::Vec::new(),
                 };
-                let recipients = addresses.iter()
+                let recipients = addresses
+                    .iter()
                     .map(|addr| self.send_msg_to(msg.clone(), addr));
 
                 // TODO: resolve the IDs
-                //srcProjectId = 
+                //srcProjectId =
                 //dstId = addresses
                 //recipients = recipients.flat()
                 // TODO: save the message
-            },
-            "client-message" => {  // combine this with the above type?
-            },
-            "user-action" => {
-            },
-            "project-response" => {  // TODO: move this to rest?
-            },
-            "request-actions" => {  // TODO: move this to REST?
-            },
+            }
+            "client-message" => { // combine this with the above type?
+            }
+            "user-action" => {}
+            "project-response" => { // TODO: move this to rest?
+            }
+            "request-actions" => { // TODO: move this to REST?
+            }
             _ => {
                 println!("unrecognized message type: {}", msg_type);
             }
@@ -53,5 +54,3 @@ impl Client {
         unimplemented!();
     }
 }
-
-

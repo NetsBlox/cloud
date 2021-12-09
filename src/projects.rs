@@ -1,5 +1,5 @@
+use actix_web::{delete, get, patch, post};
 use actix_web::{web, HttpResponse};
-use actix_web::{get, post, delete, patch};
 use mongodb::Database;
 use serde::Deserialize;
 
@@ -12,10 +12,10 @@ async fn create_project(db: web::Data<Database>) -> Result<HttpResponse, std::io
 
 //#[post("/import")]  // TODO: should I consolidate w/ the previous one? Called "create" or something? (or just post /)
 //async fn import_project(db: web::Data<Database>) -> Result<HttpResponse, std::io::Error> {
-    //unimplemented!();
+//unimplemented!();
 //}
 
-#[get("/named/{owner}/{name}")]  // TODO: better name
+#[get("/named/{owner}/{name}")] // TODO: better name
 async fn get_project_named() -> Result<HttpResponse, std::io::Error> {
     unimplemented!();
 }
@@ -32,13 +32,13 @@ async fn delete_project() -> Result<HttpResponse, std::io::Error> {
 
 #[patch("/{projectID}")]
 async fn update_project() -> Result<HttpResponse, std::io::Error> {
-    unimplemented!();  // TODO: rename, etc
+    unimplemented!(); // TODO: rename, etc
 }
 
-#[get("/{projectID}/latest")]  // Include unsaved data
+#[get("/{projectID}/latest")] // Include unsaved data
 async fn get_latest_project() -> Result<HttpResponse, std::io::Error> {
-    unimplemented!();  // TODO: return xml string
-    //Ok(HttpResponse::Ok().body(serialized_project))
+    unimplemented!(); // TODO: return xml string
+                      //Ok(HttpResponse::Ok().body(serialized_project))
 }
 
 #[get("/{projectID}/thumbnail")]
@@ -71,7 +71,7 @@ async fn delete_role() -> Result<HttpResponse, std::io::Error> {
 }
 
 #[derive(Deserialize)]
-#[serde(rename_all="PascalCase")]
+#[serde(rename_all = "PascalCase")]
 struct RoleData {
     room_name: String,
     project_name: String,
@@ -112,7 +112,9 @@ struct AddCollaboratorBody {
     username: String,
 }
 #[post("/{projectID}/collaborators/")]
-async fn add_collaborator(body: web::Json<AddCollaboratorBody>) -> Result<HttpResponse, std::io::Error> {
+async fn add_collaborator(
+    body: web::Json<AddCollaboratorBody>,
+) -> Result<HttpResponse, std::io::Error> {
     unimplemented!();
 }
 
@@ -132,14 +134,16 @@ async fn remove_occupant() -> Result<HttpResponse, std::io::Error> {
 }
 
 #[derive(Deserialize)]
-#[serde(rename_all="camelCase")]
+#[serde(rename_all = "camelCase")]
 struct OccupantInvite {
     username: String,
     role_id: String,
 }
 
-#[post("/{projectID}/occupants/invite")]  // TODO: add role ID
-async fn invite_occupant(invite: web::Json<OccupantInvite>) -> Result<HttpResponse, std::io::Error> {
+#[post("/{projectID}/occupants/invite")] // TODO: add role ID
+async fn invite_occupant(
+    invite: web::Json<OccupantInvite>,
+) -> Result<HttpResponse, std::io::Error> {
     unimplemented!();
 }
 
@@ -153,8 +157,5 @@ async fn invite_occupant(invite: web::Json<OccupantInvite>) -> Result<HttpRespon
 // - evict user
 
 pub fn config(cfg: &mut web::ServiceConfig) {
-    cfg
-        .service(create_project);
+    cfg.service(create_project);
 }
-
-

@@ -1,10 +1,10 @@
 pub mod topology;
 
-use actix::{Actor, StreamHandler, Addr,AsyncContext,Handler};
 use crate::app_data::AppData;
-use actix_web_actors::ws;
-use actix_web::{web, HttpResponse, HttpRequest, Error};
+use actix::{Actor, Addr, AsyncContext, Handler, StreamHandler};
 use actix_web::post;
+use actix_web::{web, Error, HttpRequest, HttpResponse};
+use actix_web_actors::ws;
 use serde::Deserialize;
 use serde_json::Value;
 
@@ -12,20 +12,26 @@ use serde_json::Value;
 // TODO: add support for another type of state?
 
 #[derive(Deserialize)]
-#[serde(rename_all="camelCase")]
+#[serde(rename_all = "camelCase")]
 struct SetClientState {
     pub client_id: String,
     pub role_id: String,
     pub project_id: String,
-    pub token: Option<String>,  // TODO: token for accessing the project; secret for controlling client
+    pub token: Option<String>, // TODO: token for accessing the project; secret for controlling client
 }
 
 #[post("/{client}/state")]
-async fn set_client_state(data: web::Data<AppData>, req: web::Json<SetClientState>) -> Result<HttpResponse, std::io::Error> {
+async fn set_client_state(
+    data: web::Data<AppData>,
+    req: web::Json<SetClientState>,
+) -> Result<HttpResponse, std::io::Error> {
     // TODO: authenticate client secret
-    let username = None;  // FIXME
+    let username = None; // FIXME
     let state = topology::ClientState::new(req.project_id.clone(), req.role_id.clone(), username);
-    data.network.do_send(topology::SetClientState{id: req.client_id.clone(), state});
+    data.network.do_send(topology::SetClientState {
+        id: req.client_id.clone(),
+        state,
+    });
     // TODO: look up the username
     // TODO: add a client secret (and token) for access control?
     unimplemented!();
@@ -44,10 +50,15 @@ struct ConnectClientBody {
 }
 
 #[post("/connect")]
-async fn connect_client(data: web::Data<AppData>, req: HttpRequest, stream: web::Payload, state: web::Json<ConnectClientBody>) -> Result<HttpResponse, Error> {
+async fn connect_client(
+    data: web::Data<AppData>,
+    req: HttpRequest,
+    stream: web::Payload,
+    state: web::Json<ConnectClientBody>,
+) -> Result<HttpResponse, Error> {
     // TODO: validate client secret?
     // TODO: ensure ID is unique?
-    let handler = WsSession{
+    let handler = WsSession {
         client_id: state.id.clone(),
         topology_addr: data.network.clone(),
     };
@@ -56,9 +67,7 @@ async fn connect_client(data: web::Data<AppData>, req: HttpRequest, stream: web:
 }
 
 pub fn config(cfg: &mut web::ServiceConfig) {
-    cfg
-        .service(set_client_state)
-        .service(connect_client);
+    cfg.service(set_client_state).service(connect_client);
 }
 
 struct WsSession {
@@ -74,27 +83,27 @@ impl WsSession {
                 let dst_id = msg["dstId"].clone();
                 let addresses = match dst_id {
                     Value::String(address) => vec![address],
-                    Value::Array(values) => values.iter()
+                    Value::Array(values) => values
+                        .iter()
                         .filter(|v| v.is_string())
                         .map(|v| v.to_string())
                         .collect::<Vec<String>>(),
                     _ => std::vec::Vec::new(),
                 };
-                self.topology_addr
-                    .do_send(topology::SendMessage {
-                        addresses,
-                        content: msg,
-                    });
-            },
-            "client-message" => {  // combine this with the above type?
-            },
+                self.topology_addr.do_send(topology::SendMessage {
+                    addresses,
+                    content: msg,
+                });
+            }
+            "client-message" => { // combine this with the above type?
+            }
             "user-action" => {
-                // TODO: Record 
-            },
-            "project-response" => {  // TODO: move this to rest?
-            },
-            "request-actions" => {  // TODO: move this to REST?
-            },
+                // TODO: Record
+            }
+            "project-response" => { // TODO: move this to rest?
+            }
+            "request-actions" => { // TODO: move this to REST?
+            }
             _ => {
                 println!("unrecognized message type: {}", msg_type);
             }
@@ -107,22 +116,19 @@ impl Actor for WsSession {
 
     fn started(&mut self, ctx: &mut Self::Context) {
         let addr = ctx.address();
-        self.topology_addr
-            .do_send(topology::AddClient {
-                id: self.client_id.clone(),
-                addr: addr.recipient(),
-            });
+        self.topology_addr.do_send(topology::AddClient {
+            id: self.client_id.clone(),
+            addr: addr.recipient(),
+        });
     }
 
     fn stopping(&mut self, _: &mut Self::Context) -> actix::Running {
         // TODO: wait a little bit?
-        self.topology_addr
-            .do_send(topology::RemoveClient {
-                id: self.client_id.clone(),
-            });
+        self.topology_addr.do_send(topology::RemoveClient {
+            id: self.client_id.clone(),
+        });
         actix::Running::Stop
     }
-
 }
 
 impl Handler<topology::ClientMessage> for WsSession {
@@ -137,22 +143,22 @@ impl StreamHandler<Result<ws::Message, ws::ProtocolError>> for WsSession {
         match msg {
             Ok(ws::Message::Ping(msg)) => ctx.pong(&msg),
             Ok(ws::Message::Text(text)) => {
-                let v: Value = serde_json::from_str(&text).unwrap();  // FIXME
+                let v: Value = serde_json::from_str(&text).unwrap(); // FIXME
                 println!("received {} message", v["type"]);
                 if let Value::String(msg_type) = &v["type"] {
                     self.handle_msg(&msg_type.to_string(), v);
                 } else {
                     println!("Unexpected message type");
                 }
-            },
+            }
             _ => (),
         }
     }
 }
 #[cfg(test)]
 mod tests {
-    use serde_json::json;
     use super::*;
+    use serde_json::json;
 
     #[actix_web::test]
     async fn test_connect_client() {

@@ -1,5 +1,5 @@
-use actix_web::{web, HttpResponse};
 use actix_web::{get, post};
+use actix_web::{web, HttpResponse};
 
 // Functionality:
 //   - send invite
@@ -30,7 +30,7 @@ async fn list_invites() -> Result<HttpResponse, std::io::Error> {
     unimplemented!();
 }
 
-#[post("/{recipient}/invite/")]  // TODO: set the sender (not just the session)
+#[post("/{recipient}/invite/")] // TODO: set the sender (not just the session)
 async fn send_invite() -> Result<HttpResponse, std::io::Error> {
     unimplemented!();
 }
@@ -41,10 +41,8 @@ async fn respond_to_invite() -> Result<HttpResponse, std::io::Error> {
 }
 
 pub fn config(cfg: &mut web::ServiceConfig) {
-    cfg
-        .service(list_friends)
+    cfg.service(list_friends)
         .service(list_invites)
         .service(send_invite)
         .service(respond_to_invite);
 }
-

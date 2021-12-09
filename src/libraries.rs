@@ -1,13 +1,13 @@
-use rustrict::CensorStr;
-use actix_web::{web, HttpResponse, HttpRequest};
-use actix_web::{get, post, delete};
-use futures::stream::TryStreamExt;
-use mongodb::bson::doc;
-use serde::{Serialize, Deserialize};
-use mongodb::options::FindOptions;
 use crate::database::Database;
-use regex::Regex;
+use actix_web::{delete, get, post};
+use actix_web::{web, HttpRequest, HttpResponse};
+use futures::stream::TryStreamExt;
 use lazy_static::lazy_static;
+use mongodb::bson::doc;
+use mongodb::options::FindOptions;
+use regex::Regex;
+use rustrict::CensorStr;
+use serde::{Deserialize, Serialize};
 
 #[derive(Serialize, Deserialize)]
 struct LibraryMetadata {
@@ -18,13 +18,23 @@ struct LibraryMetadata {
 }
 
 impl LibraryMetadata {
-    pub fn new(owner: String, name: String, public: bool, notes: Option<String>) -> LibraryMetadata {
-        LibraryMetadata{owner, name, notes: notes.unwrap_or("".to_string()), public}
+    pub fn new(
+        owner: String,
+        name: String,
+        public: bool,
+        notes: Option<String>,
+    ) -> LibraryMetadata {
+        LibraryMetadata {
+            owner,
+            name,
+            notes: notes.unwrap_or("".to_string()),
+            public,
+        }
     }
 }
 
 #[derive(Serialize, Deserialize)]
-#[serde(rename_all="camelCase")]
+#[serde(rename_all = "camelCase")]
 struct Library {
     owner: String,
     name: String,
@@ -42,7 +52,10 @@ async fn list_community_libraries(db: web::Data<Database>) -> Result<HttpRespons
 
     let options = FindOptions::builder().sort(doc! {"name": 1}).build();
     let public_filter = doc! {"public": true};
-    let mut cursor = collection.find(public_filter, options).await.expect("Library list query failed");
+    let mut cursor = collection
+        .find(public_filter, options)
+        .await
+        .expect("Library list query failed");
 
     let mut libraries = Vec::new();
     while let Some(library) = cursor.try_next().await.expect("Could not fetch library") {
@@ -53,13 +66,17 @@ async fn list_community_libraries(db: web::Data<Database>) -> Result<HttpRespons
     Ok(HttpResponse::Ok().json(libraries))
 }
 
-#[get("/{owner}")]  // TODO: scope these under user/? currently, this wont work if the username is "community"
-async fn list_user_libraries(db: web::Data<Database>, path: web::Path<(String,)>, req: HttpRequest) -> Result<HttpResponse, std::io::Error> {
+#[get("/{owner}")] // TODO: scope these under user/? currently, this wont work if the username is "community"
+async fn list_user_libraries(
+    db: web::Data<Database>,
+    path: web::Path<(String,)>,
+    req: HttpRequest,
+) -> Result<HttpResponse, std::io::Error> {
     // TODO: Get the user credentials
     let username = path.into_inner().0;
     let only_public = if let Some(cookie) = req.cookie("netsblox") {
         let requestor = cookie.value();
-        requestor != username  // FIXME: Make this authentication better
+        requestor != username // FIXME: Make this authentication better
     } else {
         true
     };
@@ -71,7 +88,10 @@ async fn list_user_libraries(db: web::Data<Database>, path: web::Path<(String,)>
     };
     let collection = db.collection::<LibraryMetadata>("libraries");
     let options = FindOptions::builder().sort(doc! {"name": 1}).build();
-    let mut cursor = collection.find(filter, options).await.expect("Library list query failed");
+    let mut cursor = collection
+        .find(filter, options)
+        .await
+        .expect("Library list query failed");
 
     let mut libraries = Vec::new();
     while let Some(library) = cursor.try_next().await.expect("Could not fetch library") {
@@ -83,14 +103,21 @@ async fn list_user_libraries(db: web::Data<Database>, path: web::Path<(String,)>
 }
 
 #[get("/{owner}/{name}")]
-async fn get_user_library(db: web::Data<Database>, path: web::Path<(String,String)>) -> Result<HttpResponse, std::io::Error> {
+async fn get_user_library(
+    db: web::Data<Database>,
+    path: web::Path<(String, String)>,
+) -> Result<HttpResponse, std::io::Error> {
     // TODO: retrieve the library from the database
     // TODO: check the auth
     let collection = db.collection::<Library>("libraries");
     let (owner, name) = path.into_inner();
-    let query = doc!{"owner": owner, "name": name};
+    let query = doc! {"owner": owner, "name": name};
     // TODO: get the library post data
-    if let Some(library) = collection.find_one(query, None).await.expect("Unable to retrieve from database") {
+    if let Some(library) = collection
+        .find_one(query, None)
+        .await
+        .expect("Unable to retrieve from database")
+    {
         Ok(HttpResponse::Ok().body(library.blocks))
     } else {
         Ok(HttpResponse::NotFound().finish())
@@ -98,7 +125,10 @@ async fn get_user_library(db: web::Data<Database>, path: web::Path<(String,Strin
 }
 
 #[post("/{owner}/{name}")]
-async fn save_user_library(db: web::Data<Database>, path: web::Path<(String,String)>) -> Result<HttpResponse, std::io::Error> {
+async fn save_user_library(
+    db: web::Data<Database>,
+    path: web::Path<(String, String)>,
+) -> Result<HttpResponse, std::io::Error> {
     let (owner, name) = path.into_inner();
     if !is_valid_name(&name) {
         return Ok(HttpResponse::BadRequest().body("Invalid library name"));
@@ -106,13 +136,16 @@ async fn save_user_library(db: web::Data<Database>, path: web::Path<(String,Stri
 
     // TODO: authenticate
     let collection = db.collection::<LibraryMetadata>("libraries");
-    let query = doc!{"owner": &owner, "name": &name};
+    let query = doc! {"owner": &owner, "name": &name};
     // TODO: get the library post data. What should this include? xml, notes, etc?
 
     // TODO: check if it needs re-approval?
     //let update = doc!{"$set": {"owner": owner, "name": name, "blocks": blocks}};
-    let update = doc!{"$set": {"owner": &owner, "name": &name}};  // FIXME:
-    let result = collection.update_one(query, update, None).await.expect("Unable to save in database");
+    let update = doc! {"$set": {"owner": &owner, "name": &name}}; // FIXME:
+    let result = collection
+        .update_one(query, update, None)
+        .await
+        .expect("Unable to save in database");
     if result.matched_count == 0 {
         Ok(HttpResponse::Created().finish())
     } else {
@@ -132,12 +165,18 @@ fn is_approval_required(text: &str) -> bool {
 }
 
 #[delete("/{owner}/{name}")]
-async fn delete_user_library(db: web::Data<Database>, path: web::Path<(String,String)>) -> Result<HttpResponse, std::io::Error> {
+async fn delete_user_library(
+    db: web::Data<Database>,
+    path: web::Path<(String, String)>,
+) -> Result<HttpResponse, std::io::Error> {
     // TODO: authenticate
     let collection = db.collection::<LibraryMetadata>("libraries");
     let (owner, name) = path.into_inner();
-    let query = doc!{"owner": owner, "name": name};
-    let result = collection.delete_one(query, None).await.expect("Unable to delete from database");
+    let query = doc! {"owner": owner, "name": name};
+    let result = collection
+        .delete_one(query, None)
+        .await
+        .expect("Unable to delete from database");
     if result.deleted_count == 0 {
         Ok(HttpResponse::NotFound().finish())
     } else {
@@ -146,7 +185,10 @@ async fn delete_user_library(db: web::Data<Database>, path: web::Path<(String,St
 }
 
 #[post("/{owner}/{name}/publish")]
-async fn publish_user_library(db: web::Data<Database>, path: web::Path<(String,String)>) -> Result<HttpResponse, std::io::Error> {
+async fn publish_user_library(
+    db: web::Data<Database>,
+    path: web::Path<(String, String)>,
+) -> Result<HttpResponse, std::io::Error> {
     // TODO: get the requestor and authorize
     let collection = db.collection::<LibraryMetadata>("libraries");
     let (owner, name) = path.into_inner();
@@ -154,7 +196,10 @@ async fn publish_user_library(db: web::Data<Database>, path: web::Path<(String,S
     // TODO: check if approval is required
     let query = doc! {"owner": owner, "name": name};
     let update = doc! {"$set": {"public": true}};
-    let result = collection.update_one(query, update, None).await.expect("Library publish operation failed");
+    let result = collection
+        .update_one(query, update, None)
+        .await
+        .expect("Library publish operation failed");
     if result.matched_count == 0 {
         Ok(HttpResponse::NotFound().finish())
     } else {
@@ -163,7 +208,10 @@ async fn publish_user_library(db: web::Data<Database>, path: web::Path<(String,S
 }
 
 #[post("/{owner}/{name}/unpublish")]
-async fn unpublish_user_library(db: web::Data<Database>, path: web::Path<(String,String)>) -> Result<HttpResponse, std::io::Error> {
+async fn unpublish_user_library(
+    db: web::Data<Database>,
+    path: web::Path<(String, String)>,
+) -> Result<HttpResponse, std::io::Error> {
     // TODO: update the library info in the database
     // TODO: get the requestor and authorize
     let collection = db.collection::<LibraryMetadata>("libraries");
@@ -171,7 +219,10 @@ async fn unpublish_user_library(db: web::Data<Database>, path: web::Path<(String
 
     let query = doc! {"owner": owner, "name": name};
     let update = doc! {"$set": {"public": false}};
-    let result = collection.update_one(query, update, None).await.expect("Library unpublish operation failed");
+    let result = collection
+        .update_one(query, update, None)
+        .await
+        .expect("Library unpublish operation failed");
     if result.matched_count == 0 {
         Ok(HttpResponse::NotFound().finish())
     } else {
@@ -180,8 +231,7 @@ async fn unpublish_user_library(db: web::Data<Database>, path: web::Path<(String
 }
 
 pub fn config(cfg: &mut web::ServiceConfig) {
-    cfg
-        .service(list_community_libraries)
+    cfg.service(list_community_libraries)
         .service(list_user_libraries)
         .service(get_user_library)
         .service(save_user_library)
@@ -193,23 +243,40 @@ pub fn config(cfg: &mut web::ServiceConfig) {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use actix_web::{test,http,App};
-    use mongodb::{Client,Database};
+    use actix_web::{http, test, App};
+    use mongodb::{Client, Database};
 
-    async fn init_database(name: &str, libraries: std::vec::Vec<LibraryMetadata>) -> Result<Database, std::io::Error>{
+    async fn init_database(
+        name: &str,
+        libraries: std::vec::Vec<LibraryMetadata>,
+    ) -> Result<Database, std::io::Error> {
         let library_count = libraries.len();
-        let client = Client::with_uri_str("mongodb://127.0.0.1:27017/").await
+        let client = Client::with_uri_str("mongodb://127.0.0.1:27017/")
+            .await
             .expect("Unable to connect to database");
 
         // Seed the database
         let database_name = &format!("netsblox-tests-{}", name);
         let database = client.database(database_name);
-        let collection = database.collection::<LibraryMetadata>("libraries");  // FIXME: rename collection - not database
-        collection.delete_many(doc!{}, None).await.expect("Unable to empty database");
-        collection.insert_many(libraries, None).await.expect("Unable to seed database");
+        let collection = database.collection::<LibraryMetadata>("libraries"); // FIXME: rename collection - not database
+        collection
+            .delete_many(doc! {}, None)
+            .await
+            .expect("Unable to empty database");
+        collection
+            .insert_many(libraries, None)
+            .await
+            .expect("Unable to seed database");
 
-        let count = collection.count_documents(doc!{}, None).await.expect("Unable to count docs");
-        assert_eq!(count, library_count as u64, "Expected {} docs but found {}", library_count, count);
+        let count = collection
+            .count_documents(doc! {}, None)
+            .await
+            .expect("Unable to count docs");
+        assert_eq!(
+            count, library_count as u64,
+            "Expected {} docs but found {}",
+            library_count, count
+        );
 
         Ok(database)
     }
@@ -217,20 +284,31 @@ mod tests {
     #[actix_web::test]
     async fn test_list_community_libraries() {
         let libraries = vec![
-            LibraryMetadata::new("brian".to_string(), "public example".to_string(), true, None),
-            LibraryMetadata::new("brian".to_string(), "private example".to_string(), false, None),
+            LibraryMetadata::new(
+                "brian".to_string(),
+                "public example".to_string(),
+                true,
+                None,
+            ),
+            LibraryMetadata::new(
+                "brian".to_string(),
+                "private example".to_string(),
+                false,
+                None,
+            ),
         ];
-        let database = init_database("list_community_libs", libraries).await.expect("Unable to initialize database");
+        let database = init_database("list_community_libs", libraries)
+            .await
+            .expect("Unable to initialize database");
 
         // Run the test
         let mut app = test::init_service(
             App::new()
-            .app_data(web::Data::new(database))
-            .configure(config)
-        ).await;
-        let req = test::TestRequest::get()
-            .uri("/community")
-            .to_request();
+                .app_data(web::Data::new(database))
+                .configure(config),
+        )
+        .await;
+        let req = test::TestRequest::get().uri("/community").to_request();
         let response = test::call_service(&mut app, req).await;
 
         assert_eq!(response.status(), http::StatusCode::OK);
@@ -240,23 +318,25 @@ mod tests {
     }
 
     #[actix_web::test]
-    async fn test_list_user_libraries() {  // TODO: 403 if not allowed?
+    async fn test_list_user_libraries() {
+        // TODO: 403 if not allowed?
         let libraries = vec![
             LibraryMetadata::new("cassie".to_string(), "project 1".to_string(), false, None),
             LibraryMetadata::new("brian".to_string(), "project 2".to_string(), false, None),
             LibraryMetadata::new("brian".to_string(), "project 3".to_string(), true, None),
         ];
-        let database = init_database("list_user_libs", libraries).await.expect("Unable to initialize database");
+        let database = init_database("list_user_libs", libraries)
+            .await
+            .expect("Unable to initialize database");
 
         // Run the test
         let mut app = test::init_service(
             App::new()
-            .app_data(web::Data::new(database.clone()))
-            .configure(config)
-        ).await;
-        let req = test::TestRequest::get()
-            .uri("/brian")
-            .to_request();
+                .app_data(web::Data::new(database.clone()))
+                .configure(config),
+        )
+        .await;
+        let req = test::TestRequest::get().uri("/brian").to_request();
         let response = test::call_service(&mut app, req).await;
 
         assert_eq!(response.status(), http::StatusCode::OK);
@@ -332,16 +412,24 @@ mod tests {
         let publish_name = "to-publish-example".to_string();
         let libraries = vec![
             LibraryMetadata::new("brian".to_string(), publish_name.clone(), false, None),
-            LibraryMetadata::new("brian".to_string(), "private example".to_string(), false, None),
+            LibraryMetadata::new(
+                "brian".to_string(),
+                "private example".to_string(),
+                false,
+                None,
+            ),
         ];
-        let database = init_database("publish_user_lib", libraries).await.expect("Unable to initialize database");
+        let database = init_database("publish_user_lib", libraries)
+            .await
+            .expect("Unable to initialize database");
 
         // Run the test
         let mut app = test::init_service(
             App::new()
-            .app_data(web::Data::new(database.clone()))
-            .configure(config)
-        ).await;
+                .app_data(web::Data::new(database.clone()))
+                .configure(config),
+        )
+        .await;
         let req = test::TestRequest::post()
             .uri(&format!("/brian/{}/publish", publish_name))
             .to_request();
@@ -349,12 +437,19 @@ mod tests {
 
         assert_eq!(response.status(), http::StatusCode::OK);
         let collection = database.collection::<LibraryMetadata>("libraries");
-        let mut cursor = collection.find(doc!{}, None).await.expect("Could not retrieve docs after publish");
+        let mut cursor = collection
+            .find(doc! {}, None)
+            .await
+            .expect("Could not retrieve docs after publish");
         let mut count = 0;
 
         while let Some(library) = cursor.try_next().await.expect("Could not fetch library") {
             let expected_public = library.name == publish_name;
-            assert_eq!(library.public, expected_public, "Expected \"{}\" to have public value of {}", library.name, expected_public);
+            assert_eq!(
+                library.public, expected_public,
+                "Expected \"{}\" to have public value of {}",
+                library.name, expected_public
+            );
             count += 1;
         }
         assert_eq!(count, 2);

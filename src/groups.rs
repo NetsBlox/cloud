@@ -1,7 +1,7 @@
+use actix_web::{delete, get, patch, post};
 use actix_web::{web, HttpResponse};
-use actix_web::{get, post, patch, delete};
 
-#[get("/")]  // TODO: pass the owner ID
+#[get("/")] // TODO: pass the owner ID
 async fn list_groups() -> Result<HttpResponse, std::io::Error> {
     unimplemented!();
 }
@@ -37,8 +37,7 @@ async fn delete_group() -> Result<HttpResponse, std::io::Error> {
 }
 
 pub fn config(cfg: &mut web::ServiceConfig) {
-    cfg
-        .service(list_groups)
+    cfg.service(list_groups)
         .service(view_group)
         .service(list_members)
         .service(update_group)
@@ -48,8 +47,8 @@ pub fn config(cfg: &mut web::ServiceConfig) {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use actix_web::{test,http,App};
-    use mongodb::{Client,Database,Collection};
+    use actix_web::{http, test, App};
+    use mongodb::{Client, Collection, Database};
 
     #[actix_web::test]
     async fn test_list_groups() {
