@@ -3,8 +3,7 @@ use actix_session::Session;
 use actix_web::{get, patch, post};
 use actix_web::{web, HttpResponse};
 use lazy_static::lazy_static;
-use mongodb::bson::{doc, Bson};
-use mongodb::Database;
+use mongodb::bson::{doc, Bson, DateTime};
 use regex::Regex;
 use rustrict::CensorStr;
 use serde::{Deserialize, Serialize};
@@ -164,15 +163,17 @@ async fn login(
     // TODO: authenticate
     let collection = app.collection::<User>("users");
     let query = doc! {"username": &credentials.username, "hash": &credentials.password_hash};
-    if let Some(user) = collection
+    // TODO: Check if the user has been banned...
+    match collection
         .find_one(query, None)
         .await
         .expect("Unable to retrieve user from database.")
     {
-        session.insert("username", &user.username).unwrap();
-        HttpResponse::Ok().finish()
-    } else {
-        HttpResponse::Unauthorized().finish()
+        Some(user) => {
+            session.insert("username", &user.username).unwrap();
+            HttpResponse::Ok().finish()
+        }
+        None => HttpResponse::Unauthorized().finish(),
     }
 }
 #[post("/logout")]
@@ -188,6 +189,47 @@ async fn whoami(session: Session) -> Result<HttpResponse, std::io::Error> {
     } else {
         Ok(HttpResponse::Unauthorized().finish())
     }
+}
+
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+struct BannedAccount {
+    username: String,
+    email: String,
+    banned_at: DateTime,
+}
+
+impl BannedAccount {
+    pub fn new(username: String, email: String) -> BannedAccount {
+        let banned_at = DateTime::now();
+        BannedAccount {
+            username,
+            email,
+            banned_at,
+        }
+    }
+}
+
+#[post("/{username}/ban")]
+async fn ban_user(
+    app: web::Data<AppData>,
+    path: web::Path<(String,)>,
+) -> Result<HttpResponse, std::io::Error> {
+    let (username,) = path.into_inner();
+    let collection = app.collection::<User>("users");
+    let query = doc! {"username": username};
+    match collection.find_one(query, None).await.unwrap() {
+        Some(user) => {
+            let banned_accounts = app.collection::<BannedAccount>("bannedAccounts");
+            let account = BannedAccount::new(user.username, user.email);
+            banned_accounts.insert_one(account, None).await.unwrap();
+            Ok(HttpResponse::Ok().finish())
+        }
+        None => Ok(HttpResponse::NotFound().finish()),
+    }
+
+    // TODO: authenticate!
+    // TODO: record the email and username as banned
 }
 
 #[post("/{username}/delete")]
