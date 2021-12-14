@@ -230,6 +230,40 @@ async fn unpublish_user_library(
     }
 }
 
+#[get("/admin/approval_needed")] // TODO: is this a good endpoint name?
+async fn list_approval_needed(db: web::Data<Database>) -> Result<HttpResponse, std::io::Error> {
+    let collection = db.collection::<LibraryMetadata>("libraries");
+    let mut cursor = collection
+        .find(doc! {"needs_approval": true}, None)
+        .await
+        .expect("Could not retrieve libraries");
+
+    let mut libraries = std::vec::Vec::new();
+    while let Some(library) = cursor.try_next().await.expect("Could not fetch library") {
+        // TODO: should I stream this back?
+        libraries.push(library);
+    }
+
+    Ok(HttpResponse::Ok().json(libraries))
+}
+
+#[post("/admin/{owner}/{name}/approve")] // TODO: is this a good endpoint name?
+async fn approve_library(
+    db: web::Data<Database>,
+    path: web::Path<(String, String)>,
+) -> Result<HttpResponse, std::io::Error> {
+    let collection = db.collection::<LibraryMetadata>("libraries");
+    let (owner, name) = path.into_inner();
+    // TODO: authenticate
+    let query = doc! {"owner": owner, "name": name};
+    let update = doc! {"$set": {"public": true, "needsApproval": false}};
+    collection
+        .update_one(query, update, None)
+        .await
+        .expect("Unable to update library");
+    Ok(HttpResponse::Ok().finish())
+}
+
 pub fn config(cfg: &mut web::ServiceConfig) {
     cfg.service(list_community_libraries)
         .service(list_user_libraries)
