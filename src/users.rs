@@ -163,7 +163,16 @@ async fn login(
     // TODO: authenticate
     let collection = app.collection::<User>("users");
     let query = doc! {"username": &credentials.username, "hash": &credentials.password_hash};
-    // TODO: Check if the user has been banned...
+
+    let banned_accounts = app.collection::<BannedAccount>("bannedAccounts");
+    if let Some(_account) = banned_accounts
+        .find_one(doc! {"username": &credentials.username}, None)
+        .await
+        .expect("Unable to verify account isn't banned.")
+    {
+        return HttpResponse::Unauthorized().body("Account has been banned");
+    }
+
     match collection
         .find_one(query, None)
         .await
@@ -191,7 +200,7 @@ async fn whoami(session: Session) -> Result<HttpResponse, std::io::Error> {
     }
 }
 
-#[derive(Serialize)]
+#[derive(Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 struct BannedAccount {
     username: String,
