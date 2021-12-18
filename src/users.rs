@@ -2,6 +2,7 @@ use crate::app_data::AppData;
 use actix_session::Session;
 use actix_web::{get, patch, post};
 use actix_web::{web, HttpResponse};
+use futures::stream::TryStreamExt;
 use lazy_static::lazy_static;
 use mongodb::bson::{doc, Bson, DateTime};
 use regex::Regex;
@@ -232,13 +233,12 @@ async fn ban_user(
             let banned_accounts = app.collection::<BannedAccount>("bannedAccounts");
             let account = BannedAccount::new(user.username, user.email);
             banned_accounts.insert_one(account, None).await.unwrap();
-            Ok(HttpResponse::Ok().finish())
+            Ok(HttpResponse::Ok().body("Account has been banned"))
         }
-        None => Ok(HttpResponse::NotFound().finish()),
+        None => Ok(HttpResponse::NotFound().body("Account not found")),
     }
 
     // TODO: authenticate!
-    // TODO: record the email and username as banned
 }
 
 #[post("/{username}/delete")]
@@ -260,7 +260,7 @@ async fn delete_user(
 
 #[post("/{username}/password")]
 async fn reset_password() -> HttpResponse {
-    unimplemented!();
+    todo!();
     // TODO: This will need to send an email...
 }
 
@@ -350,14 +350,55 @@ async fn unlink_account(
     }
 }
 
+#[derive(Deserialize)]
+struct ProjectMetadata {
+    id: String,
+    name: String,
+    updated: DateTime,
+    thumbnail: String,
+    public: bool,
+}
+
 #[get("/{owner}/projects")]
-async fn list_user_projects() -> Result<HttpResponse, std::io::Error> {
-    unimplemented!();
+async fn list_user_projects(
+    app: web::Data<AppData>,
+    path: web::Path<(String,)>,
+) -> Result<HttpResponse, std::io::Error> {
+    let collection = app.collection::<ProjectMetadata>("projects");
+    let (username,) = path.into_inner();
+    let query = doc! {"owner": username};
+    let cursor = collection
+        .find(query, None)
+        .await
+        .expect("Could not retrieve projects");
+
+    let mut projects = Vec::new();
+    while let Some(project) = cursor.try_next().await.expect("Could not fetch project") {
+        // TODO: should I stream this back?
+        projects.push(project);
+    }
+    Ok(HttpResponse::Ok().json(projects))
 }
 
 #[get("/{owner}/projects/shared")]
-async fn list_shared_projects() -> Result<HttpResponse, std::io::Error> {
-    unimplemented!();
+async fn list_shared_projects(
+    app: web::Data<AppData>,
+    path: web::Path<(String,)>,
+) -> Result<HttpResponse, std::io::Error> {
+    let collection = app.collection::<ProjectMetadata>("projects");
+    let (username,) = path.into_inner();
+    let query = doc! {"owner": username};
+    let cursor = collection
+        .find(query, None)
+        .await
+        .expect("Could not retrieve projects");
+
+    let mut projects = Vec::new();
+    while let Some(project) = cursor.try_next().await.expect("Could not fetch project") {
+        // TODO: should I stream this back?
+        projects.push(project);
+    }
+    Ok(HttpResponse::Ok().json(projects))
 }
 
 pub fn config(cfg: &mut web::ServiceConfig) {
@@ -617,12 +658,14 @@ mod tests {
             .await
             .expect("Unable to seed database");
 
+        // Ban the account (manually)
         let collection = app_data.collection::<BannedAccount>("bannedAccounts");
         let banned_account = BannedAccount::new("brian".to_string(), "email".to_string());
         collection
             .insert_one(banned_account, None)
             .await
             .expect("Could not insert banned account");
+
         // Run the test
         let mut app = test::init_service(
             App::new()
@@ -631,7 +674,6 @@ mod tests {
         )
         .await;
 
-        // TODO: Ban the account (manually)
         let credentials = LoginCredentials {
             username: "brian".to_string(),
             password_hash: "pwd_hash".to_string(),
