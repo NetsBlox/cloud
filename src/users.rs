@@ -606,13 +606,54 @@ mod tests {
     }
 
     #[actix_web::test]
+    async fn test_login_banned() {
+        let user = User::from(NewUser::new(
+            "brian".to_string(),
+            "pwd_hash".to_string(),
+            "email".to_string(),
+            None,
+        ));
+        let (app_data, _) = init_app_data("login_bad_pwd", vec![user])
+            .await
+            .expect("Unable to seed database");
+
+        let collection = app_data.collection::<BannedAccount>("bannedAccounts");
+        let banned_account = BannedAccount::new("brian".to_string(), "email".to_string());
+        collection
+            .insert_one(banned_account, None)
+            .await
+            .expect("Could not insert banned account");
+        // Run the test
+        let mut app = test::init_service(
+            App::new()
+                .app_data(web::Data::new(app_data))
+                .configure(config),
+        )
+        .await;
+
+        // TODO: Ban the account (manually)
+        let credentials = LoginCredentials {
+            username: "brian".to_string(),
+            password_hash: "pwd_hash".to_string(),
+        };
+
+        let req = test::TestRequest::post()
+            .uri("/login")
+            .set_json(&credentials)
+            .to_request();
+
+        let response = test::call_service(&mut app, req).await;
+        assert_eq!(response.status(), http::StatusCode::UNAUTHORIZED);
+    }
+
+    #[actix_web::test]
     async fn test_login_with_strategy() {
-        unimplemented!();
+        todo!();
     }
 
     #[actix_web::test]
     async fn test_login_with_strategy_403() {
-        unimplemented!();
+        todo!();
     }
 
     #[actix_web::test]
@@ -651,27 +692,27 @@ mod tests {
 
     #[actix_web::test]
     async fn test_delete_user() {
-        unimplemented!();
+        todo!();
     }
 
     #[actix_web::test]
     async fn test_delete_user_403() {
-        unimplemented!();
+        todo!();
     }
 
     #[actix_web::test]
     async fn test_link_account() {
-        unimplemented!();
+        todo!();
     }
 
     #[actix_web::test]
     async fn test_link_account_403() {
-        unimplemented!();
+        todo!();
     }
 
     #[actix_web::test]
     async fn test_link_account_duplicate() {
-        unimplemented!();
+        todo!();
     }
 
     #[test]

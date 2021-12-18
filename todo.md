@@ -1,7 +1,9 @@
 # To Do
 - [ ] ban user support
+    - [ ] add tests
 - [ ] validate user accounts on creation
     - maybe we will need to whitelist email domains later
+    - we can block tor exit nodes. Should we record the IP address?
 - [ ] ws support
     - [ ] sending (netsblox) messages
     - [ ] client-message
@@ -26,6 +28,21 @@
 - [ ] require login to send messages?
 
 - [ ] library approval endpoint
+    - [ ] add authentication
+
+- [ ] authentication
+    - two main forms:
+        - admin (should be easy with an extractor)
+        - group owner (a little trickier since it depends on the group...)
+    - casbin-rs seems promising. We would just need to define the policies for the database...
+        - ACL, RBAC, ABAC?
+        - maybe role-based access control?
+        - Actually ABAC might be the easiest in terms of integration
+            - user cookie can include:
+                - group IDs? Wait, that isn't included...
+
+        - It would be nice not to have two sources of truth...
+
 - [ ] admin users
 
 ## CLI
