@@ -7,6 +7,7 @@ use mongodb::bson::{doc, Bson, DateTime};
 use regex::Regex;
 use rustrict::CensorStr;
 use serde::{Deserialize, Serialize};
+use sha2::{Digest, Sha512};
 use std::time::SystemTime;
 
 #[derive(Serialize, Deserialize, Clone)]
@@ -159,7 +160,7 @@ async fn login(
     credentials: web::Json<LoginCredentials>,
     session: Session,
 ) -> HttpResponse {
-    // TODO: authenticate
+    // TODO: authenticate (must be admin)
     let collection = app.collection::<User>("users");
     let query = doc! {"username": &credentials.username, "hash": &credentials.password_hash};
 
@@ -257,8 +258,30 @@ async fn delete_user(
 }
 
 #[post("/{username}/password")]
-async fn reset_password() -> HttpResponse {
-    todo!();
+async fn reset_password(app: web::Data<AppData>, path: web::Path<(String,)>) -> HttpResponse {
+    // TODO: authenticate?
+    let (username,) = path.into_inner();
+    let pg = passwords::PasswordGenerator::new()
+        .length(8)
+        .exclude_similar_characters(true)
+        .numbers(true)
+        .spaces(false);
+    let new_password = pg.generate_one().unwrap();
+
+    let mut hasher = Sha512::new();
+    hasher.update(new_password);
+    let hash = hasher.finalize();
+    // TODO: This will need to send an email...
+
+    let collection = app.collection::<User>("users");
+    let query = doc! {"username": username};
+    let update = doc! {"hash": &hex::encode(hash)};
+    let result = collection.update_one(query, update, None).await.unwrap();
+    if result.modified_count > 0 {
+        HttpResponse::Ok().finish()
+    } else {
+        HttpResponse::NotFound().finish()
+    }
     // TODO: This will need to send an email...
 }
 
@@ -357,9 +380,7 @@ pub fn config(cfg: &mut web::ServiceConfig) {
         .service(change_password)
         .service(view_user)
         .service(link_account)
-        .service(unlink_account)
-        .service(list_user_projects)
-        .service(list_shared_projects);
+        .service(unlink_account);
 }
 
 #[cfg(test)]

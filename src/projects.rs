@@ -2,7 +2,7 @@ use crate::app_data::AppData;
 use actix_web::{delete, get, patch, post};
 use actix_web::{web, HttpResponse};
 use futures::stream::TryStreamExt;
-use mongodb::bson::{doc, DateTime};
+use mongodb::bson::{doc, oid::ObjectId, DateTime};
 use serde::{Deserialize, Serialize};
 
 #[post("/")]
@@ -24,6 +24,19 @@ struct ProjectMetadata {
     updated: DateTime,
     thumbnail: String,
     public: bool,
+}
+
+#[derive(Deserialize, Serialize)]
+struct ProjectEntry {
+    id: String,
+    owner: String,
+    name: String,
+    updated: DateTime,
+    thumbnail: String,
+    public: bool,
+    collaborators: std::vec::Vec<String>,
+    origin_time: DateTime, // FIXME: set the case
+                           // TODO: add the rest of the fields
 }
 
 #[get("/user/{owner}")]
@@ -71,11 +84,21 @@ async fn list_shared_projects(
 #[get("/user/{owner}/{name}")]
 async fn get_project_named(
     app: web::Data<AppData>,
-    path: web::Path<(String,)>,
+    path: web::Path<(String, String)>,
 ) -> Result<HttpResponse, std::io::Error> {
-    let (owner, name) = path.into_inner();
     // TODO: Should this include metadata?
-    todo!();
+    // TODO: authenticate!
+    let (owner, name) = path.into_inner();
+    let collection = app.collection::<ProjectEntry>("projects");
+    let query = doc! {"owner": owner, "name": name};
+    match collection.find_one(query, None).await.unwrap() {
+        Some(project) => {
+            //project.source_code; // TODO: fetch this using the blob client
+            // TODO: serialize the project
+            Ok(HttpResponse::Ok().json(project))
+        }
+        None => Ok(HttpResponse::NotFound().body("Project not found")),
+    }
 }
 
 #[get("/id/{projectID}")]
@@ -84,8 +107,29 @@ async fn get_project() -> Result<HttpResponse, std::io::Error> {
 }
 
 #[delete("/id/{projectID}")]
-async fn delete_project() -> Result<HttpResponse, std::io::Error> {
-    todo!();
+async fn delete_project(
+    app: web::Data<AppData>,
+    path: web::Path<(String,)>,
+) -> Result<HttpResponse, std::io::Error> {
+    // TODO: authenticate! is admin or owner (is group owner?))
+    let collection = app.collection::<ProjectMetadata>("projects");
+    let (project_id,) = path.into_inner();
+    match ObjectId::parse_str(project_id) {
+        Ok(id) => {
+            let query = doc! {"_id": id}; // FIXME
+            let result = collection
+                .delete_one(query, None)
+                .await
+                .expect("Could not delete project");
+
+            if result.deleted_count > 0 {
+                Ok(HttpResponse::Ok().body("Project deleted"))
+            } else {
+                Ok(HttpResponse::NotFound().body("Project not found"))
+            }
+        }
+        Err(_) => Ok(HttpResponse::NotFound().body("Project not found")),
+    }
 }
 
 #[patch("/id/{projectID}")]
@@ -100,8 +144,28 @@ async fn get_latest_project() -> Result<HttpResponse, std::io::Error> {
 }
 
 #[get("/id/{projectID}/thumbnail")]
-async fn get_project_thumbnail() -> Result<HttpResponse, std::io::Error> {
-    todo!();
+async fn get_project_thumbnail(
+    app: web::Data<AppData>,
+    path: web::Path<(String,)>,
+) -> Result<HttpResponse, std::io::Error> {
+    let collection = app.collection::<ProjectMetadata>("projects");
+    let (project_id,) = path.into_inner();
+    match ObjectId::parse_str(project_id) {
+        Ok(id) => {
+            let query = doc! {"_id": id};
+            let result = collection
+                .find_one(query, None)
+                .await
+                .expect("Could not delete project");
+
+            if let Some(metadata) = result {
+                Ok(HttpResponse::Ok().body(metadata.thumbnail))
+            } else {
+                Ok(HttpResponse::NotFound().body("Project not found"))
+            }
+        }
+        Err(_) => Ok(HttpResponse::NotFound().body("Project not found")),
+    }
 }
 
 #[derive(Deserialize)]
@@ -161,8 +225,29 @@ async fn get_latest_role() -> Result<HttpResponse, std::io::Error> {
 }
 
 #[get("/id/{projectID}/collaborators/")]
-async fn list_collaborators() -> Result<HttpResponse, std::io::Error> {
-    todo!();
+async fn list_collaborators(
+    app: web::Data<AppData>,
+    path: web::Path<(String,)>,
+) -> Result<HttpResponse, std::io::Error> {
+    // TODO: authenticate
+    let collection = app.collection::<ProjectEntry>("projects");
+    let (project_id,) = path.into_inner();
+    match ObjectId::parse_str(project_id) {
+        Ok(id) => {
+            let query = doc! {"_id": id};
+            let result = collection
+                .find_one(query, None)
+                .await
+                .expect("Could not find project");
+
+            if let Some(project) = result {
+                Ok(HttpResponse::Ok().json(project.collaborators))
+            } else {
+                Ok(HttpResponse::NotFound().body("Project not found"))
+            }
+        }
+        Err(_) => Ok(HttpResponse::NotFound().body("Project not found")),
+    }
 }
 
 #[derive(Deserialize)]
@@ -171,18 +256,62 @@ struct AddCollaboratorBody {
 }
 #[post("/id/{projectID}/collaborators/")]
 async fn add_collaborator(
+    app: web::Data<AppData>,
+    path: web::Path<(String,)>,
     body: web::Json<AddCollaboratorBody>,
 ) -> Result<HttpResponse, std::io::Error> {
-    todo!();
+    // TODO: authenticate
+    let collection = app.collection::<ProjectEntry>("projects");
+    let (project_id,) = path.into_inner();
+    match ObjectId::parse_str(project_id) {
+        Ok(id) => {
+            let query = doc! {"_id": id};
+            let update = doc! {"$push": {"collaborators": &body.username}};
+            let result = collection
+                .update_one(query, update, None)
+                .await
+                .expect("Could not find project");
+
+            if result.matched_count == 1 {
+                Ok(HttpResponse::Ok().body("Collaborator added"))
+            } else {
+                Ok(HttpResponse::NotFound().body("Project not found"))
+            }
+        }
+        Err(_) => Ok(HttpResponse::NotFound().body("Project not found")),
+    }
 }
 
 #[delete("/id/{projectID}/collaborators/{username}")]
-async fn remove_collaborator() -> Result<HttpResponse, std::io::Error> {
-    todo!();
+async fn remove_collaborator(
+    app: web::Data<AppData>,
+    path: web::Path<(String, String)>,
+) -> Result<HttpResponse, std::io::Error> {
+    // TODO: authenticate
+    let collection = app.collection::<ProjectEntry>("projects");
+    let (project_id, username) = path.into_inner();
+    match ObjectId::parse_str(project_id) {
+        Ok(id) => {
+            let query = doc! {"_id": id};
+            let update = doc! {"$pull": {"collaborators": &username}};
+            let result = collection
+                .update_one(query, update, None)
+                .await
+                .expect("Could not find project");
+
+            if result.matched_count == 1 {
+                Ok(HttpResponse::Ok().body("Collaborator removed"))
+            } else {
+                Ok(HttpResponse::NotFound().body("Project not found"))
+            }
+        }
+        Err(_) => Ok(HttpResponse::NotFound().body("Project not found")),
+    }
 }
 
 #[get("/id/{projectID}/occupants/")]
 async fn list_occupants() -> Result<HttpResponse, std::io::Error> {
+    // TODO: should this go to the network category?
     todo!();
 }
 

@@ -12,6 +12,8 @@
     - [ ] request-actions
 
 - [ ] user routes
+    - [ ] remove client-side password hashing?
+        - [ ] test that the hashing algs are the same?
 - [ ] network routes
     - [ ] message passing
 
