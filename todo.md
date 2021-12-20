@@ -17,10 +17,15 @@
 
 - [ ] projects routes
     - [ ] add blob support for main project data
+        - rusoto?
     - [ ] don't use hashing to store the data
         - [ ] probably need a migration since this will change assumptions on delete/rename
     - [ ] get project by name (open default role?)
     - [ ] get project by name (entire project)
+    - [ ] list projects
+        - projects/id/{ID}
+        - projects/user/{owner}
+        - projects/shared/{collaborator}
 
 - [ ] auth integration with services endpoint
     - maybe the services endpoint should hit this one?

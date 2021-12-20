@@ -2,7 +2,6 @@ use crate::app_data::AppData;
 use actix_session::Session;
 use actix_web::{get, patch, post};
 use actix_web::{web, HttpResponse};
-use futures::stream::TryStreamExt;
 use lazy_static::lazy_static;
 use mongodb::bson::{doc, Bson, DateTime};
 use regex::Regex;
@@ -10,7 +9,6 @@ use rustrict::CensorStr;
 use serde::{Deserialize, Serialize};
 use std::time::SystemTime;
 
-// TODO: Add banning support
 #[derive(Serialize, Deserialize, Clone)]
 #[serde(rename_all = "camelCase")]
 struct User {
@@ -348,57 +346,6 @@ async fn unlink_account(
     } else {
         Ok(HttpResponse::Ok().finish())
     }
-}
-
-#[derive(Deserialize)]
-struct ProjectMetadata {
-    id: String,
-    name: String,
-    updated: DateTime,
-    thumbnail: String,
-    public: bool,
-}
-
-#[get("/{owner}/projects")]
-async fn list_user_projects(
-    app: web::Data<AppData>,
-    path: web::Path<(String,)>,
-) -> Result<HttpResponse, std::io::Error> {
-    let collection = app.collection::<ProjectMetadata>("projects");
-    let (username,) = path.into_inner();
-    let query = doc! {"owner": username};
-    let cursor = collection
-        .find(query, None)
-        .await
-        .expect("Could not retrieve projects");
-
-    let mut projects = Vec::new();
-    while let Some(project) = cursor.try_next().await.expect("Could not fetch project") {
-        // TODO: should I stream this back?
-        projects.push(project);
-    }
-    Ok(HttpResponse::Ok().json(projects))
-}
-
-#[get("/{owner}/projects/shared")]
-async fn list_shared_projects(
-    app: web::Data<AppData>,
-    path: web::Path<(String,)>,
-) -> Result<HttpResponse, std::io::Error> {
-    let collection = app.collection::<ProjectMetadata>("projects");
-    let (username,) = path.into_inner();
-    let query = doc! {"owner": username};
-    let cursor = collection
-        .find(query, None)
-        .await
-        .expect("Could not retrieve projects");
-
-    let mut projects = Vec::new();
-    while let Some(project) = cursor.try_next().await.expect("Could not fetch project") {
-        // TODO: should I stream this back?
-        projects.push(project);
-    }
-    Ok(HttpResponse::Ok().json(projects))
 }
 
 pub fn config(cfg: &mut web::ServiceConfig) {
