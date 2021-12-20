@@ -1,9 +1,12 @@
 # To Do
-- [ ] ban user support
+- [ ] add room update message support
+- [x] ban user support
     - [ ] add tests
+
 - [ ] validate user accounts on creation
-    - maybe we will need to whitelist email domains later
+    - [-] maybe we will need to whitelist email domains later
     - we can block tor exit nodes. Should we record the IP address?
+
 - [ ] ws support
     - [ ] sending (netsblox) messages
     - [ ] client-message
@@ -50,7 +53,23 @@
 
         - It would be nice not to have two sources of truth...
 
+    - oso seems promising...
+
+    - Request is allowed if resource is:
+        - owned by user (projects, libraries, groups, etc)
+        - owned by member of one of my groups
+        - is admin
+
+        - are there any exceptions?
+
 - [ ] admin users
+
+- [ ] external apps (using message passing)
+    - how does this work with the friends?
+    - how can we ensure no collisions?
+    - [ ] add the group IDs (+ GLOBAL) to the clients in the network topology?
+        - these would be the user's group + any owned groups
+        - the sender and receiver must share at least one
 
 ## CLI
 - add CLI
