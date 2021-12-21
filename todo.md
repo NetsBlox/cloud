@@ -1,5 +1,10 @@
 # To Do
 - [ ] add room update message support
+    - event system
+- [ ] add configuration file
+
+- [ ] email Tom about the big update?
+
 - [x] ban user support
     - [ ] add tests
 
@@ -19,6 +24,10 @@
         - [ ] test that the hashing algs are the same?
 - [ ] network routes
     - [ ] message passing
+
+- [ ] need to figure out the format used!!!
+    - should I use xml instead of json?
+        - probably not
 
 - [ ] projects routes
     - [ ] add blob support for main project data

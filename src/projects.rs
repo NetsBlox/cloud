@@ -7,6 +7,11 @@ use serde::{Deserialize, Serialize};
 use std::collections::{HashMap, HashSet};
 use uuid::Uuid;
 
+#[derive(Deserialize, Serialize)]
+struct CreateProjectData {
+    name: String,
+}
+
 #[post("/")]
 async fn create_project(app: web::Data<AppData>) -> Result<HttpResponse, std::io::Error> {
     todo!();

@@ -2,12 +2,14 @@ use crate::app_data::AppData;
 use actix_session::Session;
 use actix_web::{get, patch, post};
 use actix_web::{web, HttpResponse};
+use futures::TryStreamExt;
 use lazy_static::lazy_static;
-use mongodb::bson::{doc, Bson, DateTime};
+use mongodb::bson::{doc, oid::ObjectId, Bson, DateTime};
 use regex::Regex;
 use rustrict::CensorStr;
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha512};
+use std::collections::HashSet;
 use std::time::SystemTime;
 
 #[derive(Serialize, Deserialize, Clone)]
@@ -16,7 +18,8 @@ struct User {
     username: String,
     email: String,
     hash: String,
-    group_id: Option<u32>,
+    group_id: Option<ObjectId>,
+    admin: Option<bool>, // TODO: use roles instead? What other roles would we even have?
     created_at: u32,
     linked_accounts: Vec<LinkedAccount>,
 }
@@ -46,7 +49,70 @@ impl From<NewUser> for User {
                 .unwrap()
                 .as_secs() as u32,
             linked_accounts: std::vec::Vec::new(),
+            admin: None,
         }
+    }
+}
+
+pub async fn is_super_user(app: &AppData, session: &Session) -> bool {
+    if let Some(username) = session.get::<String>("username").unwrap_or(None) {
+        let query = doc! {"username": username};
+        match app
+            .collection::<User>("users")
+            .find_one(query, None)
+            .await
+            .unwrap()
+        {
+            Some(user) => user.admin.unwrap_or(false),
+            None => false,
+        }
+    } else {
+        false
+    }
+}
+
+pub async fn can_edit_user(app: &AppData, session: &Session, username: &str) -> bool {
+    if let Some(requestor) = session.get::<String>("username").unwrap_or(None) {
+        requestor == username
+            || is_super_user(&app, &session).await
+            || has_group_containing(&app, &requestor, &username).await
+    } else {
+        false
+    }
+}
+
+#[derive(Serialize, Deserialize)]
+struct Group {
+    _id: ObjectId,
+    owner: String,
+}
+
+async fn has_group_containing(app: &AppData, owner: &str, member: &str) -> bool {
+    let query = doc! {"username": member};
+    match app
+        .collection::<User>("users")
+        .find_one(query, None)
+        .await
+        .unwrap()
+    {
+        Some(user) => match user.group_id {
+            Some(group_id) => {
+                let query = doc! {"owner": owner};
+                let cursor = app
+                    .collection::<Group>("groups")
+                    .find(query, None)
+                    .await
+                    .unwrap();
+                let groups = cursor.try_collect::<Vec<Group>>().await.unwrap();
+                let group_ids = groups
+                    .iter()
+                    .map(|group| group._id)
+                    .collect::<HashSet<ObjectId>>();
+                group_ids.contains(&group_id)
+            }
+            None => false,
+        },
+        None => false,
     }
 }
 
@@ -92,11 +158,16 @@ struct NewUser {
     username: String,
     hash: String,
     email: String,
-    group_id: Option<u32>,
+    group_id: Option<ObjectId>,
 }
 
 impl NewUser {
-    pub fn new(username: String, hash: String, email: String, group_id: Option<u32>) -> NewUser {
+    pub fn new(
+        username: String,
+        hash: String,
+        email: String,
+        group_id: Option<ObjectId>,
+    ) -> NewUser {
         NewUser {
             username,
             hash,
@@ -161,6 +232,7 @@ async fn login(
     session: Session,
 ) -> HttpResponse {
     // TODO: authenticate (must be admin)
+    // TODO: check if tor IP
     let collection = app.collection::<User>("users");
     let query = doc! {"username": &credentials.username, "hash": &credentials.password_hash};
 
@@ -185,6 +257,7 @@ async fn login(
         None => HttpResponse::Unauthorized().finish(),
     }
 }
+
 #[post("/logout")]
 async fn logout(session: Session) -> HttpResponse {
     session.purge();

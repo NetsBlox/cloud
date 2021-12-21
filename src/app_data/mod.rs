@@ -1,16 +1,19 @@
 use crate::network::topology::Topology;
 use actix::{Actor, Addr};
 use mongodb::{Collection, Database};
+use rusoto_s3::S3Client;
 
 pub struct AppData {
     prefix: &'static str,
     pub db: Database,
     pub network: Addr<Topology>,
+    pub s3: S3Client,
 }
 
 impl AppData {
     pub fn new(
         db: Database,
+        s3: S3Client,
         network: Option<Addr<Topology>>,
         prefix: Option<&'static str>,
     ) -> AppData {
@@ -19,6 +22,7 @@ impl AppData {
         AppData {
             db,
             network,
+            s3,
             prefix,
         }
     }

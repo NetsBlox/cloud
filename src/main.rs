@@ -10,40 +10,12 @@ mod services_hosts;
 mod users;
 
 use actix_session::CookieSession;
-use actix_web::get;
-use actix_web::{middleware, web, App, HttpRequest, HttpResponse, HttpServer};
+use actix_web::{middleware, web, App, HttpServer};
 use app_data::AppData;
 use env_logger;
 use mongodb::Client;
-use serde::Serialize;
-
-////////////// Users //////////////
-#[derive(Serialize)]
-struct User {
-    username: String,
-}
-
-#[get("/users/{username}")]
-async fn view_user(
-    path: web::Path<(String,)>,
-    req: HttpRequest,
-) -> Result<HttpResponse, std::io::Error> {
-    let username = path.into_inner().0;
-
-    if let Some(cookie) = req.cookie("netsblox") {
-        let requestor = cookie.value();
-        if requestor == username {
-            // FIXME: use actual auth
-            Ok(HttpResponse::Ok().json(User {
-                username: username.to_string(),
-            }))
-        } else {
-            Ok(HttpResponse::Unauthorized().finish())
-        }
-    } else {
-        Ok(HttpResponse::Unauthorized().finish())
-    }
-}
+use rusoto_s3::S3Client;
+use rusoto_signature::region::Region;
 
 #[actix_web::main]
 async fn main() -> std::io::Result<()> {
@@ -52,6 +24,11 @@ async fn main() -> std::io::Result<()> {
         .expect("Could not connect to mongodb.");
     let db = client.database("netsblox-tests"); // TODO: make a custom struct that wraps the collection fns
     env_logger::init_from_env(env_logger::Env::new().default_filter_or("info"));
+    let region = Region::Custom {
+        name: "".to_owned(),
+        endpoint: "http://localhost:9000".to_owned(),
+    }; // FIXME: Use this for minio but update for aws
+    let s3 = S3Client::new(region);
 
     HttpServer::new(move || {
         App::new()
@@ -62,7 +39,7 @@ async fn main() -> std::io::Result<()> {
                     .secure(true),
             ) // FIXME: Set the key
             .wrap(middleware::Logger::default())
-            .app_data(web::Data::new(AppData::new(db.clone(), None, None)))
+            .app_data(web::Data::new(AppData::new(db.clone(), s3, None, None)))
             .service(web::scope("/libraries").configure(libraries::config))
             .service(web::scope("/services-hosts").configure(services_hosts::config))
             .service(web::scope("/users").configure(users::config))
