@@ -2,12 +2,11 @@ use crate::app_data::AppData;
 use crate::users::{can_edit_user, is_super_user};
 use actix_session::Session;
 use actix_web::{delete, get, post};
-use actix_web::{web, HttpRequest, HttpResponse};
-use futures::stream::StreamExt;
+use actix_web::{web, HttpResponse};
 use futures::stream::TryStreamExt;
 use lazy_static::lazy_static;
 use mongodb::bson::doc;
-use mongodb::options::FindOptions;
+use mongodb::options::{FindOneAndUpdateOptions, FindOptions};
 use regex::Regex;
 use rustrict::CensorStr;
 use serde::{Deserialize, Serialize};
@@ -34,6 +33,14 @@ impl LibraryMetadata {
             public,
         }
     }
+    pub fn from_lib(library: &Library) -> LibraryMetadata {
+        LibraryMetadata::new(
+            library.owner,
+            library.name,
+            library.public,
+            Some(library.notes),
+        )
+    }
 }
 
 #[derive(Serialize, Deserialize)]
@@ -50,7 +57,6 @@ struct Library {
 // TODO: add an endpoint for the official ones?
 #[get("/community")]
 async fn list_community_libraries(db: web::Data<AppData>) -> Result<HttpResponse, std::io::Error> {
-    println!("listing community libraries");
     let collection = db.collection::<LibraryMetadata>("libraries");
 
     let options = FindOptions::builder().sort(doc! {"name": 1}).build();
@@ -64,90 +70,101 @@ async fn list_community_libraries(db: web::Data<AppData>) -> Result<HttpResponse
     Ok(HttpResponse::Ok().json(libraries))
 }
 
-#[get("/{owner}")] // TODO: scope these under user/? currently, this wont work if the username is "community"
+#[get("/user/{owner}")]
 async fn list_user_libraries(
-    db: web::Data<AppData>,
+    app: web::Data<AppData>,
     path: web::Path<(String,)>,
-    req: HttpRequest,
+    session: Session,
 ) -> Result<HttpResponse, std::io::Error> {
-    // TODO: Get the user credentials
-    let username = path.into_inner().0;
-    let only_public = if let Some(cookie) = req.cookie("netsblox") {
-        let requestor = cookie.value();
-        requestor != username // FIXME: Make this authentication better
-    } else {
-        true
-    };
-
-    let filter = if only_public {
-        doc! {"owner": username, "public": true}
-    } else {
-        doc! {"owner": username}
-    };
-    let collection = db.collection::<LibraryMetadata>("libraries");
+    let (username,) = path.into_inner();
+    let query = doc! {"owner": username};
+    let collection = app.collection::<LibraryMetadata>("libraries");
     let options = FindOptions::builder().sort(doc! {"name": 1}).build();
     let mut cursor = collection
-        .find(filter, options)
+        .find(query, options)
         .await
         .expect("Library list query failed");
 
     let mut libraries = Vec::new();
     while let Some(library) = cursor.try_next().await.expect("Could not fetch library") {
-        // TODO: should I stream this back?
-        libraries.push(library);
+        if can_view_library(&app, &session, &library).await {
+            libraries.push(library);
+        }
     }
 
     Ok(HttpResponse::Ok().json(libraries))
 }
 
-#[get("/{owner}/{name}")]
+#[get("/user/{owner}/{name}")]
 async fn get_user_library(
-    db: web::Data<AppData>,
+    app: web::Data<AppData>,
     path: web::Path<(String, String)>,
+    session: Session,
 ) -> Result<HttpResponse, std::io::Error> {
-    // TODO: retrieve the library from the database
-    // TODO: check the auth
-    let collection = db.collection::<Library>("libraries");
     let (owner, name) = path.into_inner();
+    let collection = app.collection::<Library>("libraries");
     let query = doc! {"owner": owner, "name": name};
-    // TODO: get the library post data
     if let Some(library) = collection
         .find_one(query, None)
         .await
         .expect("Unable to retrieve from database")
     {
-        Ok(HttpResponse::Ok().body(library.blocks))
+        if can_view_library(&app, &session, &LibraryMetadata::from_lib(&library)).await {
+            Ok(HttpResponse::Ok().body(library.blocks))
+        } else {
+            Ok(HttpResponse::Unauthorized().body("Not allowed."))
+        }
     } else {
         Ok(HttpResponse::NotFound().finish())
     }
 }
 
-#[post("/{owner}/{name}")]
+#[derive(Serialize, Deserialize)]
+struct CreateLibraryData {
+    notes: String,
+    blocks: String,
+}
+#[post("/user/{owner}/{name}")]
 async fn save_user_library(
-    db: web::Data<AppData>,
+    app: web::Data<AppData>,
     path: web::Path<(String, String)>,
+    data: web::Json<CreateLibraryData>,
+    session: Session,
 ) -> Result<HttpResponse, std::io::Error> {
     let (owner, name) = path.into_inner();
     if !is_valid_name(&name) {
         return Ok(HttpResponse::BadRequest().body("Invalid library name"));
     }
+    if !can_edit_library(&app, session, &owner).await {
+        return Ok(HttpResponse::Unauthorized().body("Not allowed."));
+    }
 
-    // TODO: authenticate
-    let collection = db.collection::<LibraryMetadata>("libraries");
+    let collection = app.collection::<Library>("libraries");
     let query = doc! {"owner": &owner, "name": &name};
-    // TODO: get the library post data. What should this include? xml, notes, etc?
-
-    // TODO: check if it needs re-approval?
-    //let update = doc!{"$set": {"owner": owner, "name": name, "blocks": blocks}};
-    let update = doc! {"$set": {"owner": &owner, "name": &name}}; // FIXME:
-    let result = collection
-        .update_one(query, update, None)
+    let update = doc! {
+        "notes": &data.notes,
+        "blocks": &data.blocks,
+        "$setOnInsert": {
+            "owner": &owner,
+            "name": &name,
+            "public": false,
+            "needsApproval": false,
+        }
+    };
+    let options = FindOneAndUpdateOptions::builder().upsert(true).build();
+    match collection
+        .find_one_and_update(query.clone(), update, options)
         .await
-        .expect("Unable to save in database");
-    if result.matched_count == 0 {
-        Ok(HttpResponse::Created().finish())
-    } else {
-        Ok(HttpResponse::Ok().finish())
+        .unwrap()
+    {
+        Some(library) => {
+            if library.public && is_approval_required(&data.blocks) {
+                let update = doc! {"public": false, "needsApproval": true};
+                collection.update_one(query, update, None).await.unwrap();
+            }
+            Ok(HttpResponse::Ok().body("Library saved."))
+        }
+        None => Ok(HttpResponse::Created().body("Library saved.")),
     }
 }
 
@@ -162,14 +179,17 @@ fn is_approval_required(text: &str) -> bool {
     text.contains("reportJSFunction") || text.is_inappropriate()
 }
 
-#[delete("/{owner}/{name}")]
+#[delete("/user/{owner}/{name}")]
 async fn delete_user_library(
-    db: web::Data<AppData>,
+    app: web::Data<AppData>,
     path: web::Path<(String, String)>,
+    session: Session,
 ) -> Result<HttpResponse, std::io::Error> {
-    // TODO: authenticate
-    let collection = db.collection::<LibraryMetadata>("libraries");
     let (owner, name) = path.into_inner();
+    if !can_edit_library(&app, session, &owner).await {
+        return Ok(HttpResponse::Unauthorized().body("Not allowed."));
+    }
+    let collection = app.collection::<LibraryMetadata>("libraries");
     let query = doc! {"owner": owner, "name": name};
     let result = collection
         .delete_one(query, None)
@@ -182,37 +202,45 @@ async fn delete_user_library(
     }
 }
 
-#[post("/{owner}/{name}/publish")]
+#[post("/user/{owner}/{name}/publish")]
 async fn publish_user_library(
-    db: web::Data<AppData>,
+    app: web::Data<AppData>,
     path: web::Path<(String, String)>,
+    session: Session,
 ) -> Result<HttpResponse, std::io::Error> {
-    // TODO: get the requestor and authorize
-    let collection = db.collection::<LibraryMetadata>("libraries");
     let (owner, name) = path.into_inner();
+    if !can_edit_library(&app, session, &owner).await {
+        return Ok(HttpResponse::Unauthorized().body("Not allowed."));
+    }
 
-    // TODO: check if approval is required
+    let collection = app.collection::<Library>("libraries");
     let query = doc! {"owner": owner, "name": name};
-    let update = doc! {"$set": {"public": true}};
-    let result = collection
-        .update_one(query, update, None)
+    let update = doc! {"$set": {"needsApproval": true}};
+
+    match collection
+        .find_one_and_update(query.clone(), update, None)
         .await
-        .expect("Library publish operation failed");
-    if result.matched_count == 0 {
-        Ok(HttpResponse::NotFound().finish())
-    } else {
-        Ok(HttpResponse::Ok().finish())
+        .expect("Library publish operation failed")
+    {
+        Some(library) => {
+            if !is_approval_required(&library.blocks) {
+                let update = doc! {"$set": {"public": true, "needsApproval": false}};
+                collection.update_one(query, update, None).await.unwrap();
+                Ok(HttpResponse::Ok().body("Library published!"))
+            } else {
+                Ok(HttpResponse::Ok().body("Library marked to publish (approval required)."))
+            }
+        }
+        None => Ok(HttpResponse::NotFound().finish()),
     }
 }
 
-#[post("/{owner}/{name}/unpublish")]
+#[post("/user/{owner}/{name}/unpublish")]
 async fn unpublish_user_library(
     db: web::Data<AppData>,
     path: web::Path<(String, String)>,
     session: Session,
 ) -> Result<HttpResponse, std::io::Error> {
-    // TODO: update the library info in the database
-    // TODO: get the requestor and authorize
     let (owner, name) = path.into_inner();
     if !can_edit_library(&db, session, &owner).await {
         return Ok(HttpResponse::Unauthorized().body("Not allowed."));
@@ -238,14 +266,20 @@ async fn can_edit_library(app: &AppData, session: Session, owner: &str) -> bool 
         Some(username) => can_edit_user(&app, &session, owner).await,
         None => false,
     }
-    // TODO: Given an authenticated user, check if it can access the library
-    // It can access a private library iff:
-    //  - it is the owner
-    //  - is a manager/supervisor of the user
-    //  - is admin
 }
 
-#[get("/admin/approval_needed")] // TODO: is this a good endpoint name?
+async fn can_view_library(app: &AppData, session: &Session, library: &LibraryMetadata) -> bool {
+    if library.public {
+        return true;
+    }
+
+    match session.get::<String>("username").unwrap_or(None) {
+        Some(username) => can_edit_user(&app, &session, &library.owner).await,
+        None => false,
+    }
+}
+
+#[get("/admin/approval_needed")]
 async fn list_approval_needed(
     app: web::Data<AppData>,
     session: Session,
@@ -255,21 +289,17 @@ async fn list_approval_needed(
     }
 
     let collection = app.collection::<LibraryMetadata>("libraries");
-    let mut cursor = collection
+    let cursor = collection
         .find(doc! {"needs_approval": true}, None)
         .await
         .expect("Could not retrieve libraries");
 
-    let mut libraries = std::vec::Vec::new();
-    while let Some(library) = cursor.try_next().await.expect("Could not fetch library") {
-        // TODO: should I stream this back?
-        libraries.push(library);
-    }
+    let libraries = cursor.try_collect::<Vec<LibraryMetadata>>().await.unwrap();
 
     Ok(HttpResponse::Ok().json(libraries))
 }
 
-#[post("/admin/{owner}/{name}/approve")] // TODO: is this a good endpoint name?
+#[post("/admin/{owner}/{name}/approve")]
 async fn approve_library(
     app: web::Data<AppData>,
     path: web::Path<(String, String)>,
@@ -281,7 +311,6 @@ async fn approve_library(
 
     let collection = app.collection::<LibraryMetadata>("libraries");
     let (owner, name) = path.into_inner();
-    // TODO: authenticate
     let query = doc! {"owner": owner, "name": name};
     let update = doc! {"$set": {"public": true, "needsApproval": false}};
     collection

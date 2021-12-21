@@ -46,8 +46,8 @@
 
 - [ ] require login to send messages?
 
-- [ ] library approval endpoint
-    - [ ] add authentication
+- [x] library approval endpoint
+    - [x] add authentication
 
 - [ ] authentication
     - two main forms:
