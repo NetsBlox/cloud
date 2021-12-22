@@ -6,7 +6,6 @@ use actix_web::{get, post};
 use actix_web::{web, HttpResponse};
 use futures::TryStreamExt;
 use mongodb::bson::{doc, oid::ObjectId};
-use serde::{Deserialize, Serialize};
 
 #[get("/group/{id}")]
 async fn list_group_hosts(

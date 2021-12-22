@@ -1,11 +1,13 @@
 use crate::app_data::AppData;
+use crate::models::{Project, ProjectMetadata};
+use crate::users::can_edit_user;
+use actix_session::Session;
 use actix_web::{delete, get, patch, post};
 use actix_web::{web, HttpResponse};
 use futures::stream::TryStreamExt;
 use mongodb::bson::{doc, oid::ObjectId, DateTime};
+use mongodb::Cursor;
 use serde::{Deserialize, Serialize};
-use std::collections::{HashMap, HashSet};
-use uuid::Uuid;
 
 #[derive(Deserialize, Serialize)]
 struct CreateProjectData {
@@ -24,76 +26,58 @@ async fn create_project(app: web::Data<AppData>) -> Result<HttpResponse, std::io
 //todo!();
 //}
 
-#[derive(Deserialize, Serialize)]
-struct ProjectMetadata {
-    id: String,
-    name: String,
-    updated: DateTime,
-    thumbnail: String,
-    public: bool,
-}
-
-#[derive(Deserialize, Serialize)]
-struct ProjectEntry {
-    _id: ObjectId,
-    owner: String,
-    name: String,
-    updated: DateTime,
-    thumbnail: String,
-    public: bool,
-    collaborators: std::vec::Vec<String>,
-    origin_time: DateTime, // FIXME: set the case
-    roles: HashMap<String, RoleData>,
-    // TODO: add the rest of the fields
-}
-
-#[derive(Deserialize, Serialize)]
-#[serde(rename_all = "PascalCase")]
-struct RoleData {
-    project_name: String,
-    source_code: String,
-    media: String,
-}
-
 #[get("/user/{owner}")]
 async fn list_user_projects(
     app: web::Data<AppData>,
     path: web::Path<(String,)>,
+    session: Session,
 ) -> Result<HttpResponse, std::io::Error> {
-    let collection = app.collection::<ProjectMetadata>("projects");
     let (username,) = path.into_inner();
-    let query = doc! {"owner": username};
-    let mut cursor = collection
+    let query = doc! {"owner": &username};
+    let cursor = app
+        .project_metadata
         .find(query, None)
         .await
         .expect("Could not retrieve projects");
 
-    let mut projects = Vec::new();
-    while let Some(project) = cursor.try_next().await.expect("Could not fetch project") {
-        // TODO: should I stream this back?
-        projects.push(project);
-    }
+    let projects = get_visible_projects(&app, &session, &username, cursor).await;
     Ok(HttpResponse::Ok().json(projects))
+}
+
+async fn get_visible_projects(
+    app: &AppData,
+    session: &Session,
+    owner: &str,
+    cursor: Cursor<ProjectMetadata>,
+) {
+    let projects = if can_edit_user(&app, &session, &owner).await {
+        cursor.try_collect::<Vec<ProjectMetadata>>().await.unwrap()
+    } else {
+        cursor
+            .try_collect::<Vec<ProjectMetadata>>()
+            .await
+            .unwrap()
+            .into_iter()
+            .filter(|p| p.public)
+            .collect::<Vec<ProjectMetadata>>()
+    };
 }
 
 #[get("/shared/{username}")]
 async fn list_shared_projects(
     app: web::Data<AppData>,
     path: web::Path<(String,)>,
+    session: Session,
 ) -> Result<HttpResponse, std::io::Error> {
-    let collection = app.collection::<ProjectMetadata>("projects");
     let (username,) = path.into_inner();
-    let query = doc! {"collaborators": username}; // FIXME
-    let mut cursor = collection
+    let query = doc! {"collaborators": &username}; // FIXME
+    let cursor = app
+        .project_metadata
         .find(query, None)
         .await
         .expect("Could not retrieve projects");
 
-    let mut projects = Vec::new();
-    while let Some(project) = cursor.try_next().await.expect("Could not fetch project") {
-        // TODO: should I stream this back?
-        projects.push(project);
-    }
+    let projects = get_visible_projects(&app, &session, &username, cursor).await;
     Ok(HttpResponse::Ok().json(projects))
 }
 
@@ -101,56 +85,122 @@ async fn list_shared_projects(
 async fn get_project_named(
     app: web::Data<AppData>,
     path: web::Path<(String, String)>,
+    session: Session,
 ) -> Result<HttpResponse, std::io::Error> {
-    // TODO: Should this include metadata?
-    // TODO: authenticate!
     let (owner, name) = path.into_inner();
-    let collection = app.collection::<ProjectEntry>("projects");
     let query = doc! {"owner": owner, "name": name};
-    match collection.find_one(query, None).await.unwrap() {
-        Some(project) => {
-            //project.source_code; // TODO: fetch this using the blob client
-            // TODO: serialize the project
+    match app.project_metadata.find_one(query, None).await.unwrap() {
+        Some(metadata) => {
+            if !can_edit_project(&app, &session, &metadata).await {
+                return Ok(HttpResponse::Unauthorized().body("Not allowed."));
+            }
+            let project = app.fetch_project(&metadata).await;
             Ok(HttpResponse::Ok().json(project))
         }
         None => Ok(HttpResponse::NotFound().body("Project not found")),
     }
 }
 
+async fn can_view_project(app: &AppData, session: &Session, project: &ProjectMetadata) -> bool {
+    if project.public {
+        return true;
+    }
+    can_edit_project(&app, &session, &project).await
+}
+
+async fn can_edit_project(app: &AppData, session: &Session, project: &ProjectMetadata) -> bool {
+    match session.get::<String>("username").unwrap_or(None) {
+        Some(username) => {
+            project.collaborators.contains(&username)
+                || can_edit_user(&app, &session, &project.owner).await
+        }
+        None => false,
+    }
+}
+
 #[get("/id/{projectID}")]
-async fn get_project() -> Result<HttpResponse, std::io::Error> {
-    todo!();
+async fn get_project(
+    app: web::Data<AppData>,
+    path: web::Path<(ObjectId,)>,
+    session: Session,
+) -> Result<HttpResponse, std::io::Error> {
+    let (project_id,) = path.into_inner();
+    let query = doc! {"_id": project_id};
+    if let Some(metadata) = app.project_metadata.find_one(query, None).await.unwrap() {
+        if !can_view_project(&app, &session, &metadata).await {
+            return Ok(HttpResponse::Unauthorized().body("Not allowed."));
+        }
+
+        // TODO: Should this return xml? Probably not (to match the other version)
+        let project = app.fetch_project(&metadata).await;
+        Ok(HttpResponse::Ok().json(project))
+    } else {
+        Ok(HttpResponse::NotFound().body("Project not found"))
+    }
 }
 
 #[delete("/id/{projectID}")]
 async fn delete_project(
     app: web::Data<AppData>,
-    path: web::Path<(String,)>,
+    path: web::Path<(ObjectId,)>,
+    session: Session,
 ) -> Result<HttpResponse, std::io::Error> {
-    // TODO: authenticate! is admin or owner (is group owner?))
-    let collection = app.collection::<ProjectMetadata>("projects");
     let (project_id,) = path.into_inner();
-    match ObjectId::parse_str(project_id) {
-        Ok(id) => {
-            let query = doc! {"_id": id}; // FIXME
-            let result = collection
-                .delete_one(query, None)
-                .await
-                .expect("Could not delete project");
-
-            if result.deleted_count > 0 {
-                Ok(HttpResponse::Ok().body("Project deleted"))
-            } else {
-                Ok(HttpResponse::NotFound().body("Project not found"))
-            }
+    let query = doc! {"_id": project_id};
+    if let Some(metadata) = app.project_metadata.find_one(query, None).await.unwrap() {
+        // collaborators cannot delete -> only user/admin/etc
+        if !can_edit_user(&app, &session, &metadata.owner).await {
+            return Ok(HttpResponse::Unauthorized().body("Not allowed."));
         }
-        Err(_) => Ok(HttpResponse::NotFound().body("Project not found")),
+
+        let deleted = app.delete_project(metadata).await;
+
+        Ok(HttpResponse::Ok().body("Project deleted"))
+    } else {
+        Ok(HttpResponse::NotFound().body("Project not found"))
     }
 }
 
+#[derive(Deserialize)]
+struct UpdateProjectBody {
+    name: String,
+}
+
 #[patch("/id/{projectID}")]
-async fn update_project() -> Result<HttpResponse, std::io::Error> {
-    todo!(); // TODO: rename, etc
+async fn update_project(
+    app: web::Data<AppData>,
+    path: web::Path<(ObjectId,)>,
+    body: web::Json<UpdateProjectBody>,
+    session: Session,
+) -> Result<HttpResponse, std::io::Error> {
+    let (project_id,) = path.into_inner();
+
+    let query = doc! {"_id": project_id};
+    match app
+        .project_metadata
+        .find_one(query.clone(), None)
+        .await
+        .unwrap()
+    {
+        Some(metadata) => {
+            if !can_edit_project(&app, &session, &metadata).await {
+                return Ok(HttpResponse::Unauthorized().body("Not allowed."));
+            }
+            let update = doc! {"name": &body.name};
+            let result = app
+                .project_metadata
+                .update_one(query, update, None)
+                .await
+                .unwrap();
+
+            if result.matched_count > 0 {
+                Ok(HttpResponse::Ok().body("Project updated."))
+            } else {
+                Ok(HttpResponse::NotFound().body("Project not found."))
+            }
+        }
+        None => Ok(HttpResponse::NotFound().body("Project not found.")),
+    }
 }
 
 #[get("/id/{projectID}/latest")] // Include unsaved data
@@ -249,8 +299,28 @@ async fn create_role(
 }
 
 #[get("/id/{projectID}/{roleID}")]
-async fn get_role() -> Result<HttpResponse, std::io::Error> {
-    todo!();
+async fn get_role(
+    app: web::Data<AppData>,
+    path: web::Path<(ObjectId, String)>,
+    session: Session,
+) -> Result<HttpResponse, std::io::Error> {
+    let (project_id, role_id) = path.into_inner();
+    let query = doc! {"_id": project_id};
+    match app.project_metadata.find_one(query, None).await.unwrap() {
+        Some(metadata) => {
+            if !can_view_project(&app, &session, &metadata).await {
+                return Ok(HttpResponse::Unauthorized().body("Not allowed."));
+            }
+            match metadata.roles.get(&role_id) {
+                Some(role_md) => {
+                    let role = app.fetch_role(role_md).await;
+                    Ok(HttpResponse::Ok().json(role))
+                }
+                None => Ok(HttpResponse::NotFound().body("Role not found.")),
+            }
+        }
+        None => Ok(HttpResponse::NotFound().body("Project not found.")),
+    }
 }
 
 #[delete("/id/{projectID}/{roleID}")]
@@ -274,23 +344,41 @@ struct RenameRoleData {
 async fn rename_role(
     app: web::Data<AppData>,
     role_data: web::Json<RenameRoleData>,
-    path: web::Path<(String, String)>,
+    path: web::Path<(ObjectId, String)>,
+    session: Session,
 ) -> Result<HttpResponse, std::io::Error> {
     let (project_id, role_id) = path.into_inner();
-    match ObjectId::parse_str(project_id) {
-        Ok(project_id) => {
-            let query = doc! {"_id": project_id};
-            let update = doc! {"$set": {format!("roles.{}.ProjectName", role_id): &role_data.name}};
-            let collection = app.collection::<ProjectEntry>("projects");
-            let result = collection.update_one(query, update, None).await.unwrap();
-
-            if result.modified_count > 0 {
-                Ok(HttpResponse::Ok().body("Role updated")) // TODO: send room update message?
-            } else {
-                Ok(HttpResponse::NotFound().body("Project not found"))
-            }
+    let query = doc! {"_id": project_id};
+    if let Some(metadata) = app
+        .project_metadata
+        .find_one(query.clone(), None)
+        .await
+        .unwrap()
+    {
+        if !can_edit_project(&app, &session, &metadata).await {
+            return Ok(HttpResponse::Unauthorized().body("Not allowed."));
         }
-        Err(_err) => Ok(HttpResponse::NotFound().body("Project not found")),
+
+        match metadata.roles.get(&role_id) {
+            Some(role_md) => {
+                let update =
+                    doc! {"$set": {format!("roles.{}.ProjectName", role_id): &role_data.name}};
+                let result = app
+                    .project_metadata
+                    .update_one(query, update, None)
+                    .await
+                    .unwrap();
+
+                if result.modified_count > 0 {
+                    Ok(HttpResponse::Ok().body("Role updated")) // TODO: send room update message?
+                } else {
+                    Ok(HttpResponse::NotFound().body("Role not found"))
+                }
+            }
+            None => Ok(HttpResponse::NotFound().body("Role not found")),
+        }
+    } else {
+        Ok(HttpResponse::NotFound().body("Role not found"))
     }
 }
 
@@ -302,47 +390,51 @@ async fn get_latest_role() -> Result<HttpResponse, std::io::Error> {
 #[get("/id/{projectID}/collaborators/")]
 async fn list_collaborators(
     app: web::Data<AppData>,
-    path: web::Path<(String,)>,
+    path: web::Path<(ObjectId,)>,
+    session: Session,
 ) -> Result<HttpResponse, std::io::Error> {
-    // TODO: authenticate
-    let collection = app.collection::<ProjectEntry>("projects");
     let (project_id,) = path.into_inner();
-    match ObjectId::parse_str(project_id) {
-        Ok(id) => {
-            let query = doc! {"_id": id};
-            let result = collection
-                .find_one(query, None)
-                .await
-                .expect("Could not find project");
+    let query = doc! {"_id": project_id};
 
-            if let Some(project) = result {
-                Ok(HttpResponse::Ok().json(project.collaborators))
-            } else {
-                Ok(HttpResponse::NotFound().body("Project not found"))
-            }
+    let result = app
+        .project_metadata
+        .find_one(query, None)
+        .await
+        .expect("Could not find project");
+
+    if let Some(metadata) = result {
+        if can_edit_project(&app, &session, &metadata).await {
+            Ok(HttpResponse::Ok().json(metadata.collaborators))
+        } else {
+            Ok(HttpResponse::Unauthorized().body("Not allowed."))
         }
-        Err(_) => Ok(HttpResponse::NotFound().body("Project not found")),
+    } else {
+        Ok(HttpResponse::NotFound().body("Project not found"))
     }
 }
 
-#[derive(Deserialize)]
-struct AddCollaboratorBody {
-    username: String,
-}
-#[post("/id/{projectID}/collaborators/")]
+#[post("/id/{projectID}/collaborators/{username}")]
 async fn add_collaborator(
     app: web::Data<AppData>,
-    path: web::Path<(String,)>,
-    body: web::Json<AddCollaboratorBody>,
+    path: web::Path<(ObjectId, String)>,
+    session: Session,
 ) -> Result<HttpResponse, std::io::Error> {
-    // TODO: authenticate
-    let collection = app.collection::<ProjectEntry>("projects");
-    let (project_id,) = path.into_inner();
-    match ObjectId::parse_str(project_id) {
-        Ok(id) => {
-            let query = doc! {"_id": id};
-            let update = doc! {"$push": {"collaborators": &body.username}};
-            let result = collection
+    let (project_id, username) = path.into_inner();
+    let query = doc! {"_id": project_id};
+    match app
+        .project_metadata
+        .find_one(query.clone(), None)
+        .await
+        .unwrap()
+    {
+        Some(metadata) => {
+            if !can_edit_project(&app, &session, &metadata).await {
+                return Ok(HttpResponse::Unauthorized().body("Not allowed."));
+            }
+
+            let update = doc! {"$push": {"collaborators": &username}};
+            let result = app
+                .project_metadata
                 .update_one(query, update, None)
                 .await
                 .expect("Could not find project");
@@ -353,34 +445,43 @@ async fn add_collaborator(
                 Ok(HttpResponse::NotFound().body("Project not found"))
             }
         }
-        Err(_) => Ok(HttpResponse::NotFound().body("Project not found")),
+        None => Ok(HttpResponse::NotFound().body("Project not found")),
     }
 }
 
 #[delete("/id/{projectID}/collaborators/{username}")]
 async fn remove_collaborator(
     app: web::Data<AppData>,
-    path: web::Path<(String, String)>,
+    path: web::Path<(ObjectId, String)>,
+    session: Session,
 ) -> Result<HttpResponse, std::io::Error> {
-    // TODO: authenticate
-    let collection = app.collection::<ProjectEntry>("projects");
     let (project_id, username) = path.into_inner();
-    match ObjectId::parse_str(project_id) {
-        Ok(id) => {
-            let query = doc! {"_id": id};
+    let query = doc! {"_id": project_id};
+    match app
+        .project_metadata
+        .find_one(query.clone(), None)
+        .await
+        .unwrap()
+    {
+        Some(metadata) => {
+            if !can_edit_project(&app, &session, &metadata).await {
+                return Ok(HttpResponse::Unauthorized().body("Not allowed."));
+            }
+
             let update = doc! {"$pull": {"collaborators": &username}};
-            let result = collection
+            let result = app
+                .project_metadata
                 .update_one(query, update, None)
                 .await
                 .expect("Could not find project");
 
             if result.matched_count == 1 {
-                Ok(HttpResponse::Ok().body("Collaborator removed"))
+                Ok(HttpResponse::Ok().body("Collaborator added"))
             } else {
                 Ok(HttpResponse::NotFound().body("Project not found"))
             }
         }
-        Err(_) => Ok(HttpResponse::NotFound().body("Project not found")),
+        None => Ok(HttpResponse::NotFound().body("Project not found")),
     }
 }
 
@@ -426,4 +527,19 @@ pub fn config(cfg: &mut web::ServiceConfig) {
         .service(invite_occupant);
 }
 
-mod tests {}
+mod tests {
+    #[actix_web::test]
+    async fn test_view_shared_projects() {
+        unimplemented!();
+    }
+
+    #[actix_web::test]
+    async fn test_view_shared_projects_403() {
+        unimplemented!();
+    }
+
+    #[actix_web::test]
+    async fn test_view_shared_projects_admin() {
+        unimplemented!();
+    }
+}

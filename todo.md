@@ -1,6 +1,7 @@
 # To Do
 - [ ] add room update message support
     - event system
+
 - [ ] add configuration file
 
 - [ ] email Tom about the big update?
@@ -27,7 +28,20 @@
 
 - [ ] routes
     - [ ] collaboration invites
+        - keep the invites (only can send one per person/project)
+    - [ ] friends
+        - store these as a list of usernames?
+            - what if the friend deletes his/her account?
+    - [ ] friend requests?
     - [x] service hosts
+    - [ ] projects
+        - project_metadata
+            - maybe add a method for only the public fields?
+        - projects
+            - get the project source from the blob
+        - roles?
+
+- [ ] can the updates to the network topology stuff replace the "transient" projects?
 
 - [ ] session doesn't ensure logged in...
      - new extractor that ensures authenticated?

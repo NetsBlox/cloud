@@ -316,7 +316,6 @@ async fn reset_password(app: web::Data<AppData>, path: web::Path<(String,)>) -> 
     } else {
         HttpResponse::NotFound().finish()
     }
-    // TODO: This will need to send an email...
 }
 
 #[derive(Deserialize)]

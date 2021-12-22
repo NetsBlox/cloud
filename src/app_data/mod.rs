@@ -1,4 +1,5 @@
-use crate::models::{Group, User};
+use crate::models::{Group, Project, ProjectMetadata, User};
+use crate::models::{RoleData, RoleMetadata};
 use crate::network::topology::Topology;
 use actix::{Actor, Addr};
 use mongodb::{Collection, Database};
@@ -11,6 +12,7 @@ pub struct AppData {
     pub s3: S3Client,
     pub groups: Collection<Group>,
     pub users: Collection<User>,
+    pub project_metadata: Collection<ProjectMetadata>,
 }
 
 impl AppData {
@@ -24,6 +26,7 @@ impl AppData {
         let prefix = prefix.unwrap_or("");
         let groups = db.collection::<Group>(&(prefix.to_owned() + "groups"));
         let users = db.collection::<User>(&(prefix.to_owned() + "users"));
+        let project_metadata = db.collection::<ProjectMetadata>(&(prefix.to_owned() + "projects"));
         AppData {
             db,
             network,
@@ -31,6 +34,7 @@ impl AppData {
             groups,
             users,
             prefix,
+            project_metadata,
         }
     }
 
@@ -38,4 +42,23 @@ impl AppData {
         let name = &(self.prefix.to_owned() + name);
         self.db.collection::<T>(name)
     }
+
+    pub async fn fetch_project(&self, metadata: &ProjectMetadata) -> Project {
+        // TODO: populate the source code, media for each role
+        todo!();
+    }
+
+    pub async fn delete_project(&self, metadata: ProjectMetadata) -> bool {
+        todo!();
+    }
+
+    pub async fn fetch_role(&self, metadata: &RoleMetadata) -> RoleData {
+        todo!();
+    }
 }
+
+// TODO: add projects
+//struct Projects {
+//metadata:
+//
+//}

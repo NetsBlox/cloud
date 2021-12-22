@@ -7,18 +7,16 @@ async fn list_invites() -> Result<HttpResponse, std::io::Error> {
     unimplemented!();
 }
 
-#[derive(Deserialize)]
-#[serde(rename_all = "camelCase")]
-struct CollaborateInvite {
-    sender: String,
-    project_id: String,
-    // TODO
-}
-
 #[post("/{recipient}/")]
 async fn send_invite(invite: web::Json<CollaborateInvite>) -> Result<HttpResponse, std::io::Error> {
     unimplemented!();
 }
+
+// #[derive(Deserialize)]
+// enum CollaborateResponse {
+//     ACCEPTED,
+//     REJECTED,
+// }
 
 #[derive(Deserialize)]
 struct CollaborateResponse {

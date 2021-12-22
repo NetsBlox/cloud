@@ -1,5 +1,9 @@
+use crate::app_data::AppData;
+use actix_session::Session;
 use actix_web::{get, post};
 use actix_web::{web, HttpResponse};
+use futures::TryStreamExt;
+use mongodb::bson::oid::ObjectId;
 
 // Functionality:
 //   - send invite
@@ -11,7 +15,11 @@ use actix_web::{web, HttpResponse};
 //   - list friends
 //   - remove friend
 #[get("/{owner}/")]
-async fn list_friends() -> Result<HttpResponse, std::io::Error> {
+async fn list_friends(
+    app: web::Data<AppData>,
+    path: web::Path<(ObjectId,)>,
+    session: Session,
+) -> Result<HttpResponse, std::io::Error> {
     unimplemented!();
 }
 
