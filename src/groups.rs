@@ -6,7 +6,7 @@ use actix_web::{delete, get, patch, post};
 use actix_web::{web, HttpResponse};
 use futures::stream::TryStreamExt;
 use mongodb::bson::{doc, oid::ObjectId};
-use serde::{Deserialize, Serialize};
+use serde::Deserialize;
 
 #[get("/user/{owner}")]
 async fn list_groups(
@@ -27,25 +27,20 @@ async fn list_groups(
 #[get("/id/{id}")]
 async fn view_group(
     app: web::Data<AppData>,
-    path: web::Path<(String,)>,
+    path: web::Path<(ObjectId,)>,
     session: Session,
 ) -> Result<HttpResponse, std::io::Error> {
     let (id,) = path.into_inner();
     if let Some(username) = session.get::<String>("username").unwrap() {
-        match ObjectId::parse_str(id) {
-            Ok(id) => {
-                let query = if is_super_user(&app, &session).await {
-                    doc! {"_id": id}
-                } else {
-                    doc! {"_id": id, "owner": username}
-                };
-                if let Some(group) = app.groups.find_one(query, None).await.unwrap() {
-                    Ok(HttpResponse::Ok().json(group))
-                } else {
-                    Ok(HttpResponse::NotFound().body("Not found."))
-                }
-            }
-            Err(_err) => Ok(HttpResponse::NotFound().body("Not found.")),
+        let query = if is_super_user(&app, &session).await {
+            doc! {"_id": id}
+        } else {
+            doc! {"_id": id, "owner": username}
+        };
+        if let Some(group) = app.groups.find_one(query, None).await.unwrap() {
+            Ok(HttpResponse::Ok().json(group))
+        } else {
+            Ok(HttpResponse::NotFound().body("Not found."))
         }
     } else {
         Ok(HttpResponse::Unauthorized().body("Not allowed."))

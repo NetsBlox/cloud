@@ -5,9 +5,6 @@
 
 - [ ] email Tom about the big update?
 
-- [x] ban user support
-    - [ ] add tests
-
 - [ ] validate user accounts on creation
     - [-] maybe we will need to whitelist email domains later
     - we can block tor exit nodes. Should we record the IP address?
@@ -25,16 +22,16 @@
 - [ ] network routes
     - [ ] message passing
 
-- [ ] group routes
-    - how are invalid object IDs handled?
-        - 404? (hopefully)
+- [ ] add tests
+    - [ ] group routes
+
+- [ ] routes
+    - [ ] collaboration invites
+    - [x] service hosts
 
 - [ ] session doesn't ensure logged in...
      - new extractor that ensures authenticated?
 
-- [ ] not implemented
-
-- [ ] service hosts routes
 - [ ] should I replace "collection" with specific names:
     - users, projects, etc?
     - [ ] do the types provide a projection?
@@ -100,4 +97,13 @@
         - is admin
 
         - are there any exceptions?
+
+- [x] group routes
+    - how are invalid object IDs handled?
+        - 404? (hopefully)
+
+- [x] ban user support
+    - [x] add tests
+
+- [-] not implemented
 

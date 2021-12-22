@@ -26,6 +26,7 @@ impl From<NewUser> for User {
                 .as_secs() as u32,
             linked_accounts: std::vec::Vec::new(),
             admin: None,
+            services_hosts: None,
         }
     }
 }

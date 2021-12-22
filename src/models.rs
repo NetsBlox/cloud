@@ -11,6 +11,7 @@ pub struct User {
     pub admin: Option<bool>, // TODO: use roles instead? What other roles would we even have?
     pub created_at: u32,
     pub linked_accounts: Vec<LinkedAccount>,
+    pub services_hosts: Option<Vec<ServiceHost>>,
 }
 
 impl Into<Bson> for User {
@@ -64,4 +65,13 @@ impl Into<Bson> for ServiceHost {
             "categories": Into::<Bson>::into(self.categories)
         })
     }
+}
+
+#[derive(Serialize, Deserialize, Clone)]
+#[serde(rename_all = "camelCase")]
+pub struct CollaborationInvite {
+    pub sender: String,
+    pub receiver: String,
+    pub project: String,
+    // TODO: role?
 }
