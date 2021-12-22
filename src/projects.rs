@@ -198,52 +198,54 @@ async fn create_role(
 ) -> Result<HttpResponse, std::io::Error> {
     // TODO: send room update message? I am not sure
     // TODO: this shouldn't need to. It should trigger an update sent
-    let (project_id,) = path.into_inner();
-    match ObjectId::parse_str(project_id) {
-        Ok(project_id) => {
-            let collection = app.collection::<ProjectEntry>("projects");
-            let query = doc! {"_id": project_id};
-            let role_id = Uuid::new_v4();
-            // FIXME: This isn't right...
-            let role = RoleData {
-                project_name: role_data.name,
-                // TODO: store this using the blob
-                source_code: role_data.data.unwrap_or("".to_owned()), // TODO: what about media?
-                media: "".to_owned(),
-            };
-            let update = doc! {format!("roles.{}", role_id): role};
-            match collection
-                .find_one_and_update(query, update, None)
-                .await
-                .unwrap()
-            {
-                Some(project) => {
-                    let role_names = project
-                        .roles
-                        .into_values()
-                        .map(|r| r.project_name)
-                        .collect::<HashSet<String>>();
+    todo!();
+    // let (project_id,) = path.into_inner();
+    // match ObjectId::parse_str(project_id) {
+    //     Ok(project_id) => {
+    //         let collection = app.collection::<ProjectEntry>("projects");
+    //         let query = doc! {"_id": project_id};
+    //         let role_id = Uuid::new_v4();
+    //         // FIXME: This isn't right...
+    //         let role = RoleData {
+    //             project_name: role_data.name,
+    //             // TODO: store this using the blob
+    //             source_code: role_data.data.unwrap_or("".to_owned()), // TODO: what about media?
+    //             media: "".to_owned(),
+    //         };
+    //         //let update = doc! {format!("roles.{}", role_id): role};
+    //         let update = doc! {format!("roles.{}", role_id): "FIXME"};
+    //         match collection
+    //             .find_one_and_update(query, update, None)
+    //             .await
+    //             .unwrap()
+    //         {
+    //             Some(project) => {
+    //                 let role_names = project
+    //                     .roles
+    //                     .into_values()
+    //                     .map(|r| r.project_name)
+    //                     .collect::<HashSet<String>>();
 
-                    if role_names.contains(&role_data.name) {
-                        let mut base_name = role_data.name;
-                        let mut role_name = base_name.clone();
-                        let number: u32 = 2;
-                        while role_names.contains(&role_name) {
-                            role_name = format!("{} ({})", base_name, number);
-                            number += 1;
-                        }
-                        let query = doc! {"_id": project_id};
-                        let update =
-                            doc! {"$set": {format!("roles.{}.ProjectName", role_id): role_name}};
-                        collection.update_one(query, update, None).await.unwrap();
-                    }
-                    Ok(HttpResponse::Ok().body("Role created"))
-                }
-                None => Ok(HttpResponse::NotFound().body("Project not found")),
-            }
-        }
-        Err(_err) => Ok(HttpResponse::NotFound().body("Project not found")),
-    }
+    //                 if role_names.contains(&role_data.name) {
+    //                     let mut base_name = role_data.name;
+    //                     let mut role_name = base_name.clone();
+    //                     let number: u32 = 2;
+    //                     while role_names.contains(&role_name) {
+    //                         role_name = format!("{} ({})", base_name, number);
+    //                         number += 1;
+    //                     }
+    //                     let query = doc! {"_id": project_id};
+    //                     let update =
+    //                         doc! {"$set": {format!("roles.{}.ProjectName", role_id): role_name}};
+    //                     collection.update_one(query, update, None).await.unwrap();
+    //                 }
+    //                 Ok(HttpResponse::Ok().body("Role created"))
+    //             }
+    //             None => Ok(HttpResponse::NotFound().body("Project not found")),
+    //         }
+    //     }
+    //     Err(_err) => Ok(HttpResponse::NotFound().body("Project not found")),
+    // }
 }
 
 #[get("/id/{projectID}/{roleID}")]

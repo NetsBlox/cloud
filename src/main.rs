@@ -4,6 +4,7 @@ mod database;
 mod friends;
 mod groups;
 mod libraries;
+mod models;
 mod network;
 mod projects;
 mod services_hosts;
@@ -28,18 +29,22 @@ async fn main() -> std::io::Result<()> {
         name: "".to_owned(),
         endpoint: "http://localhost:9000".to_owned(),
     }; // FIXME: Use this for minio but update for aws
-    let s3 = S3Client::new(region);
 
     HttpServer::new(move || {
         App::new()
             .wrap(
                 CookieSession::signed(&[1; 32])
-                    .domain("localhost:8080")
+                    .domain("localhost:7777")
                     .name("netsblox")
                     .secure(true),
             ) // FIXME: Set the key
             .wrap(middleware::Logger::default())
-            .app_data(web::Data::new(AppData::new(db.clone(), s3, None, None)))
+            .app_data(web::Data::new(AppData::new(
+                db.clone(),
+                S3Client::new(region.clone()),
+                None,
+                None,
+            )))
             .service(web::scope("/libraries").configure(libraries::config))
             .service(web::scope("/services-hosts").configure(services_hosts::config))
             .service(web::scope("/users").configure(users::config))
@@ -49,7 +54,7 @@ async fn main() -> std::io::Result<()> {
             .service(web::scope("/network").configure(network::config))
             .service(web::scope("/collaboration-invites").configure(collaboration_invites::config))
     })
-    .bind("127.0.0.1:8080")?
+    .bind("127.0.0.1:7777")?
     .run()
     .await
 }

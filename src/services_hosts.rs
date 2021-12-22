@@ -1,7 +1,9 @@
+use crate::app_data::AppData;
+use crate::models::ServiceHost;
+use actix_session::Session;
 use actix_web::{get, post};
 use actix_web::{web, HttpResponse};
-use mongodb::bson::{doc, Bson};
-use mongodb::Database;
+use mongodb::bson::{doc, oid::ObjectId};
 use serde::{Deserialize, Serialize};
 
 #[derive(Serialize, Deserialize)]
@@ -11,30 +13,27 @@ struct ThinUser {
     services_hosts: Vec<ServiceHost>,
 }
 
-#[derive(Serialize, Deserialize, Clone)]
-struct ServiceHost {
-    url: String,
-    categories: Vec<String>,
-}
-
-impl Into<Bson> for ServiceHost {
-    fn into(self) -> Bson {
-        Bson::Document(doc! {
-            "url": self.url,
-            "categories": Into::<Bson>::into(self.categories)
-        })
-    }
+#[derive(Serialize, Deserialize)]
+struct ThinGroup {
+    _id: ObjectId,
+    services_hosts: Vec<ServiceHost>,
 }
 
 #[get("/group/{id}")]
-async fn list_group_hosts(db: web::Data<Database>) -> Result<HttpResponse, std::io::Error> {
-    // TODO
+async fn list_group_hosts(
+    app: web::Data<AppData>,
+    path: web::Path<(String,)>,
+    session: Session,
+) -> Result<HttpResponse, std::io::Error> {
+    // TODO: is group owner or super user
+    let (group_id,) = path.into_inner();
+    let collection = app.collection::<ThinGroup>("groups");
     Ok(HttpResponse::Ok().json(true))
 }
 
 #[post("/group/{id}")]
 async fn set_group_hosts(
-    db: web::Data<Database>,
+    db: web::Data<AppData>,
     path: web::Path<(String,)>,
 ) -> Result<HttpResponse, std::io::Error> {
     unimplemented!();
@@ -54,7 +53,7 @@ async fn set_group_hosts(
 
 #[get("/user/{username}")]
 async fn list_user_hosts(
-    db: web::Data<Database>,
+    db: web::Data<AppData>,
     path: web::Path<(String,)>,
 ) -> Result<HttpResponse, std::io::Error> {
     // TODO: check authorization (if requestor != username)
@@ -75,7 +74,7 @@ async fn list_user_hosts(
 
 #[post("/user/{username}")]
 async fn set_user_hosts(
-    db: web::Data<Database>,
+    db: web::Data<AppData>,
     path: web::Path<(String,)>,
     hosts: web::Json<Vec<ServiceHost>>,
 ) -> Result<HttpResponse, std::io::Error> {
@@ -97,7 +96,7 @@ async fn set_user_hosts(
 }
 
 #[get("/all/{username}")]
-async fn list_all_hosts(db: web::Data<Database>) -> Result<HttpResponse, std::io::Error> {
+async fn list_all_hosts(db: web::Data<AppData>) -> Result<HttpResponse, std::io::Error> {
     // TODO
     Ok(HttpResponse::Ok().json(true))
 }
@@ -109,3 +108,5 @@ pub fn config(cfg: &mut web::ServiceConfig) {
         .service(set_user_hosts)
         .service(list_all_hosts);
 }
+
+mod test {}

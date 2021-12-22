@@ -35,10 +35,10 @@ impl LibraryMetadata {
     }
     pub fn from_lib(library: &Library) -> LibraryMetadata {
         LibraryMetadata::new(
-            library.owner,
-            library.name,
+            library.owner.clone(),
+            library.name.clone(),
             library.public,
-            Some(library.notes),
+            Some(library.notes.clone()),
         )
     }
 }

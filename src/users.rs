@@ -1,4 +1,5 @@
 use crate::app_data::AppData;
+use crate::models::{LinkedAccount, User};
 use actix_session::Session;
 use actix_web::{get, patch, post};
 use actix_web::{web, HttpResponse};
@@ -11,31 +12,6 @@ use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha512};
 use std::collections::HashSet;
 use std::time::SystemTime;
-
-#[derive(Serialize, Deserialize, Clone)]
-#[serde(rename_all = "camelCase")]
-struct User {
-    username: String,
-    email: String,
-    hash: String,
-    group_id: Option<ObjectId>,
-    admin: Option<bool>, // TODO: use roles instead? What other roles would we even have?
-    created_at: u32,
-    linked_accounts: Vec<LinkedAccount>,
-}
-
-impl Into<Bson> for User {
-    fn into(self) -> Bson {
-        Bson::Document(doc! {
-            "username": self.username,
-            "email": self.email,
-            "hash": self.hash,
-            "groupId": self.group_id,
-            "createdAt": self.created_at,
-            "linkedAccounts": Into::<Bson>::into(self.linked_accounts)
-        })
-    }
-}
 
 impl From<NewUser> for User {
     fn from(user_data: NewUser) -> Self {
@@ -113,21 +89,6 @@ async fn has_group_containing(app: &AppData, owner: &str, member: &str) -> bool 
             None => false,
         },
         None => false,
-    }
-}
-
-#[derive(Serialize, Deserialize, Clone)]
-struct LinkedAccount {
-    username: String,
-    strategy: String, // TODO: migrate type -> strategy
-}
-
-impl Into<Bson> for LinkedAccount {
-    fn into(self) -> Bson {
-        Bson::Document(doc! {
-            "username": self.username,
-            "strategy": self.strategy,
-        })
     }
 }
 
@@ -231,7 +192,6 @@ async fn login(
     credentials: web::Json<LoginCredentials>,
     session: Session,
 ) -> HttpResponse {
-    // TODO: authenticate (must be admin)
     // TODO: check if tor IP
     let collection = app.collection::<User>("users");
     let query = doc! {"username": &credentials.username, "hash": &credentials.password_hash};

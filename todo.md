@@ -25,9 +25,19 @@
 - [ ] network routes
     - [ ] message passing
 
-- [ ] need to figure out the format used!!!
-    - should I use xml instead of json?
-        - probably not
+- [ ] group routes
+    - how are invalid object IDs handled?
+        - 404? (hopefully)
+
+- [ ] session doesn't ensure logged in...
+     - new extractor that ensures authenticated?
+
+- [ ] not implemented
+
+- [ ] service hosts routes
+- [ ] should I replace "collection" with specific names:
+    - users, projects, etc?
+    - [ ] do the types provide a projection?
 
 - [ ] projects routes
     - [ ] add blob support for main project data
@@ -46,10 +56,30 @@
 
 - [ ] require login to send messages?
 
+- [ ] admin users
+    - [ ] add tests
+
+- [ ] external apps (using message passing)
+    - how does this work with the friends?
+    - how can we ensure no collisions?
+    - [ ] add the group IDs (+ GLOBAL) to the clients in the network topology?
+        - these would be the user's group + any owned groups
+        - the sender and receiver must share at least one
+
+## CLI
+- add CLI
+- write integration tests?
+    - import the server and test against it?
+
+## DONE
 - [x] library approval endpoint
     - [x] add authentication
 
-- [ ] authentication
+- [-] need to figure out the format used!!!
+    - should I use xml instead of json?
+        - probably not
+
+- [x] authentication
     - two main forms:
         - admin (should be easy with an extractor)
         - group owner (a little trickier since it depends on the group...)
@@ -71,16 +101,3 @@
 
         - are there any exceptions?
 
-- [ ] admin users
-
-- [ ] external apps (using message passing)
-    - how does this work with the friends?
-    - how can we ensure no collisions?
-    - [ ] add the group IDs (+ GLOBAL) to the clients in the network topology?
-        - these would be the user's group + any owned groups
-        - the sender and receiver must share at least one
-
-## CLI
-- add CLI
-- write integration tests?
-    - import the server and test against it?
