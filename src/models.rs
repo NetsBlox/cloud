@@ -13,7 +13,6 @@ pub struct User {
     pub created_at: u32,
     pub linked_accounts: Vec<LinkedAccount>,
     pub services_hosts: Option<Vec<ServiceHost>>,
-    //pub friends: Option<Vec<String>>,
 }
 
 impl From<User> for Bson {
@@ -30,6 +29,7 @@ impl From<User> for Bson {
 }
 
 #[derive(Deserialize, Serialize)]
+#[serde(rename_all = "camelCase")]
 pub struct ProjectMetadata {
     pub _id: ObjectId,
     pub owner: String,
@@ -43,6 +43,7 @@ pub struct ProjectMetadata {
 }
 
 #[derive(Deserialize, Serialize)]
+#[serde(rename_all = "camelCase")]
 pub struct Project {
     _id: ObjectId,
     owner: String,
