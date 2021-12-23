@@ -46,18 +46,19 @@
         - roles?
         - [ ] add blob support
 
+    - [ ] apiKeys. Should these be managed from the services server?
+        - probably
+
+
 - Do I need "transient" projects on the server?
     - Can I handle name collisions some other way?
 
 - [ ] can the updates to the network topology stuff replace the "transient" projects?
     - I don't think so since we will need to know the existing (unopened) projects so their name isn't changed on open (given them priority, that is)
+        - what if 
 
 - [ ] session doesn't ensure logged in...
      - new extractor that ensures authenticated?
-
-- [ ] should I replace "collection" with specific names:
-    - users, projects, etc?
-    - [ ] do the types provide a projection?
 
 - [ ] projects routes
     - [ ] add blob support for main project data
@@ -75,6 +76,8 @@
     - maybe the services endpoint should hit this one?
 
 - [ ] require login to send messages?
+
+- [ ] add client ID to cookie...
 
 - [ ] admin users
     - [ ] add tests
@@ -129,4 +132,8 @@
     - [x] add tests
 
 - [-] not implemented
+
+- [x] should I replace "collection" with specific names:
+    - users, projects, etc?
+    - [ ] do the types provide a projection?
 

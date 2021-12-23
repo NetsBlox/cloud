@@ -1,5 +1,3 @@
-use std::collections::HashMap;
-
 use crate::app_data::AppData;
 use crate::models::{ProjectMetadata, RoleData};
 use crate::users::can_edit_user;
@@ -15,7 +13,7 @@ use serde::{Deserialize, Serialize};
 struct CreateProjectData {
     owner: Option<String>,
     name: String,
-    roles: Vec<RoleData>,
+    roles: Option<Vec<RoleData>>,
 }
 
 #[post("/")]
@@ -25,7 +23,22 @@ async fn create_project(
     session: Session,
 ) -> Result<HttpResponse, std::io::Error> {
     // TODO: store the client ID in the session? and use it here?
-    todo!();
+
+    match session.get::<String>("username").unwrap_or(None) {
+        Some(owner) => {
+            let name = body.name.to_owned();
+            let metadata = app
+                .import_project(&owner, &name, body.into_inner().roles)
+                .await;
+
+            // TODO: Send the project_id, role_id
+            todo!();
+            //Ok(HttpResponse::Ok().json("TODO"))
+        }
+        None => todo!(),
+    }
+    // TODO: how should we determine the role to open?
+
     // TODO: add allow_rename query string parameter?
     // TODO: return the project name/id, role name/id
 }

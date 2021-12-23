@@ -1,6 +1,7 @@
 use mongodb::bson::{doc, oid::ObjectId, Bson, DateTime};
 use serde::{Deserialize, Serialize};
 use std::{collections::HashMap, time::SystemTime};
+use uuid::Uuid;
 
 #[derive(Serialize, Deserialize, Clone)]
 #[serde(rename_all = "camelCase")]
@@ -40,6 +41,28 @@ pub struct ProjectMetadata {
     pub collaborators: std::vec::Vec<String>,
     pub origin_time: DateTime, // FIXME: set the case
     pub roles: HashMap<String, RoleMetadata>,
+}
+
+impl ProjectMetadata {
+    pub fn new(owner: &str, name: &str, roles: Vec<RoleMetadata>) -> ProjectMetadata {
+        let origin_time = DateTime::from_system_time(SystemTime::now());
+        let roles = roles
+            .into_iter()
+            .map(|role| (Uuid::new_v4().to_string(), role))
+            .collect::<HashMap<String, RoleMetadata>>();
+
+        ProjectMetadata {
+            _id: ObjectId::new(),
+            owner: owner.to_owned(),
+            name: name.to_owned(),
+            updated: origin_time,
+            origin_time,
+            thumbnail: "".to_owned(),
+            public: false,
+            collaborators: vec![],
+            roles,
+        }
+    }
 }
 
 #[derive(Deserialize, Serialize)]

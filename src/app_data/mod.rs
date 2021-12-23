@@ -1,17 +1,24 @@
+use futures::future::join_all;
+use futures::join;
+use mongodb::bson::doc;
 use std::collections::HashSet;
 
 use crate::models::{CollaborationInvitation, Group, Project, ProjectMetadata, User};
 use crate::models::{RoleData, RoleMetadata};
 use crate::network::topology::Topology;
 use actix::{Actor, Addr};
+use futures::TryStreamExt;
+use mongodb::bson::oid::ObjectId;
+use mongodb::options::FindOptions;
 use mongodb::{Collection, Database};
-use rusoto_s3::S3Client;
+use rusoto_s3::{PutObjectOutput, PutObjectRequest, S3Client, S3};
 
 pub struct AppData {
     prefix: &'static str,
+    bucket: String,
+    s3: S3Client,
     pub db: Database,
     pub network: Addr<Topology>,
-    pub s3: S3Client,
     pub groups: Collection<Group>,
     pub users: Collection<User>,
     pub project_metadata: Collection<ProjectMetadata>,
@@ -37,6 +44,7 @@ impl AppData {
             db,
             network,
             s3,
+            bucket: "netsblox_rs".to_owned(),
             groups,
             users,
             prefix,
@@ -49,6 +57,71 @@ impl AppData {
     pub fn collection<T>(&self, name: &str) -> Collection<T> {
         let name = &(self.prefix.to_owned() + name);
         self.db.collection::<T>(name)
+    }
+
+    pub async fn import_project(
+        &self,
+        owner: &str,
+        name: &str,
+        roles: Option<Vec<RoleData>>,
+    ) -> ProjectMetadata {
+        let query = doc! {"owner": &owner};
+        let projection = doc! {"name": true};
+        let options = FindOptions::builder().projection(projection).build();
+        let cursor = self.project_metadata.find(query, options).await.unwrap();
+        let project_names = cursor
+            .try_collect::<Vec<ProjectMetadata>>()
+            .await
+            .unwrap()
+            .iter()
+            .map(|md| md.name.to_owned())
+            .collect();
+
+        let unique_name = get_unique_name(project_names, name);
+        let roles = roles.unwrap_or(vec![RoleData {
+            project_name: "myRole".to_owned(),
+            source_code: "".to_owned(),
+            media: "".to_owned(),
+        }]);
+
+        let role_mds = join_all(
+            roles
+                .iter()
+                .map(|role| self.upload_role(&owner, &unique_name, role)),
+        )
+        .await;
+
+        let metadata = ProjectMetadata::new(owner, name, roles);
+        self.project_metadata
+            .insert_one(metadata, None)
+            .await
+            .unwrap();
+        metadata
+    }
+
+    async fn upload_role(&self, owner: &str, project_name: &str, role: &RoleData) -> RoleMetadata {
+        let basepath = format!("users/{}/{}/{}", owner, project_name, &role.project_name);
+        let src_path = format!("{}/source_code.xml", &basepath);
+        let media_path = format!("{}/media.xml", owner);
+
+        self.upload(&media_path, role.media.to_owned()).await;
+        self.upload(&src_path, role.source_code.to_owned()).await;
+
+        RoleMetadata {
+            project_name: role.project_name.to_owned(),
+            source_code: src_path,
+            media: media_path,
+        }
+    }
+
+    async fn upload(&self, key: &str, body: String) -> PutObjectOutput {
+        let request = PutObjectRequest {
+            bucket: self.bucket.clone(),
+            key: String::from(key),
+            body: Some(String::into_bytes(body).into()),
+            ..Default::default()
+        };
+        self.s3.put_object(request).await.unwrap()
     }
 
     pub async fn fetch_project(&self, metadata: &ProjectMetadata) -> Project {
@@ -83,29 +156,25 @@ impl AppData {
     ) -> Result<bool, std::io::Error> {
         // FIXME: incorrect signature
         //let role_id = Uuid::new_v4();
+
+        // let role_names = metadata
+        //     .roles
+        //     .into_values()
+        //     .map(|r| r.project_name)
+        //     .collect::<HashSet<String>>();
         // let role_name = get_unique_name(&metadata, &body.name);
         todo!();
     }
 }
 
-fn get_unique_name(metadata: ProjectMetadata, name: &str) -> String {
-    let role_names = metadata
-        .roles
-        .into_values()
-        .map(|r| r.project_name)
-        .collect::<HashSet<String>>();
-
+fn get_unique_name(existing: Vec<String>, name: &str) -> String {
+    let names: HashSet<std::string::String> = HashSet::from_iter(existing.iter().cloned());
     let mut base_name = name;
     let mut role_name = base_name.to_owned();
     let mut number: u8 = 2;
-    while role_names.contains(&role_name) {
+    while names.contains(&role_name) {
         role_name = format!("{} ({})", base_name, number);
         number += 1;
     }
     role_name
 }
-// TODO: add projects
-//struct Projects {
-//metadata:
-//
-//}
