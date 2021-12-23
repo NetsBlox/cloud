@@ -27,12 +27,16 @@
     - [ ] group routes
 
 - [ ] routes
-    - [ ] collaboration invites
+    - [x] collaboration invites
         - keep the invites (only can send one per person/project)
     - [ ] friends
         - store these as a list of usernames?
             - what if the friend deletes his/her account?
+        - store these in an "edges" collection?
+            - easier to update on deletion
+            - this is probably the better way to go
     - [ ] friend requests?
+        - should we have "block"/decline
     - [x] service hosts
     - [ ] projects
         - project_metadata
@@ -40,8 +44,13 @@
         - projects
             - get the project source from the blob
         - roles?
+        - [ ] add blob support
+
+- Do I need "transient" projects on the server?
+    - Can I handle name collisions some other way?
 
 - [ ] can the updates to the network topology stuff replace the "transient" projects?
+    - I don't think so since we will need to know the existing (unopened) projects so their name isn't changed on open (given them priority, that is)
 
 - [ ] session doesn't ensure logged in...
      - new extractor that ensures authenticated?

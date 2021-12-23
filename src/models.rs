@@ -16,15 +16,15 @@ pub struct User {
     //pub friends: Option<Vec<String>>,
 }
 
-impl Into<Bson> for User {
-    fn into(self) -> Bson {
+impl From<User> for Bson {
+    fn from(user: User) -> Bson {
         Bson::Document(doc! {
-            "username": self.username,
-            "email": self.email,
-            "hash": self.hash,
-            "groupId": self.group_id,
-            "createdAt": self.created_at,
-            "linkedAccounts": Into::<Bson>::into(self.linked_accounts)
+            "username": user.username,
+            "email": user.email,
+            "hash": user.hash,
+            "groupId": user.group_id,
+            "createdAt": user.created_at,
+            "linkedAccounts": user.linked_accounts,
         })
     }
 }
@@ -58,17 +58,17 @@ pub struct Project {
 #[derive(Deserialize, Serialize)]
 #[serde(rename_all = "PascalCase")]
 pub struct RoleMetadata {
-    project_name: String,
-    source_code: String,
-    media: String,
+    pub project_name: String,
+    pub source_code: String,
+    pub media: String,
 }
 
 #[derive(Deserialize, Serialize)]
 #[serde(rename_all = "PascalCase")]
 pub struct RoleData {
-    project_name: String,
-    source_code: String,
-    media: String,
+    pub project_name: String,
+    pub source_code: String,
+    pub media: String,
 }
 
 #[derive(Serialize, Deserialize, Clone)]
@@ -77,11 +77,11 @@ pub struct LinkedAccount {
     pub strategy: String, // TODO: migrate type -> strategy
 }
 
-impl Into<Bson> for LinkedAccount {
-    fn into(self) -> Bson {
+impl From<LinkedAccount> for Bson {
+    fn from(account: LinkedAccount) -> Bson {
         Bson::Document(doc! {
-            "username": self.username,
-            "strategy": self.strategy,
+            "username": account.username,
+            "strategy": account.strategy,
         })
     }
 }
@@ -102,11 +102,11 @@ pub struct ServiceHost {
     categories: Vec<String>,
 }
 
-impl Into<Bson> for ServiceHost {
-    fn into(self) -> Bson {
+impl From<ServiceHost> for Bson {
+    fn from(host: ServiceHost) -> Bson {
         Bson::Document(doc! {
-            "url": self.url,
-            "categories": Into::<Bson>::into(self.categories)
+            "url": host.url,
+            "categories": host.categories
         })
     }
 }
@@ -154,7 +154,7 @@ impl CollaborationInvitation {
 }
 impl From<CollaborationInvitation> for Bson {
     fn from(invite: CollaborationInvitation) -> Self {
-        let mut doc = Bson::Document(doc! {
+        let doc = Bson::Document(doc! {
             "sender": invite.sender,
             "receiver": invite.receiver,
             "projectId": invite.project_id,
