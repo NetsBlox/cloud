@@ -2,7 +2,7 @@ pub mod topology;
 
 use crate::app_data::AppData;
 use actix::{Actor, Addr, AsyncContext, Handler, StreamHandler};
-use actix_web::post;
+use actix_web::{delete, get, post};
 use actix_web::{web, Error, HttpRequest, HttpResponse};
 use actix_web_actors::ws;
 use serde::Deserialize;
@@ -64,6 +64,31 @@ async fn connect_client(
     };
     let resp = ws::start(handler, &req, stream);
     resp
+}
+
+#[get("/id/{projectID}/occupants/")]
+async fn list_occupants() -> Result<HttpResponse, std::io::Error> {
+    // TODO: should this go to the network category?
+    todo!();
+}
+
+#[delete("/id/{projectID}/occupants/{clientID}")]
+async fn remove_occupant() -> Result<HttpResponse, std::io::Error> {
+    todo!();
+}
+
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct OccupantInvite {
+    username: String,
+    role_id: String,
+}
+
+#[post("/id/{projectID}/occupants/invite")] // TODO: add role ID
+async fn invite_occupant(
+    invite: web::Json<OccupantInvite>,
+) -> Result<HttpResponse, std::io::Error> {
+    todo!();
 }
 
 pub fn config(cfg: &mut web::ServiceConfig) {

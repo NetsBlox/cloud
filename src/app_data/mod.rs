@@ -1,4 +1,4 @@
-use crate::models::{Group, Project, ProjectMetadata, User};
+use crate::models::{CollaborationInvitation, Group, Project, ProjectMetadata, User};
 use crate::models::{RoleData, RoleMetadata};
 use crate::network::topology::Topology;
 use actix::{Actor, Addr};
@@ -13,6 +13,7 @@ pub struct AppData {
     pub groups: Collection<Group>,
     pub users: Collection<User>,
     pub project_metadata: Collection<ProjectMetadata>,
+    pub collab_invites: Collection<CollaborationInvitation>,
 }
 
 impl AppData {
@@ -27,6 +28,9 @@ impl AppData {
         let groups = db.collection::<Group>(&(prefix.to_owned() + "groups"));
         let users = db.collection::<User>(&(prefix.to_owned() + "users"));
         let project_metadata = db.collection::<ProjectMetadata>(&(prefix.to_owned() + "projects"));
+        let collab_invites = db.collection::<CollaborationInvitation>(
+            &(prefix.to_owned() + "collaborationInvitations"),
+        );
         AppData {
             db,
             network,
@@ -35,6 +39,8 @@ impl AppData {
             users,
             prefix,
             project_metadata,
+
+            collab_invites,
         }
     }
 
