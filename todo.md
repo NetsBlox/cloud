@@ -43,7 +43,7 @@
         - projects
             - get the project source from the blob
         - roles?
-        - [ ] add blob support
+        - [x] add blob support
 
     - [ ] apiKeys. Should these be managed from the services server?
         - probably

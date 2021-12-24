@@ -1,5 +1,5 @@
 use futures::future::join_all;
-use futures::join;
+use futures::{join, StreamExt};
 use mongodb::bson::doc;
 use std::collections::HashSet;
 
@@ -10,7 +10,9 @@ use actix::{Actor, Addr};
 use futures::TryStreamExt;
 use mongodb::options::FindOptions;
 use mongodb::{Collection, Database};
-use rusoto_s3::{PutObjectOutput, PutObjectRequest, S3Client, S3};
+use rusoto_s3::{
+    GetObjectOutput, GetObjectRequest, PutObjectOutput, PutObjectRequest, S3Client, S3,
+};
 
 pub struct AppData {
     prefix: &'static str,
@@ -123,6 +125,25 @@ impl AppData {
         self.s3.put_object(request).await.unwrap()
     }
 
+    async fn download(&self, key: &str) -> String {
+        let request = GetObjectRequest {
+            bucket: self.bucket.clone(),
+            key: String::from(key),
+            ..Default::default()
+        };
+
+        let output = self.s3.get_object(request).await.unwrap();
+        let byte_str = output
+            .body
+            .unwrap()
+            .map_ok(|b| b.to_vec())
+            .try_concat()
+            .await
+            .unwrap();
+
+        String::from_utf8(byte_str).unwrap()
+    }
+
     pub async fn fetch_project(&self, metadata: &ProjectMetadata) -> Project {
         // TODO: populate the source code, media for each role
         todo!();
@@ -133,16 +154,15 @@ impl AppData {
     }
 
     pub async fn fetch_role(&self, metadata: &RoleMetadata) -> RoleData {
-        todo!();
-        // let (source_code, media) = join!(
-        //     // TODO: fetch the source code and
-
-        // );
-        // RoleData {
-        //     project_name: metadata.project_name,
-        //     source_code,
-        //     media,
-        // }
+        let (source_code, media) = join!(
+            self.download(&metadata.source_code),
+            self.download(&metadata.media),
+        );
+        RoleData {
+            project_name: metadata.project_name.to_owned(),
+            source_code,
+            media,
+        }
     }
 
     pub async fn save_role(
