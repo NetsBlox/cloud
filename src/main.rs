@@ -32,8 +32,8 @@ async fn get_client_config(
     app: web::Data<AppData>,
     session: Session,
 ) -> Result<HttpResponse, std::io::Error> {
-    // TODO: check if authenticated?
-    // Fetch sessions
+    // TODO: if authenticated,
+    //  - [ ] retrieve services hosts
     let config = ClientConfig {
         client_id: format!("_netsblox{}", Uuid::new_v4().to_string()),
         services_hosts: vec![],
