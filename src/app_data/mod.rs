@@ -8,7 +8,6 @@ use crate::models::{RoleData, RoleMetadata};
 use crate::network::topology::Topology;
 use actix::{Actor, Addr};
 use futures::TryStreamExt;
-use mongodb::bson::oid::ObjectId;
 use mongodb::options::FindOptions;
 use mongodb::{Collection, Database};
 use rusoto_s3::{PutObjectOutput, PutObjectRequest, S3Client, S3};
@@ -135,6 +134,15 @@ impl AppData {
 
     pub async fn fetch_role(&self, metadata: &RoleMetadata) -> RoleData {
         todo!();
+        // let (source_code, media) = join!(
+        //     // TODO: fetch the source code and
+
+        // );
+        // RoleData {
+        //     project_name: metadata.project_name,
+        //     source_code,
+        //     media,
+        // }
     }
 
     pub async fn save_role(

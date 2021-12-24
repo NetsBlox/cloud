@@ -20,11 +20,16 @@
 - [ ] user routes
     - [ ] remove client-side password hashing?
         - [ ] test that the hashing algs are the same?
+
 - [ ] network routes
     - [ ] message passing
 
 - [ ] add tests
     - [ ] group routes
+
+- [ ] where do they get the services hosts, client ID, etc?
+    - move away from server side code generation
+    - configuration should be:
 
 - [ ] routes
     - [x] collaboration invites

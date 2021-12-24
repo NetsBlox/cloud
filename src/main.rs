@@ -10,13 +10,36 @@ mod projects;
 mod services_hosts;
 mod users;
 
-use actix_session::CookieSession;
-use actix_web::{middleware, web, App, HttpServer};
+use actix_session::{CookieSession, Session};
+use actix_web::{get, middleware, web, App, HttpResponse, HttpServer};
 use app_data::AppData;
 use env_logger;
-use mongodb::Client;
+use models::ServiceHost;
+use mongodb::{bson::oid::ObjectId, Client};
 use rusoto_s3::S3Client;
 use rusoto_signature::region::Region;
+use serde::Serialize;
+use uuid::Uuid;
+
+#[derive(Serialize)]
+struct ClientConfig {
+    client_id: String,
+    services_hosts: Vec<ServiceHost>,
+}
+
+#[get("/configuration")] // TODO: add username?
+async fn get_client_config(
+    app: web::Data<AppData>,
+    session: Session,
+) -> Result<HttpResponse, std::io::Error> {
+    // TODO: check if authenticated?
+    // Fetch sessions
+    let config = ClientConfig {
+        client_id: format!("_netsblox{}", Uuid::new_v4().to_string()),
+        services_hosts: vec![],
+    };
+    Ok(HttpResponse::Ok().json(config))
+}
 
 #[actix_web::main]
 async fn main() -> std::io::Result<()> {
@@ -53,6 +76,7 @@ async fn main() -> std::io::Result<()> {
             .service(web::scope("/friends").configure(friends::config))
             .service(web::scope("/network").configure(network::config))
             .service(web::scope("/collaboration-invites").configure(collaboration_invites::config))
+            .service(get_client_config)
     })
     .bind("127.0.0.1:7777")?
     .run()
