@@ -2,8 +2,6 @@
 - [ ] add room update message support
     - event system
 
-- [ ] add configuration file
-
 - [ ] email Tom about the big update?
 
 - [ ] validate user accounts on creation
@@ -26,10 +24,6 @@
 
 - [ ] add tests
     - [ ] group routes
-
-- [ ] where do they get the services hosts, client ID, etc?
-    - move away from server side code generation
-    - configuration should be:
 
 - [ ] routes
     - [x] collaboration invites
@@ -141,4 +135,10 @@
 - [x] should I replace "collection" with specific names:
     - users, projects, etc?
     - [ ] do the types provide a projection?
+
+- [x] where do they get the services hosts, client ID, etc?
+    - move away from server side code generation
+    - configuration should be:
+
+- [x] add configuration file
 

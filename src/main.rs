@@ -24,6 +24,7 @@ use uuid::Uuid;
 #[derive(Serialize)]
 struct ClientConfig {
     client_id: String,
+    username: Option<String>,
     services_hosts: Vec<ServiceHost>,
 }
 
@@ -36,6 +37,7 @@ async fn get_client_config(
     //  - [ ] retrieve services hosts
     let config = ClientConfig {
         client_id: format!("_netsblox{}", Uuid::new_v4().to_string()),
+        username: session.get::<String>("username").unwrap_or(None),
         services_hosts: vec![],
     };
     Ok(HttpResponse::Ok().json(config))
