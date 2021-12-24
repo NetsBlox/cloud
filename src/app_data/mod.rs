@@ -91,9 +91,9 @@ impl AppData {
         )
         .await;
 
-        let metadata = ProjectMetadata::new(owner, name, roles);
+        let metadata = ProjectMetadata::new(owner, name, role_mds);
         self.project_metadata
-            .insert_one(metadata, None)
+            .insert_one(metadata.clone(), None)
             .await
             .unwrap();
         metadata

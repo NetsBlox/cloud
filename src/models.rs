@@ -29,7 +29,7 @@ impl From<User> for Bson {
     }
 }
 
-#[derive(Deserialize, Serialize)]
+#[derive(Deserialize, Serialize, Clone)]
 #[serde(rename_all = "camelCase")]
 pub struct ProjectMetadata {
     pub _id: ObjectId,
@@ -79,7 +79,7 @@ pub struct Project {
     roles: HashMap<String, RoleData>,
 }
 
-#[derive(Deserialize, Serialize)]
+#[derive(Deserialize, Serialize, Clone)]
 #[serde(rename_all = "PascalCase")]
 pub struct RoleMetadata {
     pub project_name: String,
