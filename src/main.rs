@@ -64,7 +64,10 @@ async fn main() -> std::io::Result<()> {
     }; // FIXME: Use this for minio but update for aws
 
     HttpServer::new(move || {
-        let cors = Cors::default().allow_any_origin();
+        let cors = Cors::default()
+            .allow_any_origin()
+            .allow_any_header()
+            .allow_any_method();
         App::new()
             .wrap(cors)
             .wrap(

@@ -2,6 +2,7 @@ pub mod topology;
 
 use crate::app_data::AppData;
 use actix::{Actor, Addr, AsyncContext, Handler, StreamHandler};
+use actix_session::Session;
 use actix_web::{delete, get, post};
 use actix_web::{web, Error, HttpRequest, HttpResponse};
 use actix_web_actors::ws;
@@ -14,7 +15,7 @@ use serde_json::Value;
 #[derive(Deserialize)]
 #[serde(rename_all = "camelCase")]
 struct SetClientState {
-    pub client_id: String,
+    //pub client_id: String,
     pub role_id: String,
     pub project_id: String,
     pub token: Option<String>, // TODO: token for accessing the project; secret for controlling client
@@ -23,13 +24,16 @@ struct SetClientState {
 #[post("/{client}/state")]
 async fn set_client_state(
     data: web::Data<AppData>,
+    path: web::Path<(String,)>,
     req: web::Json<SetClientState>,
+    session: Session,
 ) -> Result<HttpResponse, std::io::Error> {
     // TODO: authenticate client secret
     let username = None; // FIXME
+    let (client_id,) = path.into_inner();
     let state = topology::ClientState::new(req.project_id.clone(), req.role_id.clone(), username);
     data.network.do_send(topology::SetClientState {
-        id: req.client_id.clone(),
+        id: client_id.clone(),
         state,
     });
     // TODO: look up the username

@@ -7,7 +7,10 @@
 - [ ] email Tom about the big update?
 
 - [ ] connect the client code and start testing things!
-    - [ ] refactor cloud
+    - [x] refactor cloud
+    - [ ] set client state not working...
+        - how will this work with the new server?
+            - network/<client_id>/state
 
 - [ ] validate user accounts on creation
     - [-] maybe we will need to whitelist email domains later

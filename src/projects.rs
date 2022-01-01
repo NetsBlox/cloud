@@ -10,10 +10,19 @@ use mongodb::Cursor;
 use serde::{Deserialize, Serialize};
 
 #[derive(Deserialize, Serialize)]
+#[serde(rename_all = "camelCase")]
 struct CreateProjectData {
     owner: Option<String>,
     name: String,
     roles: Option<Vec<RoleData>>,
+    client_id: String,
+}
+
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+struct CreatedRole {
+    project_id: ObjectId,
+    role_id: String,
 }
 
 #[post("/")]
@@ -22,21 +31,21 @@ async fn create_project(
     body: web::Json<CreateProjectData>,
     session: Session,
 ) -> Result<HttpResponse, std::io::Error> {
-    // TODO: store the client ID in the session? and use it here?
+    let owner = session
+        .get::<String>("username")
+        .unwrap_or(None)
+        .unwrap_or(body.client_id.to_owned());
 
-    match session.get::<String>("username").unwrap_or(None) {
-        Some(owner) => {
-            let name = body.name.to_owned();
-            let metadata = app
-                .import_project(&owner, &name, body.into_inner().roles)
-                .await;
+    let name = body.name.to_owned();
+    let metadata = app
+        .import_project(&owner, &name, body.into_inner().roles)
+        .await;
 
-            // TODO: Send the project_id, role_id
-            todo!();
-            //Ok(HttpResponse::Ok().json("TODO"))
-        }
-        None => todo!(),
-    }
+    let role_id = metadata.roles.into_keys().next().unwrap();
+    Ok(HttpResponse::Ok().json(CreatedRole {
+        project_id: metadata._id,
+        role_id,
+    }))
     // TODO: how should we determine the role to open?
 
     // TODO: add allow_rename query string parameter?
