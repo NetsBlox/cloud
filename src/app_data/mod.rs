@@ -103,9 +103,14 @@ impl AppData {
     }
 
     async fn upload_role(&self, owner: &str, project_name: &str, role: &RoleData) -> RoleMetadata {
-        let basepath = format!("users/{}/{}/{}", owner, project_name, &role.project_name);
+        let is_guest = owner.starts_with("_");
+        let top_level = if is_guest { "guests" } else { "users" };
+        let basepath = format!(
+            "{}/{}/{}/{}",
+            top_level, owner, project_name, &role.project_name
+        );
         let src_path = format!("{}/source_code.xml", &basepath);
-        let media_path = format!("{}/media.xml", owner);
+        let media_path = format!("{}/media.xml", &basepath);
 
         self.upload(&media_path, role.media.to_owned()).await;
         self.upload(&src_path, role.source_code.to_owned()).await;

@@ -6,6 +6,7 @@ use actix_web::{web, HttpResponse};
 use futures::TryStreamExt;
 use lazy_static::lazy_static;
 use mongodb::bson::{doc, oid::ObjectId, Bson, DateTime};
+use mongodb::results::UpdateResult;
 use regex::Regex;
 use rustrict::CensorStr;
 use serde::{Deserialize, Serialize};
@@ -15,9 +16,18 @@ use std::time::SystemTime;
 
 impl From<NewUser> for User {
     fn from(user_data: NewUser) -> Self {
+        let hash: String = if let Some(pwd) = user_data.password {
+            let mut hasher = Sha512::new();
+            hasher.update(pwd);
+            let hash = hasher.finalize();
+            hex::encode(hash)
+        } else {
+            "None".to_owned()
+        };
+
         User {
             username: user_data.username,
-            hash: user_data.hash,
+            hash, // FIXME: This will double hash new users
             email: user_data.email,
             group_id: user_data.group_id,
             created_at: SystemTime::now()
@@ -50,10 +60,12 @@ pub async fn is_super_user(app: &AppData, session: &Session) -> bool {
 
 pub async fn can_edit_user(app: &AppData, session: &Session, username: &str) -> bool {
     if let Some(requestor) = session.get::<String>("username").unwrap_or(None) {
+        println!("Can {} edit {}?", requestor, username);
         requestor == username
             || is_super_user(&app, &session).await
             || has_group_containing(&app, &requestor, &username).await
     } else {
+        println!("Could not get username from cookie!");
         false
     }
 }
@@ -118,25 +130,9 @@ impl UserCookie<'_> {
 #[derive(Serialize, Deserialize)]
 struct NewUser {
     username: String,
-    hash: String,
     email: String,
+    password: Option<String>,
     group_id: Option<ObjectId>,
-}
-
-impl NewUser {
-    pub fn new(
-        username: String,
-        hash: String,
-        email: String,
-        group_id: Option<ObjectId>,
-    ) -> NewUser {
-        NewUser {
-            username,
-            hash,
-            email,
-            group_id,
-        }
-    }
 }
 
 #[post("/create")]
@@ -162,7 +158,7 @@ async fn create_user(
                     Ok(HttpResponse::BadRequest().body("User already exists"))
                 }
             }
-            Err(_) => {
+            Err(_err) => {
                 // TODO: log the error
                 Ok(HttpResponse::InternalServerError().body("User creation failed"))
             }
@@ -180,9 +176,12 @@ fn is_valid_username(name: &str) -> bool {
 }
 
 #[derive(Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
 struct LoginCredentials {
     username: String,
-    password_hash: String,
+    password: String,
+    strategy: Option<String>,
+    client_id: Option<String>, // TODO: add a secret token for the client?
 }
 
 // TODO: should we change the endpoints to /users/{id}
@@ -194,8 +193,7 @@ async fn login(
     session: Session,
 ) -> HttpResponse {
     // TODO: check if tor IP
-    let collection = app.collection::<User>("users");
-    let query = doc! {"username": &credentials.username, "hash": &credentials.password_hash};
+    let query = doc! {"username": &credentials.username, "hash": &credentials.password};
 
     let banned_accounts = app.collection::<BannedAccount>("bannedAccounts");
     if let Some(_account) = banned_accounts
@@ -206,16 +204,42 @@ async fn login(
         return HttpResponse::Unauthorized().body("Account has been banned");
     }
 
-    match collection
+    match app
+        .users
         .find_one(query, None)
         .await
         .expect("Unable to retrieve user from database.")
     {
         Some(user) => {
             session.insert("username", &user.username).unwrap();
-            HttpResponse::Ok().finish()
+
+            match update_ownership(&app, &credentials.client_id, &user.username).await {
+                Err(msg) => HttpResponse::BadRequest().body(msg),
+                _ => HttpResponse::Ok().body(user.username),
+            }
         }
         None => HttpResponse::Unauthorized().finish(),
+    }
+}
+
+async fn update_ownership(
+    app: &AppData,
+    client_id: &Option<String>,
+    username: &str,
+) -> Result<bool, &'static str> {
+    // Update ownership of current project
+    if let Some(client_id) = &client_id {
+        if !client_id.starts_with("_") {
+            return Err("Invalid client ID.");
+        }
+
+        let query = doc! {"owner": client_id};
+        let update = doc! {"$set": {"owner": username}};
+        let result = app.project_metadata.update_one(query, update, None).await;
+        // TODO: Update the room
+        Ok(result.unwrap().modified_count > 0)
+    } else {
+        Ok(false)
     }
 }
 
@@ -345,30 +369,27 @@ async fn change_password(
 async fn view_user(
     app: web::Data<AppData>,
     path: web::Path<(String,)>,
+    session: Session,
 ) -> Result<HttpResponse, std::io::Error> {
     let (username,) = path.into_inner();
-    let collection = app.collection::<User>("users");
+
+    if !can_edit_user(&app, &session, &username).await {
+        return Ok(HttpResponse::Unauthorized().body("Not allowed."));
+    }
+
     let query = doc! {"username": username};
-    if let Some(user) = collection.find_one(query, None).await.unwrap() {
-        // TODO: check auth
-        Ok(HttpResponse::Ok().finish())
+    if let Some(user) = app.users.find_one(query, None).await.unwrap() {
+        // TODO: hide the hash field
+        Ok(HttpResponse::Ok().json(user))
     } else {
         Ok(HttpResponse::NotFound().finish())
     }
-}
-
-#[derive(Deserialize)]
-struct StrategyCredentials {
-    // TODO: combine this with the basic login?
-    username: String,
-    password: String,
 }
 
 #[post("/{username}/link/{strategy}")]
 async fn link_account(
     app: web::Data<AppData>,
     path: web::Path<(String, String)>,
-    credentials: web::Json<StrategyCredentials>,
 ) -> Result<HttpResponse, std::io::Error> {
     let (username, strategy) = path.into_inner();
     let collection = app.collection::<User>("users");
@@ -376,7 +397,7 @@ async fn link_account(
     // TODO: check if already used
     let query = doc! {"username": &username};
     let account = LinkedAccount { username, strategy };
-    let update = doc! {"$pull": {"linkedAccounts": &account}};
+    let update = doc! {"$push": {"linkedAccounts": &account}};
     let result = collection.update_one(query, update, None).await.unwrap();
     if result.matched_count == 0 {
         Ok(HttpResponse::NotFound().finish())

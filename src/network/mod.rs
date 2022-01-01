@@ -28,17 +28,20 @@ async fn set_client_state(
     req: web::Json<SetClientState>,
     session: Session,
 ) -> Result<HttpResponse, std::io::Error> {
-    // TODO: authenticate client secret
-    let username = None; // FIXME
+    let username = session.get::<String>("username").unwrap();
     let (client_id,) = path.into_inner();
+
+    // TODO: Check that the user can set the state to the given value
+    // User needs to either be able to edit the project or use a token
+
     let state = topology::ClientState::new(req.project_id.clone(), req.role_id.clone(), username);
     data.network.do_send(topology::SetClientState {
         id: client_id.clone(),
         state,
     });
-    // TODO: look up the username
-    // TODO: add a client secret (and token) for access control?
-    unimplemented!();
+
+    // TODO: if the owner is the client and logged in, update to the username
+    Ok(HttpResponse::Ok().finish())
 }
 
 #[derive(Deserialize)]

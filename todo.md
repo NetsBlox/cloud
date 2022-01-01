@@ -9,9 +9,13 @@
 - [ ] connect the client code and start testing things!
     - [x] refactor cloud
     - [ ] create project:
-        - [ ] new project
+        - [x] new project
             - blob connection test (minio)
-        - [ ] new project
+        - [ ] save projects
+        - [x] login
+        - [x] signup
+        - [ ] cookie is blank
+            - it seems to be set correctly... Maybe this is an issue with fetch?
 
     - [ ] set client state not working...
         - how will this work with the new server?

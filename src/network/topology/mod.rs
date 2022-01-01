@@ -126,6 +126,7 @@ impl Handler<SetClientState> for Topology {
     type Result = ();
 
     fn handle(&mut self, msg: SetClientState, _: &mut Context<Self>) -> Self::Result {
+        // TODO: set the state to the given value
         unimplemented!();
     }
 }
