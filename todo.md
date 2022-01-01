@@ -4,6 +4,8 @@
 
 - [ ] email Tom about the big update?
 
+- [ ] connect the client code and start testing things!
+
 - [ ] validate user accounts on creation
     - [-] maybe we will need to whitelist email domains later
     - we can block tor exit nodes. Should we record the IP address?

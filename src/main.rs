@@ -10,6 +10,7 @@ mod projects;
 mod services_hosts;
 mod users;
 
+use actix_cors::Cors;
 use actix_session::{CookieSession, Session};
 use actix_web::{get, middleware, web, App, HttpResponse, HttpServer};
 use app_data::AppData;
@@ -56,7 +57,9 @@ async fn main() -> std::io::Result<()> {
     }; // FIXME: Use this for minio but update for aws
 
     HttpServer::new(move || {
+        let cors = Cors::default().allow_any_origin();
         App::new()
+            .wrap(cors)
             .wrap(
                 CookieSession::signed(&[1; 32])
                     .domain("localhost:7777")
