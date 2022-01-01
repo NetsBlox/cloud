@@ -8,6 +8,11 @@
 
 - [ ] connect the client code and start testing things!
     - [x] refactor cloud
+    - [ ] create project:
+        - [ ] new project
+            - blob connection test (minio)
+        - [ ] new project
+
     - [ ] set client state not working...
         - how will this work with the new server?
             - network/<client_id>/state

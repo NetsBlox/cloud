@@ -11,7 +11,8 @@ use futures::TryStreamExt;
 use mongodb::options::FindOptions;
 use mongodb::{Collection, Database};
 use rusoto_s3::{
-    GetObjectOutput, GetObjectRequest, PutObjectOutput, PutObjectRequest, S3Client, S3,
+    CreateBucketOutput, CreateBucketRequest, GetObjectOutput, GetObjectRequest, PutObjectOutput,
+    PutObjectRequest, S3Client, S3,
 };
 
 pub struct AppData {
@@ -30,6 +31,7 @@ impl AppData {
     pub fn new(
         db: Database,
         s3: S3Client,
+        bucket: String,
         network: Option<Addr<Topology>>,
         prefix: Option<&'static str>,
     ) -> AppData {
@@ -45,7 +47,7 @@ impl AppData {
             db,
             network,
             s3,
-            bucket: "netsblox_rs".to_owned(),
+            bucket,
             groups,
             users,
             prefix,

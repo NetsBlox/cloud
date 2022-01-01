@@ -20,9 +20,11 @@ struct CreateProjectData {
 
 #[derive(Serialize)]
 #[serde(rename_all = "camelCase")]
-struct CreatedRole {
-    project_id: ObjectId,
-    role_id: String,
+struct CreatedRole<'a> {
+    project_id: String,
+    role_id: &'a str,
+    name: String,
+    role_name: &'a str,
 }
 
 #[post("/")]
@@ -41,10 +43,13 @@ async fn create_project(
         .import_project(&owner, &name, body.into_inner().roles)
         .await;
 
-    let role_id = metadata.roles.into_keys().next().unwrap();
+    let role_id = metadata.roles.keys().next().unwrap();
+    let role_name = &metadata.roles.get(role_id).unwrap().project_name;
     Ok(HttpResponse::Ok().json(CreatedRole {
-        project_id: metadata._id,
+        project_id: metadata._id.to_string(),
         role_id,
+        name: metadata.name,
+        role_name,
     }))
     // TODO: how should we determine the role to open?
 

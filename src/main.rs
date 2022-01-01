@@ -17,7 +17,8 @@ use app_data::AppData;
 use env_logger;
 use models::ServiceHost;
 use mongodb::Client;
-use rusoto_s3::S3Client;
+use rusoto_core::credential::{AwsCredentials, StaticProvider};
+use rusoto_s3::{CreateBucketRequest, S3Client, S3};
 use rusoto_signature::region::Region;
 use serde::Serialize;
 use uuid::Uuid;
@@ -56,18 +57,36 @@ async fn main() -> std::io::Result<()> {
     let client = Client::with_uri_str("mongodb://127.0.0.1:27017/")
         .await
         .expect("Could not connect to mongodb.");
-    let db = client.database("netsblox-tests"); // TODO: make a custom struct that wraps the collection fns
+    let db = client.database("netsblox-rs");
     env_logger::init_from_env(env_logger::Env::new().default_filter_or("info"));
+    // TODO: Ensure the bucket exists
+
     let region = Region::Custom {
         name: "".to_owned(),
-        endpoint: "http://localhost:9000".to_owned(),
+        endpoint: "http://127.0.0.1:9000".to_owned(),
     }; // FIXME: Use this for minio but update for aws
+
+    let s3 = S3Client::new_with(
+        rusoto_core::request::HttpClient::new().expect("Failed to create HTTP client"),
+        StaticProvider::new("KEY".to_owned(), "MYSECRET".to_owned(), None, None),
+        //StaticProvider::from(AwsCredentials::default()),
+        region,
+    );
+
+    // Create the s3 bucket
+    let bucket = "netsbloxrs".to_owned();
+    let request = CreateBucketRequest {
+        bucket: bucket.clone(),
+        ..Default::default()
+    };
+    s3.create_bucket(request).await;
 
     HttpServer::new(move || {
         let cors = Cors::default()
             .allow_any_origin()
             .allow_any_header()
             .allow_any_method();
+
         App::new()
             .wrap(cors)
             .wrap(
@@ -79,7 +98,9 @@ async fn main() -> std::io::Result<()> {
             .wrap(middleware::Logger::default())
             .app_data(web::Data::new(AppData::new(
                 db.clone(),
-                S3Client::new(region.clone()),
+                s3.clone(),
+                bucket.clone(),
+                //S3Client::new(region.clone()),
                 None,
                 None,
             )))
