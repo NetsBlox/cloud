@@ -1,10 +1,13 @@
 # To Do
+- [ ] update mobile apps
+
 - [ ] add room update message support
     - event system
 
 - [ ] email Tom about the big update?
 
 - [ ] connect the client code and start testing things!
+    - [ ] refactor cloud
 
 - [ ] validate user accounts on creation
     - [-] maybe we will need to whitelist email domains later

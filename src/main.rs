@@ -16,17 +16,19 @@ use actix_web::{get, middleware, web, App, HttpResponse, HttpServer};
 use app_data::AppData;
 use env_logger;
 use models::ServiceHost;
-use mongodb::{bson::oid::ObjectId, Client};
+use mongodb::Client;
 use rusoto_s3::S3Client;
 use rusoto_signature::region::Region;
 use serde::Serialize;
 use uuid::Uuid;
 
 #[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
 struct ClientConfig {
     client_id: String,
     username: Option<String>,
     services_hosts: Vec<ServiceHost>,
+    cloud_url: &'static str,
 }
 
 #[get("/configuration")] // TODO: add username?
@@ -36,10 +38,15 @@ async fn get_client_config(
 ) -> Result<HttpResponse, std::io::Error> {
     // TODO: if authenticated,
     //  - [ ] retrieve services hosts
+    let default_host = ServiceHost {
+        url: "http://localhost:5000/services".to_owned(),
+        categories: vec![],
+    };
     let config = ClientConfig {
         client_id: format!("_netsblox{}", Uuid::new_v4().to_string()),
         username: session.get::<String>("username").unwrap_or(None),
-        services_hosts: vec![],
+        services_hosts: vec![default_host],
+        cloud_url: "http://localhost:7777",
     };
     Ok(HttpResponse::Ok().json(config))
 }

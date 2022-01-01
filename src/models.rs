@@ -122,8 +122,8 @@ pub struct Group {
 #[derive(Serialize, Deserialize, Clone)]
 #[serde(rename_all = "camelCase")]
 pub struct ServiceHost {
-    url: String,
-    categories: Vec<String>,
+    pub url: String,
+    pub categories: Vec<String>,
 }
 
 impl From<ServiceHost> for Bson {
