@@ -16,8 +16,10 @@
         - [x] signup
         - [x] cookie is blank
             - it seems to be set correctly... Maybe this is an issue with fetch?
+
         - [ ] the cookie still doesn't seem to persist...
             - maybe if I set the expires_in value?
+                - this doesn't seem to be working...
 
     - [ ] set client state not working...
         - how will this work with the new server?

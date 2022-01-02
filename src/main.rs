@@ -90,14 +90,15 @@ async fn main() -> std::io::Result<()> {
         let cors = Cors::default()
             .allow_any_origin()
             .allow_any_header()
-            .allow_any_method();
+            .allow_any_method()
+            .supports_credentials();
 
         App::new()
             .wrap(cors)
             .wrap(
                 CookieSession::signed(&[1; 32])
-                    .domain(&config.cookie.domain)
-                    .expires_in(7 * 24 * 60 * 60)
+                    //.domain(&config.cookie.domain)  // FIXME: Enable this again
+                    .expires_in(2 * 7 * 24 * 60 * 60)
                     .name(&config.cookie.name)
                     .secure(true),
             )

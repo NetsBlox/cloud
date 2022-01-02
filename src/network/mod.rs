@@ -21,7 +21,7 @@ struct SetClientState {
     pub token: Option<String>, // TODO: token for accessing the project; secret for controlling client
 }
 
-#[post("/{client}/state")]
+#[post("/{client}/state")] // TODO: add token here, too
 async fn set_client_state(
     app: web::Data<AppData>,
     path: web::Path<(String,)>,
@@ -33,6 +33,9 @@ async fn set_client_state(
 
     // TODO: Check that the user can set the state to the given value
     // User needs to either be able to edit the project or use a token
+    // In other words, there are 2 things that need to be verified:
+    //   - the request can edit the client (ie, secret/signed token or something)
+    //   - the user can join the project. May need a token if invited as occupant
 
     let state = topology::ClientState::new(req.project_id.clone(), req.role_id.clone(), username);
     app.network.do_send(topology::SetClientState {
