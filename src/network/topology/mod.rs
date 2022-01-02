@@ -23,7 +23,7 @@ struct ProjectNetwork {
 pub struct Topology {
     //clients: HashMap<String, Client>,
     project_metadata: Collection<ProjectMetadata>,
-    clients: Vec<Client>,
+    clients: HashMap<String, Client>,
     rooms: HashMap<String, ProjectNetwork>,
 }
 
@@ -31,40 +31,36 @@ impl Topology {
     pub fn new(project_metadata: Collection<ProjectMetadata>) -> Topology {
         Topology {
             //clients: HashMap::new(),
-            clients: vec![],
+            clients: HashMap::new(),
             project_metadata,
             rooms: HashMap::new(),
         }
     }
 
     pub async fn get_clients_at(&self, addr: &str) -> Vec<&Client> {
-        // FIXME: actually resolve the address to the clients
-
+        // TODO: Add support for third party clients
+        // How should they be addressed?
         let addresses = ClientAddress::parse(&self.project_metadata, addr).await;
-        let ids = addresses.into_iter().flat_map(|addr| {
-            self.rooms
-                .get(&addr.project_id)
-                .and_then(|room| room.roles.get(&addr.role_id))
-            // .and_then(|occupants| Some(occupants.iter()))
-            // .unwrap_or(std::iter::empty())
-        });
-        // TODO: I need to look up which clients are at the given locations
-        // I will do something simple to start
-        return self.clients.iter().take(1).collect();
-        // TODO: look up the clients using the project_id, role_ids
-        //unimplemented!();
+        let empty = Vec::new();
+        let clients = addresses
+            .into_iter()
+            .flat_map(|addr| {
+                self.rooms
+                    .get(&addr.project_id)
+                    .and_then(|room| room.roles.get(&addr.role_id))
+                    .unwrap_or(&empty)
+            })
+            .map(|id| self.clients.get(id))
+            .filter(|client| client.is_some())
+            .map(|client| client.unwrap())
+            .collect();
+
+        return clients;
     }
 
     pub async fn route_msg(&self, msg: SendMessage) {
         let message = ClientMessage(msg.content);
         println!("received message to send to {:?}", msg.addresses);
-        // for addr_str in msg.addresses {
-        //     self.get_clients_at(&addr_str).then(|clients| {
-        //         clients
-        //             .iter()
-        //             .for_each(|c| c.addr.do_send(message.clone()).unwrap())
-        //     });
-        // }
         let recipients = join_all(
             msg.addresses
                 .iter()
@@ -192,7 +188,7 @@ impl Handler<AddClient> for Topology {
             id: msg.id,
             addr: msg.addr,
         };
-        self.clients.push(client);
+        self.clients.insert(msg.id, client);
     }
 }
 
