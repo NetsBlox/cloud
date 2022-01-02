@@ -23,7 +23,7 @@ struct SetClientState {
 
 #[post("/{client}/state")]
 async fn set_client_state(
-    data: web::Data<AppData>,
+    app: web::Data<AppData>,
     path: web::Path<(String,)>,
     req: web::Json<SetClientState>,
     session: Session,
@@ -35,12 +35,11 @@ async fn set_client_state(
     // User needs to either be able to edit the project or use a token
 
     let state = topology::ClientState::new(req.project_id.clone(), req.role_id.clone(), username);
-    data.network.do_send(topology::SetClientState {
+    app.network.do_send(topology::SetClientState {
         id: client_id.clone(),
         state,
     });
 
-    // TODO: if the owner is the client and logged in, update to the username
     Ok(HttpResponse::Ok().finish())
 }
 
@@ -56,17 +55,19 @@ struct ConnectClientBody {
     secret: String,
 }
 
-#[post("/connect")]
+#[get("/{client}/connect")]
 async fn connect_client(
     data: web::Data<AppData>,
     req: HttpRequest,
     stream: web::Payload,
-    state: web::Json<ConnectClientBody>,
+    path: web::Path<(String,)>,
+    //body: web::Json<ConnectClientBody>,
 ) -> Result<HttpResponse, Error> {
     // TODO: validate client secret?
     // TODO: ensure ID is unique?
+    let (client_id,) = path.into_inner();
     let handler = WsSession {
-        client_id: state.id.clone(),
+        client_id: client_id.clone(),
         topology_addr: data.network.clone(),
     };
     let resp = ws::start(handler, &req, stream);

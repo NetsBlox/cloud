@@ -92,6 +92,7 @@ async fn main() -> std::io::Result<()> {
             .wrap(
                 CookieSession::signed(&[1; 32])
                     .domain("localhost:7777")
+                    .expires_in(7 * 24 * 60 * 60)
                     .name("netsblox")
                     .secure(true),
             ) // FIXME: Set the key
