@@ -1,8 +1,9 @@
 use futures::future::join_all;
-use futures::{join, StreamExt};
+use futures::join;
 use mongodb::bson::doc;
 use std::collections::HashSet;
 
+use crate::config::Settings;
 use crate::models::{CollaborationInvitation, Group, Project, ProjectMetadata, User};
 use crate::models::{RoleData, RoleMetadata};
 use crate::network::topology::Topology;
@@ -10,15 +11,13 @@ use actix::{Actor, Addr};
 use futures::TryStreamExt;
 use mongodb::options::FindOptions;
 use mongodb::{Collection, Database};
-use rusoto_s3::{
-    CreateBucketOutput, CreateBucketRequest, GetObjectOutput, GetObjectRequest, PutObjectOutput,
-    PutObjectRequest, S3Client, S3,
-};
+use rusoto_s3::{GetObjectRequest, PutObjectOutput, PutObjectRequest, S3Client, S3};
 
 pub struct AppData {
     prefix: &'static str,
     bucket: String,
     s3: S3Client,
+    pub settings: Settings,
     pub db: Database,
     pub network: Addr<Topology>,
     pub groups: Collection<Group>,
@@ -29,6 +28,7 @@ pub struct AppData {
 
 impl AppData {
     pub fn new(
+        settings: Settings,
         db: Database,
         s3: S3Client,
         bucket: String,
@@ -44,6 +44,7 @@ impl AppData {
             &(prefix.to_owned() + "collaborationInvitations"),
         );
         AppData {
+            settings,
             db,
             network,
             s3,

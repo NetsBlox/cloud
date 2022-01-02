@@ -1,0 +1,23 @@
+address = "0.0.0.0:7777"
+public_url = "http://127.0.0.1:7777"
+
+[database]
+url = "mongodb://127.0.0.1:27017/"
+name = "netsblox-rs"
+
+[s3]
+bucket = "netsbloxrs"
+endpoint = "http://127.0.0.1:9000"
+region_name = ""
+
+[s3.credentials]
+access_key = "KEY"
+secret_key = "MYSECRET"
+
+[[services_hosts]]
+url = "http://127.0.0.1:6060/services"
+categories = []
+
+[cookie]
+name = "netsblox"
+domain = "localhost:7777"
