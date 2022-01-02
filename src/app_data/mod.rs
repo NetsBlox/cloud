@@ -9,7 +9,6 @@ use crate::models::{RoleData, RoleMetadata};
 use crate::network::topology::Topology;
 use actix::{Actor, Addr};
 use futures::TryStreamExt;
-use mongodb::options::FindOptions;
 use mongodb::{Collection, Database};
 use rusoto_s3::{GetObjectRequest, PutObjectOutput, PutObjectRequest, S3Client, S3};
 
@@ -35,7 +34,6 @@ impl AppData {
         network: Option<Addr<Topology>>,
         prefix: Option<&'static str>,
     ) -> AppData {
-        let network = network.unwrap_or(Topology::new().start());
         let prefix = prefix.unwrap_or("");
         let groups = db.collection::<Group>(&(prefix.to_owned() + "groups"));
         let users = db.collection::<User>(&(prefix.to_owned() + "users"));
@@ -43,6 +41,7 @@ impl AppData {
         let collab_invites = db.collection::<CollaborationInvitation>(
             &(prefix.to_owned() + "collaborationInvitations"),
         );
+        let network = network.unwrap_or(Topology::new(project_metadata.clone()).start());
         AppData {
             settings,
             db,
@@ -70,9 +69,10 @@ impl AppData {
         roles: Option<Vec<RoleData>>,
     ) -> ProjectMetadata {
         let query = doc! {"owner": &owner};
-        let projection = doc! {"name": true};
-        let options = FindOptions::builder().projection(projection).build();
-        let cursor = self.project_metadata.find(query, options).await.unwrap();
+        // FIXME: Update the type if we use the projection
+        //let projection = doc! {"name": true};
+        //let options = FindOptions::builder().projection(projection).build();
+        let cursor = self.project_metadata.find(query, None).await.unwrap();
         let project_names = cursor
             .try_collect::<Vec<ProjectMetadata>>()
             .await

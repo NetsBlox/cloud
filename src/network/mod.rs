@@ -126,6 +126,9 @@ impl WsSession {
                         .collect::<Vec<String>>(),
                     _ => std::vec::Vec::new(),
                 };
+                println!("Sending message to {:?}", addresses);
+                // TODO: record the sender ID so relative addresses can be resolved?
+                // Or should we resolve them on the client?
                 self.topology_addr.do_send(topology::SendMessage {
                     addresses,
                     content: msg,

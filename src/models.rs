@@ -15,6 +15,7 @@ pub struct User {
     pub linked_accounts: Vec<LinkedAccount>,
     pub services_hosts: Option<Vec<ServiceHost>>,
 }
+// TODO: implement Responder (omit the hash)
 
 impl From<User> for Bson {
     fn from(user: User) -> Bson {

@@ -20,10 +20,14 @@
         - [ ] the cookie still doesn't seem to persist...
             - maybe if I set the expires_in value?
                 - this doesn't seem to be working...
+            - I think this is actually an issue on the client side...
 
     - [ ] set client state not working...
         - how will this work with the new server?
             - network/<client_id>/state
+
+    - [ ] can I send a message to myself (unauthenticated)?
+        - resolve "everyone in room"/"others in room" on the client
 
 - [ ] validate user accounts on creation
     - [-] maybe we will need to whitelist email domains later

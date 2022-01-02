@@ -19,7 +19,7 @@ use actix_session::{CookieSession, Session};
 use actix_web::{get, middleware, web, App, HttpResponse, HttpServer};
 use env_logger;
 use mongodb::Client;
-use rusoto_core::credential::{AwsCredentials, StaticProvider};
+use rusoto_core::credential::StaticProvider;
 use rusoto_s3::{CreateBucketRequest, S3Client, S3};
 use rusoto_signature::region::Region;
 use serde::Serialize;

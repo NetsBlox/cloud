@@ -2,9 +2,8 @@ use actix_session::Session;
 use actix_web::{get, post};
 use actix_web::{web, HttpResponse};
 use futures::TryStreamExt;
-use mongodb::bson::Bson;
-use mongodb::bson::{doc, oid::ObjectId, DateTime};
-use serde::{Deserialize, Serialize};
+use mongodb::bson::{doc, oid::ObjectId};
+use serde::Deserialize;
 
 use crate::app_data::AppData;
 use crate::models::{CollaborationInvitation, InvitationState};

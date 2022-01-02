@@ -1,9 +1,14 @@
 pub mod client;
 
 use actix::prelude::{Message, Recipient};
-use actix::{Actor, Context, Handler};
+use actix::{Actor, AsyncContext, Context, Handler};
+use futures::future::join_all;
+use mongodb::bson::doc;
+use mongodb::Collection;
 use serde_json::Value;
 use std::collections::HashMap;
+
+use crate::models::ProjectMetadata;
 
 #[derive(Clone)]
 pub struct Client {
@@ -11,45 +16,68 @@ pub struct Client {
     pub addr: Recipient<ClientMessage>,
 }
 
-#[derive(Clone)]
+struct ProjectNetwork {
+    roles: HashMap<String, Vec<String>>,
+}
+
 pub struct Topology {
-    clients: HashMap<String, Client>,
+    //clients: HashMap<String, Client>,
+    project_metadata: Collection<ProjectMetadata>,
+    clients: Vec<Client>,
+    rooms: HashMap<String, ProjectNetwork>,
 }
 
 impl Topology {
-    pub fn new() -> Topology {
+    pub fn new(project_metadata: Collection<ProjectMetadata>) -> Topology {
         Topology {
-            clients: HashMap::new(),
+            //clients: HashMap::new(),
+            clients: vec![],
+            project_metadata,
+            rooms: HashMap::new(),
         }
     }
 
-    fn resolve_address(&self, addr: &str) -> Vec<ClientState> {
-        let mut chunks = addr.split('@');
-        let role = chunks.next().unwrap();
-        if let Some(project) = chunks.next() {
-            match chunks.next() {
-                Some(owner) => {
-                    //self.projects.find_one(doc! {owner, project})
-                    // TODO: send it to role@project@owner
-                }
-                None => {
-                    let owner = project;
-                    let project = role;
-                    // TODO: send to project@owner
-                }
-            }
-        } else {
-            // TODO: send to the role using the current project/owner
-            // TODO: check for "everyone in room" or "others in room" (or resolve these on the
-            // client?)
-        }
-        unimplemented!();
-    }
+    pub async fn get_clients_at(&self, addr: &str) -> Vec<&Client> {
+        // FIXME: actually resolve the address to the clients
 
-    pub fn get_clients_at(&self, addr: &str) -> Vec<&Client> {
-        let states = self.resolve_address(addr);
+        let addresses = ClientAddress::parse(&self.project_metadata, addr).await;
+        let ids = addresses.into_iter().flat_map(|addr| {
+            self.rooms
+                .get(&addr.project_id)
+                .and_then(|room| room.roles.get(&addr.role_id))
+            // .and_then(|occupants| Some(occupants.iter()))
+            // .unwrap_or(std::iter::empty())
+        });
+        // TODO: I need to look up which clients are at the given locations
+        // I will do something simple to start
+        return self.clients.iter().take(1).collect();
         // TODO: look up the clients using the project_id, role_ids
-        unimplemented!();
+        //unimplemented!();
+    }
+
+    pub async fn route_msg(&self, msg: SendMessage) {
+        let message = ClientMessage(msg.content);
+        println!("received message to send to {:?}", msg.addresses);
+        // for addr_str in msg.addresses {
+        //     self.get_clients_at(&addr_str).then(|clients| {
+        //         clients
+        //             .iter()
+        //             .for_each(|c| c.addr.do_send(message.clone()).unwrap())
+        //     });
+        // }
+        let recipients = join_all(
+            msg.addresses
+                .iter()
+                .map(|address| self.get_clients_at(address)),
+        )
+        .await
+        .into_iter()
+        .flatten();
+
+        recipients.for_each(|client| {
+            println!("Sending msg to client: {}", client.id);
+            client.addr.do_send(message.clone()).unwrap();
+        });
     }
 }
 
@@ -89,6 +117,56 @@ pub struct ClientState {
     username: Option<String>,
 }
 
+pub struct ClientAddress {
+    project_id: String,
+    role_id: String,
+}
+
+impl ClientAddress {
+    pub async fn parse(project_metadata: &Collection<ProjectMetadata>, addr: &str) -> Vec<Self> {
+        let mut chunks = addr.split('@').rev();
+        let owner = chunks.next().unwrap(); // FIXME: Better feedback for devs
+        let project = chunks.next().unwrap();
+        let role = chunks.next();
+        let mut states = vec![];
+        let query = doc! {"name": project, "owner": owner};
+        if let Some(metadata) = project_metadata.find_one(query, None).await.unwrap() {
+            let project_id = metadata._id.to_string();
+            match role {
+                Some(role_name) => {
+                    let name2id = metadata
+                        .roles
+                        .into_iter()
+                        .map(|(k, v)| (v.project_name, k))
+                        .collect::<HashMap<String, String>>();
+
+                    match name2id.get(role_name) {
+                        Some(role_id) => {
+                            let state = ClientAddress {
+                                role_id: role_id.to_owned(),
+                                project_id,
+                            };
+                            states.push(state);
+                        }
+                        None => {
+                            todo!(); // TODO: Log an error
+                        }
+                    }
+                }
+                None => metadata
+                    .roles
+                    .into_keys()
+                    .map(|role_id| ClientAddress {
+                        role_id,
+                        project_id: project_id.clone(),
+                    })
+                    .for_each(|state| states.push(state)),
+            }
+        }
+        states
+    }
+}
+
 #[derive(Message)]
 #[rtype(result = "()")]
 pub struct SendMessage {
@@ -110,7 +188,11 @@ impl Handler<AddClient> for Topology {
     type Result = ();
 
     fn handle(&mut self, msg: AddClient, _: &mut Context<Self>) -> Self::Result {
-        unimplemented!();
+        let client = Client {
+            id: msg.id,
+            addr: msg.addr,
+        };
+        self.clients.push(client);
     }
 }
 
@@ -126,8 +208,20 @@ impl Handler<SetClientState> for Topology {
     type Result = ();
 
     fn handle(&mut self, msg: SetClientState, _: &mut Context<Self>) -> Self::Result {
-        // TODO: set the state to the given value
-        unimplemented!();
+        if !self.rooms.contains_key(&msg.state.project_id) {
+            self.rooms.insert(
+                msg.state.project_id.to_owned(),
+                ProjectNetwork {
+                    roles: HashMap::new(),
+                },
+            );
+        }
+        let room = self.rooms.get_mut(&msg.state.project_id).unwrap();
+        if let Some(occupants) = room.roles.get_mut(&msg.state.role_id) {
+            occupants.push(msg.id);
+        } else {
+            room.roles.insert(msg.state.role_id, vec![msg.id]);
+        }
     }
 }
 
@@ -135,14 +229,11 @@ impl Handler<SendMessage> for Topology {
     type Result = ();
 
     fn handle(&mut self, msg: SendMessage, ctx: &mut Context<Self>) -> Self::Result {
-        let message = ClientMessage(msg.content);
-        let recipients = msg
-            .addresses
-            .iter()
-            .flat_map(|address| self.get_clients_at(address));
-        recipients.for_each(|client| {
-            client.addr.do_send(message.clone());
-        });
+        //let fut = async move { self.route_msg(msg).await };
+        let fut = self.route_msg(msg);
+        let fut = actix::fut::wrap_future(fut); // Darn this won't work...
+        ctx.spawn(fut);
+        //ctx.spawn(fut);
         // TODO: resolve the address? Or should it already be resolved?
     }
 }
