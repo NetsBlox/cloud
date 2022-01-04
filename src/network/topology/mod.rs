@@ -100,11 +100,9 @@ impl Topology {
     }
 
     async fn set_client_state(&mut self, msg: SetClientState) {
-        if let Some(state) = self.states.remove(&msg.id) {
-            self.remove_client_from(&msg.id, &state).await;
-        }
-
         println!("Setting client state to {:?}", msg.state);
+        self.reset_client_state(&msg.id).await;
+
         if !self.rooms.contains_key(&msg.state.project_id) {
             self.rooms.insert(
                 msg.state.project_id.to_owned(),
@@ -132,20 +130,22 @@ impl Topology {
     async fn remove_client(&mut self, msg: RemoveClient) {
         println!("remove client");
         self.clients.remove(&msg.id);
-
-        if let Some(state) = self.states.remove(&msg.id) {
-            self.remove_client_from(&msg.id, &state).await;
-        }
+        self.reset_client_state(&msg.id).await;
     }
 
-    async fn remove_client_from(&mut self, id: &str, state: &ClientState) {
+    async fn reset_client_state(&mut self, id: &str) {
         let mut empty: Vec<String> = Vec::new();
-        let room = self
-            .states
-            .remove(id)
-            .and_then(|state| self.rooms.get_mut(&state.project_id));
 
-        let mut update_needed = true;
+        let state = self.states.remove(id);
+        if state.is_none() {
+            return;
+        }
+
+        let state = state.unwrap();
+        let room = self.rooms.get_mut(&state.project_id);
+
+        let mut update_needed = room.is_some();
+
         if let Some(room) = room {
             let occupants = room.roles.get_mut(&state.role_id).unwrap_or(&mut empty);
             if let Some(pos) = occupants.iter().position(|item| item == id) {
