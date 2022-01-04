@@ -45,7 +45,8 @@
 
     - [x] remove client on disconnect
     - [ ] send room messages
-        - [ ] detect project/role rename
+        - [x] detect project rename
+        - [ ] role rename
 
     - [ ] delete transient projects after inactivity
         - if we disable creating roles without saving, this would be good

@@ -116,7 +116,9 @@ impl Topology {
             room.roles
                 .insert(msg.state.role_id.clone(), vec![msg.id.clone()]);
         }
+        let project_id = msg.state.project_id.to_owned();
         self.states.insert(msg.id, msg.state);
+        self.send_room_state_for(&project_id).await;
     }
 
     fn add_client(&mut self, msg: AddClient) {
@@ -168,12 +170,17 @@ impl Topology {
         }
 
         if update_needed {
-            if let Some(project_metadata) = &self.project_metadata {
-                let id = ObjectId::parse_str(&state.project_id).expect("Invalid project ID.");
-                let query = doc! {"id": id};
-                if let Some(project) = project_metadata.find_one(query, None).await.unwrap() {
-                    self.send_room_state(SendRoomState { project });
-                }
+            self.send_room_state_for(&state.project_id).await;
+        }
+    }
+
+    // FIXME: it might be nice not to query the database on *every* occupant invite/move/etc
+    async fn send_room_state_for(&self, project_id: &str) {
+        if let Some(project_metadata) = &self.project_metadata {
+            let id = ObjectId::parse_str(&project_id).expect("Invalid project ID.");
+            let query = doc! {"id": id};
+            if let Some(project) = project_metadata.find_one(query, None).await.unwrap() {
+                self.send_room_state(SendRoomState { project });
             }
         }
     }

@@ -53,8 +53,8 @@ async fn create_project(
         name: metadata.name,
         role_name,
     }))
+    // TODO: should we automatically set the client to the role?
     // TODO: how should we determine the role to open?
-
     // TODO: add allow_rename query string parameter?
     // TODO: return the project name/id, role name/id
 }
@@ -124,7 +124,7 @@ async fn get_project_named(
     let query = doc! {"owner": owner, "name": name};
     match app.project_metadata.find_one(query, None).await.unwrap() {
         Some(metadata) => {
-            if !can_edit_project(&app, &session, &metadata).await {
+            if !can_edit_project(&app, &session, None, &metadata).await {
                 return Ok(HttpResponse::Unauthorized().body("Not allowed."));
             }
             let project = app.fetch_project(&metadata).await;
@@ -138,18 +138,30 @@ async fn can_view_project(app: &AppData, session: &Session, project: &ProjectMet
     if project.public {
         return true;
     }
-    can_edit_project(&app, &session, &project).await
+    can_edit_project(&app, &session, None, &project).await
 }
 
-async fn can_edit_project(app: &AppData, session: &Session, project: &ProjectMetadata) -> bool {
-    // TODO: consider the client ID, too
-    match session.get::<String>("username").unwrap_or(None) {
-        Some(username) => {
-            project.collaborators.contains(&username)
-                || can_edit_user(&app, &session, &project.owner).await
+async fn can_edit_project(
+    app: &AppData,
+    session: &Session,
+    client_id: Option<String>,
+    project: &ProjectMetadata,
+) -> bool {
+    println!(
+        "Can {} edit the project? ({})",
+        client_id.clone().unwrap_or("None".to_owned()),
+        project.owner
+    );
+    let is_owner = client_id.map(|id| id == project.owner).unwrap_or(false);
+
+    is_owner
+        || match session.get::<String>("username").unwrap_or(None) {
+            Some(username) => {
+                project.collaborators.contains(&username)
+                    || can_edit_user(&app, &session, &project.owner).await
+            }
+            None => false,
         }
-        None => false,
-    }
 }
 
 #[get("/id/{projectID}")]
@@ -187,7 +199,7 @@ async fn publish_project(
         .await
         .unwrap()
     {
-        if !can_edit_project(&app, &session, &metadata).await {
+        if !can_edit_project(&app, &session, None, &metadata).await {
             return Ok(HttpResponse::Unauthorized().body("Not allowed."));
         }
 
@@ -217,7 +229,7 @@ async fn unpublish_project(
         .await
         .unwrap()
     {
-        if !can_edit_project(&app, &session, &metadata).await {
+        if !can_edit_project(&app, &session, None, &metadata).await {
             return Ok(HttpResponse::Unauthorized().body("Not allowed."));
         }
 
@@ -286,10 +298,7 @@ async fn update_project(
     {
         Some(metadata) => {
             let body = body.into_inner();
-            let client_id = body.client_id.unwrap();
-            if client_id != metadata.owner  // TODO: refactor
-                && !can_edit_project(&app, &session, &metadata).await
-            {
+            if !can_edit_project(&app, &session, body.client_id, &metadata).await {
                 return Ok(HttpResponse::Unauthorized().body("Not allowed."));
             }
             println!("Changing name from {} to {}", &metadata.name, &body.name);
@@ -370,7 +379,7 @@ async fn create_role(
     let (project_id,) = path.into_inner();
     let query = doc! {"id": project_id};
     if let Some(metadata) = app.project_metadata.find_one(query, None).await.unwrap() {
-        if !can_edit_project(&app, &session, &metadata).await {
+        if !can_edit_project(&app, &session, None, &metadata).await {
             return Ok(HttpResponse::Unauthorized().body("Not allowed."));
         }
 
@@ -429,7 +438,7 @@ async fn delete_role(
         .unwrap()
     {
         Some(metadata) => {
-            if !can_edit_project(&app, &session, &metadata).await {
+            if !can_edit_project(&app, &session, None, &metadata).await {
                 return Ok(HttpResponse::Unauthorized().body("Not allowed."));
             }
             let update = doc! {"$unset": {format!("roles.{}", role_id): &""}};
@@ -462,7 +471,7 @@ async fn save_role(
     let query = doc! {"id": project_id};
     match app.project_metadata.find_one(query, None).await.unwrap() {
         Some(metadata) => {
-            if !can_edit_project(&app, &session, &metadata).await {
+            if !can_edit_project(&app, &session, None, &metadata).await {
                 return Ok(HttpResponse::Unauthorized().body("Not allowed."));
             }
             app.save_role(&metadata, &role_id, &body.source_code, &body.media)
@@ -476,41 +485,54 @@ async fn save_role(
 }
 
 #[derive(Deserialize)]
+#[serde(rename_all = "camelCase")]
 struct RenameRoleData {
     name: String,
+    client_id: Option<String>,
 }
 
 #[patch("/id/{projectID}/{roleID}")]
 async fn rename_role(
     app: web::Data<AppData>,
     body: web::Json<RenameRoleData>,
-    path: web::Path<(ObjectId, String)>,
+    path: web::Path<(String, String)>,
     session: Session,
 ) -> Result<HttpResponse, std::io::Error> {
-    let (project_id, role_id) = path.into_inner();
+    let (project_id_str, role_id) = path.into_inner();
+    let project_id = match ObjectId::parse_str(project_id_str) {
+        Ok(id) => id,
+        Err(_) => return Ok(HttpResponse::BadRequest().body("Invalid project ID.")),
+    };
+
     let query = doc! {"id": project_id};
+    let body = body.into_inner();
     if let Some(metadata) = app
         .project_metadata
         .find_one(query.clone(), None)
         .await
         .unwrap()
     {
-        if !can_edit_project(&app, &session, &metadata).await {
+        if !can_edit_project(&app, &session, body.client_id, &metadata).await {
             return Ok(HttpResponse::Unauthorized().body("Not allowed."));
         }
 
         if metadata.roles.contains_key(&role_id) {
             let update = doc! {"$set": {format!("roles.{}.ProjectName", role_id): &body.name}};
-            let result = app
+            let options = FindOneAndUpdateOptions::builder()
+                .return_document(ReturnDocument::After)
+                .build();
+
+            let updated_metadata = app
                 .project_metadata
-                .update_one(query, update, None)
+                .find_one_and_update(query, update, options)
                 .await
                 .unwrap();
 
-            if result.modified_count > 0 {
-                app.network
-                    .do_send(topology::SendRoomState { project: metadata });
-                Ok(HttpResponse::Ok().body("Role updated")) // TODO: send room update message?
+            if updated_metadata.is_some() {
+                app.network.do_send(topology::SendRoomState {
+                    project: updated_metadata.unwrap(),
+                });
+                Ok(HttpResponse::Ok().body("Role updated"))
             } else {
                 Ok(HttpResponse::NotFound().body("Project not found"))
             }
@@ -543,7 +565,7 @@ async fn list_collaborators(
         .expect("Could not find project");
 
     if let Some(metadata) = result {
-        if can_edit_project(&app, &session, &metadata).await {
+        if can_edit_project(&app, &session, None, &metadata).await {
             Ok(HttpResponse::Ok().json(metadata.collaborators))
         } else {
             Ok(HttpResponse::Unauthorized().body("Not allowed."))
@@ -569,7 +591,7 @@ async fn add_collaborator(
         .unwrap()
     {
         Some(metadata) => {
-            if !can_edit_project(&app, &session, &metadata).await {
+            if !can_edit_project(&app, &session, None, &metadata).await {
                 return Ok(HttpResponse::Unauthorized().body("Not allowed."));
             }
 
@@ -605,7 +627,7 @@ async fn remove_collaborator(
         .unwrap()
     {
         Some(metadata) => {
-            if !can_edit_project(&app, &session, &metadata).await {
+            if !can_edit_project(&app, &session, None, &metadata).await {
                 return Ok(HttpResponse::Unauthorized().body("Not allowed."));
             }
 
@@ -629,6 +651,7 @@ async fn remove_collaborator(
 pub fn config(cfg: &mut web::ServiceConfig) {
     cfg.service(create_project)
         .service(update_project)
+        .service(rename_role)
         .service(add_collaborator)
         .service(add_collaborator)
         .service(add_collaborator)
@@ -650,6 +673,36 @@ mod tests {
 
     #[actix_web::test]
     async fn test_view_shared_projects_admin() {
+        unimplemented!();
+    }
+
+    #[actix_web::test]
+    async fn test_create_project() {
+        unimplemented!();
+    }
+
+    #[actix_web::test]
+    async fn test_create_project_403() {
+        unimplemented!();
+    }
+
+    #[actix_web::test]
+    async fn test_create_project_admin() {
+        unimplemented!();
+    }
+
+    #[actix_web::test]
+    async fn test_rename_role() {
+        unimplemented!();
+    }
+
+    #[actix_web::test]
+    async fn test_rename_role_403() {
+        unimplemented!();
+    }
+
+    #[actix_web::test]
+    async fn test_rename_role_admin() {
         unimplemented!();
     }
 }
