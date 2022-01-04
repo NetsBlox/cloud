@@ -108,7 +108,7 @@ pub fn config(cfg: &mut web::ServiceConfig) {
 
 struct WsSession {
     client_id: String,
-    topology_addr: Addr<topology::Topology>,
+    topology_addr: Addr<topology::TopologyActor>,
 }
 
 impl WsSession {

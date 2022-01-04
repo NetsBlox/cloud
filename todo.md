@@ -28,8 +28,9 @@
 
     - [ ] can I send a message to myself (unauthenticated)?
         - [x] resolve "everyone in room"/"others in room" on the client
-        - [ ] fix the async issue w/ actix...
+        - [x] fix the async issue w/ actix...
             - Can I move the ref into the async block?
+                - this fixed it!
 
 - [ ] validate user accounts on creation
     - [-] maybe we will need to whitelist email domains later

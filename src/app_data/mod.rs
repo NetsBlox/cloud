@@ -6,7 +6,7 @@ use std::collections::HashSet;
 use crate::config::Settings;
 use crate::models::{CollaborationInvitation, Group, Project, ProjectMetadata, User};
 use crate::models::{RoleData, RoleMetadata};
-use crate::network::topology::Topology;
+use crate::network::topology::{SetStorage, TopologyActor};
 use actix::{Actor, Addr};
 use futures::TryStreamExt;
 use mongodb::{Collection, Database};
@@ -18,7 +18,7 @@ pub struct AppData {
     s3: S3Client,
     pub settings: Settings,
     pub db: Database,
-    pub network: Addr<Topology>,
+    pub network: Addr<TopologyActor>,
     pub groups: Collection<Group>,
     pub users: Collection<User>,
     pub project_metadata: Collection<ProjectMetadata>,
@@ -31,7 +31,7 @@ impl AppData {
         db: Database,
         s3: S3Client,
         bucket: String,
-        network: Option<Addr<Topology>>,
+        network: Option<Addr<TopologyActor>>,
         prefix: Option<&'static str>,
     ) -> AppData {
         let prefix = prefix.unwrap_or("");
@@ -41,7 +41,10 @@ impl AppData {
         let collab_invites = db.collection::<CollaborationInvitation>(
             &(prefix.to_owned() + "collaborationInvitations"),
         );
-        let network = network.unwrap_or(Topology::new(project_metadata.clone()).start());
+        let network = network.unwrap_or(TopologyActor {}.start());
+        network.do_send(SetStorage {
+            project_metadata: project_metadata.clone(),
+        });
         AppData {
             settings,
             db,
@@ -205,7 +208,7 @@ impl AppData {
 
 fn get_unique_name(existing: Vec<String>, name: &str) -> String {
     let names: HashSet<std::string::String> = HashSet::from_iter(existing.iter().cloned());
-    let mut base_name = name;
+    let base_name = name;
     let mut role_name = base_name.to_owned();
     let mut number: u8 = 2;
     while names.contains(&role_name) {

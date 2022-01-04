@@ -3,10 +3,12 @@ pub mod client;
 use actix::prelude::{Message, Recipient};
 use actix::{Actor, AsyncContext, Context, Handler};
 use futures::future::join_all;
+use lazy_static::lazy_static;
 use mongodb::bson::doc;
 use mongodb::Collection;
 use serde_json::Value;
 use std::collections::HashMap;
+use std::sync::{Arc, RwLock};
 
 use crate::models::ProjectMetadata;
 
@@ -20,45 +22,56 @@ struct ProjectNetwork {
     roles: HashMap<String, Vec<String>>,
 }
 
-pub struct Topology {
-    //clients: HashMap<String, Client>,
-    project_metadata: Collection<ProjectMetadata>,
+struct Topology {
+    project_metadata: Option<Collection<ProjectMetadata>>,
     clients: HashMap<String, Client>,
     rooms: HashMap<String, ProjectNetwork>,
 }
 
+// TODO: wrap this in a mutex or something?
+lazy_static! {
+    static ref TOPOLOGY: Arc<RwLock<Topology>> = Arc::new(RwLock::new(Topology::new()));
+}
+
 impl Topology {
-    pub fn new(project_metadata: Collection<ProjectMetadata>) -> Topology {
+    pub fn new() -> Topology {
         Topology {
-            //clients: HashMap::new(),
             clients: HashMap::new(),
-            project_metadata,
+            project_metadata: None,
             rooms: HashMap::new(),
         }
     }
 
-    pub async fn get_clients_at(&self, addr: &str) -> Vec<&Client> {
-        // TODO: Add support for third party clients
-        // How should they be addressed?
-        let addresses = ClientAddress::parse(&self.project_metadata, addr).await;
-        let empty = Vec::new();
-        let clients = addresses
-            .into_iter()
-            .flat_map(|addr| {
-                self.rooms
-                    .get(&addr.project_id)
-                    .and_then(|room| room.roles.get(&addr.role_id))
-                    .unwrap_or(&empty)
-            })
-            .map(|id| self.clients.get(id))
-            .filter(|client| client.is_some())
-            .map(|client| client.unwrap())
-            .collect();
-
-        return clients;
+    fn set_project_metadata(&mut self, project_metadata: Collection<ProjectMetadata>) {
+        self.project_metadata = Some(project_metadata);
     }
 
-    pub async fn route_msg(&self, msg: SendMessage) {
+    async fn get_clients_at(&self, addr: &str) -> Vec<&Client> {
+        // TODO: Add support for third party clients
+        // How should they be addressed?
+        if let Some(project_metadata) = &self.project_metadata {
+            let addresses = ClientAddress::parse(&project_metadata, addr).await;
+            let empty = Vec::new();
+            let clients = addresses
+                .into_iter()
+                .flat_map(|addr| {
+                    self.rooms
+                        .get(&addr.project_id)
+                        .and_then(|room| room.roles.get(&addr.role_id))
+                        .unwrap_or(&empty)
+                })
+                .map(|id| self.clients.get(id))
+                .filter(|client| client.is_some())
+                .map(|client| client.unwrap())
+                .collect();
+
+            return clients;
+        } else {
+            return Vec::new();
+        }
+    }
+
+    pub async fn send_msg(&self, msg: SendMessage) {
         let message = ClientMessage(msg.content);
         println!("received message to send to {:?}", msg.addresses);
         let recipients = join_all(
@@ -75,9 +88,36 @@ impl Topology {
             client.addr.do_send(message.clone()).unwrap();
         });
     }
+
+    fn set_client_state(&mut self, msg: SetClientState) {
+        if !self.rooms.contains_key(&msg.state.project_id) {
+            self.rooms.insert(
+                msg.state.project_id.to_owned(),
+                ProjectNetwork {
+                    roles: HashMap::new(),
+                },
+            );
+        }
+        let room = self.rooms.get_mut(&msg.state.project_id).unwrap();
+        if let Some(occupants) = room.roles.get_mut(&msg.state.role_id) {
+            occupants.push(msg.id);
+        } else {
+            room.roles.insert(msg.state.role_id, vec![msg.id]);
+        }
+    }
+
+    fn add_client(&mut self, msg: AddClient) {
+        let client = Client {
+            id: msg.id.clone(),
+            addr: msg.addr,
+        };
+        self.clients.insert(msg.id, client);
+    }
 }
 
-impl Actor for Topology {
+pub struct TopologyActor {}
+
+impl Actor for TopologyActor {
     type Context = Context<Self>;
 }
 
@@ -90,6 +130,12 @@ pub struct ClientMessage(pub Value);
 pub struct AddClient {
     pub id: String,
     pub addr: Recipient<ClientMessage>,
+}
+
+#[derive(Message)]
+#[rtype(result = "()")]
+pub struct SetStorage {
+    pub project_metadata: Collection<ProjectMetadata>,
 }
 
 #[derive(Message)]
@@ -180,19 +226,16 @@ impl ClientState {
     }
 }
 
-impl Handler<AddClient> for Topology {
+impl Handler<AddClient> for TopologyActor {
     type Result = ();
 
     fn handle(&mut self, msg: AddClient, _: &mut Context<Self>) -> Self::Result {
-        let client = Client {
-            id: msg.id,
-            addr: msg.addr,
-        };
-        self.clients.insert(msg.id, client);
+        let mut topology = TOPOLOGY.write().unwrap();
+        topology.add_client(msg);
     }
 }
 
-impl Handler<RemoveClient> for Topology {
+impl Handler<RemoveClient> for TopologyActor {
     type Result = ();
 
     fn handle(&mut self, msg: RemoveClient, _: &mut Context<Self>) -> Self::Result {
@@ -200,36 +243,32 @@ impl Handler<RemoveClient> for Topology {
     }
 }
 
-impl Handler<SetClientState> for Topology {
+impl Handler<SetClientState> for TopologyActor {
     type Result = ();
 
     fn handle(&mut self, msg: SetClientState, _: &mut Context<Self>) -> Self::Result {
-        if !self.rooms.contains_key(&msg.state.project_id) {
-            self.rooms.insert(
-                msg.state.project_id.to_owned(),
-                ProjectNetwork {
-                    roles: HashMap::new(),
-                },
-            );
-        }
-        let room = self.rooms.get_mut(&msg.state.project_id).unwrap();
-        if let Some(occupants) = room.roles.get_mut(&msg.state.role_id) {
-            occupants.push(msg.id);
-        } else {
-            room.roles.insert(msg.state.role_id, vec![msg.id]);
-        }
+        let mut topology = TOPOLOGY.write().unwrap();
+        topology.set_client_state(msg);
     }
 }
 
-impl Handler<SendMessage> for Topology {
+impl Handler<SendMessage> for TopologyActor {
     type Result = ();
 
     fn handle(&mut self, msg: SendMessage, ctx: &mut Context<Self>) -> Self::Result {
-        //let fut = async move { self.route_msg(msg).await };
-        let fut = self.route_msg(msg);
+        let fut = async {
+            let topology = TOPOLOGY.read().unwrap();
+            topology.send_msg(msg).await;
+        };
         let fut = actix::fut::wrap_future(fut); // Darn this won't work...
         ctx.spawn(fut);
-        //ctx.spawn(fut);
-        // TODO: resolve the address? Or should it already be resolved?
+    }
+}
+impl Handler<SetStorage> for TopologyActor {
+    type Result = ();
+
+    fn handle(&mut self, msg: SetStorage, ctx: &mut Context<Self>) -> Self::Result {
+        let mut topology = TOPOLOGY.write().unwrap();
+        topology.set_project_metadata(msg.project_metadata);
     }
 }
