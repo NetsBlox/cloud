@@ -6,9 +6,15 @@
 
 - [ ] email Tom about the big update?
 
+- [ ] update the services server connection (zmq)
+    - add resolve endpoint?
+        - (public role ID resolution)
+        - Or the client could send this in the request...
+            - context: {project: {name, id}, role: {name, id}}
+
 - [ ] connect the client code and start testing things!
     - [x] refactor cloud
-    - [ ] create project:
+    - [x] create project:
         - [x] new project
             - blob connection test (minio)
         - [ ] save projects
@@ -22,7 +28,7 @@
                 - this doesn't seem to be working...
             - I think this is actually an issue on the client side...
 
-    - [ ] set client state not working...
+    - [x] set client state not working...
         - how will this work with the new server?
             - network/<client_id>/state
 
@@ -37,17 +43,30 @@
         - [x] why is the address quoted?
             - json_serde (use as_str)
 
-    - [ ] remove client on disconnect
+    - [x] remove client on disconnect
     - [ ] send room messages
+        - [ ] detect project/role rename
+
+    - [ ] delete transient projects after inactivity
+        - if we disable creating roles without saving, this would be good
+        - this isn't great since we wouldn't be able to try public projects...
+
+        - inactivity should probably be determined by network activity?
+            - when a client closes, we should delete all transient projects owned by the client ID (or username) after a set amount of time
+            - same for logging out?
+
+- [ ] update the compiler for resolving addresses
+    - should be pretty easy to just copy the logic over
 
 - [ ] validate user accounts on creation
     - [-] maybe we will need to whitelist email domains later
     - we can block tor exit nodes. Should we record the IP address?
 
 - [ ] ws support
-    - [ ] sending (netsblox) messages
+    - [x] sending (netsblox) messages
     - [ ] client-message
     - [ ] user-action
+        - how should we handle collaboration?
     - [ ] project-response
     - [ ] request-actions
 

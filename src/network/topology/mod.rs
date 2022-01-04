@@ -1,14 +1,15 @@
-pub mod client;
-
 use actix::prelude::{Message, Recipient};
 use actix::{Actor, AsyncContext, Context, Handler};
 use futures::future::join_all;
 use lazy_static::lazy_static;
 use mongodb::bson::doc;
+use mongodb::bson::oid::ObjectId;
 use mongodb::Collection;
+use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use std::collections::HashMap;
 use std::sync::{Arc, RwLock};
+use std::time::SystemTime;
 
 use crate::models::ProjectMetadata;
 
@@ -19,7 +20,17 @@ pub struct Client {
 }
 
 struct ProjectNetwork {
+    id: String,
     roles: HashMap<String, Vec<String>>,
+}
+
+impl ProjectNetwork {
+    fn new(id: String) -> ProjectNetwork {
+        ProjectNetwork {
+            id,
+            roles: HashMap::new(),
+        }
+    }
 }
 
 struct Topology {
@@ -29,7 +40,6 @@ struct Topology {
     states: HashMap<String, ClientState>,
 }
 
-// TODO: wrap this in a mutex or something?
 lazy_static! {
     static ref TOPOLOGY: Arc<RwLock<Topology>> = Arc::new(RwLock::new(Topology::new()));
 }
@@ -89,18 +99,16 @@ impl Topology {
         });
     }
 
-    fn set_client_state(&mut self, msg: SetClientState) {
+    async fn set_client_state(&mut self, msg: SetClientState) {
         if let Some(state) = self.states.remove(&msg.id) {
-            self.remove_client_from(&msg.id, &state);
+            self.remove_client_from(&msg.id, &state).await;
         }
 
         println!("Setting client state to {:?}", msg.state);
         if !self.rooms.contains_key(&msg.state.project_id) {
             self.rooms.insert(
                 msg.state.project_id.to_owned(),
-                ProjectNetwork {
-                    roles: HashMap::new(),
-                },
+                ProjectNetwork::new(msg.state.project_id.to_owned()),
             );
         }
         let room = self.rooms.get_mut(&msg.state.project_id).unwrap();
@@ -121,43 +129,69 @@ impl Topology {
         self.clients.insert(msg.id, client);
     }
 
-    fn remove_client(&mut self, msg: RemoveClient) {
+    async fn remove_client(&mut self, msg: RemoveClient) {
         println!("remove client");
         self.clients.remove(&msg.id);
 
         if let Some(state) = self.states.remove(&msg.id) {
-            self.remove_client_from(&msg.id, &state);
+            self.remove_client_from(&msg.id, &state).await;
         }
     }
 
-    fn remove_client_from(&mut self, id: &str, state: &ClientState) {
+    async fn remove_client_from(&mut self, id: &str, state: &ClientState) {
         let mut empty: Vec<String> = Vec::new();
-        let occupants_and_role_count = self
+        let room = self
             .states
             .remove(id)
-            .and_then(|state| self.rooms.get_mut(&state.project_id))
-            .map(|room| {
-                (
-                    room.roles.len().clone(),
-                    room.roles.get_mut(&state.role_id).unwrap_or(&mut empty),
-                )
-            });
+            .and_then(|state| self.rooms.get_mut(&state.project_id));
 
-        if let Some((mut role_count, occupants)) = occupants_and_role_count {
+        let mut update_needed = true;
+        if let Some(room) = room {
+            let occupants = room.roles.get_mut(&state.role_id).unwrap_or(&mut empty);
             if let Some(pos) = occupants.iter().position(|item| item == id) {
                 occupants.swap_remove(pos);
-                role_count -= 1;
             }
+
             if occupants.len() == 0 {
-                if role_count == 0 {
+                let role_count = room.roles.len().clone();
+                if role_count == 1 {
                     // remove the room
                     self.rooms.remove(&state.project_id);
+                    // TODO: Should we remove the entry from the database?
+                    update_needed = false;
                 } else {
                     // remove the role
                     let room = self.rooms.get_mut(&state.role_id).unwrap();
                     room.roles.remove(&state.role_id);
                 }
             }
+        }
+
+        if update_needed {
+            if let Some(project_metadata) = &self.project_metadata {
+                let id = ObjectId::parse_str(&state.project_id).expect("Invalid project ID.");
+                let query = doc! {"id": id};
+                if let Some(project) = project_metadata.find_one(query, None).await.unwrap() {
+                    self.send_room_state(SendRoomState { project });
+                }
+            }
+        }
+    }
+
+    fn send_room_state(&self, msg: SendRoomState) {
+        let id = msg.project.id.to_string();
+        if let Some(room) = self.rooms.get(&id) {
+            let clients = room
+                .roles
+                .values()
+                .flatten()
+                .filter_map(|id| self.clients.get(id));
+
+            let room_state = RoomStateMessage::new(msg.project, room);
+            println!("Sending room update: {}", room_state.name);
+            clients.for_each(|client| {
+                client.addr.do_send(room_state.clone().into());
+            });
         }
     }
 }
@@ -183,6 +217,12 @@ pub struct AddClient {
 #[rtype(result = "()")]
 pub struct SetStorage {
     pub project_metadata: Collection<ProjectMetadata>,
+}
+
+#[derive(Message)]
+#[rtype(result = "()")]
+pub struct SendRoomState {
+    pub project: ProjectMetadata,
 }
 
 #[derive(Message)]
@@ -220,7 +260,7 @@ impl ClientAddress {
         let mut states = vec![];
         let query = doc! {"name": project, "owner": owner};
         if let Some(metadata) = project_metadata.find_one(query, None).await.unwrap() {
-            let project_id = metadata._id.to_string();
+            let project_id = metadata.id.to_string();
             match role {
                 Some(role_name) => {
                     let name2id = metadata
@@ -263,6 +303,83 @@ pub struct SendMessage {
     pub content: Value,
 }
 
+#[derive(Message, Serialize, Clone)]
+#[rtype(result = "()")]
+struct RoomStateMessage {
+    id: String,
+    owner: String,
+    name: String,
+    roles: HashMap<String, RoleState>,
+    collaborators: Vec<String>,
+    version: u64,
+}
+
+impl From<RoomStateMessage> for ClientMessage {
+    fn from(msg: RoomStateMessage) -> ClientMessage {
+        let mut value = serde_json::to_value(msg).unwrap();
+        let msg = value.as_object_mut().unwrap();
+        msg.insert(
+            "type".to_string(),
+            serde_json::to_value("room-roles").unwrap(),
+        );
+        ClientMessage(value)
+    }
+}
+#[derive(Message, Serialize, Clone)]
+#[rtype(result = "()")]
+struct RoleState {
+    name: String,
+    occupants: Vec<OccupantState>,
+}
+
+#[derive(Message, Serialize, Clone)]
+#[rtype(result = "()")]
+struct OccupantState {
+    id: String,
+    name: String,
+}
+
+impl RoomStateMessage {
+    fn new(project: ProjectMetadata, room: &ProjectNetwork) -> RoomStateMessage {
+        let empty = Vec::new();
+        let roles: HashMap<String, RoleState> = project
+            .roles
+            .into_iter()
+            .map(|(id, role)| {
+                let client_ids = room.roles.get(&id).unwrap_or(&empty);
+                // TODO: get the names...
+                let occupants = client_ids
+                    .into_iter()
+                    .map(|id| OccupantState {
+                        id: id.to_owned(),
+                        name: "guest".to_owned(),
+                    })
+                    .collect();
+
+                (
+                    id,
+                    RoleState {
+                        name: role.project_name,
+                        occupants,
+                    },
+                )
+            })
+            .collect();
+
+        RoomStateMessage {
+            id: room.id.to_owned(),
+            owner: project.owner,
+            name: project.name,
+            roles,
+            collaborators: project.collaborators,
+            version: SystemTime::now()
+                .duration_since(SystemTime::UNIX_EPOCH)
+                .expect("Could not get system time")
+                .as_secs(),
+        }
+    }
+}
+
 impl ClientState {
     pub fn new(project_id: String, role_id: String, username: Option<String>) -> ClientState {
         ClientState {
@@ -285,18 +402,26 @@ impl Handler<AddClient> for TopologyActor {
 impl Handler<RemoveClient> for TopologyActor {
     type Result = ();
 
-    fn handle(&mut self, msg: RemoveClient, _: &mut Context<Self>) -> Self::Result {
-        let mut topology = TOPOLOGY.write().unwrap();
-        topology.remove_client(msg);
+    fn handle(&mut self, msg: RemoveClient, ctx: &mut Context<Self>) -> Self::Result {
+        let fut = async {
+            let mut topology = TOPOLOGY.write().unwrap();
+            topology.remove_client(msg).await;
+        };
+        let fut = actix::fut::wrap_future(fut);
+        ctx.spawn(fut);
     }
 }
 
 impl Handler<SetClientState> for TopologyActor {
     type Result = ();
 
-    fn handle(&mut self, msg: SetClientState, _: &mut Context<Self>) -> Self::Result {
-        let mut topology = TOPOLOGY.write().unwrap();
-        topology.set_client_state(msg);
+    fn handle(&mut self, msg: SetClientState, ctx: &mut Context<Self>) -> Self::Result {
+        let fut = async {
+            let mut topology = TOPOLOGY.write().unwrap();
+            topology.set_client_state(msg).await;
+        };
+        let fut = actix::fut::wrap_future(fut);
+        ctx.spawn(fut);
     }
 }
 
@@ -308,15 +433,24 @@ impl Handler<SendMessage> for TopologyActor {
             let topology = TOPOLOGY.read().unwrap();
             topology.send_msg(msg).await;
         };
-        let fut = actix::fut::wrap_future(fut); // Darn this won't work...
+        let fut = actix::fut::wrap_future(fut);
         ctx.spawn(fut);
     }
 }
 impl Handler<SetStorage> for TopologyActor {
     type Result = ();
 
-    fn handle(&mut self, msg: SetStorage, ctx: &mut Context<Self>) -> Self::Result {
+    fn handle(&mut self, msg: SetStorage, _: &mut Context<Self>) -> Self::Result {
         let mut topology = TOPOLOGY.write().unwrap();
         topology.set_project_metadata(msg.project_metadata);
+    }
+}
+
+impl Handler<SendRoomState> for TopologyActor {
+    type Result = ();
+
+    fn handle(&mut self, msg: SendRoomState, _: &mut Context<Self>) -> Self::Result {
+        let topology = TOPOLOGY.read().unwrap();
+        topology.send_room_state(msg);
     }
 }

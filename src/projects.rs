@@ -1,11 +1,13 @@
 use crate::app_data::AppData;
 use crate::models::{ProjectMetadata, RoleData};
+use crate::network::topology;
 use crate::users::can_edit_user;
 use actix_session::Session;
 use actix_web::{delete, get, patch, post};
 use actix_web::{web, HttpResponse};
 use futures::stream::TryStreamExt;
 use mongodb::bson::{doc, oid::ObjectId};
+use mongodb::options::{FindOneAndUpdateOptions, ReturnDocument};
 use mongodb::Cursor;
 use serde::{Deserialize, Serialize};
 
@@ -46,7 +48,7 @@ async fn create_project(
     let role_id = metadata.roles.keys().next().unwrap();
     let role_name = &metadata.roles.get(role_id).unwrap().project_name;
     Ok(HttpResponse::Ok().json(CreatedRole {
-        project_id: metadata._id.to_string(),
+        project_id: metadata.id.to_string(),
         role_id,
         name: metadata.name,
         role_name,
@@ -140,6 +142,7 @@ async fn can_view_project(app: &AppData, session: &Session, project: &ProjectMet
 }
 
 async fn can_edit_project(app: &AppData, session: &Session, project: &ProjectMetadata) -> bool {
+    // TODO: consider the client ID, too
     match session.get::<String>("username").unwrap_or(None) {
         Some(username) => {
             project.collaborators.contains(&username)
@@ -156,7 +159,7 @@ async fn get_project(
     session: Session,
 ) -> Result<HttpResponse, std::io::Error> {
     let (project_id,) = path.into_inner();
-    let query = doc! {"_id": project_id};
+    let query = doc! {"id": project_id};
     if let Some(metadata) = app.project_metadata.find_one(query, None).await.unwrap() {
         if !can_view_project(&app, &session, &metadata).await {
             return Ok(HttpResponse::Unauthorized().body("Not allowed."));
@@ -177,7 +180,7 @@ async fn publish_project(
     session: Session,
 ) -> Result<HttpResponse, std::io::Error> {
     let (project_id,) = path.into_inner();
-    let query = doc! {"_id": project_id};
+    let query = doc! {"id": project_id};
     if let Some(metadata) = app
         .project_metadata
         .find_one(query.clone(), None)
@@ -207,7 +210,7 @@ async fn unpublish_project(
     session: Session,
 ) -> Result<HttpResponse, std::io::Error> {
     let (project_id,) = path.into_inner();
-    let query = doc! {"_id": project_id};
+    let query = doc! {"id": project_id};
     if let Some(metadata) = app
         .project_metadata
         .find_one(query.clone(), None)
@@ -237,7 +240,7 @@ async fn delete_project(
     session: Session,
 ) -> Result<HttpResponse, std::io::Error> {
     let (project_id,) = path.into_inner();
-    let query = doc! {"_id": project_id};
+    let query = doc! {"id": project_id};
     if let Some(metadata) = app.project_metadata.find_one(query, None).await.unwrap() {
         // collaborators cannot delete -> only user/admin/etc
         if !can_edit_user(&app, &session, &metadata.owner).await {
@@ -253,20 +256,28 @@ async fn delete_project(
 }
 
 #[derive(Deserialize)]
+#[serde(rename_all = "camelCase")]
 struct UpdateProjectBody {
     name: String,
+    client_id: Option<String>,
 }
 
 #[patch("/id/{projectID}")]
 async fn update_project(
     app: web::Data<AppData>,
-    path: web::Path<(ObjectId,)>,
+    path: web::Path<(String,)>,
     body: web::Json<UpdateProjectBody>,
     session: Session,
 ) -> Result<HttpResponse, std::io::Error> {
-    let (project_id,) = path.into_inner();
+    let (id_str,) = path.into_inner();
+    // TODO: make a ProjectID type
+    let project_id = match ObjectId::parse_str(id_str) {
+        Ok(id) => id,
+        Err(_) => return Ok(HttpResponse::BadRequest().body("Invalid project ID.")),
+    };
 
-    let query = doc! {"_id": project_id};
+    // TODO: validate the name. Or make it a type?
+    let query = doc! {"id": project_id};
     match app
         .project_metadata
         .find_one(query.clone(), None)
@@ -274,17 +285,32 @@ async fn update_project(
         .unwrap()
     {
         Some(metadata) => {
-            if !can_edit_project(&app, &session, &metadata).await {
+            let body = body.into_inner();
+            let client_id = body.client_id.unwrap();
+            if client_id != metadata.owner  // TODO: refactor
+                && !can_edit_project(&app, &session, &metadata).await
+            {
                 return Ok(HttpResponse::Unauthorized().body("Not allowed."));
             }
-            let update = doc! {"name": &body.name};
-            let result = app
+            println!("Changing name from {} to {}", &metadata.name, &body.name);
+            let update = doc! {"$set": {"name": &body.name}};
+            let options = FindOneAndUpdateOptions::builder()
+                .return_document(ReturnDocument::After)
+                .build();
+            let updated_metadata = app
                 .project_metadata
-                .update_one(query, update, None)
+                .find_one_and_update(query, update, options)
                 .await
                 .unwrap();
 
-            if result.matched_count > 0 {
+            if updated_metadata.is_some() {
+                println!(
+                    "New project name is {:?}",
+                    updated_metadata.as_ref().unwrap().name
+                );
+                app.network.do_send(topology::SendRoomState {
+                    project: updated_metadata.unwrap(),
+                });
                 Ok(HttpResponse::Ok().body("Project updated."))
             } else {
                 Ok(HttpResponse::NotFound().body("Project not found."))
@@ -309,7 +335,7 @@ async fn get_project_thumbnail(
     let (project_id,) = path.into_inner();
     match ObjectId::parse_str(project_id) {
         Ok(id) => {
-            let query = doc! {"_id": id};
+            let query = doc! {"id": id};
             let result = collection
                 .find_one(query, None)
                 .await
@@ -342,7 +368,7 @@ async fn create_role(
     // TODO: send room update message? I am not sure
     // TODO: this shouldn't need to. It should trigger an update sent
     let (project_id,) = path.into_inner();
-    let query = doc! {"_id": project_id};
+    let query = doc! {"id": project_id};
     if let Some(metadata) = app.project_metadata.find_one(query, None).await.unwrap() {
         if !can_edit_project(&app, &session, &metadata).await {
             return Ok(HttpResponse::Unauthorized().body("Not allowed."));
@@ -370,7 +396,7 @@ async fn get_role(
     session: Session,
 ) -> Result<HttpResponse, std::io::Error> {
     let (project_id, role_id) = path.into_inner();
-    let query = doc! {"_id": project_id};
+    let query = doc! {"id": project_id};
     match app.project_metadata.find_one(query, None).await.unwrap() {
         Some(metadata) => {
             if !can_view_project(&app, &session, &metadata).await {
@@ -395,7 +421,7 @@ async fn delete_role(
     session: Session,
 ) -> Result<HttpResponse, std::io::Error> {
     let (project_id, role_id) = path.into_inner();
-    let query = doc! {"_id": project_id};
+    let query = doc! {"id": project_id};
     match app
         .project_metadata
         .find_one(query.clone(), None)
@@ -433,7 +459,7 @@ async fn save_role(
     session: Session,
 ) -> Result<HttpResponse, std::io::Error> {
     let (project_id, role_id) = path.into_inner();
-    let query = doc! {"_id": project_id};
+    let query = doc! {"id": project_id};
     match app.project_metadata.find_one(query, None).await.unwrap() {
         Some(metadata) => {
             if !can_edit_project(&app, &session, &metadata).await {
@@ -462,7 +488,7 @@ async fn rename_role(
     session: Session,
 ) -> Result<HttpResponse, std::io::Error> {
     let (project_id, role_id) = path.into_inner();
-    let query = doc! {"_id": project_id};
+    let query = doc! {"id": project_id};
     if let Some(metadata) = app
         .project_metadata
         .find_one(query.clone(), None)
@@ -482,6 +508,8 @@ async fn rename_role(
                 .unwrap();
 
             if result.modified_count > 0 {
+                app.network
+                    .do_send(topology::SendRoomState { project: metadata });
                 Ok(HttpResponse::Ok().body("Role updated")) // TODO: send room update message?
             } else {
                 Ok(HttpResponse::NotFound().body("Project not found"))
@@ -506,7 +534,7 @@ async fn list_collaborators(
     session: Session,
 ) -> Result<HttpResponse, std::io::Error> {
     let (project_id,) = path.into_inner();
-    let query = doc! {"_id": project_id};
+    let query = doc! {"id": project_id};
 
     let result = app
         .project_metadata
@@ -533,7 +561,7 @@ async fn add_collaborator(
     session: Session,
 ) -> Result<HttpResponse, std::io::Error> {
     let (project_id, username) = path.into_inner();
-    let query = doc! {"_id": project_id};
+    let query = doc! {"id": project_id};
     match app
         .project_metadata
         .find_one(query.clone(), None)
@@ -569,7 +597,7 @@ async fn remove_collaborator(
     session: Session,
 ) -> Result<HttpResponse, std::io::Error> {
     let (project_id, username) = path.into_inner();
-    let query = doc! {"_id": project_id};
+    let query = doc! {"id": project_id};
     match app
         .project_metadata
         .find_one(query.clone(), None)
@@ -600,6 +628,7 @@ async fn remove_collaborator(
 
 pub fn config(cfg: &mut web::ServiceConfig) {
     cfg.service(create_project)
+        .service(update_project)
         .service(add_collaborator)
         .service(add_collaborator)
         .service(add_collaborator)

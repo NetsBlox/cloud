@@ -126,8 +126,6 @@ impl WsSession {
                     _ => std::vec::Vec::new(),
                 };
                 println!("Sending message to {:?}", addresses);
-                // TODO: record the sender ID so relative addresses can be resolved?
-                // Or should we resolve them on the client?
                 self.topology_addr.do_send(topology::SendMessage {
                     addresses,
                     content: msg,
@@ -191,6 +189,7 @@ impl StreamHandler<Result<ws::Message, ws::ProtocolError>> for WsSession {
                 }
             }
             Ok(ws::Message::Close(reason_opt)) => {
+                // TODO: detect broken connection
                 println!("Closing! Reason: {:?}", reason_opt);
             }
             _ => (),

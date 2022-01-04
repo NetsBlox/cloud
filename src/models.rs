@@ -33,7 +33,7 @@ impl From<User> for Bson {
 #[derive(Deserialize, Serialize, Clone)]
 #[serde(rename_all = "camelCase")]
 pub struct ProjectMetadata {
-    pub _id: ObjectId,
+    pub id: ObjectId,
     pub owner: String,
     pub name: String,
     pub updated: DateTime,
@@ -53,7 +53,7 @@ impl ProjectMetadata {
             .collect::<HashMap<String, RoleMetadata>>();
 
         ProjectMetadata {
-            _id: ObjectId::new(),
+            id: ObjectId::new(),
             owner: owner.to_owned(),
             name: name.to_owned(),
             updated: origin_time,
