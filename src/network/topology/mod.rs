@@ -26,6 +26,7 @@ struct Topology {
     project_metadata: Option<Collection<ProjectMetadata>>,
     clients: HashMap<String, Client>,
     rooms: HashMap<String, ProjectNetwork>,
+    states: HashMap<String, ClientState>,
 }
 
 // TODO: wrap this in a mutex or something?
@@ -39,6 +40,7 @@ impl Topology {
             clients: HashMap::new(),
             project_metadata: None,
             rooms: HashMap::new(),
+            states: HashMap::new(),
         }
     }
 
@@ -52,7 +54,7 @@ impl Topology {
         if let Some(project_metadata) = &self.project_metadata {
             let addresses = ClientAddress::parse(&project_metadata, addr).await;
             let empty = Vec::new();
-            let clients = addresses
+            let clients: Vec<&Client> = addresses
                 .into_iter()
                 .flat_map(|addr| {
                     self.rooms
@@ -60,9 +62,7 @@ impl Topology {
                         .and_then(|room| room.roles.get(&addr.role_id))
                         .unwrap_or(&empty)
                 })
-                .map(|id| self.clients.get(id))
-                .filter(|client| client.is_some())
-                .map(|client| client.unwrap())
+                .filter_map(|id| self.clients.get(id))
                 .collect();
 
             return clients;
@@ -90,6 +90,11 @@ impl Topology {
     }
 
     fn set_client_state(&mut self, msg: SetClientState) {
+        if let Some(state) = self.states.remove(&msg.id) {
+            self.remove_client_from(&msg.id, &state);
+        }
+
+        println!("Setting client state to {:?}", msg.state);
         if !self.rooms.contains_key(&msg.state.project_id) {
             self.rooms.insert(
                 msg.state.project_id.to_owned(),
@@ -100,10 +105,12 @@ impl Topology {
         }
         let room = self.rooms.get_mut(&msg.state.project_id).unwrap();
         if let Some(occupants) = room.roles.get_mut(&msg.state.role_id) {
-            occupants.push(msg.id);
+            occupants.push(msg.id.clone());
         } else {
-            room.roles.insert(msg.state.role_id, vec![msg.id]);
+            room.roles
+                .insert(msg.state.role_id.clone(), vec![msg.id.clone()]);
         }
+        self.states.insert(msg.id, msg.state);
     }
 
     fn add_client(&mut self, msg: AddClient) {
@@ -112,6 +119,46 @@ impl Topology {
             addr: msg.addr,
         };
         self.clients.insert(msg.id, client);
+    }
+
+    fn remove_client(&mut self, msg: RemoveClient) {
+        println!("remove client");
+        self.clients.remove(&msg.id);
+
+        if let Some(state) = self.states.remove(&msg.id) {
+            self.remove_client_from(&msg.id, &state);
+        }
+    }
+
+    fn remove_client_from(&mut self, id: &str, state: &ClientState) {
+        let mut empty: Vec<String> = Vec::new();
+        let occupants_and_role_count = self
+            .states
+            .remove(id)
+            .and_then(|state| self.rooms.get_mut(&state.project_id))
+            .map(|room| {
+                (
+                    room.roles.len().clone(),
+                    room.roles.get_mut(&state.role_id).unwrap_or(&mut empty),
+                )
+            });
+
+        if let Some((mut role_count, occupants)) = occupants_and_role_count {
+            if let Some(pos) = occupants.iter().position(|item| item == id) {
+                occupants.swap_remove(pos);
+                role_count -= 1;
+            }
+            if occupants.len() == 0 {
+                if role_count == 0 {
+                    // remove the room
+                    self.rooms.remove(&state.project_id);
+                } else {
+                    // remove the role
+                    let room = self.rooms.get_mut(&state.role_id).unwrap();
+                    room.roles.remove(&state.role_id);
+                }
+            }
+        }
     }
 }
 
@@ -151,7 +198,7 @@ pub struct SetClientState {
     pub state: ClientState,
 }
 
-#[derive(Message)]
+#[derive(Message, Debug)]
 #[rtype(result = "()")]
 pub struct ClientState {
     role_id: String,
@@ -239,7 +286,8 @@ impl Handler<RemoveClient> for TopologyActor {
     type Result = ();
 
     fn handle(&mut self, msg: RemoveClient, _: &mut Context<Self>) -> Self::Result {
-        unimplemented!();
+        let mut topology = TOPOLOGY.write().unwrap();
+        topology.remove_client(msg);
     }
 }
 

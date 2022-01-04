@@ -38,6 +38,7 @@ async fn set_client_state(
     //   - the user can join the project. May need a token if invited as occupant
 
     let state = topology::ClientState::new(req.project_id.clone(), req.role_id.clone(), username);
+
     app.network.do_send(topology::SetClientState {
         id: client_id.clone(),
         state,
@@ -118,11 +119,9 @@ impl WsSession {
             "message" => {
                 let dst_id = msg["dstId"].clone();
                 let addresses = match dst_id {
-                    Value::String(address) => vec![address],
                     Value::Array(values) => values
                         .iter()
-                        .filter(|v| v.is_string())
-                        .map(|v| v.to_string())
+                        .filter_map(|v| v.as_str().map(|s| s.to_owned()))
                         .collect::<Vec<String>>(),
                     _ => std::vec::Vec::new(),
                 };

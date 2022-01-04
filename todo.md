@@ -26,11 +26,19 @@
         - how will this work with the new server?
             - network/<client_id>/state
 
-    - [ ] can I send a message to myself (unauthenticated)?
+    - [x] can I send a message to myself (unauthenticated)?
         - [x] resolve "everyone in room"/"others in room" on the client
         - [x] fix the async issue w/ actix...
             - Can I move the ref into the async block?
                 - this fixed it!
+        - [x] is the state being set?
+            - checking...
+
+        - [x] why is the address quoted?
+            - json_serde (use as_str)
+
+    - [ ] remove client on disconnect
+    - [ ] send room messages
 
 - [ ] validate user accounts on creation
     - [-] maybe we will need to whitelist email domains later
