@@ -383,14 +383,20 @@ async fn create_role(
             return Ok(HttpResponse::Unauthorized().body("Not allowed."));
         }
 
-        app.create_role(
-            metadata,
-            &body.name,
-            body.source_code.to_owned(),
-            body.media.to_owned(),
-        )
-        .await
-        .unwrap();
+        let updated_metadata = app
+            .create_role(
+                metadata,
+                &body.name,
+                body.source_code.to_owned(),
+                body.media.to_owned(),
+            )
+            .await;
+
+        if updated_metadata.is_ok() {
+            app.network.do_send(topology::SendRoomState {
+                project: updated_metadata.unwrap(),
+            });
+        }
 
         Ok(HttpResponse::Ok().body("Role created"))
     } else {
@@ -442,16 +448,26 @@ async fn delete_role(
                 return Ok(HttpResponse::Unauthorized().body("Not allowed."));
             }
             let update = doc! {"$unset": {format!("roles.{}", role_id): &""}};
-            app.project_metadata
-                .update_one(query, update, None)
+            let options = FindOneAndUpdateOptions::builder()
+                .return_document(ReturnDocument::After)
+                .build();
+
+            let updated_metadata = app
+                .project_metadata
+                .find_one_and_update(query, update, options)
                 .await
                 .unwrap();
+
+            if updated_metadata.is_some() {
+                app.network.do_send(topology::SendRoomState {
+                    project: updated_metadata.unwrap(),
+                });
+            }
 
             Ok(HttpResponse::Ok().body("Deleted!"))
         }
         None => Ok(HttpResponse::NotFound().body("Project not found.")),
     }
-    // TODO: send room update message?
 }
 
 #[derive(Deserialize)]
@@ -650,13 +666,23 @@ async fn remove_collaborator(
 
 pub fn config(cfg: &mut web::ServiceConfig) {
     cfg.service(create_project)
+        .service(delete_project)
+        .service(list_user_projects)
+        .service(list_shared_projects)
+        .service(get_project_named)
+        .service(get_project)
+        .service(publish_project)
+        .service(unpublish_project)
         .service(update_project)
+        .service(get_latest_project)
+        .service(get_project_thumbnail)
+        .service(get_role)
+        .service(get_latest_role)
         .service(rename_role)
+        .service(create_role)
+        .service(delete_role)
         .service(add_collaborator)
-        .service(add_collaborator)
-        .service(add_collaborator)
-        .service(add_collaborator)
-        .service(add_collaborator)
+        .service(list_collaborators)
         .service(remove_collaborator);
 }
 
@@ -703,6 +729,51 @@ mod tests {
 
     #[actix_web::test]
     async fn test_rename_role_admin() {
+        unimplemented!();
+    }
+
+    #[actix_web::test]
+    async fn test_rename_role_room_update() {
+        unimplemented!();
+    }
+
+    #[actix_web::test]
+    async fn test_delete_role() {
+        unimplemented!();
+    }
+
+    #[actix_web::test]
+    async fn test_delete_role_403() {
+        unimplemented!();
+    }
+
+    #[actix_web::test]
+    async fn test_delete_role_admin() {
+        unimplemented!();
+    }
+
+    #[actix_web::test]
+    async fn test_delete_role_room_update() {
+        unimplemented!();
+    }
+
+    #[actix_web::test]
+    async fn test_add_role() {
+        unimplemented!();
+    }
+
+    #[actix_web::test]
+    async fn test_add_role_403() {
+        unimplemented!();
+    }
+
+    #[actix_web::test]
+    async fn test_add_role_admin() {
+        unimplemented!();
+    }
+
+    #[actix_web::test]
+    async fn test_add_role_room_update() {
         unimplemented!();
     }
 }
