@@ -113,7 +113,7 @@ struct WsSession {
 }
 
 impl WsSession {
-    pub fn handle_msg(&self, msg_type: &str, msg: Value) {
+    pub fn handle_msg(&self, msg_type: &str, msg: Value, ctx: &mut <WsSession as Actor>::Context) {
         // TODO: handle message from client
         match msg_type {
             "message" => {
@@ -142,6 +142,7 @@ impl WsSession {
             }
             "request-actions" => { // TODO: move this to REST?
             }
+            "ping" => ctx.text("{\"type\": \"pong\"}"),
             _ => {
                 println!("unrecognized message type: {}", msg_type);
             }
@@ -184,10 +185,13 @@ impl StreamHandler<Result<ws::Message, ws::ProtocolError>> for WsSession {
                 let v: Value = serde_json::from_str(&text).unwrap(); // FIXME
                 println!("received {} message", v["type"]);
                 if let Value::String(msg_type) = &v["type"] {
-                    self.handle_msg(&msg_type.to_string(), v);
+                    self.handle_msg(&msg_type.to_string(), v, ctx);
                 } else {
                     println!("Unexpected message type");
                 }
+            }
+            Ok(ws::Message::Close(reason_opt)) => {
+                println!("Closing! Reason: {:?}", reason_opt);
             }
             _ => (),
         }
