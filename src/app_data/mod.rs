@@ -1,7 +1,7 @@
 use futures::future::join_all;
 use futures::join;
 use mongodb::bson::doc;
-use std::collections::HashSet;
+use std::collections::{HashMap, HashSet};
 
 use crate::config::Settings;
 use crate::models::{CollaborationInvitation, Group, Project, ProjectMetadata, User};
@@ -156,11 +156,29 @@ impl AppData {
     }
 
     pub async fn fetch_project(&self, metadata: &ProjectMetadata) -> Project {
-        // TODO: populate the source code, media for each role
-        todo!();
+        let (keys, values): (Vec<_>, Vec<_>) = metadata.roles.clone().into_iter().unzip();
+        let role_data = join_all(values.iter().map(|v| self.fetch_role(v))).await;
+
+        let roles = keys
+            .into_iter()
+            .zip(role_data.into_iter())
+            .collect::<HashMap<String, RoleData>>();
+
+        Project {
+            _id: metadata._id,
+            name: metadata.name.to_owned(),
+            owner: metadata.owner.to_owned(),
+            updated: metadata.updated.to_owned(),
+            thumbnail: metadata.thumbnail.to_owned(),
+            public: metadata.public.to_owned(),
+            collaborators: metadata.collaborators.to_owned(),
+            origin_time: metadata.origin_time,
+            roles,
+        }
     }
 
     pub async fn delete_project(&self, metadata: ProjectMetadata) -> bool {
+        // TODO: send update to any current occupants
         todo!();
     }
 

@@ -69,15 +69,15 @@ impl ProjectMetadata {
 #[derive(Deserialize, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct Project {
-    _id: ObjectId,
-    owner: String,
-    name: String,
-    updated: DateTime,
-    thumbnail: String,
-    public: bool,
-    collaborators: std::vec::Vec<String>,
-    origin_time: DateTime, // FIXME: set the case
-    roles: HashMap<String, RoleData>,
+    pub _id: ObjectId,
+    pub owner: String,
+    pub name: String,
+    pub updated: DateTime,
+    pub thumbnail: String,
+    pub public: bool,
+    pub collaborators: std::vec::Vec<String>,
+    pub origin_time: DateTime,
+    pub roles: HashMap<String, RoleData>,
 }
 
 #[derive(Deserialize, Serialize, Clone)]
