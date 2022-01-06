@@ -165,7 +165,7 @@ impl AppData {
             .collect::<HashMap<String, RoleData>>();
 
         Project {
-            _id: metadata._id,
+            id: metadata.id,
             name: metadata.name.to_owned(),
             owner: metadata.owner.to_owned(),
             updated: metadata.updated.to_owned(),

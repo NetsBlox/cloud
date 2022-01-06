@@ -69,7 +69,7 @@ impl ProjectMetadata {
 #[derive(Deserialize, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct Project {
-    pub _id: ObjectId,
+    pub id: ObjectId,
     pub owner: String,
     pub name: String,
     pub updated: DateTime,
