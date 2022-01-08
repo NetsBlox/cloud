@@ -87,6 +87,8 @@
 - [ ] add tests
     - [ ] group routes
 
+- [ ] api docs with paperclip?
+
 - [ ] routes
     - [x] collaboration invites
         - keep the invites (only can send one per person/project)
@@ -109,8 +111,9 @@
 
     - [ ] apiKeys. Should these be managed from the services server?
         - probably
+        - how can we have services servers register data for a user/group?
 
-    - [ ] external client support
+    - [x] external client support
         - when/where should I differentiate? I don't think a single network will be able to handle them all
         - maybe have a "app_networks" which can send messages?
             - NetsBlox
@@ -122,10 +125,16 @@
 
         - what else might a client state need to include?
             - group IDs?
+            - [/] probably only needs to take affect on login.
+                - moved to different location
 
 
 - Do I need "transient" projects on the server?
     - Can I handle name collisions some other way?
+
+- [ ] add caching to the message sending?
+
+- [ ] add benchmarks for message passing??
 
 - [ ] can the updates to the network topology stuff replace the "transient" projects?
     - I don't think so since we will need to know the existing (unopened) projects so their name isn't changed on open (given them priority, that is)
@@ -135,9 +144,9 @@
      - new extractor that ensures authenticated?
 
 - [ ] projects routes
-    - [ ] add blob support for main project data
+    - [x] add blob support for main project data
         - rusoto?
-    - [ ] don't use hashing to store the data
+    - [x] don't use hashing to store the data
         - [ ] probably need a migration since this will change assumptions on delete/rename
     - [ ] get project by name (open default role?)
     - [ ] get project by name (entire project)
@@ -151,17 +160,12 @@
 
 - [ ] require login to send messages?
 
-- [ ] add client ID to cookie...
-
-- [ ] admin users
+- [x] admin users
     - [ ] add tests
 
-- [ ] external apps (using message passing)
-    - how does this work with the friends?
-    - how can we ensure no collisions?
-    - [ ] add the group IDs (+ GLOBAL) to the clients in the network topology?
-        - these would be the user's group + any owned groups
-        - the sender and receiver must share at least one
+- [ ] add the group IDs (+ GLOBAL) to the clients in the network topology?
+    - these would be the user's group + any owned groups
+    - the sender and receiver must share at least one
 
 ## CLI
 - add CLI
@@ -169,6 +173,14 @@
     - import the server and test against it?
 
 ## DONE
+- [-] add client ID to cookie...
+    - this isn't good since cookies are shared across tabs
+
+- [x] external apps (using message passing)
+    - how does this work with the friends?
+    - how can we ensure no collisions?
+        - we can add #APP_ID afterwards
+
 - [x] library approval endpoint
     - [x] add authentication
 
