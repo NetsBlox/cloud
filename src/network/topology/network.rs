@@ -62,7 +62,7 @@ struct RoleState {
 
 #[derive(Serialize, Clone)]
 struct OccupantState {
-    id: String,
+    id: ClientID,
     name: String,
 }
 
@@ -121,10 +121,11 @@ impl From<RoomStateMessage> for ClientMessage {
 
 #[derive(Clone, Debug)]
 pub struct Client {
-    pub id: String,
+    pub id: ClientID,
     pub addr: Recipient<ClientMessage>,
 }
 
+#[derive(Debug)]
 struct ProjectNetwork {
     id: String,
     roles: HashMap<String, Vec<ClientID>>,
@@ -142,8 +143,8 @@ impl ProjectNetwork {
 pub struct Topology {
     project_metadata: Option<Collection<ProjectMetadata>>,
 
-    clients: HashMap<String, Client>,
-    states: HashMap<String, ClientState>,
+    clients: HashMap<ClientID, Client>,
+    states: HashMap<ClientID, ClientState>,
 
     rooms: HashMap<String, ProjectNetwork>,
     // address_cache: HashMap<String, (String, String)>,
@@ -166,7 +167,7 @@ impl Topology {
     }
 
     async fn get_clients_at(&self, addr: ClientAddress) -> Vec<&Client> {
-        let mut client_ids: Vec<&String> = Vec::new();
+        let mut client_ids: Vec<&ClientID> = Vec::new();
         let empty = Vec::new();
         for app_id in &addr.app_ids {
             if app_id == "netsblox" {
