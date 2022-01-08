@@ -16,7 +16,7 @@ use crate::config::Settings;
 use crate::models::ServiceHost;
 use actix_cors::Cors;
 use actix_session::{CookieSession, Session};
-use actix_web::{get, middleware, web, App, HttpResponse, HttpServer};
+use actix_web::{cookie::SameSite, get, middleware, web, App, HttpResponse, HttpServer};
 use env_logger;
 use mongodb::Client;
 use rusoto_core::credential::StaticProvider;
@@ -99,6 +99,8 @@ async fn main() -> std::io::Result<()> {
                 CookieSession::signed(&[1; 32])
                     //.domain(&config.cookie.domain)  // FIXME: Enable this again
                     .expires_in(2 * 7 * 24 * 60 * 60)
+                    .same_site(SameSite::None)
+                    .lazy(true)
                     .name(&config.cookie.name)
                     .secure(true),
             )
