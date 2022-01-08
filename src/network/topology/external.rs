@@ -3,12 +3,6 @@ use std::collections::HashMap;
 use super::address::ClientAddress;
 use actix::Message;
 
-// TODO: this can be generalized:
-//   we have ExternalNetworks:
-//     - netsblox
-//     - pyblox
-//     - etc
-
 #[derive(Message, Clone)]
 #[rtype(result = "()")]
 pub struct ExternalClientState {

@@ -1,35 +1,34 @@
 pub mod topology;
 
 use crate::app_data::AppData;
+use crate::network::topology::{ClientState, ExternalClientState};
 use actix::{Actor, Addr, AsyncContext, Handler, StreamHandler};
 use actix_session::Session;
 use actix_web::{delete, get, post};
 use actix_web::{web, Error, HttpRequest, HttpResponse};
 use actix_web_actors::ws;
 use serde::Deserialize;
-use serde_json::Value;
-
-// TODO: how to handle pyblocks connections?
-// TODO: add support for another type of state?
+use serde_json::{json, Value};
 
 #[derive(Deserialize)]
 #[serde(rename_all = "camelCase")]
-struct SetClientState {
-    //pub client_id: String,
-    pub role_id: String,
-    pub project_id: String,
-    pub token: Option<String>, // TODO: token for accessing the project; secret for controlling client
+struct ClientStateData {
+    state: ClientState,
+    // pub token: Option<String>, // TODO: token for accessing the project; secret for controlling client
 }
 
 #[post("/{client}/state")] // TODO: add token here, too
 async fn set_client_state(
     app: web::Data<AppData>,
     path: web::Path<(String,)>,
-    req: web::Json<SetClientState>,
+    body: web::Json<ClientStateData>,
     session: Session,
-) -> Result<HttpResponse, std::io::Error> {
+) -> HttpResponse {
     let username = session.get::<String>("username").unwrap();
     let (client_id,) = path.into_inner();
+    if !client_id.starts_with('_') {
+        return HttpResponse::BadRequest().body("Invalid client ID.");
+    }
 
     // TODO: Check that the user can set the state to the given value
     // User needs to either be able to edit the project or use a token
@@ -37,14 +36,28 @@ async fn set_client_state(
     //   - the request can edit the client (ie, secret/signed token or something)
     //   - the user can join the project. May need a token if invited as occupant
 
-    let state = topology::ClientState::new(req.project_id.clone(), req.role_id.clone(), username);
+    let mut response = None;
+    let mut state = body.into_inner().state;
+    if let ClientState::External(client_state) = state {
+        let user_id = &username.unwrap_or(client_id.clone());
+        let address = format!("{}@{}", client_state.address, user_id);
+        let app_id = client_state.app_id;
+        if app_id.to_lowercase() == "netsblox" {
+            // TODO: make AppID a type
+            return HttpResponse::BadRequest().body("Invalid App ID.");
+        }
 
+        response = Some(address.clone());
+        state = ClientState::External(ExternalClientState { address, app_id });
+    };
+
+    println!("setting state {:?}", &state);
     app.network.do_send(topology::SetClientState {
-        id: client_id.clone(),
+        id: client_id,
         state,
     });
 
-    Ok(HttpResponse::Ok().finish())
+    HttpResponse::Ok().body(response.unwrap_or("".to_owned()))
 }
 
 #[derive(Deserialize)]
@@ -204,21 +217,14 @@ mod tests {
     #[actix_web::test]
     async fn test_connect_client() {
         // TODO: send a connect request and check that the client has been added to the topology
-        unimplemented!();
+        todo!();
     }
 
     #[actix_web::test]
     async fn test_send_msg_room() {
         //let client = Client::new("test".to_string());
         //let msg = json!({"type": "message", "dstId": "project@owner"});
-        unimplemented!();
-    }
-
-    #[actix_web::test]
-    async fn test_send_msg_role() {
-        //let client = Client::new("test".to_string());
-        //let msg = json!({"type": "message", "dstId": "role1@project@owner"});
-        unimplemented!();
+        todo!();
     }
 
     #[actix_web::test]
@@ -226,6 +232,14 @@ mod tests {
         //let client = Client::new("test".to_string());
         //let msg = json!({"type": "message", "dstId": ["role1@project@owner"]});
         //client.handle_msg(msg);
-        unimplemented!();
+        todo!();
+    }
+
+    #[actix_web::test]
+    async fn test_connect_invalid_client_id() {
+        //let client = Client::new("test".to_string());
+        //let msg = json!({"type": "message", "dstId": "role1@project@owner"});
+
+        todo!();
     }
 }

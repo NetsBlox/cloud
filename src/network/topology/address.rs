@@ -8,6 +8,13 @@ pub struct ClientAddress {
     pub app_ids: Vec<String>,
 }
 
+impl ClientAddress {
+    /// Get the address for routing within the app (ie, excluding the app tags).
+    pub fn to_app_string(&self) -> String {
+        format!("{}@{}", self.address, self.user_id)
+    }
+}
+
 #[derive(Debug)]
 pub struct AddressError {
     addr: String,
