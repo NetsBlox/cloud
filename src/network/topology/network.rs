@@ -12,6 +12,7 @@ use mongodb::Collection;
 use crate::models::ProjectMetadata;
 use crate::network::topology::address::ClientAddress;
 
+pub use super::address::DEFAULT_APP_ID;
 use super::{AddClient, ClientMessage, RemoveClient, SendMessage, SendRoomState, SetClientState};
 
 type ClientID = String; // TODO: use this everywhere
@@ -170,7 +171,7 @@ impl Topology {
         let mut client_ids: Vec<&ClientID> = Vec::new();
         let empty = Vec::new();
         for app_id in &addr.app_ids {
-            if app_id == "netsblox" {
+            if app_id == DEFAULT_APP_ID {
                 let addresses = self.resolve_address(&addr).await;
                 let ids = addresses.into_iter().flat_map(|addr| {
                     self.rooms

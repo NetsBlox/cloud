@@ -1,6 +1,8 @@
 use itertools::Itertools;
 use std::{error, fmt, str::FromStr};
 
+pub static DEFAULT_APP_ID: &str = "netsblox";
+
 #[derive(Clone)]
 pub struct ClientAddress {
     pub address: String,
@@ -32,8 +34,6 @@ impl FromStr for ClientAddress {
     type Err = AddressError;
 
     fn from_str(addr: &str) -> Result<Self, Self::Err> {
-        const DEFAULT_APP_ID: &str = "netsblox";
-
         if let Some(index) = addr.rfind('@') {
             let address = addr.chars().into_iter().take(index).collect::<String>();
             let user_id = addr

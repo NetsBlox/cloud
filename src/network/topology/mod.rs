@@ -12,7 +12,7 @@ use serde_json::Value;
 use std::sync::{Arc, RwLock};
 
 use self::network::Topology;
-pub use self::network::{BrowserClientState, ClientState, ExternalClientState};
+pub use self::network::{BrowserClientState, ClientState, ExternalClientState, DEFAULT_APP_ID};
 
 lazy_static! {
     static ref TOPOLOGY: Arc<RwLock<Topology>> = Arc::new(RwLock::new(Topology::new()));

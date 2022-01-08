@@ -42,7 +42,7 @@ async fn set_client_state(
         let user_id = &username.unwrap_or(client_id.clone());
         let address = format!("{}@{}", client_state.address, user_id);
         let app_id = client_state.app_id;
-        if app_id.to_lowercase() == "netsblox" {
+        if app_id.to_lowercase() == topology::DEFAULT_APP_ID {
             // TODO: make AppID a type
             return HttpResponse::BadRequest().body("Invalid App ID.");
         }
@@ -127,7 +127,9 @@ struct WsSession {
 
 impl WsSession {
     pub fn handle_msg(&self, msg_type: &str, msg: Value, ctx: &mut <WsSession as Actor>::Context) {
-        // TODO: handle message from client
+        if msg_type != "ping" {
+            println!("received {} message", msg_type);
+        }
         match msg_type {
             "message" => {
                 let dst_id = msg["dstId"].clone();
@@ -194,7 +196,6 @@ impl StreamHandler<Result<ws::Message, ws::ProtocolError>> for WsSession {
             Ok(ws::Message::Ping(msg)) => ctx.pong(&msg),
             Ok(ws::Message::Text(text)) => {
                 let v: Value = serde_json::from_str(&text).unwrap(); // FIXME
-                println!("received {} message", v["type"]);
                 if let Value::String(msg_type) = &v["type"] {
                     self.handle_msg(&msg_type.to_string(), v, ctx);
                 } else {
