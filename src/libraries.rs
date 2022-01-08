@@ -531,10 +531,11 @@ mod tests {
             .find(doc! {}, None)
             .await
             .expect("Could not retrieve docs after publish");
+
         let mut count = 0;
 
-        let libraries = cursor.try_collect::<Vec<Library>>();
-        libraries.for_each(|library| {
+        let libraries = cursor.try_collect::<Vec<LibraryMetadata>>().await.unwrap();
+        libraries.into_iter().for_each(|library| {
             let expected_public = library.name == publish_name;
             assert_eq!(
                 library.public, expected_public,
