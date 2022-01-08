@@ -83,9 +83,19 @@ pub struct Project {
 #[derive(Deserialize, Serialize, Clone)]
 #[serde(rename_all = "PascalCase")]
 pub struct RoleMetadata {
-    pub project_name: String,
+    pub project_name: String, // TODO: Change this to "name"?
     pub source_code: String,
     pub media: String,
+}
+
+impl From<RoleMetadata> for Bson {
+    fn from(role: RoleMetadata) -> Bson {
+        Bson::Document(doc! {
+            "ProjectName": role.project_name,
+            "SourceCode": role.source_code,
+            "Media": role.media,
+        })
+    }
 }
 
 #[derive(Deserialize, Serialize)]

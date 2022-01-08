@@ -82,7 +82,7 @@ async fn get_visible_projects(
     session: &Session,
     owner: &str,
     cursor: Cursor<ProjectMetadata>,
-) {
+) -> Vec<ProjectMetadata> {
     let projects = if can_edit_user(&app, &session, &owner).await {
         cursor.try_collect::<Vec<ProjectMetadata>>().await.unwrap()
     } else {
@@ -94,6 +94,7 @@ async fn get_visible_projects(
             .filter(|p| p.public)
             .collect::<Vec<ProjectMetadata>>()
     };
+    projects
 }
 
 #[get("/shared/{username}")]
@@ -367,6 +368,16 @@ struct CreateRoleData {
     media: Option<String>,
 }
 
+impl From<CreateRoleData> for RoleData {
+    fn from(data: CreateRoleData) -> RoleData {
+        RoleData {
+            project_name: data.name,
+            source_code: data.source_code.unwrap_or("".to_string()),
+            media: data.media.unwrap_or("".to_string()),
+        }
+    }
+}
+
 #[post("/id/{projectID}/")]
 async fn create_role(
     app: web::Data<AppData>,
@@ -386,9 +397,10 @@ async fn create_role(
         let updated_metadata = app
             .create_role(
                 metadata,
-                &body.name,
-                body.source_code.to_owned(),
-                body.media.to_owned(),
+                body.into_inner().into()
+                // &body.name,
+                // body.source_code.to_owned(),
+                // body.media.to_owned(),
             )
             .await;
 
@@ -470,16 +482,10 @@ async fn delete_role(
     }
 }
 
-#[derive(Deserialize)]
-struct SaveRoleBody {
-    source_code: String,
-    media: String,
-}
-
 #[post("/id/{projectID}/{roleID}")]
 async fn save_role(
     app: web::Data<AppData>,
-    body: web::Json<SaveRoleBody>,
+    body: web::Json<RoleData>,
     path: web::Path<(ObjectId, String)>,
     session: Session,
 ) -> Result<HttpResponse, std::io::Error> {
@@ -490,8 +496,7 @@ async fn save_role(
             if !can_edit_project(&app, &session, None, &metadata).await {
                 return Ok(HttpResponse::Unauthorized().body("Not allowed."));
             }
-            app.save_role(&metadata, &role_id, &body.source_code, &body.media)
-                .await;
+            app.save_role(&metadata, &role_id, body.into_inner()).await;
 
             Ok(HttpResponse::Ok().body("Saved!"))
         }

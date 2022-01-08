@@ -1,7 +1,9 @@
 use futures::future::join_all;
 use futures::join;
 use mongodb::bson::doc;
+use mongodb::options::{FindOneAndUpdateOptions, ReturnDocument};
 use std::collections::{HashMap, HashSet};
+use uuid::Uuid;
 
 use crate::config::Settings;
 use crate::models::{CollaborationInvitation, Group, Project, ProjectMetadata, User};
@@ -198,29 +200,59 @@ impl AppData {
         &self,
         metadata: &ProjectMetadata,
         role_id: &str,
-        source_code: &str,
-        media: &str,
-    ) -> bool {
-        todo!();
+        role: RoleData,
+    ) -> Option<RoleMetadata> {
+        let role_md = self
+            .upload_role(&metadata.owner, &metadata.name, &role)
+            .await;
+        let query = doc! {"id": metadata.id};
+        let update = doc! {"$set": {&format!("roles.{}", role_id): role_md, "transient": false}};
+        let options = FindOneAndUpdateOptions::builder()
+            .return_document(ReturnDocument::After)
+            .build();
+
+        let updated_metadata = self
+            .project_metadata
+            .find_one_and_update(query, update, options)
+            .await
+            .unwrap()
+            .unwrap(); // TODO: not found error
+
+        updated_metadata.roles.get(role_id).map(|md| md.to_owned())
     }
 
     pub async fn create_role(
         &self,
         metadata: ProjectMetadata,
-        name: &str,
-        source_code: Option<String>,
-        media: Option<String>,
-    ) -> Result<bool, std::io::Error> {
-        // FIXME: incorrect signature
-        //let role_id = Uuid::new_v4();
+        role_data: RoleData,
+    ) -> Result<ProjectMetadata, std::io::Error> {
+        let mut role_md = self
+            .upload_role(&metadata.owner, &metadata.name, &role_data)
+            .await;
 
-        // let role_names = metadata
-        //     .roles
-        //     .into_values()
-        //     .map(|r| r.project_name)
-        //     .collect::<HashSet<String>>();
-        // let role_name = get_unique_name(&metadata, &body.name);
-        todo!();
+        let options = FindOneAndUpdateOptions::builder()
+            .return_document(ReturnDocument::After)
+            .build();
+
+        let role_names = metadata
+            .roles
+            .into_values()
+            .map(|r| r.project_name)
+            .collect::<Vec<String>>();
+        let role_name = get_unique_name(role_names, &role_md.project_name);
+        role_md.project_name = role_name;
+
+        let role_id = Uuid::new_v4();
+        let query = doc! {"id": metadata.id};
+        let update = doc! {"$set": {&format!("roles.{}", role_id): role_md}};
+        let updated_metadata = self
+            .project_metadata
+            .find_one_and_update(query, update, options)
+            .await
+            .unwrap()
+            .expect("Project not found.");
+
+        Ok(updated_metadata)
     }
 }
 
@@ -234,4 +266,17 @@ fn get_unique_name(existing: Vec<String>, name: &str) -> String {
         number += 1;
     }
     role_name
+}
+
+#[cfg(test)]
+mod tests {
+    #[actix_web::test]
+    async fn test_save_role_blob() {
+        todo!();
+    }
+
+    #[actix_web::test]
+    async fn test_save_role_set_transient_false() {
+        todo!();
+    }
 }
