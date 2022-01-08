@@ -1,3 +1,6 @@
+mod address;
+mod external;
+
 use actix::prelude::{Message, Recipient};
 use actix::{Actor, AsyncContext, Context, Handler};
 use futures::future::join_all;
@@ -5,13 +8,18 @@ use lazy_static::lazy_static;
 use mongodb::bson::doc;
 use mongodb::bson::oid::ObjectId;
 use mongodb::Collection;
-use serde::{Deserialize, Serialize};
+use serde::Serialize;
 use serde_json::Value;
 use std::collections::HashMap;
+use std::str::FromStr;
 use std::sync::{Arc, RwLock};
 use std::time::SystemTime;
 
 use crate::models::ProjectMetadata;
+use crate::network::topology::address::ClientAddress;
+use crate::network::topology::external::ExternalNetwork;
+
+use self::external::ExternalClientState;
 
 #[derive(Clone)]
 pub struct Client {
@@ -35,9 +43,12 @@ impl ProjectNetwork {
 
 struct Topology {
     project_metadata: Option<Collection<ProjectMetadata>>,
+
     clients: HashMap<String, Client>,
-    rooms: HashMap<String, ProjectNetwork>,
-    states: HashMap<String, ClientState>,
+    states: HashMap<String, ClientState>, // TODO: Make ClientState an enum?
+
+    rooms: HashMap<String, ProjectNetwork>, // TODO: Make this different?
+    external: HashMap<String, ExternalNetwork>,
 }
 
 lazy_static! {
@@ -51,6 +62,7 @@ impl Topology {
             project_metadata: None,
             rooms: HashMap::new(),
             states: HashMap::new(),
+            external: HashMap::new(), // ExternalNetwork::new(),
         }
     }
 
@@ -58,27 +70,78 @@ impl Topology {
         self.project_metadata = Some(project_metadata);
     }
 
-    async fn get_clients_at(&self, addr: &str) -> Vec<&Client> {
-        // TODO: Add support for third party clients
-        // How should they be addressed?
-        if let Some(project_metadata) = &self.project_metadata {
-            let addresses = ClientAddress::parse(&project_metadata, addr).await;
-            let empty = Vec::new();
-            let clients: Vec<&Client> = addresses
-                .into_iter()
-                .flat_map(|addr| {
+    async fn get_clients_at(&self, addr: ClientAddress) -> Vec<&Client> {
+        let mut client_ids: Vec<&String> = Vec::new();
+        let empty = Vec::new();
+        for app_id in &addr.app_ids {
+            if app_id == "netsblox" {
+                let addresses = self.resolve_address(&addr).await;
+                let ids = addresses.into_iter().flat_map(|addr| {
                     self.rooms
                         .get(&addr.project_id)
                         .and_then(|room| room.roles.get(&addr.role_id))
                         .unwrap_or(&empty)
-                })
-                .filter_map(|id| self.clients.get(id))
-                .collect();
+                });
+                client_ids.extend(ids);
+            } else {
+                let ids = self
+                    .external
+                    .get(app_id)
+                    .map(|network| network.get_clients_at(&addr))
+                    .unwrap_or(Vec::new())
+                    .into_iter();
+                client_ids.extend(ids);
+            }
+        }
 
-            return clients;
-        } else {
+        client_ids
+            .into_iter()
+            .filter_map(|id| self.clients.get(id))
+            .collect()
+    }
+
+    pub async fn resolve_address(&self, addr: &ClientAddress) -> Vec<BrowserAddress> {
+        if self.project_metadata.is_none() {
             return Vec::new();
         }
+
+        let project_metadata = self.project_metadata.as_ref().unwrap();
+
+        let mut chunks = addr.address.split('@').rev();
+        let project = chunks.next().unwrap();
+        let role = chunks.next();
+
+        let query = doc! {"name": project, "owner": &addr.user_id};
+        let empty = Vec::new();
+        project_metadata
+            .find_one(query, None)
+            .await
+            .unwrap()
+            .map(|metadata| {
+                let role_names = role.map(|name| vec![name.to_owned()]).unwrap_or_else(|| {
+                    metadata
+                        .roles
+                        .iter()
+                        .map(|(_, role)| role.project_name.to_owned())
+                        .collect()
+                });
+
+                let name2id = metadata
+                    .roles
+                    .into_iter()
+                    .map(|(k, v)| (v.project_name, k))
+                    .collect::<HashMap<String, String>>();
+
+                role_names
+                    .into_iter()
+                    .filter_map(|name| name2id.get(&name))
+                    .map(|role_id| BrowserAddress {
+                        project_id: metadata.id.to_string(),
+                        role_id: role_id.to_owned(),
+                    })
+                    .collect()
+            })
+            .unwrap_or(empty)
     }
 
     pub async fn send_msg(&self, msg: SendMessage) {
@@ -87,6 +150,7 @@ impl Topology {
         let recipients = join_all(
             msg.addresses
                 .iter()
+                .filter_map(|addr_str| ClientAddress::from_str(addr_str).ok())
                 .map(|address| self.get_clients_at(address)),
         )
         .await
@@ -250,57 +314,19 @@ pub struct SetClientState {
 pub struct ClientState {
     role_id: String,
     project_id: String,
-    username: Option<String>,
+    username: Option<String>, // TODO: do I need this?
 }
 
-pub struct ClientAddress {
-    project_id: String,
+#[derive(Message, Clone)]
+#[rtype(result = "()")]
+pub struct SetExternalClientState {
+    pub id: String,
+    pub state: ExternalClientState,
+}
+
+struct BrowserAddress {
     role_id: String,
-}
-
-impl ClientAddress {
-    pub async fn parse(project_metadata: &Collection<ProjectMetadata>, addr: &str) -> Vec<Self> {
-        let mut chunks = addr.split('@').rev();
-        let owner = chunks.next().unwrap(); // FIXME: Better feedback for devs
-        let project = chunks.next().unwrap();
-        let role = chunks.next();
-        let mut states = vec![];
-        let query = doc! {"name": project, "owner": owner};
-        if let Some(metadata) = project_metadata.find_one(query, None).await.unwrap() {
-            let project_id = metadata.id.to_string();
-            match role {
-                Some(role_name) => {
-                    let name2id = metadata
-                        .roles
-                        .into_iter()
-                        .map(|(k, v)| (v.project_name, k))
-                        .collect::<HashMap<String, String>>();
-
-                    match name2id.get(role_name) {
-                        Some(role_id) => {
-                            let state = ClientAddress {
-                                role_id: role_id.to_owned(),
-                                project_id,
-                            };
-                            states.push(state);
-                        }
-                        None => {
-                            todo!(); // TODO: Log an error
-                        }
-                    }
-                }
-                None => metadata
-                    .roles
-                    .into_keys()
-                    .map(|role_id| ClientAddress {
-                        role_id,
-                        project_id: project_id.clone(),
-                    })
-                    .for_each(|state| states.push(state)),
-            }
-        }
-        states
-    }
+    project_id: String,
 }
 
 #[derive(Message)]
@@ -429,6 +455,18 @@ impl Handler<SetClientState> for TopologyActor {
         };
         let fut = actix::fut::wrap_future(fut);
         ctx.spawn(fut);
+    }
+}
+
+impl Handler<SetExternalClientState> for TopologyActor {
+    type Result = ();
+
+    fn handle(&mut self, msg: SetExternalClientState, _: &mut Context<Self>) -> Self::Result {
+        let mut topology = TOPOLOGY.write().unwrap();
+        // TODO:  b
+        if let Some(network) = topology.external.get_mut(&msg.state.app_id) {
+            network.set_client_state(&msg.id, msg.state);
+        }
     }
 }
 

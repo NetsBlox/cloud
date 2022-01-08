@@ -110,6 +110,19 @@
     - [ ] apiKeys. Should these be managed from the services server?
         - probably
 
+    - [ ] external client support
+        - when/where should I differentiate? I don't think a single network will be able to handle them all
+        - maybe have a "app_networks" which can send messages?
+            - NetsBlox
+
+            - These would have two levels of hierarchy
+            - The saved versions might be different (and might so we probably shouldn't 
+
+        - Let's keep them separate so we can add optimizations to the netsblox one
+
+        - what else might a client state need to include?
+            - group IDs?
+
 
 - Do I need "transient" projects on the server?
     - Can I handle name collisions some other way?
