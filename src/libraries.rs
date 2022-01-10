@@ -66,7 +66,7 @@ async fn list_community_libraries(db: web::Data<AppData>) -> Result<HttpResponse
         .await
         .expect("Library list query failed");
 
-    let libraries = cursor.try_collect::<Vec<LibraryMetadata>>().await.unwrap();
+    let libraries = cursor.try_collect::<Vec<_>>().await.unwrap();
     Ok(HttpResponse::Ok().json(libraries))
 }
 
@@ -294,7 +294,7 @@ async fn list_approval_needed(
         .await
         .expect("Could not retrieve libraries");
 
-    let libraries = cursor.try_collect::<Vec<LibraryMetadata>>().await.unwrap();
+    let libraries = cursor.try_collect::<Vec<_>>().await.unwrap();
 
     Ok(HttpResponse::Ok().json(libraries))
 }
@@ -534,7 +534,7 @@ mod tests {
 
         let mut count = 0;
 
-        let libraries = cursor.try_collect::<Vec<LibraryMetadata>>().await.unwrap();
+        let libraries = cursor.try_collect::<Vec<_>>().await.unwrap();
         libraries.into_iter().for_each(|library| {
             let expected_public = library.name == publish_name;
             assert_eq!(

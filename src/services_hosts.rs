@@ -136,7 +136,7 @@ async fn list_all_hosts(
                 .find(doc! {"owner": &username}, None)
                 .await
                 .unwrap()
-                .try_collect::<Vec<Group>>()
+                .try_collect::<Vec<_>>()
                 .await
                 .unwrap();
 

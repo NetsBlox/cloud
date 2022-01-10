@@ -226,7 +226,7 @@ impl Topology {
                     .roles
                     .into_iter()
                     .map(|(k, v)| (v.project_name, k))
-                    .collect::<HashMap<String, String>>();
+                    .collect::<HashMap<_, _>>();
 
                 role_names
                     .into_iter()

@@ -79,7 +79,7 @@ impl AppData {
         //let options = FindOptions::builder().projection(projection).build();
         let cursor = self.project_metadata.find(query, None).await.unwrap();
         let project_names = cursor
-            .try_collect::<Vec<ProjectMetadata>>()
+            .try_collect::<Vec<_>>()
             .await
             .unwrap()
             .iter()
@@ -163,8 +163,8 @@ impl AppData {
 
         let roles = keys
             .into_iter()
-            .zip(role_data.into_iter())
-            .collect::<HashMap<String, RoleData>>();
+            .zip(role_data)
+            .collect::<HashMap<_, _>>();
 
         Project {
             id: metadata.id,
@@ -238,7 +238,7 @@ impl AppData {
             .roles
             .into_values()
             .map(|r| r.project_name)
-            .collect::<Vec<String>>();
+            .collect::<Vec<_>>();
         let role_name = get_unique_name(role_names, &role_md.project_name);
         role_md.project_name = role_name;
 

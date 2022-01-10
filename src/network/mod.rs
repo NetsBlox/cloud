@@ -136,8 +136,8 @@ impl WsSession {
                     Value::Array(values) => values
                         .iter()
                         .filter_map(|v| v.as_str().map(|s| s.to_owned()))
-                        .collect::<Vec<String>>(),
-                    _ => std::vec::Vec::new(),
+                        .collect::<Vec<_>>(),
+                    _ => vec![],
                 };
                 println!("Sending message to {:?}", addresses);
                 self.topology_addr.do_send(topology::SendMessage {
