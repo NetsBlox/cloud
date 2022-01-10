@@ -375,14 +375,14 @@ mod tests {
     async fn test_list_community_libraries() {
         let libraries = vec![
             LibraryMetadata::new(
-                "brian".to_string(),
-                "public example".to_string(),
+                "brian".into(),
+                "public example".into(),
                 true,
                 None,
             ),
             LibraryMetadata::new(
-                "brian".to_string(),
-                "private example".to_string(),
+                "brian".into(),
+                "private example".into(),
                 false,
                 None,
             ),
@@ -411,9 +411,9 @@ mod tests {
     async fn test_list_user_libraries() {
         // TODO: 403 if not allowed?
         let libraries = vec![
-            LibraryMetadata::new("cassie".to_string(), "project 1".to_string(), false, None),
-            LibraryMetadata::new("brian".to_string(), "project 2".to_string(), false, None),
-            LibraryMetadata::new("brian".to_string(), "project 3".to_string(), true, None),
+            LibraryMetadata::new("cassie".into(), "project 1".into(), false, None),
+            LibraryMetadata::new("brian".into(), "project 2".into(), false, None),
+            LibraryMetadata::new("brian".into(), "project 3".into(), true, None),
         ];
         let database = init_database("list_user_libs", libraries)
             .await
@@ -499,12 +499,12 @@ mod tests {
 
     #[actix_web::test]
     async fn test_publish_user_library() {
-        let publish_name = "to-publish-example".to_string();
+        let publish_name = "to-publish-example";
         let libraries = vec![
-            LibraryMetadata::new("brian".to_string(), publish_name.clone(), false, None),
+            LibraryMetadata::new("brian".into(), publish_name.into(), false, None),
             LibraryMetadata::new(
-                "brian".to_string(),
-                "private example".to_string(),
+                "brian".into(),
+                "private example".into(),
                 false,
                 None,
             ),

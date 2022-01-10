@@ -111,7 +111,7 @@ impl From<RoomStateMessage> for ClientMessage {
         let mut value = serde_json::to_value(msg).unwrap();
         let msg = value.as_object_mut().unwrap();
         msg.insert(
-            "type".to_string(),
+            "type".into(),
             serde_json::to_value("room-roles").unwrap(),
         );
         ClientMessage(value)

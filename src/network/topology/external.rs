@@ -39,7 +39,7 @@ impl ExternalNetwork {
     pub fn set_client_state(&mut self, client_id: &str, state: ExternalClientState) {
         self.reset_client_state(client_id);
 
-        self.states.insert(client_id.to_string(), state.clone());
+        self.states.insert(client_id.into(), state.clone());
         let app_id = state.app_id;
         let address = state.address;
 
@@ -48,7 +48,7 @@ impl ExternalNetwork {
             .apps
             .get_mut(&app_id)
             .unwrap_or(&mut empty_network);
-        network.insert(address, client_id.to_string());
+        network.insert(address, client_id.into());
     }
 
     pub fn get_clients_at(&self, addr: &ClientAddress) -> Vec<&String> {

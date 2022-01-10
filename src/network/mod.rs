@@ -196,7 +196,7 @@ impl StreamHandler<Result<ws::Message, ws::ProtocolError>> for WsSession {
             Ok(ws::Message::Text(text)) => {
                 let v: Value = serde_json::from_str(&text).unwrap(); // FIXME
                 if let Value::String(msg_type) = &v["type"] {
-                    self.handle_msg(&msg_type.to_string(), v, ctx);
+                    self.handle_msg(&msg_type.clone(), v, ctx);
                 } else {
                     println!("Unexpected message type");
                 }
@@ -222,14 +222,14 @@ mod tests {
 
     #[actix_web::test]
     async fn test_send_msg_room() {
-        //let client = Client::new("test".to_string());
+        //let client = Client::new("test".into());
         //let msg = json!({"type": "message", "dstId": "project@owner"});
         todo!();
     }
 
     #[actix_web::test]
     async fn test_send_msg_list() {
-        //let client = Client::new("test".to_string());
+        //let client = Client::new("test".into());
         //let msg = json!({"type": "message", "dstId": ["role1@project@owner"]});
         //client.handle_msg(msg);
         todo!();
@@ -237,7 +237,7 @@ mod tests {
 
     #[actix_web::test]
     async fn test_connect_invalid_client_id() {
-        //let client = Client::new("test".to_string());
+        //let client = Client::new("test".into());
         //let msg = json!({"type": "message", "dstId": "role1@project@owner"});
 
         todo!();

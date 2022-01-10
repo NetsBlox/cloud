@@ -519,9 +519,9 @@ pub fn config(cfg: &mut web::ServiceConfig) {
 //         .await;
 
 //         let user_data = NewUser::new(
-//             "test".to_string(),
-//             "pwd_hash".to_string(),
-//             "test@gmail.com".to_string(),
+//             "test".into(),
+//             "pwd_hash".into(),
+//             "test@gmail.com".into(),
 //             None,
 //         );
 //         let req = test::TestRequest::post()
@@ -553,9 +553,9 @@ pub fn config(cfg: &mut web::ServiceConfig) {
 //         .await;
 
 //         let user_data = NewUser::new(
-//             "hell".to_string(),
-//             "pwd_hash".to_string(),
-//             "test@gmail.com".to_string(),
+//             "hell".into(),
+//             "pwd_hash".into(),
+//             "test@gmail.com".into(),
 //             None,
 //         );
 //         let req = test::TestRequest::post()
@@ -579,9 +579,9 @@ pub fn config(cfg: &mut web::ServiceConfig) {
 //     //).await;
 
 //     //let user_data = NewUser::new(
-//     //"hell".to_string(),
-//     //"pwd_hash".to_string(),
-//     //"test@gmail.com".to_string(),
+//     //"hell".into(),
+//     //"pwd_hash".into(),
+//     //"test@gmail.com".into(),
 //     //None  // TODO: set the group
 //     //);
 //     //let req = test::TestRequest::post()
@@ -596,9 +596,9 @@ pub fn config(cfg: &mut web::ServiceConfig) {
 //     #[actix_web::test]
 //     async fn test_login() {
 //         let user = User::from(NewUser::new(
-//             "brian".to_string(),
-//             "pwd_hash".to_string(),
-//             "email".to_string(),
+//             "brian".into(),
+//             "pwd_hash".into(),
+//             "email".into(),
 //             None,
 //         ));
 //         let (database, _) = init_app_data("login", vec![user])
@@ -619,8 +619,8 @@ pub fn config(cfg: &mut web::ServiceConfig) {
 //         .await;
 
 //         let credentials = LoginCredentials {
-//             username: "brian".to_string(),
-//             password: "pwd_hash".to_string(),
+//             username: "brian".into(),
+//             password: "pwd_hash".into(),
 //             client_id: None,
 //             strategy: None,
 //         };
@@ -639,9 +639,9 @@ pub fn config(cfg: &mut web::ServiceConfig) {
 //     #[actix_web::test]
 //     async fn test_login_bad_pwd() {
 //         let user = User::from(NewUser::new(
-//             "brian".to_string(),
-//             "pwd_hash".to_string(),
-//             "email".to_string(),
+//             "brian".into(),
+//             "pwd_hash".into(),
+//             "email".into(),
 //             None,
 //         ));
 //         let (database, _) = init_app_data("login_bad_pwd", vec![user])
@@ -656,8 +656,8 @@ pub fn config(cfg: &mut web::ServiceConfig) {
 //         .await;
 
 //         let credentials = LoginCredentials {
-//             username: "brian".to_string(),
-//             password: "wrong_hash".to_string(),
+//             username: "brian".into(),
+//             password: "wrong_hash".into(),
 //             client_id: None,
 //             strategy: None,
 //         };
@@ -684,8 +684,8 @@ pub fn config(cfg: &mut web::ServiceConfig) {
 //         .await;
 
 //         let credentials = LoginCredentials {
-//             username: "nonExistentUser".to_string(),
-//             password: "pwd_hash".to_string(),
+//             username: "nonExistentUser".into(),
+//             password: "pwd_hash".into(),
 //             client_id: None,
 //             strategy: None,
 //         };
@@ -701,9 +701,9 @@ pub fn config(cfg: &mut web::ServiceConfig) {
 //     #[actix_web::test]
 //     async fn test_login_banned() {
 //         let user = User::from(NewUser::new(
-//             "brian".to_string(),
-//             "pwd_hash".to_string(),
-//             "email".to_string(),
+//             "brian".into(),
+//             "pwd_hash".into(),
+//             "email".into(),
 //             None,
 //         ));
 //         let (app_data, _) = init_app_data("login_bad_pwd", vec![user])
@@ -712,7 +712,7 @@ pub fn config(cfg: &mut web::ServiceConfig) {
 
 //         // Ban the account (manually)
 //         let collection = app_data.collection::<BannedAccount>("bannedAccounts");
-//         let banned_account = BannedAccount::new("brian".to_string(), "email".to_string());
+//         let banned_account = BannedAccount::new("brian".into(), "email".into());
 //         collection
 //             .insert_one(banned_account, None)
 //             .await
@@ -727,8 +727,8 @@ pub fn config(cfg: &mut web::ServiceConfig) {
 //         .await;
 
 //         let credentials = LoginCredentials {
-//             username: "brian".to_string(),
-//             password: "pwd_hash".to_string(),
+//             username: "brian".into(),
+//             password: "pwd_hash".into(),
 //             client_id: None,
 //             strategy: None,
 //         };
@@ -755,9 +755,9 @@ pub fn config(cfg: &mut web::ServiceConfig) {
 //     #[actix_web::test]
 //     async fn test_logout() {
 //         let user = User::from(NewUser::new(
-//             "brian".to_string(),
-//             "pwd_hash".to_string(),
-//             "email".to_string(),
+//             "brian".into(),
+//             "pwd_hash".into(),
+//             "email".into(),
 //             None,
 //         ));
 //         let (database, _) = init_app_data("login", vec![user])

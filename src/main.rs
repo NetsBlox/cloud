@@ -42,7 +42,7 @@ async fn get_client_config(
     //  - [ ] retrieve services hosts
     let default_hosts = app.settings.services_hosts.clone();
     let config = ClientConfig {
-        client_id: format!("_netsblox{}", Uuid::new_v4().to_string()),
+        client_id: format!("_netsblox{}", Uuid::new_v4()),
         username: session.get::<String>("username").unwrap_or(None),
         services_hosts: default_hosts,
         cloud_url: &app.settings.public_url,

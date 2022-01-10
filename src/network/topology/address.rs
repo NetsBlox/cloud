@@ -64,7 +64,7 @@ impl FromStr for ClientAddress {
             })
         } else {
             Err(AddressError {
-                addr: addr.to_string(),
+                addr: addr.into(),
             })
         }
     }
