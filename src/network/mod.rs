@@ -8,7 +8,7 @@ use actix_web::{delete, get, post};
 use actix_web::{web, Error, HttpRequest, HttpResponse};
 use actix_web_actors::ws;
 use serde::Deserialize;
-use serde_json::{json, Value};
+use serde_json::Value;
 
 #[derive(Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -39,7 +39,7 @@ async fn set_client_state(
     let mut response = None;
     let mut state = body.into_inner().state;
     if let ClientState::External(client_state) = state {
-        let user_id = &username.unwrap_or(client_id.clone());
+        let user_id = &username.unwrap_or_else(|| client_id.clone());
         let address = format!("{}@{}", client_state.address, user_id);
         let app_id = client_state.app_id;
         if app_id.to_lowercase() == topology::DEFAULT_APP_ID {
@@ -57,7 +57,7 @@ async fn set_client_state(
         state,
     });
 
-    HttpResponse::Ok().body(response.unwrap_or("".to_owned()))
+    HttpResponse::Ok().body(response.unwrap_or_else(String::new))
 }
 
 #[derive(Deserialize)]
@@ -84,11 +84,10 @@ async fn connect_client(
     // TODO: ensure ID is unique?
     let (client_id,) = path.into_inner();
     let handler = WsSession {
-        client_id: client_id.clone(),
+        client_id,
         topology_addr: data.network.clone(),
     };
-    let resp = ws::start(handler, &req, stream);
-    resp
+    ws::start(handler, &req, stream)
 }
 
 #[get("/id/{projectID}/occupants/")]

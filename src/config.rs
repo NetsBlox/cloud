@@ -42,7 +42,7 @@ pub struct Settings {
 
 impl Settings {
     pub fn new() -> Result<Self, ConfigError> {
-        let run_mode = env::var("RUN_MODE").unwrap_or("development".to_owned());
+        let run_mode = env::var("RUN_MODE").unwrap_or_else(|_| "development".to_owned());
         let mut c = Config::new();
 
         c.merge(File::with_name("config/default"))?;

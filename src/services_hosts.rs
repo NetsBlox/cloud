@@ -24,7 +24,7 @@ async fn list_group_hosts(
         match app.groups.find_one(query, None).await.unwrap() {
             Some(group) => {
                 Ok(HttpResponse::Ok()
-                    .json(group.services_hosts.unwrap_or(Vec::<ServiceHost>::from([]))))
+                    .json(group.services_hosts.unwrap_or_else(Vec::new)))
             }
             None => Ok(HttpResponse::NotFound().body("Not found.")),
         }
@@ -82,7 +82,7 @@ async fn list_user_hosts(
         .expect("User not found")
     {
         Some(user) => Ok(
-            HttpResponse::Ok().json(user.services_hosts.unwrap_or(Vec::<ServiceHost>::from([])))
+            HttpResponse::Ok().json(user.services_hosts.unwrap_or_else(Vec::new))
         ),
         None => Ok(HttpResponse::NotFound().finish()),
     } // FIXME: status code
@@ -153,13 +153,12 @@ async fn list_all_hosts(
 
             let services_hosts = user
                 .services_hosts
-                .unwrap_or(Vec::<ServiceHost>::from([]))
+                .unwrap_or_else(Vec::new)
                 .into_iter()
                 .chain(
                     groups
                         .into_iter()
-                        .map(|g| g.services_hosts.unwrap_or(Vec::<ServiceHost>::from([])))
-                        .flatten(),
+                        .flat_map(|g| g.services_hosts.unwrap_or_else(Vec::new))
                 );
             Ok(HttpResponse::Ok().json(services_hosts.collect::<Vec<_>>()))
         }

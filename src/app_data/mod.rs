@@ -43,7 +43,7 @@ impl AppData {
         let collab_invites = db.collection::<CollaborationInvitation>(
             &(prefix.to_owned() + "collaborationInvitations"),
         );
-        let network = network.unwrap_or(TopologyActor {}.start());
+        let network = network.unwrap_or_else(|| TopologyActor {}.start());
         network.do_send(SetStorage {
             project_metadata: project_metadata.clone(),
         });
@@ -87,7 +87,7 @@ impl AppData {
             .collect();
 
         let unique_name = get_unique_name(project_names, name);
-        let roles = roles.unwrap_or(vec![RoleData {
+        let roles = roles.unwrap_or_else(|| vec![RoleData {
             project_name: "myRole".to_owned(),
             source_code: "".to_owned(),
             media: "".to_owned(),
@@ -96,7 +96,7 @@ impl AppData {
         let role_mds = join_all(
             roles
                 .iter()
-                .map(|role| self.upload_role(&owner, &unique_name, role)),
+                .map(|role| self.upload_role(owner, &unique_name, role)),
         )
         .await;
 
@@ -109,7 +109,7 @@ impl AppData {
     }
 
     async fn upload_role(&self, owner: &str, project_name: &str, role: &RoleData) -> RoleMetadata {
-        let is_guest = owner.starts_with("_");
+        let is_guest = owner.starts_with('_');
         let top_level = if is_guest { "guests" } else { "users" };
         let basepath = format!(
             "{}/{}/{}/{}",

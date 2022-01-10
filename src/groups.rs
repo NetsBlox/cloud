@@ -157,7 +157,7 @@ async fn delete_group(
 }
 
 async fn is_allowed(app: &AppData, session: &Session, owner: &str) -> bool {
-    can_edit_user(&app, &session, owner).await
+    can_edit_user(app, session, owner).await
 }
 
 pub fn config(cfg: &mut web::ServiceConfig) {

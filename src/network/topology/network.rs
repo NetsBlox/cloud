@@ -77,20 +77,18 @@ impl RoomStateMessage {
                 let client_ids = room.roles.get(&id).unwrap_or(&empty);
                 // TODO: get the names...
                 let occupants = client_ids
-                    .into_iter()
+                    .iter()
                     .map(|id| OccupantState {
                         id: id.to_owned(),
                         name: "guest".to_owned(),
                     })
                     .collect();
 
-                (
-                    id,
-                    RoleState {
-                        name: role.project_name,
-                        occupants,
-                    },
-                )
+                let state = RoleState {
+                    name: role.project_name,
+                    occupants,
+                };
+                (id, state)
             })
             .collect();
 
@@ -297,8 +295,8 @@ impl Topology {
             ClientState::External(state) => {
                 let app_net = self
                     .external
-                    .entry(state.app_id.to_owned().to_lowercase())
-                    .or_insert(HashMap::new());
+                    .entry(state.app_id.to_lowercase())
+                    .or_insert_with(HashMap::new);
 
                 app_net.insert(state.address.to_owned(), msg.id.to_owned());
             }
@@ -333,8 +331,8 @@ impl Topology {
                         occupants.swap_remove(pos);
                     }
 
-                    if occupants.len() == 0 {
-                        let role_count = room.roles.len().clone();
+                    if occupants.is_empty() {
+                        let role_count = room.roles.len();
                         if role_count == 1 {
                             // remove the room
                             self.rooms.remove(&state.project_id);
@@ -395,7 +393,7 @@ impl Topology {
             let room_state = RoomStateMessage::new(msg.project, room);
             println!("Sending room update: {}", room_state.name);
             clients.for_each(|client| {
-                client.addr.do_send(room_state.clone().into());
+                let _ = client.addr.do_send(room_state.clone().into()); // TODO: handle error?
             });
         }
     }

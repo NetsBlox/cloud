@@ -61,8 +61,8 @@ pub async fn can_edit_user(app: &AppData, session: &Session, username: &str) -> 
     if let Some(requestor) = session.get::<String>("username").unwrap_or(None) {
         println!("Can {} edit {}?", requestor, username);
         requestor == username
-            || is_super_user(&app, &session).await
-            || has_group_containing(&app, &requestor, &username).await
+            || is_super_user(app, session).await
+            || has_group_containing(app, &requestor, username).await
     } else {
         println!("Could not get username from cookie!");
         false
@@ -114,7 +114,7 @@ struct UserCookie<'a> {
 }
 
 impl UserCookie<'_> {
-    pub fn new<'a>(username: &'a str, remember: Option<bool>) -> UserCookie {
+    pub fn new(username: &str, remember: Option<bool>) -> UserCookie {
         UserCookie {
             username,
             remember: remember.unwrap_or(false),
@@ -228,7 +228,7 @@ async fn update_ownership(
 ) -> Result<bool, &'static str> {
     // Update ownership of current project
     if let Some(client_id) = &client_id {
-        if !client_id.starts_with("_") {
+        if !client_id.starts_with('_') {
             return Err("Invalid client ID.");
         }
 
@@ -251,7 +251,7 @@ async fn logout(session: Session) -> HttpResponse {
 #[get("/whoami")]
 async fn whoami(session: Session) -> Result<HttpResponse, std::io::Error> {
     if let Some(username) = session.get::<String>("username").unwrap() {
-        Ok(HttpResponse::Ok().body(username.to_string()))
+        Ok(HttpResponse::Ok().body(username))
     } else {
         Ok(HttpResponse::Unauthorized().finish())
     }
