@@ -149,7 +149,7 @@ impl WsSession {
             "client-message" => { // combine this with the above type?
             }
             "user-action" => {
-                // TODO: Record
+                // TODO: Record: Can we get rid of these?
             }
             "project-response" => { // TODO: move this to rest?
             }

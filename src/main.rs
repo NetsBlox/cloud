@@ -54,6 +54,7 @@ async fn get_client_config(
 #[actix_web::main]
 async fn main() -> std::io::Result<()> {
     let config = Settings::new().unwrap();
+    // TODO: move the logic below into app_data?
     let client = Client::with_uri_str(&config.database.url)
         .await
         .expect("Could not connect to mongodb.");

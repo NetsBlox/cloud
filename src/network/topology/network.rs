@@ -255,6 +255,7 @@ impl Topology {
         .into_iter()
         .flatten();
         println!("external: {:?}", self.external);
+        println!("rooms: {:?}", self.rooms);
         println!("clients: {:?}", self.clients);
 
         recipients.for_each(|client| {
@@ -353,6 +354,7 @@ impl Topology {
                 }
             }
             Some(ClientState::External(state)) => {
+                println!(">>> external state: {:?}", state);
                 let remove_entry = self
                     .external
                     .get_mut(&state.app_id)
