@@ -1,10 +1,6 @@
 # To Do
-- [ ] update mobile apps
-
 - [ ] add room update message support
     - event system
-
-- [ ] email Tom about the big update?
 
 - [ ] update the services server connection (zmq)
     - add resolve endpoint?
@@ -18,6 +14,8 @@
         - [x] new project
             - blob connection test (minio)
         - [ ] save projects
+            - [ ] need to fix the cookie problem first...
+        - [ ] list projects
         - [x] login
         - [x] signup
         - [x] cookie is blank
@@ -27,6 +25,7 @@
             - maybe if I set the expires_in value?
                 - this doesn't seem to be working...
             - I think this is actually an issue on the client side...
+                - [x] set same-site...
 
     - [x] set client state not working...
         - how will this work with the new server?
@@ -61,9 +60,6 @@
         - inactivity should probably be determined by network activity?
             - when a client closes, we should delete all transient projects owned by the client ID (or username) after a set amount of time
             - same for logging out?
-
-- [ ] update the compiler for resolving addresses
-    - should be pretty easy to just copy the logic over
 
 - [ ] validate user accounts on creation
     - [-] maybe we will need to whitelist email domains later
@@ -132,7 +128,7 @@
 - Do I need "transient" projects on the server?
     - Can I handle name collisions some other way?
 
-- [ ] add caching to the message sending?
+- [ ] add address caching to the message sending?
 
 - [ ] add benchmarks for message passing??
 
@@ -166,6 +162,20 @@
 - [ ] add the group IDs (+ GLOBAL) to the clients in the network topology?
     - these would be the user's group + any owned groups
     - the sender and receiver must share at least one
+
+## Related project updates/migrations
+- [ ] project \_id -> id
+
+- [ ] update the compiler for resolving addresses
+    - should be pretty easy to just copy the logic over
+
+- [ ] ensure no usernames have @ symbol in them
+
+- [ ] update mobile apps
+
+- [ ] email Tom about the big update?
+
+- [ ] change "project_name" to "name"
 
 ## CLI
 - add CLI
