@@ -43,7 +43,7 @@ impl AppData {
         let collab_invites = db.collection::<CollaborationInvitation>(
             &(prefix.to_owned() + "collaborationInvitations"),
         );
-        let network = network.unwrap_or(TopologyActor {}.start());
+        let network = network.unwrap_or_else(|| TopologyActor {}.start());
         network.do_send(SetStorage {
             project_metadata: project_metadata.clone(),
         });
@@ -79,7 +79,7 @@ impl AppData {
         //let options = FindOptions::builder().projection(projection).build();
         let cursor = self.project_metadata.find(query, None).await.unwrap();
         let project_names = cursor
-            .try_collect::<Vec<ProjectMetadata>>()
+            .try_collect::<Vec<_>>()
             .await
             .unwrap()
             .iter()
@@ -87,7 +87,7 @@ impl AppData {
             .collect();
 
         let unique_name = get_unique_name(project_names, name);
-        let roles = roles.unwrap_or(vec![RoleData {
+        let roles = roles.unwrap_or_else(|| vec![RoleData {
             project_name: "myRole".to_owned(),
             source_code: "".to_owned(),
             media: "".to_owned(),
@@ -96,7 +96,7 @@ impl AppData {
         let role_mds = join_all(
             roles
                 .iter()
-                .map(|role| self.upload_role(&owner, &unique_name, role)),
+                .map(|role| self.upload_role(owner, &unique_name, role)),
         )
         .await;
 
@@ -109,7 +109,7 @@ impl AppData {
     }
 
     async fn upload_role(&self, owner: &str, project_name: &str, role: &RoleData) -> RoleMetadata {
-        let is_guest = owner.starts_with("_");
+        let is_guest = owner.starts_with('_');
         let top_level = if is_guest { "guests" } else { "users" };
         let basepath = format!(
             "{}/{}/{}/{}",
@@ -163,8 +163,8 @@ impl AppData {
 
         let roles = keys
             .into_iter()
-            .zip(role_data.into_iter())
-            .collect::<HashMap<String, RoleData>>();
+            .zip(role_data)
+            .collect::<HashMap<_, _>>();
 
         Project {
             id: metadata.id,
@@ -238,7 +238,7 @@ impl AppData {
             .roles
             .into_values()
             .map(|r| r.project_name)
-            .collect::<Vec<String>>();
+            .collect::<Vec<_>>();
         let role_name = get_unique_name(role_names, &role_md.project_name);
         role_md.project_name = role_name;
 

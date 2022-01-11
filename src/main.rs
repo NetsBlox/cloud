@@ -17,7 +17,6 @@ use crate::models::ServiceHost;
 use actix_cors::Cors;
 use actix_session::{CookieSession, Session};
 use actix_web::{cookie::SameSite, get, middleware, web, App, HttpResponse, HttpServer};
-use env_logger;
 use mongodb::Client;
 use rusoto_core::credential::StaticProvider;
 use rusoto_s3::{CreateBucketRequest, S3Client, S3};
@@ -43,7 +42,7 @@ async fn get_client_config(
     //  - [ ] retrieve services hosts
     let default_hosts = app.settings.services_hosts.clone();
     let config = ClientConfig {
-        client_id: format!("_netsblox{}", Uuid::new_v4().to_string()),
+        client_id: format!("_netsblox{}", Uuid::new_v4()),
         username: session.get::<String>("username").unwrap_or(None),
         services_hosts: default_hosts,
         cloud_url: &app.settings.public_url,
@@ -85,7 +84,7 @@ async fn main() -> std::io::Result<()> {
         bucket: bucket.clone(),
         ..Default::default()
     };
-    s3.create_bucket(request).await;
+    s3.create_bucket(request).await.unwrap();
 
     HttpServer::new(move || {
         let cors = Cors::default()

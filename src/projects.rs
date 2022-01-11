@@ -38,7 +38,7 @@ async fn create_project(
     let owner = session
         .get::<String>("username")
         .unwrap_or(None)
-        .unwrap_or(body.client_id.to_owned());
+        .unwrap_or_else(|| body.client_id.to_owned());
 
     let name = body.name.to_owned();
     let metadata = app
@@ -83,16 +83,16 @@ async fn get_visible_projects(
     owner: &str,
     cursor: Cursor<ProjectMetadata>,
 ) -> Vec<ProjectMetadata> {
-    let projects = if can_edit_user(&app, &session, &owner).await {
-        cursor.try_collect::<Vec<ProjectMetadata>>().await.unwrap()
+    let projects = if can_edit_user(app, session, owner).await {
+        cursor.try_collect::<Vec<_>>().await.unwrap()
     } else {
         cursor
-            .try_collect::<Vec<ProjectMetadata>>()
+            .try_collect::<Vec<_>>()
             .await
             .unwrap()
             .into_iter()
             .filter(|p| p.public)
-            .collect::<Vec<ProjectMetadata>>()
+            .collect::<Vec<_>>()
     };
     projects
 }
@@ -139,7 +139,7 @@ async fn can_view_project(app: &AppData, session: &Session, project: &ProjectMet
     if project.public {
         return true;
     }
-    can_edit_project(&app, &session, None, &project).await
+    can_edit_project(app, session, None, project).await
 }
 
 async fn can_edit_project(
@@ -150,7 +150,7 @@ async fn can_edit_project(
 ) -> bool {
     println!(
         "Can {} edit the project? ({})",
-        client_id.clone().unwrap_or("None".to_owned()),
+        client_id.as_deref().unwrap_or("None"),
         project.owner
     );
     let is_owner = client_id.map(|id| id == project.owner).unwrap_or(false);
@@ -159,7 +159,7 @@ async fn can_edit_project(
         || match session.get::<String>("username").unwrap_or(None) {
             Some(username) => {
                 project.collaborators.contains(&username)
-                    || can_edit_user(&app, &session, &project.owner).await
+                    || can_edit_user(app, session, &project.owner).await
             }
             None => false,
         }
@@ -278,16 +278,11 @@ struct UpdateProjectBody {
 #[patch("/id/{projectID}")]
 async fn update_project(
     app: web::Data<AppData>,
-    path: web::Path<(String,)>,
+    path: web::Path<(ObjectId,)>,
     body: web::Json<UpdateProjectBody>,
     session: Session,
 ) -> Result<HttpResponse, std::io::Error> {
-    let (id_str,) = path.into_inner();
-    // TODO: make a ProjectID type
-    let project_id = match ObjectId::parse_str(id_str) {
-        Ok(id) => id,
-        Err(_) => return Ok(HttpResponse::BadRequest().body("Invalid project ID.")),
-    };
+    let (project_id,) = path.into_inner();
 
     // TODO: validate the name. Or make it a type?
     let query = doc! {"id": project_id};
@@ -339,25 +334,21 @@ async fn get_latest_project() -> Result<HttpResponse, std::io::Error> {
 #[get("/id/{projectID}/thumbnail")]
 async fn get_project_thumbnail(
     app: web::Data<AppData>,
-    path: web::Path<(String,)>,
+    path: web::Path<(ObjectId,)>,
 ) -> Result<HttpResponse, std::io::Error> {
     let collection = app.collection::<ProjectMetadata>("projects");
     let (project_id,) = path.into_inner();
-    match ObjectId::parse_str(project_id) {
-        Ok(id) => {
-            let query = doc! {"id": id};
-            let result = collection
-                .find_one(query, None)
-                .await
-                .expect("Could not delete project");
 
-            if let Some(metadata) = result {
-                Ok(HttpResponse::Ok().body(metadata.thumbnail))
-            } else {
-                Ok(HttpResponse::NotFound().body("Project not found"))
-            }
-        }
-        Err(_) => Ok(HttpResponse::NotFound().body("Project not found")),
+    let query = doc! {"id": project_id};
+    let result = collection
+        .find_one(query, None)
+        .await
+        .expect("Could not delete project");
+
+    if let Some(metadata) = result {
+        Ok(HttpResponse::Ok().body(metadata.thumbnail))
+    } else {
+        Ok(HttpResponse::NotFound().body("Project not found"))
     }
 }
 
@@ -372,8 +363,8 @@ impl From<CreateRoleData> for RoleData {
     fn from(data: CreateRoleData) -> RoleData {
         RoleData {
             project_name: data.name,
-            source_code: data.source_code.unwrap_or("".to_string()),
-            media: data.media.unwrap_or("".to_string()),
+            source_code: data.source_code.unwrap_or_else(String::new),
+            media: data.media.unwrap_or_else(String::new),
         }
     }
 }
@@ -516,14 +507,10 @@ struct RenameRoleData {
 async fn rename_role(
     app: web::Data<AppData>,
     body: web::Json<RenameRoleData>,
-    path: web::Path<(String, String)>,
+    path: web::Path<(ObjectId, String)>,
     session: Session,
 ) -> Result<HttpResponse, std::io::Error> {
-    let (project_id_str, role_id) = path.into_inner();
-    let project_id = match ObjectId::parse_str(project_id_str) {
-        Ok(id) => id,
-        Err(_) => return Ok(HttpResponse::BadRequest().body("Invalid project ID.")),
-    };
+    let (project_id, role_id) = path.into_inner();
 
     let query = doc! {"id": project_id};
     let body = body.into_inner();

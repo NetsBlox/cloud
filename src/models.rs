@@ -50,7 +50,7 @@ impl ProjectMetadata {
         let roles = roles
             .into_iter()
             .map(|role| (Uuid::new_v4().to_string(), role))
-            .collect::<HashMap<String, RoleMetadata>>();
+            .collect::<HashMap<_, _>>();
 
         ProjectMetadata {
             id: ObjectId::new(),

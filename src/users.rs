@@ -61,8 +61,8 @@ pub async fn can_edit_user(app: &AppData, session: &Session, username: &str) -> 
     if let Some(requestor) = session.get::<String>("username").unwrap_or(None) {
         println!("Can {} edit {}?", requestor, username);
         requestor == username
-            || is_super_user(&app, &session).await
-            || has_group_containing(&app, &requestor, &username).await
+            || is_super_user(app, session).await
+            || has_group_containing(app, &requestor, username).await
     } else {
         println!("Could not get username from cookie!");
         false
@@ -91,11 +91,11 @@ async fn has_group_containing(app: &AppData, owner: &str, member: &str) -> bool 
                     .find(query, None)
                     .await
                     .unwrap();
-                let groups = cursor.try_collect::<Vec<Group>>().await.unwrap();
+                let groups = cursor.try_collect::<Vec<_>>().await.unwrap();
                 let group_ids = groups
                     .iter()
                     .map(|group| group._id)
-                    .collect::<HashSet<ObjectId>>();
+                    .collect::<HashSet<_>>();
                 group_ids.contains(&group_id)
             }
             None => false,
@@ -114,7 +114,7 @@ struct UserCookie<'a> {
 }
 
 impl UserCookie<'_> {
-    pub fn new<'a>(username: &'a str, remember: Option<bool>) -> UserCookie {
+    pub fn new(username: &str, remember: Option<bool>) -> UserCookie {
         UserCookie {
             username,
             remember: remember.unwrap_or(false),
@@ -228,7 +228,7 @@ async fn update_ownership(
 ) -> Result<bool, &'static str> {
     // Update ownership of current project
     if let Some(client_id) = &client_id {
-        if !client_id.starts_with("_") {
+        if !client_id.starts_with('_') {
             return Err("Invalid client ID.");
         }
 
@@ -251,7 +251,7 @@ async fn logout(session: Session) -> HttpResponse {
 #[get("/whoami")]
 async fn whoami(session: Session) -> Result<HttpResponse, std::io::Error> {
     if let Some(username) = session.get::<String>("username").unwrap() {
-        Ok(HttpResponse::Ok().body(username.to_string()))
+        Ok(HttpResponse::Ok().body(username))
     } else {
         Ok(HttpResponse::Unauthorized().finish())
     }
@@ -519,9 +519,9 @@ pub fn config(cfg: &mut web::ServiceConfig) {
 //         .await;
 
 //         let user_data = NewUser::new(
-//             "test".to_string(),
-//             "pwd_hash".to_string(),
-//             "test@gmail.com".to_string(),
+//             "test".into(),
+//             "pwd_hash".into(),
+//             "test@gmail.com".into(),
 //             None,
 //         );
 //         let req = test::TestRequest::post()
@@ -553,9 +553,9 @@ pub fn config(cfg: &mut web::ServiceConfig) {
 //         .await;
 
 //         let user_data = NewUser::new(
-//             "hell".to_string(),
-//             "pwd_hash".to_string(),
-//             "test@gmail.com".to_string(),
+//             "hell".into(),
+//             "pwd_hash".into(),
+//             "test@gmail.com".into(),
 //             None,
 //         );
 //         let req = test::TestRequest::post()
@@ -579,9 +579,9 @@ pub fn config(cfg: &mut web::ServiceConfig) {
 //     //).await;
 
 //     //let user_data = NewUser::new(
-//     //"hell".to_string(),
-//     //"pwd_hash".to_string(),
-//     //"test@gmail.com".to_string(),
+//     //"hell".into(),
+//     //"pwd_hash".into(),
+//     //"test@gmail.com".into(),
 //     //None  // TODO: set the group
 //     //);
 //     //let req = test::TestRequest::post()
@@ -596,9 +596,9 @@ pub fn config(cfg: &mut web::ServiceConfig) {
 //     #[actix_web::test]
 //     async fn test_login() {
 //         let user = User::from(NewUser::new(
-//             "brian".to_string(),
-//             "pwd_hash".to_string(),
-//             "email".to_string(),
+//             "brian".into(),
+//             "pwd_hash".into(),
+//             "email".into(),
 //             None,
 //         ));
 //         let (database, _) = init_app_data("login", vec![user])
@@ -619,8 +619,8 @@ pub fn config(cfg: &mut web::ServiceConfig) {
 //         .await;
 
 //         let credentials = LoginCredentials {
-//             username: "brian".to_string(),
-//             password: "pwd_hash".to_string(),
+//             username: "brian".into(),
+//             password: "pwd_hash".into(),
 //             client_id: None,
 //             strategy: None,
 //         };
@@ -639,9 +639,9 @@ pub fn config(cfg: &mut web::ServiceConfig) {
 //     #[actix_web::test]
 //     async fn test_login_bad_pwd() {
 //         let user = User::from(NewUser::new(
-//             "brian".to_string(),
-//             "pwd_hash".to_string(),
-//             "email".to_string(),
+//             "brian".into(),
+//             "pwd_hash".into(),
+//             "email".into(),
 //             None,
 //         ));
 //         let (database, _) = init_app_data("login_bad_pwd", vec![user])
@@ -656,8 +656,8 @@ pub fn config(cfg: &mut web::ServiceConfig) {
 //         .await;
 
 //         let credentials = LoginCredentials {
-//             username: "brian".to_string(),
-//             password: "wrong_hash".to_string(),
+//             username: "brian".into(),
+//             password: "wrong_hash".into(),
 //             client_id: None,
 //             strategy: None,
 //         };
@@ -684,8 +684,8 @@ pub fn config(cfg: &mut web::ServiceConfig) {
 //         .await;
 
 //         let credentials = LoginCredentials {
-//             username: "nonExistentUser".to_string(),
-//             password: "pwd_hash".to_string(),
+//             username: "nonExistentUser".into(),
+//             password: "pwd_hash".into(),
 //             client_id: None,
 //             strategy: None,
 //         };
@@ -701,9 +701,9 @@ pub fn config(cfg: &mut web::ServiceConfig) {
 //     #[actix_web::test]
 //     async fn test_login_banned() {
 //         let user = User::from(NewUser::new(
-//             "brian".to_string(),
-//             "pwd_hash".to_string(),
-//             "email".to_string(),
+//             "brian".into(),
+//             "pwd_hash".into(),
+//             "email".into(),
 //             None,
 //         ));
 //         let (app_data, _) = init_app_data("login_bad_pwd", vec![user])
@@ -712,7 +712,7 @@ pub fn config(cfg: &mut web::ServiceConfig) {
 
 //         // Ban the account (manually)
 //         let collection = app_data.collection::<BannedAccount>("bannedAccounts");
-//         let banned_account = BannedAccount::new("brian".to_string(), "email".to_string());
+//         let banned_account = BannedAccount::new("brian".into(), "email".into());
 //         collection
 //             .insert_one(banned_account, None)
 //             .await
@@ -727,8 +727,8 @@ pub fn config(cfg: &mut web::ServiceConfig) {
 //         .await;
 
 //         let credentials = LoginCredentials {
-//             username: "brian".to_string(),
-//             password: "pwd_hash".to_string(),
+//             username: "brian".into(),
+//             password: "pwd_hash".into(),
 //             client_id: None,
 //             strategy: None,
 //         };
@@ -755,9 +755,9 @@ pub fn config(cfg: &mut web::ServiceConfig) {
 //     #[actix_web::test]
 //     async fn test_logout() {
 //         let user = User::from(NewUser::new(
-//             "brian".to_string(),
-//             "pwd_hash".to_string(),
-//             "email".to_string(),
+//             "brian".into(),
+//             "pwd_hash".into(),
+//             "email".into(),
 //             None,
 //         ));
 //         let (database, _) = init_app_data("login", vec![user])

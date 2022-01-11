@@ -53,7 +53,7 @@ impl FromStr for ClientAddress {
                 .map(|(_k, iter)| iter.collect::<String>().to_lowercase())
                 .collect();
 
-            if app_ids.len() == 0 {
+            if app_ids.is_empty() {
                 app_ids.push(DEFAULT_APP_ID.to_owned());
             }
 
@@ -64,7 +64,7 @@ impl FromStr for ClientAddress {
             })
         } else {
             Err(AddressError {
-                addr: addr.to_string(),
+                addr: addr.into(),
             })
         }
     }

@@ -29,7 +29,7 @@ impl LibraryMetadata {
         LibraryMetadata {
             owner,
             name,
-            notes: notes.unwrap_or("".to_string()),
+            notes: notes.unwrap_or_else(String::new),
             public,
         }
     }
@@ -66,7 +66,7 @@ async fn list_community_libraries(db: web::Data<AppData>) -> Result<HttpResponse
         .await
         .expect("Library list query failed");
 
-    let libraries = cursor.try_collect::<Vec<LibraryMetadata>>().await.unwrap();
+    let libraries = cursor.try_collect::<Vec<_>>().await.unwrap();
     Ok(HttpResponse::Ok().json(libraries))
 }
 
@@ -135,7 +135,7 @@ async fn save_user_library(
     if !is_valid_name(&name) {
         return Ok(HttpResponse::BadRequest().body("Invalid library name"));
     }
-    if !can_edit_library(&app, session, &owner).await {
+    if !can_edit_library(&app, &session, &owner).await {
         return Ok(HttpResponse::Unauthorized().body("Not allowed."));
     }
 
@@ -186,7 +186,7 @@ async fn delete_user_library(
     session: Session,
 ) -> Result<HttpResponse, std::io::Error> {
     let (owner, name) = path.into_inner();
-    if !can_edit_library(&app, session, &owner).await {
+    if !can_edit_library(&app, &session, &owner).await {
         return Ok(HttpResponse::Unauthorized().body("Not allowed."));
     }
     let collection = app.collection::<LibraryMetadata>("libraries");
@@ -209,7 +209,7 @@ async fn publish_user_library(
     session: Session,
 ) -> Result<HttpResponse, std::io::Error> {
     let (owner, name) = path.into_inner();
-    if !can_edit_library(&app, session, &owner).await {
+    if !can_edit_library(&app, &session, &owner).await {
         return Ok(HttpResponse::Unauthorized().body("Not allowed."));
     }
 
@@ -242,7 +242,7 @@ async fn unpublish_user_library(
     session: Session,
 ) -> Result<HttpResponse, std::io::Error> {
     let (owner, name) = path.into_inner();
-    if !can_edit_library(&db, session, &owner).await {
+    if !can_edit_library(&db, &session, &owner).await {
         return Ok(HttpResponse::Unauthorized().body("Not allowed."));
     }
 
@@ -261,9 +261,9 @@ async fn unpublish_user_library(
     }
 }
 
-async fn can_edit_library(app: &AppData, session: Session, owner: &str) -> bool {
+async fn can_edit_library(app: &AppData, session: &Session, owner: &str) -> bool {
     match session.get::<String>("username").unwrap_or(None) {
-        Some(username) => can_edit_user(&app, &session, owner).await,
+        Some(username) => can_edit_user(app, session, owner).await,
         None => false,
     }
 }
@@ -274,7 +274,7 @@ async fn can_view_library(app: &AppData, session: &Session, library: &LibraryMet
     }
 
     match session.get::<String>("username").unwrap_or(None) {
-        Some(username) => can_edit_user(&app, &session, &library.owner).await,
+        Some(username) => can_edit_user(app, session, &library.owner).await,
         None => false,
     }
 }
@@ -294,7 +294,7 @@ async fn list_approval_needed(
         .await
         .expect("Could not retrieve libraries");
 
-    let libraries = cursor.try_collect::<Vec<LibraryMetadata>>().await.unwrap();
+    let libraries = cursor.try_collect::<Vec<_>>().await.unwrap();
 
     Ok(HttpResponse::Ok().json(libraries))
 }
@@ -375,14 +375,14 @@ mod tests {
     async fn test_list_community_libraries() {
         let libraries = vec![
             LibraryMetadata::new(
-                "brian".to_string(),
-                "public example".to_string(),
+                "brian".into(),
+                "public example".into(),
                 true,
                 None,
             ),
             LibraryMetadata::new(
-                "brian".to_string(),
-                "private example".to_string(),
+                "brian".into(),
+                "private example".into(),
                 false,
                 None,
             ),
@@ -411,9 +411,9 @@ mod tests {
     async fn test_list_user_libraries() {
         // TODO: 403 if not allowed?
         let libraries = vec![
-            LibraryMetadata::new("cassie".to_string(), "project 1".to_string(), false, None),
-            LibraryMetadata::new("brian".to_string(), "project 2".to_string(), false, None),
-            LibraryMetadata::new("brian".to_string(), "project 3".to_string(), true, None),
+            LibraryMetadata::new("cassie".into(), "project 1".into(), false, None),
+            LibraryMetadata::new("brian".into(), "project 2".into(), false, None),
+            LibraryMetadata::new("brian".into(), "project 3".into(), true, None),
         ];
         let database = init_database("list_user_libs", libraries)
             .await
@@ -499,12 +499,12 @@ mod tests {
 
     #[actix_web::test]
     async fn test_publish_user_library() {
-        let publish_name = "to-publish-example".to_string();
+        let publish_name = "to-publish-example";
         let libraries = vec![
-            LibraryMetadata::new("brian".to_string(), publish_name.clone(), false, None),
+            LibraryMetadata::new("brian".into(), publish_name.into(), false, None),
             LibraryMetadata::new(
-                "brian".to_string(),
-                "private example".to_string(),
+                "brian".into(),
+                "private example".into(),
                 false,
                 None,
             ),
@@ -534,7 +534,7 @@ mod tests {
 
         let mut count = 0;
 
-        let libraries = cursor.try_collect::<Vec<LibraryMetadata>>().await.unwrap();
+        let libraries = cursor.try_collect::<Vec<_>>().await.unwrap();
         libraries.into_iter().for_each(|library| {
             let expected_public = library.name == publish_name;
             assert_eq!(

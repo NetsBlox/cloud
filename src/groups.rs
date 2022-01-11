@@ -20,7 +20,7 @@ async fn list_groups(
     }
     let query = doc! {"owner": owner};
     let cursor = app.groups.find(query, None).await.unwrap();
-    let groups = cursor.try_collect::<Vec<Group>>().await.unwrap();
+    let groups = cursor.try_collect::<Vec<_>>().await.unwrap();
     Ok(HttpResponse::Ok().json(groups))
 }
 
@@ -50,27 +50,23 @@ async fn view_group(
 #[get("/id/{id}/members")]
 async fn list_members(
     app: web::Data<AppData>,
-    path: web::Path<(String,)>,
+    path: web::Path<(ObjectId,)>,
     session: Session,
 ) -> Result<HttpResponse, std::io::Error> {
     let (id,) = path.into_inner();
-    match ObjectId::parse_str(id) {
-        Ok(id) => {
-            let query = doc! {"_id": id};
-            match app.groups.find_one(query, None).await.unwrap() {
-                Some(group) => {
-                    if !is_allowed(&app, &session, &group.owner).await {
-                        return Ok(HttpResponse::Unauthorized().body("Not allowed"));
-                    }
-                    let query = doc! {"groupId": group._id};
-                    let cursor = app.users.find(query, None).await.unwrap();
-                    let members = cursor.try_collect::<Vec<User>>().await.unwrap();
-                    Ok(HttpResponse::Ok().json(members))
-                }
-                None => Ok(HttpResponse::NotFound().body("Not found.")),
+
+    let query = doc! {"_id": id};
+    match app.groups.find_one(query, None).await.unwrap() {
+        Some(group) => {
+            if !is_allowed(&app, &session, &group.owner).await {
+                return Ok(HttpResponse::Unauthorized().body("Not allowed"));
             }
+            let query = doc! {"groupId": group._id};
+            let cursor = app.users.find(query, None).await.unwrap();
+            let members = cursor.try_collect::<Vec<_>>().await.unwrap();
+            Ok(HttpResponse::Ok().json(members))
         }
-        Err(_err) => Ok(HttpResponse::NotFound().body("Not found.")),
+        None => Ok(HttpResponse::NotFound().body("Not found.")),
     }
 }
 
@@ -157,7 +153,7 @@ async fn delete_group(
 }
 
 async fn is_allowed(app: &AppData, session: &Session, owner: &str) -> bool {
-    can_edit_user(&app, &session, owner).await
+    can_edit_user(app, session, owner).await
 }
 
 pub fn config(cfg: &mut web::ServiceConfig) {
