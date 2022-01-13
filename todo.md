@@ -96,6 +96,8 @@
             - this is probably the better way to go
     - [ ] friend requests?
         - should we have "block"/decline
+        - should reject auto block?
+            - probably not
     - [x] service hosts
     - [ ] projects
         - project_metadata

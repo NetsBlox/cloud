@@ -30,6 +30,66 @@ impl From<User> for Bson {
     }
 }
 
+#[derive(Deserialize, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub enum FriendLinkState {
+    PENDING,
+    APPROVED,
+    REJECTED,
+    DELETED,
+    BLOCKED,
+}
+
+impl From<FriendLinkState> for Bson {
+    fn from(link_state: FriendLinkState) -> Bson {
+        match link_state {
+            FriendLinkState::PENDING => Bson::String("PENDING".into()),
+            FriendLinkState::APPROVED => Bson::String("APPROVED".into()),
+            FriendLinkState::REJECTED => Bson::String("REJECTED".into()),
+            FriendLinkState::DELETED => Bson::String("DELETED".into()),
+            FriendLinkState::BLOCKED => Bson::String("BLOCKED".into()),
+        }
+    }
+}
+
+#[derive(Deserialize, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct FriendLink {
+    pub id: ObjectId,
+    pub sender: String,
+    pub recipient: String,
+    pub state: FriendLinkState,
+    pub created_at: DateTime,
+    pub updated_at: DateTime,
+}
+
+impl FriendLink {
+    pub fn new(sender: String, recipient: String, state: Option<FriendLinkState>) -> FriendLink {
+        let created_at = DateTime::from_system_time(SystemTime::now());
+        FriendLink {
+            id: ObjectId::new(),
+            sender,
+            recipient,
+            state: state.unwrap_or(FriendLinkState::PENDING),
+            created_at,
+            updated_at: created_at,
+        }
+    }
+}
+
+impl From<FriendLink> for Bson {
+    fn from(link: FriendLink) -> Bson {
+        Bson::Document(doc! {
+            "id": link.id,
+            "sender": link.sender,
+            "recipient": link.recipient,
+            "state": link.state,
+            "createdAt": link.created_at,
+            "updatedAt": link.updated_at,
+        })
+    }
+}
+
 #[derive(Deserialize, Serialize, Clone)]
 #[serde(rename_all = "camelCase")]
 pub struct ProjectMetadata {

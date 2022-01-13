@@ -6,7 +6,7 @@ use std::collections::{HashMap, HashSet};
 use uuid::Uuid;
 
 use crate::config::Settings;
-use crate::models::{CollaborationInvitation, Group, Project, ProjectMetadata, User};
+use crate::models::{CollaborationInvitation, FriendLink, Group, Project, ProjectMetadata, User};
 use crate::models::{RoleData, RoleMetadata};
 use crate::network::topology::{SetStorage, TopologyActor};
 use actix::{Actor, Addr};
@@ -23,6 +23,7 @@ pub struct AppData {
     pub network: Addr<TopologyActor>,
     pub groups: Collection<Group>,
     pub users: Collection<User>,
+    pub friends: Collection<FriendLink>,
     pub project_metadata: Collection<ProjectMetadata>,
     pub collab_invites: Collection<CollaborationInvitation>,
 }
@@ -43,6 +44,7 @@ impl AppData {
         let collab_invites = db.collection::<CollaborationInvitation>(
             &(prefix.to_owned() + "collaborationInvitations"),
         );
+        let friends = db.collection::<FriendLink>(&(prefix.to_owned() + "friends"));
         let network = network.unwrap_or_else(|| TopologyActor {}.start());
         network.do_send(SetStorage {
             project_metadata: project_metadata.clone(),
@@ -59,6 +61,7 @@ impl AppData {
             project_metadata,
 
             collab_invites,
+            friends,
         }
     }
 
