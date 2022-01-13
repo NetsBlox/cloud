@@ -84,7 +84,7 @@ async fn main() -> std::io::Result<()> {
         bucket: bucket.clone(),
         ..Default::default()
     };
-    s3.create_bucket(request).await.unwrap();
+    s3.create_bucket(request).await;
 
     HttpServer::new(move || {
         let cors = Cors::default()
