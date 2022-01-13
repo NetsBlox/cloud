@@ -90,11 +90,13 @@ impl AppData {
             .collect();
 
         let unique_name = get_unique_name(project_names, name);
-        let roles = roles.unwrap_or_else(|| vec![RoleData {
-            project_name: "myRole".to_owned(),
-            source_code: "".to_owned(),
-            media: "".to_owned(),
-        }]);
+        let roles = roles.unwrap_or_else(|| {
+            vec![RoleData {
+                project_name: "myRole".to_owned(),
+                source_code: "".to_owned(),
+                media: "".to_owned(),
+            }]
+        });
 
         let role_mds = join_all(
             roles
@@ -164,10 +166,7 @@ impl AppData {
         let (keys, values): (Vec<_>, Vec<_>) = metadata.roles.clone().into_iter().unzip();
         let role_data = join_all(values.iter().map(|v| self.fetch_role(v))).await;
 
-        let roles = keys
-            .into_iter()
-            .zip(role_data)
-            .collect::<HashMap<_, _>>();
+        let roles = keys.into_iter().zip(role_data).collect::<HashMap<_, _>>();
 
         Project {
             id: metadata.id,
