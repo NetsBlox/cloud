@@ -14,8 +14,11 @@
         - [x] new project
             - blob connection test (minio)
         - [ ] save projects
-            - [ ] need to fix the cookie problem first...
+            - [x] need to fix the cookie problem first...
         - [ ] list projects
+            - [ ] ObjectId is serializing very strangely ($oid)
+                - [x] changing project Id...
+        - [ ] cookie on initial load does not seem to be present
         - [x] login
         - [x] signup
         - [x] cookie is blank

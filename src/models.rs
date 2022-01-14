@@ -90,10 +90,14 @@ impl From<FriendLink> for Bson {
     }
 }
 
+pub type ProjectId = String;
+
 #[derive(Deserialize, Serialize, Clone)]
 #[serde(rename_all = "camelCase")]
 pub struct ProjectMetadata {
-    pub id: ObjectId,
+    // #[serde(with = "uuid_as_binary")]
+    // pub id: Uuid,
+    pub id: ProjectId,
     pub owner: String,
     pub name: String,
     pub updated: DateTime,
@@ -113,7 +117,7 @@ impl ProjectMetadata {
             .collect::<HashMap<_, _>>();
 
         ProjectMetadata {
-            id: ObjectId::new(),
+            id: Uuid::new_v4().to_string(),
             owner: owner.to_owned(),
             name: name.to_owned(),
             updated: origin_time,
@@ -129,7 +133,7 @@ impl ProjectMetadata {
 #[derive(Deserialize, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct Project {
-    pub id: ObjectId,
+    pub id: ProjectId,
     pub owner: String,
     pub name: String,
     pub updated: DateTime,

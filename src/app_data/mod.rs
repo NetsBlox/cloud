@@ -169,7 +169,7 @@ impl AppData {
         let roles = keys.into_iter().zip(role_data).collect::<HashMap<_, _>>();
 
         Project {
-            id: metadata.id,
+            id: metadata.id.to_owned(),
             name: metadata.name.to_owned(),
             owner: metadata.owner.to_owned(),
             updated: metadata.updated.to_owned(),
@@ -207,7 +207,7 @@ impl AppData {
         let role_md = self
             .upload_role(&metadata.owner, &metadata.name, &role)
             .await;
-        let query = doc! {"id": metadata.id};
+        let query = doc! {"id": &metadata.id};
         let update = doc! {"$set": {&format!("roles.{}", role_id): role_md, "transient": false}};
         let options = FindOneAndUpdateOptions::builder()
             .return_document(ReturnDocument::After)

@@ -1,12 +1,12 @@
 use crate::app_data::AppData;
-use crate::models::{ProjectMetadata, RoleData};
+use crate::models::{ProjectId, ProjectMetadata, RoleData};
 use crate::network::topology;
 use crate::users::can_edit_user;
 use actix_session::Session;
 use actix_web::{delete, get, patch, post};
 use actix_web::{web, HttpResponse};
 use futures::stream::TryStreamExt;
-use mongodb::bson::{doc, oid::ObjectId};
+use mongodb::bson::doc;
 use mongodb::options::{FindOneAndUpdateOptions, ReturnDocument};
 use mongodb::Cursor;
 use serde::{Deserialize, Serialize};
@@ -168,7 +168,7 @@ async fn can_edit_project(
 #[get("/id/{projectID}")]
 async fn get_project(
     app: web::Data<AppData>,
-    path: web::Path<(ObjectId,)>,
+    path: web::Path<(ProjectId,)>,
     session: Session,
 ) -> Result<HttpResponse, std::io::Error> {
     let (project_id,) = path.into_inner();
@@ -189,7 +189,7 @@ async fn get_project(
 #[post("/id/{projectID}/publish")] // TODO: Will this collide with role
 async fn publish_project(
     app: web::Data<AppData>,
-    path: web::Path<(ObjectId,)>,
+    path: web::Path<(ProjectId,)>,
     session: Session,
 ) -> Result<HttpResponse, std::io::Error> {
     let (project_id,) = path.into_inner();
@@ -219,7 +219,7 @@ async fn publish_project(
 #[post("/id/{projectID}/unpublish")] // TODO: Will this collide with role
 async fn unpublish_project(
     app: web::Data<AppData>,
-    path: web::Path<(ObjectId,)>,
+    path: web::Path<(ProjectId,)>,
     session: Session,
 ) -> Result<HttpResponse, std::io::Error> {
     let (project_id,) = path.into_inner();
@@ -249,7 +249,7 @@ async fn unpublish_project(
 #[delete("/id/{projectID}")]
 async fn delete_project(
     app: web::Data<AppData>,
-    path: web::Path<(ObjectId,)>,
+    path: web::Path<(ProjectId,)>,
     session: Session,
 ) -> Result<HttpResponse, std::io::Error> {
     let (project_id,) = path.into_inner();
@@ -278,7 +278,7 @@ struct UpdateProjectBody {
 #[patch("/id/{projectID}")]
 async fn update_project(
     app: web::Data<AppData>,
-    path: web::Path<(ObjectId,)>,
+    path: web::Path<(ProjectId,)>,
     body: web::Json<UpdateProjectBody>,
     session: Session,
 ) -> Result<HttpResponse, std::io::Error> {
@@ -334,7 +334,7 @@ async fn get_latest_project() -> Result<HttpResponse, std::io::Error> {
 #[get("/id/{projectID}/thumbnail")]
 async fn get_project_thumbnail(
     app: web::Data<AppData>,
-    path: web::Path<(ObjectId,)>,
+    path: web::Path<(ProjectId,)>,
 ) -> Result<HttpResponse, std::io::Error> {
     let collection = app.collection::<ProjectMetadata>("projects");
     let (project_id,) = path.into_inner();
@@ -373,7 +373,7 @@ impl From<CreateRoleData> for RoleData {
 async fn create_role(
     app: web::Data<AppData>,
     body: web::Json<CreateRoleData>,
-    path: web::Path<(ObjectId,)>,
+    path: web::Path<(ProjectId,)>,
     session: Session,
 ) -> Result<HttpResponse, std::io::Error> {
     // TODO: send room update message? I am not sure
@@ -410,7 +410,7 @@ async fn create_role(
 #[get("/id/{projectID}/{roleID}")]
 async fn get_role(
     app: web::Data<AppData>,
-    path: web::Path<(ObjectId, String)>,
+    path: web::Path<(ProjectId, String)>,
     session: Session,
 ) -> Result<HttpResponse, std::io::Error> {
     let (project_id, role_id) = path.into_inner();
@@ -435,7 +435,7 @@ async fn get_role(
 #[delete("/id/{projectID}/{roleID}")]
 async fn delete_role(
     app: web::Data<AppData>,
-    path: web::Path<(ObjectId, String)>,
+    path: web::Path<(ProjectId, String)>,
     session: Session,
 ) -> Result<HttpResponse, std::io::Error> {
     let (project_id, role_id) = path.into_inner();
@@ -477,7 +477,7 @@ async fn delete_role(
 async fn save_role(
     app: web::Data<AppData>,
     body: web::Json<RoleData>,
-    path: web::Path<(ObjectId, String)>,
+    path: web::Path<(ProjectId, String)>,
     session: Session,
 ) -> Result<HttpResponse, std::io::Error> {
     let (project_id, role_id) = path.into_inner();
@@ -507,7 +507,7 @@ struct RenameRoleData {
 async fn rename_role(
     app: web::Data<AppData>,
     body: web::Json<RenameRoleData>,
-    path: web::Path<(ObjectId, String)>,
+    path: web::Path<(ProjectId, String)>,
     session: Session,
 ) -> Result<HttpResponse, std::io::Error> {
     let (project_id, role_id) = path.into_inner();
@@ -560,7 +560,7 @@ async fn get_latest_role() -> Result<HttpResponse, std::io::Error> {
 #[get("/id/{projectID}/collaborators/")]
 async fn list_collaborators(
     app: web::Data<AppData>,
-    path: web::Path<(ObjectId,)>,
+    path: web::Path<(ProjectId,)>,
     session: Session,
 ) -> Result<HttpResponse, std::io::Error> {
     let (project_id,) = path.into_inner();
@@ -587,7 +587,7 @@ async fn list_collaborators(
 #[post("/id/{projectID}/collaborators/{username}")]
 async fn add_collaborator(
     app: web::Data<AppData>,
-    path: web::Path<(ObjectId, String)>,
+    path: web::Path<(ProjectId, String)>,
     session: Session,
 ) -> Result<HttpResponse, std::io::Error> {
     let (project_id, username) = path.into_inner();
@@ -623,7 +623,7 @@ async fn add_collaborator(
 #[delete("/id/{projectID}/collaborators/{username}")]
 async fn remove_collaborator(
     app: web::Data<AppData>,
-    path: web::Path<(ObjectId, String)>,
+    path: web::Path<(ProjectId, String)>,
     session: Session,
 ) -> Result<HttpResponse, std::io::Error> {
     let (project_id, username) = path.into_inner();
