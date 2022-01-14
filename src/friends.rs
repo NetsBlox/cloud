@@ -189,6 +189,7 @@ async fn respond_to_invite(
 
 pub fn config(cfg: &mut web::ServiceConfig) {
     cfg.service(list_friends)
+        .service(list_online_friends)
         .service(block_user)
         .service(unfriend)
         .service(list_invites)
@@ -206,6 +207,16 @@ mod tests {
 
     #[actix_web::test]
     async fn test_list_friends_403() {
+        todo!();
+    }
+
+    #[actix_web::test]
+    async fn test_list_online_friends() {
+        todo!();
+    }
+
+    #[actix_web::test]
+    async fn test_list_online_friends_403() {
         todo!();
     }
 
