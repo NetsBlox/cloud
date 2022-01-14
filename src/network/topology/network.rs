@@ -1,6 +1,5 @@
 use futures::future::join_all;
 use mongodb::bson::doc;
-use mongodb::bson::oid::ObjectId;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::str::FromStr;
@@ -9,7 +8,7 @@ use std::time::SystemTime;
 use actix::Recipient;
 use mongodb::Collection;
 
-use crate::models::ProjectMetadata;
+use crate::models::{ProjectId, ProjectMetadata};
 use crate::network::topology::address::ClientAddress;
 
 pub use super::address::DEFAULT_APP_ID;
@@ -370,10 +369,9 @@ impl Topology {
     // FIXME: it might be nice not to query the database on *every* occupant invite/move/etc
     // We should be able to cache the addresses since any change should result in a new
     // call to send_room_state
-    async fn send_room_state_for(&self, project_id: &str) {
+    async fn send_room_state_for(&self, project_id: &ProjectId) {
         if let Some(project_metadata) = &self.project_metadata {
-            let id = ObjectId::parse_str(&project_id).expect("Invalid project ID.");
-            let query = doc! {"id": id};
+            let query = doc! {"id": project_id};
             if let Some(project) = project_metadata.find_one(query, None).await.unwrap() {
                 self.send_room_state(SendRoomState { project });
             }
