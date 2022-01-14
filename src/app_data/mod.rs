@@ -12,7 +12,10 @@ use crate::network::topology::{SetStorage, TopologyActor};
 use actix::{Actor, Addr};
 use futures::TryStreamExt;
 use mongodb::{Collection, Database};
-use rusoto_s3::{GetObjectRequest, PutObjectOutput, PutObjectRequest, S3Client, S3};
+use rusoto_s3::{
+    DeleteObjectOutput, DeleteObjectRequest, GetObjectRequest, PutObjectOutput, PutObjectRequest,
+    S3Client, S3,
+};
 
 pub struct AppData {
     prefix: &'static str,
@@ -133,6 +136,15 @@ impl AppData {
         }
     }
 
+    async fn delete(&self, key: &str) -> DeleteObjectOutput {
+        let request = DeleteObjectRequest {
+            bucket: self.bucket.clone(),
+            key: String::from(key),
+            ..Default::default()
+        };
+        self.s3.delete_object(request).await.unwrap()
+    }
+
     async fn upload(&self, key: &str, body: String) -> PutObjectOutput {
         let request = PutObjectRequest {
             bucket: self.bucket.clone(),
@@ -181,9 +193,26 @@ impl AppData {
         }
     }
 
-    pub async fn delete_project(&self, metadata: ProjectMetadata) -> bool {
+    pub async fn delete_project(&self, metadata: ProjectMetadata) {
+        let query = doc! {"id": &metadata.id};
+        let result = self
+            .project_metadata
+            .find_one_and_delete(query, None)
+            .await
+            .unwrap();
+
+        if let Some(metadata) = result {
+            let paths: Vec<_> = metadata
+                .roles
+                .into_values()
+                .flat_map(|role| vec![role.source_code, role.media])
+                .collect();
+
+            for path in paths {
+                self.delete(&path).await;
+            }
+        }
         // TODO: send update to any current occupants
-        todo!();
     }
 
     pub async fn fetch_role(&self, metadata: &RoleMetadata) -> RoleData {
