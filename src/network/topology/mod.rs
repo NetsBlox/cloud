@@ -49,6 +49,18 @@ pub struct SendRoomState {
 
 #[derive(Message)]
 #[rtype(result = "()")]
+pub struct GetOnlineUsers {
+    pub usernames: Vec<String>,
+}
+
+#[derive(Message)]
+#[rtype(result = "()")]
+pub struct BrokenClient {
+    pub id: String,
+}
+
+#[derive(Message)]
+#[rtype(result = "()")]
 pub struct RemoveClient {
     pub id: String,
 }
@@ -83,6 +95,19 @@ impl Handler<AddClient> for TopologyActor {
     fn handle(&mut self, msg: AddClient, _: &mut Context<Self>) -> Self::Result {
         let mut topology = TOPOLOGY.write().unwrap();
         topology.add_client(msg);
+    }
+}
+
+impl Handler<BrokenClient> for TopologyActor {
+    type Result = ();
+
+    fn handle(&mut self, msg: BrokenClient, ctx: &mut Context<Self>) -> Self::Result {
+        let fut = async {
+            let mut topology = TOPOLOGY.write().unwrap();
+            topology.set_broken_client(msg).await;
+        };
+        let fut = actix::fut::wrap_future(fut);
+        ctx.spawn(fut);
     }
 }
 
@@ -141,3 +166,14 @@ impl Handler<SendRoomState> for TopologyActor {
         topology.send_room_state(msg);
     }
 }
+
+// TODO: Add method for getting the usernames from the network
+// impl Handler<GetOnlineUsers> for TopologyActor {
+//     type Result = Vec<String>;
+
+//     fn handle(&mut self, msg: GetOnlineUsers, _: &mut Context<Self>) -> Self::Result {
+//         let topology = TOPOLOGY.read().unwrap();
+//         msg.usernames.filter(|name| topology.clients)
+//         topology.send_room_state(msg);
+//     }
+// }

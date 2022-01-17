@@ -6,7 +6,7 @@ use actix::{Actor, Addr, AsyncContext, Handler, StreamHandler};
 use actix_session::Session;
 use actix_web::{delete, get, post};
 use actix_web::{web, Error, HttpRequest, HttpResponse};
-use actix_web_actors::ws;
+use actix_web_actors::ws::{self, CloseCode};
 use serde::Deserialize;
 use serde_json::Value;
 
@@ -202,8 +202,19 @@ impl StreamHandler<Result<ws::Message, ws::ProtocolError>> for WsSession {
                 }
             }
             Ok(ws::Message::Close(reason_opt)) => {
-                // TODO: detect broken connection
-                println!("Closing! Reason: {:?}", reason_opt);
+                println!("Closing! Reason: {:?}", &reason_opt);
+                let is_broken = reason_opt
+                    .map(|reason| match reason.code {
+                        CloseCode::Normal | CloseCode::Away => false,
+                        _ => true,
+                    })
+                    .unwrap_or(true);
+
+                if is_broken {
+                    self.topology_addr.do_send(topology::BrokenClient {
+                        id: self.client_id.clone(),
+                    });
+                }
             }
             _ => (),
         }

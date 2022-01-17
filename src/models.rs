@@ -30,7 +30,7 @@ impl From<User> for Bson {
     }
 }
 
-#[derive(Deserialize, Serialize)]
+#[derive(Deserialize, Serialize, Clone)]
 #[serde(rename_all = "camelCase")]
 pub enum FriendLinkState {
     PENDING,
@@ -52,7 +52,7 @@ impl From<FriendLinkState> for Bson {
     }
 }
 
-#[derive(Deserialize, Serialize)]
+#[derive(Deserialize, Serialize, Clone)]
 #[serde(rename_all = "camelCase")]
 pub struct FriendLink {
     pub id: ObjectId,
@@ -90,13 +90,28 @@ impl From<FriendLink> for Bson {
     }
 }
 
+#[derive(Deserialize, Serialize, Clone)]
+pub enum SaveState {
+    TRANSIENT,
+    BROKEN,
+    SAVED,
+}
+
+impl From<SaveState> for Bson {
+    fn from(state: SaveState) -> Bson {
+        match state {
+            SaveState::TRANSIENT => Bson::Int32(0),
+            SaveState::BROKEN => Bson::Int32(1),
+            SaveState::SAVED => Bson::Int32(2),
+        }
+    }
+}
+
 pub type ProjectId = String;
 
 #[derive(Deserialize, Serialize, Clone)]
 #[serde(rename_all = "camelCase")]
 pub struct ProjectMetadata {
-    // #[serde(with = "uuid_as_binary")]
-    // pub id: Uuid,
     pub id: ProjectId,
     pub owner: String,
     pub name: String,
@@ -104,7 +119,8 @@ pub struct ProjectMetadata {
     pub thumbnail: String,
     pub public: bool,
     pub collaborators: std::vec::Vec<String>,
-    pub origin_time: DateTime, // FIXME: set the case
+    pub origin_time: DateTime,
+    pub save_state: SaveState,
     pub roles: HashMap<String, RoleMetadata>,
 }
 
@@ -125,6 +141,7 @@ impl ProjectMetadata {
             thumbnail: "".to_owned(),
             public: false,
             collaborators: vec![],
+            save_state: SaveState::TRANSIENT,
             roles,
         }
     }
@@ -141,6 +158,7 @@ pub struct Project {
     pub public: bool,
     pub collaborators: std::vec::Vec<String>,
     pub origin_time: DateTime,
+    pub save_state: SaveState,
     pub roles: HashMap<String, RoleData>,
 }
 
@@ -185,7 +203,7 @@ impl From<LinkedAccount> for Bson {
     }
 }
 
-#[derive(Serialize, Deserialize)]
+#[derive(Serialize, Deserialize, Clone)]
 #[serde(rename_all = "camelCase")]
 pub struct Group {
     pub _id: ObjectId,
@@ -227,7 +245,7 @@ impl From<InvitationState> for Bson {
     }
 }
 
-#[derive(Deserialize, Serialize)]
+#[derive(Deserialize, Serialize, Clone)]
 #[serde(rename_all = "camelCase")]
 pub struct CollaborationInvitation {
     pub _id: Option<ObjectId>,
@@ -267,4 +285,11 @@ impl From<CollaborationInvitation> for Bson {
         // }
         doc
     }
+}
+
+#[cfg(test)]
+mod tests {
+
+    #[actix_web::test]
+    async fn test_uuid_ser() {}
 }

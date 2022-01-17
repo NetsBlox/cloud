@@ -56,6 +56,7 @@ async fn list_online_friends(
     let friend_names = get_friends(&app, &owner).await;
     // TODO: Find the client IDs for these (and filter using them)
     // let online_friends = friend_names.iter().filter_map(|username| app.network.).collect();
+    // TODO...
     HttpResponse::Ok().json(friend_names)
 }
 

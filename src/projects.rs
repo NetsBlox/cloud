@@ -376,8 +376,6 @@ async fn create_role(
     path: web::Path<(ProjectId,)>,
     session: Session,
 ) -> Result<HttpResponse, std::io::Error> {
-    // TODO: send room update message? I am not sure
-    // TODO: this shouldn't need to. It should trigger an update sent
     let (project_id,) = path.into_inner();
     let query = doc! {"id": project_id};
     if let Some(metadata) = app.project_metadata.find_one(query, None).await.unwrap() {
@@ -385,22 +383,7 @@ async fn create_role(
             return Ok(HttpResponse::Unauthorized().body("Not allowed."));
         }
 
-        let updated_metadata = app
-            .create_role(
-                metadata,
-                body.into_inner().into()
-                // &body.name,
-                // body.source_code.to_owned(),
-                // body.media.to_owned(),
-            )
-            .await;
-
-        if updated_metadata.is_ok() {
-            app.network.do_send(topology::SendRoomState {
-                project: updated_metadata.unwrap(),
-            });
-        }
-
+        app.create_role(metadata, body.into_inner().into()).await;
         Ok(HttpResponse::Ok().body("Role created"))
     } else {
         Ok(HttpResponse::NotFound().body("Project not found"))
@@ -447,6 +430,7 @@ async fn delete_role(
         .unwrap()
     {
         Some(metadata) => {
+            // TODO: Move this to AppData
             if !can_edit_project(&app, &session, None, &metadata).await {
                 return Ok(HttpResponse::Unauthorized().body("Not allowed."));
             }

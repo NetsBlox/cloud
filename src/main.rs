@@ -18,9 +18,6 @@ use actix_cors::Cors;
 use actix_session::{CookieSession, Session};
 use actix_web::{cookie::SameSite, get, middleware, web, App, HttpResponse, HttpServer};
 use mongodb::Client;
-use rusoto_core::credential::StaticProvider;
-use rusoto_s3::{CreateBucketRequest, S3Client, S3};
-use rusoto_signature::region::Region;
 use serde::Serialize;
 use uuid::Uuid;
 
@@ -33,7 +30,7 @@ struct ClientConfig<'a> {
     cloud_url: &'a str,
 }
 
-#[get("/configuration")] // TODO: add username?
+#[get("/configuration")]
 async fn get_client_config(
     app: web::Data<AppData>,
     session: Session,
@@ -53,38 +50,14 @@ async fn get_client_config(
 #[actix_web::main]
 async fn main() -> std::io::Result<()> {
     let config = Settings::new().unwrap();
-    // TODO: move the logic below into app_data?
+    env_logger::init_from_env(env_logger::Env::new().default_filter_or("info"));
+
     let client = Client::with_uri_str(&config.database.url)
         .await
         .expect("Could not connect to mongodb.");
 
-    let db = client.database(&config.database.name);
-    env_logger::init_from_env(env_logger::Env::new().default_filter_or("info"));
-
-    let region = Region::Custom {
-        name: config.s3.region_name,
-        endpoint: config.s3.endpoint,
-    };
-
-    let s3 = S3Client::new_with(
-        rusoto_core::request::HttpClient::new().expect("Failed to create HTTP client"),
-        StaticProvider::new(
-            config.s3.credentials.access_key,
-            config.s3.credentials.secret_key,
-            None,
-            None,
-        ),
-        //StaticProvider::from(AwsCredentials::default()),
-        region,
-    );
-
-    // Create the s3 bucket
-    let bucket = config.s3.bucket;
-    let request = CreateBucketRequest {
-        bucket: bucket.clone(),
-        ..Default::default()
-    };
-    s3.create_bucket(request).await;
+    let app_data = AppData::new(client, Settings::new().unwrap(), None, None);
+    app_data.initialize().await;
 
     HttpServer::new(move || {
         let cors = Cors::default()
@@ -105,14 +78,7 @@ async fn main() -> std::io::Result<()> {
                     .secure(true),
             )
             .wrap(middleware::Logger::default())
-            .app_data(web::Data::new(AppData::new(
-                Settings::new().unwrap(),
-                db.clone(),
-                s3.clone(),
-                bucket.clone(),
-                None,
-                None,
-            )))
+            .app_data(web::Data::new(app_data.clone()))
             .service(web::scope("/libraries").configure(libraries::config))
             .service(web::scope("/services-hosts").configure(services_hosts::config))
             .service(web::scope("/users").configure(users::config))

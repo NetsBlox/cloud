@@ -2,27 +2,30 @@ use futures::future::join_all;
 use futures::join;
 use mongodb::bson::doc;
 use mongodb::options::{FindOneAndUpdateOptions, ReturnDocument};
+use rusoto_core::credential::StaticProvider;
+use rusoto_core::Region;
 use std::collections::{HashMap, HashSet};
 use uuid::Uuid;
 
 use crate::config::Settings;
 use crate::models::{CollaborationInvitation, FriendLink, Group, Project, ProjectMetadata, User};
 use crate::models::{RoleData, RoleMetadata};
-use crate::network::topology::{SetStorage, TopologyActor};
+use crate::network::topology::{self, SetStorage, TopologyActor};
 use actix::{Actor, Addr};
 use futures::TryStreamExt;
-use mongodb::{Collection, Database};
+use mongodb::{Client, Collection, Database, IndexModel};
 use rusoto_s3::{
-    DeleteObjectOutput, DeleteObjectRequest, GetObjectRequest, PutObjectOutput, PutObjectRequest,
-    S3Client, S3,
+    CreateBucketRequest, DeleteObjectOutput, DeleteObjectRequest, GetObjectRequest,
+    PutObjectOutput, PutObjectRequest, S3Client, S3,
 };
 
+#[derive(Clone)]
 pub struct AppData {
     prefix: &'static str,
     bucket: String,
     s3: S3Client,
     pub settings: Settings,
-    pub db: Database,
+    db: Database,
     pub network: Addr<TopologyActor>,
     pub groups: Collection<Group>,
     pub users: Collection<User>,
@@ -33,17 +36,33 @@ pub struct AppData {
 
 impl AppData {
     pub fn new(
+        client: Client,
         settings: Settings,
-        db: Database,
-        s3: S3Client,
-        bucket: String,
         network: Option<Addr<TopologyActor>>,
         prefix: Option<&'static str>,
     ) -> AppData {
+        let db = client.database(&settings.database.name);
+        let region = Region::Custom {
+            name: settings.s3.region_name.clone(),
+            endpoint: settings.s3.endpoint.clone(),
+        };
+        let s3 = S3Client::new_with(
+            rusoto_core::request::HttpClient::new().expect("Failed to create HTTP client"),
+            StaticProvider::new(
+                settings.s3.credentials.access_key.clone(),
+                settings.s3.credentials.secret_key.clone(),
+                None,
+                None,
+            ),
+            //StaticProvider::from(AwsCredentials::default()),
+            region,
+        );
+
         let prefix = prefix.unwrap_or("");
         let groups = db.collection::<Group>(&(prefix.to_owned() + "groups"));
         let users = db.collection::<User>(&(prefix.to_owned() + "users"));
         let project_metadata = db.collection::<ProjectMetadata>(&(prefix.to_owned() + "projects"));
+
         let collab_invites = db.collection::<CollaborationInvitation>(
             &(prefix.to_owned() + "collaborationInvitations"),
         );
@@ -52,6 +71,7 @@ impl AppData {
         network.do_send(SetStorage {
             project_metadata: project_metadata.clone(),
         });
+        let bucket = settings.s3.bucket.clone();
         AppData {
             settings,
             db,
@@ -66,6 +86,32 @@ impl AppData {
             collab_invites,
             friends,
         }
+    }
+
+    pub async fn initialize(&self) {
+        // Create the s3 bucket
+        let bucket = &self.settings.s3.bucket;
+        let request = CreateBucketRequest {
+            bucket: bucket.clone(),
+            ..Default::default()
+        };
+        self.s3.create_bucket(request).await;
+        self.db
+            .run_command(
+                doc! {
+                    "createIndexes": &(self.prefix.to_owned() + "projects"),
+                    "indexes": [
+                        {
+                            "key": {"deleteAt": 1},
+                            "name": "broken_project_ttl",
+                            "unique": true
+                        }
+                    ],
+                },
+                None,
+            )
+            .await
+            .unwrap();
     }
 
     pub fn collection<T>(&self, name: &str) -> Collection<T> {
@@ -189,6 +235,7 @@ impl AppData {
             public: metadata.public.to_owned(),
             collaborators: metadata.collaborators.to_owned(),
             origin_time: metadata.origin_time,
+            save_state: metadata.save_state.to_owned(),
             roles,
         }
     }
@@ -283,8 +330,13 @@ impl AppData {
             .unwrap()
             .expect("Project not found.");
 
+        self.network.do_send(topology::SendRoomState {
+            project: updated_metadata.clone(),
+        });
         Ok(updated_metadata)
     }
+
+    // pub async fn create_role(
 }
 
 fn get_unique_name(existing: Vec<String>, name: &str) -> String {

@@ -1,18 +1,21 @@
 use futures::future::join_all;
-use mongodb::bson::doc;
+use mongodb::bson::{doc, DateTime};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::str::FromStr;
-use std::time::SystemTime;
+use std::time::{Duration, SystemTime};
 
 use actix::Recipient;
 use mongodb::Collection;
 
-use crate::models::{ProjectId, ProjectMetadata};
+use crate::models::{ProjectId, ProjectMetadata, SaveState};
 use crate::network::topology::address::ClientAddress;
 
 pub use super::address::DEFAULT_APP_ID;
-use super::{AddClient, ClientMessage, RemoveClient, SendMessage, SendRoomState, SetClientState};
+use super::{
+    AddClient, BrokenClient, ClientMessage, RemoveClient, SendMessage, SendRoomState,
+    SetClientState,
+};
 
 type ClientID = String; // TODO: use this everywhere
 type AppID = String;
@@ -144,6 +147,13 @@ pub struct Topology {
     rooms: HashMap<String, ProjectNetwork>,
     // address_cache: HashMap<String, (String, String)>,
     external: HashMap<AppID, HashMap<String, ClientID>>,
+}
+
+#[derive(Debug)]
+enum ProjectCleanup {
+    NONE,
+    IMMEDIATELY,
+    DELAYED,
 }
 
 impl Topology {
@@ -310,6 +320,25 @@ impl Topology {
         self.clients.insert(msg.id, client);
     }
 
+    pub async fn set_broken_client(&mut self, msg: BrokenClient) {
+        println!("detected broken client!");
+        if let Some(project_metadata) = &self.project_metadata {
+            if let Some(ClientState::Browser(state)) = self.states.get(&msg.id) {
+                let query = doc! {
+                    "id": &state.project_id,
+                    "saveState": SaveState::TRANSIENT
+                };
+                let update = doc! {"$set": {"saveState": SaveState::BROKEN}};
+                let result = project_metadata
+                    .update_one(query, update, None)
+                    .await
+                    .unwrap();
+                println!("Set {} projects broken", result.matched_count);
+            }
+        }
+        // TODO: Record a list of broken clients for the project?
+    }
+
     pub async fn remove_client(&mut self, msg: RemoveClient) {
         self.clients.remove(&msg.id);
         self.reset_client_state(&msg.id).await;
@@ -331,9 +360,7 @@ impl Topology {
                     if occupants.is_empty() {
                         let role_count = room.roles.len();
                         if role_count == 1 {
-                            // remove the room
-                            self.rooms.remove(&state.project_id);
-                            // TODO: Should we remove the entry from the database?
+                            self.remove_room(&state.project_id).await;
                             update_needed = false;
                         } else {
                             // remove the role
@@ -348,7 +375,6 @@ impl Topology {
                 }
             }
             Some(ClientState::External(state)) => {
-                println!(">>> external state: {:?}", state);
                 let remove_entry = self
                     .external
                     .get_mut(&state.app_id)
@@ -363,6 +389,45 @@ impl Topology {
                 }
             }
             None => {}
+        }
+    }
+
+    async fn remove_room(&mut self, project_id: &str) {
+        // TODO: Set the entry to be removed. After how long?
+        //   - If the room has only one role, it can be deleted immediately
+        //     - the client may need to be updated
+        //   - if multiple roles and there is a broken connection:
+        //     - delete after an amount of time with no activity - maybe 10 minutes?
+        self.rooms.remove(project_id);
+        if let Some(project_metadata) = &self.project_metadata {
+            // If it has no broken connections, delete it!
+            let query = doc! {"id": project_id};
+            let cleanup = project_metadata
+                .find_one(query.clone(), None)
+                .await
+                .unwrap()
+                .map(|md| match md.save_state {
+                    SaveState::TRANSIENT => ProjectCleanup::IMMEDIATELY,
+                    SaveState::BROKEN => ProjectCleanup::DELAYED,
+                    SaveState::SAVED => ProjectCleanup::NONE,
+                })
+                .unwrap_or(ProjectCleanup::NONE);
+
+            println!("Project cleanup policy is {:?}", cleanup);
+            match cleanup {
+                ProjectCleanup::IMMEDIATELY => {
+                    project_metadata.delete_one(query, None).await;
+                }
+                ProjectCleanup::DELAYED => {
+                    let ten_minutes = Duration::new(10 * 60, 0);
+                    let delete_at = DateTime::from_system_time(
+                        SystemTime::now().checked_add(ten_minutes).unwrap(),
+                    );
+                    let update = doc! {"$set": {"deleteAt": delete_at}};
+                    project_metadata.update_one(query, update, None).await;
+                }
+                _ => {}
+            }
         }
     }
 
@@ -417,4 +482,5 @@ mod tests {
     async fn test_filter_group_msgs() {
         todo!();
     }
+    // TODO: Add test for broken connections?
 }

@@ -15,8 +15,8 @@
             - blob connection test (minio)
         - [ ] save projects
             - [x] need to fix the cookie problem first...
-        - [ ] list projects
-            - [ ] ObjectId is serializing very strangely ($oid)
+        - [x] list projects
+            - [x] ObjectId is serializing very strangely ($oid)
                 - [x] changing project Id...
         - [ ] cookie on initial load does not seem to be present
         - [x] login
@@ -52,6 +52,7 @@
         - [ ] add role
         - [ ] delete role
         - [ ] duplicate role
+
     - [ ] add the "latest" endpoints
         - project
         - role
@@ -63,6 +64,8 @@
         - inactivity should probably be determined by network activity?
             - when a client closes, we should delete all transient projects owned by the client ID (or username) after a set amount of time
             - same for logging out?
+
+        - [ ] set projects as "broken" on broken ws connections
 
 - [ ] validate user accounts on creation
     - [-] maybe we will need to whitelist email domains later
