@@ -1,7 +1,8 @@
 use crate::app_data::AppData;
+use crate::errors::UserError;
 use crate::models::{ProjectId, ProjectMetadata, RoleData};
 use crate::network::topology;
-use crate::users::can_edit_user;
+use crate::users::{can_edit_user, ensure_can_edit_user};
 use actix_session::Session;
 use actix_web::{delete, get, patch, post};
 use actix_web::{web, HttpResponse};
@@ -120,18 +121,32 @@ async fn get_project_named(
     app: web::Data<AppData>,
     path: web::Path<(String, String)>,
     session: Session,
-) -> Result<HttpResponse, std::io::Error> {
+) -> Result<HttpResponse, UserError> {
     let (owner, name) = path.into_inner();
     let query = doc! {"owner": owner, "name": name};
-    match app.project_metadata.find_one(query, None).await.unwrap() {
-        Some(metadata) => {
-            if !can_edit_project(&app, &session, None, &metadata).await {
-                return Ok(HttpResponse::Unauthorized().body("Not allowed."));
-            }
-            let project = app.fetch_project(&metadata).await;
-            Ok(HttpResponse::Ok().json(project))
-        }
-        None => Ok(HttpResponse::NotFound().body("Project not found")),
+    let metadata = app
+        .project_metadata
+        .find_one(query, None)
+        .await
+        .map_err(|_err| UserError::InternalError)? // TODO: wrap the error?
+        .ok_or_else(|| UserError::ProjectNotFoundError)?;
+
+    // TODO: Do I need to have edit permissions?
+    ensure_can_edit_project(&app, &session, None, &metadata).await?;
+
+    let project = app.fetch_project(&metadata).await?;
+    Ok(HttpResponse::Ok().json(project)) // TODO: Update this to a responder?
+}
+
+async fn ensure_can_view_project(
+    app: &AppData,
+    session: &Session,
+    project: &ProjectMetadata,
+) -> Result<(), UserError> {
+    if !can_view_project(app, session, project).await {
+        Err(UserError::PermissionsError)
+    } else {
+        Ok(())
     }
 }
 
@@ -140,6 +155,19 @@ async fn can_view_project(app: &AppData, session: &Session, project: &ProjectMet
         return true;
     }
     can_edit_project(app, session, None, project).await
+}
+
+async fn ensure_can_edit_project(
+    app: &AppData,
+    session: &Session,
+    client_id: Option<String>,
+    project: &ProjectMetadata,
+) -> Result<(), UserError> {
+    if !can_edit_project(app, session, client_id, project).await {
+        Err(UserError::PermissionsError)
+    } else {
+        Ok(())
+    }
 }
 
 async fn can_edit_project(
@@ -170,50 +198,47 @@ async fn get_project(
     app: web::Data<AppData>,
     path: web::Path<(ProjectId,)>,
     session: Session,
-) -> Result<HttpResponse, std::io::Error> {
+) -> Result<HttpResponse, UserError> {
     let (project_id,) = path.into_inner();
     let query = doc! {"id": project_id};
-    if let Some(metadata) = app.project_metadata.find_one(query, None).await.unwrap() {
-        if !can_view_project(&app, &session, &metadata).await {
-            return Ok(HttpResponse::Unauthorized().body("Not allowed."));
-        }
+    // TODO: better error handling
+    let metadata = app
+        .project_metadata
+        .find_one(query, None)
+        .await
+        .map_err(|_err| UserError::InternalError)? // TODO: wrap the error?
+        .ok_or_else(|| UserError::ProjectNotFoundError)?;
 
-        // TODO: Should this return xml? Probably not (to match the other version)
-        let project = app.fetch_project(&metadata).await;
-        Ok(HttpResponse::Ok().json(project))
-    } else {
-        Ok(HttpResponse::NotFound().body("Project not found"))
-    }
+    ensure_can_view_project(&app, &session, &metadata).await?;
+
+    let project = app.fetch_project(&metadata).await?;
+    Ok(HttpResponse::Ok().json(project)) // TODO: Update this to a responder?
 }
 
-#[post("/id/{projectID}/publish")] // TODO: Will this collide with role
+#[post("/id/{projectID}/publish")] // TODO: Will this collide with role?
 async fn publish_project(
     app: web::Data<AppData>,
     path: web::Path<(ProjectId,)>,
     session: Session,
-) -> Result<HttpResponse, std::io::Error> {
+) -> Result<HttpResponse, UserError> {
     let (project_id,) = path.into_inner();
     let query = doc! {"id": project_id};
-    if let Some(metadata) = app
+    let metadata = app
         .project_metadata
         .find_one(query.clone(), None)
         .await
-        .unwrap()
-    {
-        if !can_edit_project(&app, &session, None, &metadata).await {
-            return Ok(HttpResponse::Unauthorized().body("Not allowed."));
-        }
+        .map_err(|_err| UserError::InternalError)? // TODO: wrap the error?
+        .ok_or_else(|| UserError::ProjectNotFoundError)?;
 
-        let update = doc! {"public": true};
-        app.project_metadata
-            .update_one(query, update, None)
-            .await
-            .unwrap();
+    ensure_can_edit_project(&app, &session, None, &metadata).await?;
 
-        Ok(HttpResponse::Ok().body("Project published!"))
-    } else {
-        Ok(HttpResponse::NotFound().body("Project not found"))
-    }
+    let update = doc! {"public": true};
+    app.project_metadata
+        .update_one(query, update, None)
+        .await
+        .map_err(|_err| UserError::InternalError)?; // TODO: wrap the error?
+
+    Ok(HttpResponse::Ok().body("Project published!"))
 }
 
 #[post("/id/{projectID}/unpublish")] // TODO: Will this collide with role
@@ -221,28 +246,29 @@ async fn unpublish_project(
     app: web::Data<AppData>,
     path: web::Path<(ProjectId,)>,
     session: Session,
-) -> Result<HttpResponse, std::io::Error> {
+) -> Result<HttpResponse, UserError> {
     let (project_id,) = path.into_inner();
     let query = doc! {"id": project_id};
-    if let Some(metadata) = app
+    let metadata = app
         .project_metadata
         .find_one(query.clone(), None)
         .await
-        .unwrap()
-    {
-        if !can_edit_project(&app, &session, None, &metadata).await {
-            return Ok(HttpResponse::Unauthorized().body("Not allowed."));
-        }
+        .map_err(|_err| UserError::InternalError)? // TODO: wrap the error?
+        .ok_or_else(|| UserError::ProjectNotFoundError)?;
 
-        let update = doc! {"public": false};
-        app.project_metadata
-            .update_one(query, update, None)
-            .await
-            .unwrap();
+    ensure_can_edit_project(&app, &session, None, &metadata).await?;
 
+    let update = doc! {"public": false};
+    let result = app
+        .project_metadata
+        .update_one(query, update, None)
+        .await
+        .map_err(|_err| UserError::InternalError)?; // TODO: wrap the error?
+
+    if result.matched_count > 0 {
         Ok(HttpResponse::Ok().body("Project published!"))
     } else {
-        Ok(HttpResponse::NotFound().body("Project not found"))
+        Err(UserError::ProjectNotFoundError)
     }
 }
 
@@ -251,21 +277,20 @@ async fn delete_project(
     app: web::Data<AppData>,
     path: web::Path<(ProjectId,)>,
     session: Session,
-) -> Result<HttpResponse, std::io::Error> {
+) -> Result<HttpResponse, UserError> {
     let (project_id,) = path.into_inner();
     let query = doc! {"id": project_id};
-    if let Some(metadata) = app.project_metadata.find_one(query, None).await.unwrap() {
-        // collaborators cannot delete -> only user/admin/etc
-        if !can_edit_user(&app, &session, &metadata.owner).await {
-            return Ok(HttpResponse::Unauthorized().body("Not allowed."));
-        }
+    let metadata = app
+        .project_metadata
+        .find_one(query, None)
+        .await
+        .map_err(|_err| UserError::InternalError)? // TODO: wrap the error?
+        .ok_or_else(|| UserError::ProjectNotFoundError)?;
+    // collaborators cannot delete -> only user/admin/etc
 
-        let deleted = app.delete_project(metadata).await;
-
-        Ok(HttpResponse::Ok().body("Project deleted"))
-    } else {
-        Ok(HttpResponse::NotFound().body("Project not found"))
-    }
+    ensure_can_edit_user(&app, &session, &metadata.owner).await?;
+    app.delete_project(metadata).await?; // TODO:
+    Ok(HttpResponse::Ok().body("Project deleted"))
 }
 
 #[derive(Deserialize)]

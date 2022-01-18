@@ -8,6 +8,9 @@
         - Or the client could send this in the request...
             - context: {project: {name, id}, role: {name, id}}
 
+- [ ] refactor errors...
+    - define a user error for something specific - maybe a database error?
+
 - [ ] connect the client code and start testing things!
     - [x] refactor cloud
     - [x] create project:

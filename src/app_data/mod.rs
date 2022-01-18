@@ -8,6 +8,7 @@ use std::collections::{HashMap, HashSet};
 use uuid::Uuid;
 
 use crate::config::Settings;
+use crate::errors::UserError;
 use crate::models::{CollaborationInvitation, FriendLink, Group, Project, ProjectMetadata, User};
 use crate::models::{RoleData, RoleMetadata};
 use crate::network::topology::{self, SetStorage, TopologyActor};
@@ -220,13 +221,14 @@ impl AppData {
         String::from_utf8(byte_str).unwrap()
     }
 
-    pub async fn fetch_project(&self, metadata: &ProjectMetadata) -> Project {
+    pub async fn fetch_project(&self, metadata: &ProjectMetadata) -> Result<Project, UserError> {
         let (keys, values): (Vec<_>, Vec<_>) = metadata.roles.clone().into_iter().unzip();
+        // TODO: make fetch_role fallible
         let role_data = join_all(values.iter().map(|v| self.fetch_role(v))).await;
 
         let roles = keys.into_iter().zip(role_data).collect::<HashMap<_, _>>();
 
-        Project {
+        Ok(Project {
             id: metadata.id.to_owned(),
             name: metadata.name.to_owned(),
             owner: metadata.owner.to_owned(),
@@ -237,10 +239,10 @@ impl AppData {
             origin_time: metadata.origin_time,
             save_state: metadata.save_state.to_owned(),
             roles,
-        }
+        })
     }
 
-    pub async fn delete_project(&self, metadata: ProjectMetadata) {
+    pub async fn delete_project(&self, metadata: ProjectMetadata) -> Result<(), UserError> {
         let query = doc! {"id": &metadata.id};
         let result = self
             .project_metadata
@@ -258,8 +260,11 @@ impl AppData {
             for path in paths {
                 self.delete(&path).await;
             }
+            // TODO: send update to any current occupants
+            Ok(())
+        } else {
+            Err(UserError::ProjectNotFoundError)
         }
-        // TODO: send update to any current occupants
     }
 
     pub async fn fetch_role(&self, metadata: &RoleMetadata) -> RoleData {
@@ -295,6 +300,10 @@ impl AppData {
             .await
             .unwrap()
             .unwrap(); // TODO: not found error
+
+        self.network.do_send(topology::SendRoomState {
+            project: updated_metadata.clone(),
+        });
 
         updated_metadata.roles.get(role_id).map(|md| md.to_owned())
     }

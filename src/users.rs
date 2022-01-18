@@ -1,4 +1,5 @@
 use crate::app_data::AppData;
+use crate::errors::UserError;
 use crate::models::{LinkedAccount, User};
 use actix_session::Session;
 use actix_web::{get, patch, post};
@@ -54,6 +55,18 @@ pub async fn is_super_user(app: &AppData, session: &Session) -> bool {
         }
     } else {
         false
+    }
+}
+
+pub async fn ensure_can_edit_user(
+    app: &AppData,
+    session: &Session,
+    username: &str,
+) -> Result<(), UserError> {
+    if !can_edit_user(app, session, username).await {
+        Err(UserError::PermissionsError)
+    } else {
+        Ok(())
     }
 }
 
