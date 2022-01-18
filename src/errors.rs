@@ -12,6 +12,8 @@ pub enum UserError {
     PermissionsError,
     #[display(fmt = "Project not found.")]
     ProjectNotFoundError,
+    #[display(fmt = "Role not found.")]
+    RoleNotFoundError,
     #[display(fmt = "An internal error occurred. Please try again later.")]
     InternalError,
 }
@@ -25,14 +27,15 @@ impl error::ResponseError for UserError {
     fn status_code(&self) -> StatusCode {
         match *self {
             UserError::PermissionsError => StatusCode::UNAUTHORIZED,
-            UserError::ProjectNotFoundError => StatusCode::NOT_FOUND,
+            UserError::ProjectNotFoundError | UserError::RoleNotFoundError => StatusCode::NOT_FOUND,
             UserError::InternalError => StatusCode::INTERNAL_SERVER_ERROR,
         }
     }
 }
 
 impl From<InternalError> for UserError {
-    fn from(err: InternalError) -> UserError {
+    fn from(_err: InternalError) -> UserError {
+        // TODO: log this?
         UserError::InternalError
     }
 }

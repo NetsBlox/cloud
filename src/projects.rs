@@ -1,5 +1,5 @@
 use crate::app_data::AppData;
-use crate::errors::UserError;
+use crate::errors::{InternalError, UserError};
 use crate::models::{ProjectId, ProjectMetadata, RoleData};
 use crate::network::topology;
 use crate::users::{can_edit_user, ensure_can_edit_user};
@@ -128,11 +128,11 @@ async fn get_project_named(
         .project_metadata
         .find_one(query, None)
         .await
-        .map_err(|_err| UserError::InternalError)? // TODO: wrap the error?
+        .map_err(|_err| InternalError::DatabaseConnectionError)? // TODO: wrap the error?
         .ok_or_else(|| UserError::ProjectNotFoundError)?;
 
     // TODO: Do I need to have edit permissions?
-    ensure_can_edit_project(&app, &session, None, &metadata).await?;
+    ensure_can_view_project(&app, &session, &metadata).await?;
 
     let project = app.fetch_project(&metadata).await?;
     Ok(HttpResponse::Ok().json(project)) // TODO: Update this to a responder?
@@ -241,7 +241,7 @@ async fn publish_project(
     Ok(HttpResponse::Ok().body("Project published!"))
 }
 
-#[post("/id/{projectID}/unpublish")] // TODO: Will this collide with role
+#[post("/id/{projectID}/unpublish")]
 async fn unpublish_project(
     app: web::Data<AppData>,
     path: web::Path<(ProjectId,)>,
@@ -284,8 +284,9 @@ async fn delete_project(
         .project_metadata
         .find_one(query, None)
         .await
-        .map_err(|_err| UserError::InternalError)? // TODO: wrap the error?
+        .map_err(|_err| InternalError::DatabaseConnectionError)? // TODO: wrap the error?
         .ok_or_else(|| UserError::ProjectNotFoundError)?;
+
     // collaborators cannot delete -> only user/admin/etc
 
     ensure_can_edit_user(&app, &session, &metadata.owner).await?;
@@ -306,48 +307,40 @@ async fn update_project(
     path: web::Path<(ProjectId,)>,
     body: web::Json<UpdateProjectBody>,
     session: Session,
-) -> Result<HttpResponse, std::io::Error> {
+) -> Result<HttpResponse, UserError> {
     let (project_id,) = path.into_inner();
 
     // TODO: validate the name. Or make it a type?
     let query = doc! {"id": project_id};
-    match app
+    let metadata = app
         .project_metadata
         .find_one(query.clone(), None)
         .await
-        .unwrap()
-    {
-        Some(metadata) => {
-            let body = body.into_inner();
-            if !can_edit_project(&app, &session, body.client_id, &metadata).await {
-                return Ok(HttpResponse::Unauthorized().body("Not allowed."));
-            }
-            println!("Changing name from {} to {}", &metadata.name, &body.name);
-            let update = doc! {"$set": {"name": &body.name}};
-            let options = FindOneAndUpdateOptions::builder()
-                .return_document(ReturnDocument::After)
-                .build();
-            let updated_metadata = app
-                .project_metadata
-                .find_one_and_update(query, update, options)
-                .await
-                .unwrap();
+        .map_err(|_err| InternalError::DatabaseConnectionError)? // TODO: wrap the error?
+        .ok_or_else(|| UserError::ProjectNotFoundError)?;
 
-            if updated_metadata.is_some() {
-                println!(
-                    "New project name is {:?}",
-                    updated_metadata.as_ref().unwrap().name
-                );
-                app.network.do_send(topology::SendRoomState {
-                    project: updated_metadata.unwrap(),
-                });
-                Ok(HttpResponse::Ok().body("Project updated."))
-            } else {
-                Ok(HttpResponse::NotFound().body("Project not found."))
-            }
-        }
-        None => Ok(HttpResponse::NotFound().body("Project not found.")),
-    }
+    let body = body.into_inner();
+    ensure_can_edit_project(&app, &session, body.client_id, &metadata).await?;
+
+    println!("Changing name from {} to {}", &metadata.name, &body.name);
+    let update = doc! {"$set": {"name": &body.name}};
+    let options = FindOneAndUpdateOptions::builder()
+        .return_document(ReturnDocument::After)
+        .build();
+
+    let updated_metadata = app
+        .project_metadata
+        .find_one_and_update(query, update, options)
+        .await
+        .map_err(|_err| InternalError::DatabaseConnectionError)? // TODO: wrap the error?
+        .ok_or_else(|| UserError::ProjectNotFoundError)?;
+
+    println!("New project name is {:?}", updated_metadata.name);
+    app.network.do_send(topology::SendRoomState {
+        project: updated_metadata,
+    });
+
+    Ok(HttpResponse::Ok().body("Project updated."))
 }
 
 #[get("/id/{projectID}/latest")] // Include unsaved data
@@ -360,21 +353,21 @@ async fn get_latest_project() -> Result<HttpResponse, std::io::Error> {
 async fn get_project_thumbnail(
     app: web::Data<AppData>,
     path: web::Path<(ProjectId,)>,
-) -> Result<HttpResponse, std::io::Error> {
-    let collection = app.collection::<ProjectMetadata>("projects");
+    session: Session,
+) -> Result<HttpResponse, UserError> {
     let (project_id,) = path.into_inner();
 
     let query = doc! {"id": project_id};
-    let result = collection
+    let metadata = app
+        .project_metadata
         .find_one(query, None)
         .await
-        .expect("Could not delete project");
+        .map_err(|_err| InternalError::DatabaseConnectionError)? // TODO: wrap the error?
+        .ok_or_else(|| UserError::ProjectNotFoundError)?;
 
-    if let Some(metadata) = result {
-        Ok(HttpResponse::Ok().body(metadata.thumbnail))
-    } else {
-        Ok(HttpResponse::NotFound().body("Project not found"))
-    }
+    ensure_can_view_project(&app, &session, &metadata).await?;
+
+    Ok(HttpResponse::Ok().body(metadata.thumbnail))
 }
 
 #[derive(Deserialize)]
@@ -400,19 +393,20 @@ async fn create_role(
     body: web::Json<CreateRoleData>,
     path: web::Path<(ProjectId,)>,
     session: Session,
-) -> Result<HttpResponse, std::io::Error> {
+) -> Result<HttpResponse, UserError> {
     let (project_id,) = path.into_inner();
     let query = doc! {"id": project_id};
-    if let Some(metadata) = app.project_metadata.find_one(query, None).await.unwrap() {
-        if !can_edit_project(&app, &session, None, &metadata).await {
-            return Ok(HttpResponse::Unauthorized().body("Not allowed."));
-        }
+    let metadata = app
+        .project_metadata
+        .find_one(query, None)
+        .await
+        .map_err(|_err| InternalError::DatabaseConnectionError)? // TODO: wrap the error?
+        .ok_or_else(|| UserError::ProjectNotFoundError)?;
 
-        app.create_role(metadata, body.into_inner().into()).await;
-        Ok(HttpResponse::Ok().body("Role created"))
-    } else {
-        Ok(HttpResponse::NotFound().body("Project not found"))
-    }
+    ensure_can_edit_project(&app, &session, None, &metadata).await?;
+
+    app.create_role(metadata, body.into_inner().into()).await;
+    Ok(HttpResponse::Ok().body("Role created"))
 }
 
 #[get("/id/{projectID}/{roleID}")]
@@ -420,24 +414,24 @@ async fn get_role(
     app: web::Data<AppData>,
     path: web::Path<(ProjectId, String)>,
     session: Session,
-) -> Result<HttpResponse, std::io::Error> {
+) -> Result<HttpResponse, UserError> {
     let (project_id, role_id) = path.into_inner();
     let query = doc! {"id": project_id};
-    match app.project_metadata.find_one(query, None).await.unwrap() {
-        Some(metadata) => {
-            if !can_view_project(&app, &session, &metadata).await {
-                return Ok(HttpResponse::Unauthorized().body("Not allowed."));
-            }
-            match metadata.roles.get(&role_id) {
-                Some(role_md) => {
-                    let role = app.fetch_role(role_md).await;
-                    Ok(HttpResponse::Ok().json(role))
-                }
-                None => Ok(HttpResponse::NotFound().body("Role not found.")),
-            }
-        }
-        None => Ok(HttpResponse::NotFound().body("Project not found.")),
-    }
+    let metadata = app
+        .project_metadata
+        .find_one(query, None)
+        .await
+        .map_err(|_err| InternalError::DatabaseConnectionError)? // TODO: wrap the error?
+        .ok_or_else(|| UserError::ProjectNotFoundError)?;
+
+    ensure_can_view_project(&app, &session, &metadata).await?;
+    let role_md = metadata
+        .roles
+        .get(&role_id)
+        .ok_or_else(|| UserError::RoleNotFoundError)?;
+
+    let role = app.fetch_role(role_md).await;
+    Ok(HttpResponse::Ok().json(role))
 }
 
 #[delete("/id/{projectID}/{roleID}")]
@@ -445,41 +439,36 @@ async fn delete_role(
     app: web::Data<AppData>,
     path: web::Path<(ProjectId, String)>,
     session: Session,
-) -> Result<HttpResponse, std::io::Error> {
+) -> Result<HttpResponse, UserError> {
     let (project_id, role_id) = path.into_inner();
     let query = doc! {"id": project_id};
-    match app
+    let metadata = app
         .project_metadata
         .find_one(query.clone(), None)
         .await
-        .unwrap()
-    {
-        Some(metadata) => {
-            // TODO: Move this to AppData
-            if !can_edit_project(&app, &session, None, &metadata).await {
-                return Ok(HttpResponse::Unauthorized().body("Not allowed."));
-            }
-            let update = doc! {"$unset": {format!("roles.{}", role_id): &""}};
-            let options = FindOneAndUpdateOptions::builder()
-                .return_document(ReturnDocument::After)
-                .build();
+        .map_err(|_err| InternalError::DatabaseConnectionError)? // TODO: wrap the error?
+        .ok_or_else(|| UserError::ProjectNotFoundError)?;
 
-            let updated_metadata = app
-                .project_metadata
-                .find_one_and_update(query, update, options)
-                .await
-                .unwrap();
+    // TODO: Move this to AppData
+    ensure_can_edit_project(&app, &session, None, &metadata).await?;
+    let update = doc! {"$unset": {format!("roles.{}", role_id): &""}};
+    let options = FindOneAndUpdateOptions::builder()
+        .return_document(ReturnDocument::After)
+        .build();
 
-            if updated_metadata.is_some() {
-                app.network.do_send(topology::SendRoomState {
-                    project: updated_metadata.unwrap(),
-                });
-            }
+    let updated_metadata = app
+        .project_metadata
+        .find_one_and_update(query, update, options)
+        .await
+        .map_err(|_err| InternalError::DatabaseConnectionError)?; // TODO: wrap the error?
 
-            Ok(HttpResponse::Ok().body("Deleted!"))
-        }
-        None => Ok(HttpResponse::NotFound().body("Project not found.")),
+    if updated_metadata.is_some() {
+        app.network.do_send(topology::SendRoomState {
+            project: updated_metadata.unwrap(),
+        });
     }
+
+    Ok(HttpResponse::Ok().body("Deleted!"))
 }
 
 #[post("/id/{projectID}/{roleID}")]
@@ -488,21 +477,20 @@ async fn save_role(
     body: web::Json<RoleData>,
     path: web::Path<(ProjectId, String)>,
     session: Session,
-) -> Result<HttpResponse, std::io::Error> {
+) -> Result<HttpResponse, UserError> {
     let (project_id, role_id) = path.into_inner();
     let query = doc! {"id": project_id};
-    match app.project_metadata.find_one(query, None).await.unwrap() {
-        Some(metadata) => {
-            if !can_edit_project(&app, &session, None, &metadata).await {
-                return Ok(HttpResponse::Unauthorized().body("Not allowed."));
-            }
-            app.save_role(&metadata, &role_id, body.into_inner()).await;
+    let metadata = app
+        .project_metadata
+        .find_one(query, None)
+        .await
+        .map_err(|_err| InternalError::DatabaseConnectionError)? // TODO: wrap the error?
+        .ok_or_else(|| UserError::ProjectNotFoundError)?;
 
-            Ok(HttpResponse::Ok().body("Saved!"))
-        }
-        None => Ok(HttpResponse::NotFound().body("Project not found.")),
-    }
-    // TODO: send room update message?
+    ensure_can_edit_project(&app, &session, None, &metadata).await?;
+    app.save_role(&metadata, &role_id, body.into_inner()).await;
+
+    Ok(HttpResponse::Ok().body("Saved!"))
 }
 
 #[derive(Deserialize)]
@@ -518,46 +506,39 @@ async fn rename_role(
     body: web::Json<RenameRoleData>,
     path: web::Path<(ProjectId, String)>,
     session: Session,
-) -> Result<HttpResponse, std::io::Error> {
+) -> Result<HttpResponse, UserError> {
     let (project_id, role_id) = path.into_inner();
 
     let query = doc! {"id": project_id};
     let body = body.into_inner();
-    if let Some(metadata) = app
+    let metadata = app
         .project_metadata
         .find_one(query.clone(), None)
         .await
-        .unwrap()
-    {
-        if !can_edit_project(&app, &session, body.client_id, &metadata).await {
-            return Ok(HttpResponse::Unauthorized().body("Not allowed."));
-        }
+        .map_err(|_err| InternalError::DatabaseConnectionError)? // TODO: wrap the error?
+        .ok_or_else(|| UserError::ProjectNotFoundError)?;
 
-        if metadata.roles.contains_key(&role_id) {
-            let update = doc! {"$set": {format!("roles.{}.ProjectName", role_id): &body.name}};
-            let options = FindOneAndUpdateOptions::builder()
-                .return_document(ReturnDocument::After)
-                .build();
+    ensure_can_edit_project(&app, &session, body.client_id, &metadata).await?;
 
-            let updated_metadata = app
-                .project_metadata
-                .find_one_and_update(query, update, options)
-                .await
-                .unwrap();
+    if metadata.roles.contains_key(&role_id) {
+        let update = doc! {"$set": {format!("roles.{}.ProjectName", role_id): &body.name}};
+        let options = FindOneAndUpdateOptions::builder()
+            .return_document(ReturnDocument::After)
+            .build();
 
-            if updated_metadata.is_some() {
-                app.network.do_send(topology::SendRoomState {
-                    project: updated_metadata.unwrap(),
-                });
-                Ok(HttpResponse::Ok().body("Role updated"))
-            } else {
-                Ok(HttpResponse::NotFound().body("Project not found"))
-            }
-        } else {
-            Ok(HttpResponse::NotFound().body("Role not found"))
-        }
+        let updated_metadata = app
+            .project_metadata
+            .find_one_and_update(query, update, options)
+            .await
+            .map_err(|_err| InternalError::DatabaseConnectionError)? // TODO: wrap the error?
+            .ok_or_else(|| UserError::ProjectNotFoundError)?;
+
+        app.network.do_send(topology::SendRoomState {
+            project: updated_metadata,
+        });
+        Ok(HttpResponse::Ok().body("Role updated"))
     } else {
-        Ok(HttpResponse::NotFound().body("Role not found"))
+        Err(UserError::RoleNotFoundError)
     }
 }
 
@@ -571,25 +552,19 @@ async fn list_collaborators(
     app: web::Data<AppData>,
     path: web::Path<(ProjectId,)>,
     session: Session,
-) -> Result<HttpResponse, std::io::Error> {
+) -> Result<HttpResponse, UserError> {
     let (project_id,) = path.into_inner();
     let query = doc! {"id": project_id};
 
-    let result = app
+    let metadata = app
         .project_metadata
         .find_one(query, None)
         .await
-        .expect("Could not find project");
+        .map_err(|_err| InternalError::DatabaseConnectionError)? // TODO: wrap the error?
+        .ok_or_else(|| UserError::ProjectNotFoundError)?;
 
-    if let Some(metadata) = result {
-        if can_edit_project(&app, &session, None, &metadata).await {
-            Ok(HttpResponse::Ok().json(metadata.collaborators))
-        } else {
-            Ok(HttpResponse::Unauthorized().body("Not allowed."))
-        }
-    } else {
-        Ok(HttpResponse::NotFound().body("Project not found"))
-    }
+    ensure_can_edit_project(&app, &session, None, &metadata).await?;
+    Ok(HttpResponse::Ok().json(metadata.collaborators))
 }
 
 // TODO: Should we use this or the invite endpoints?
@@ -598,34 +573,29 @@ async fn add_collaborator(
     app: web::Data<AppData>,
     path: web::Path<(ProjectId, String)>,
     session: Session,
-) -> Result<HttpResponse, std::io::Error> {
+) -> Result<HttpResponse, UserError> {
     let (project_id, username) = path.into_inner();
     let query = doc! {"id": project_id};
-    match app
+    let metadata = app
         .project_metadata
         .find_one(query.clone(), None)
         .await
-        .unwrap()
-    {
-        Some(metadata) => {
-            if !can_edit_project(&app, &session, None, &metadata).await {
-                return Ok(HttpResponse::Unauthorized().body("Not allowed."));
-            }
+        .map_err(|_err| InternalError::DatabaseConnectionError)? // TODO: wrap the error?
+        .ok_or_else(|| UserError::ProjectNotFoundError)?;
 
-            let update = doc! {"$push": {"collaborators": &username}};
-            let result = app
-                .project_metadata
-                .update_one(query, update, None)
-                .await
-                .expect("Could not find project");
+    ensure_can_edit_project(&app, &session, None, &metadata).await?;
 
-            if result.matched_count == 1 {
-                Ok(HttpResponse::Ok().body("Collaborator added"))
-            } else {
-                Ok(HttpResponse::NotFound().body("Project not found"))
-            }
-        }
-        None => Ok(HttpResponse::NotFound().body("Project not found")),
+    let update = doc! {"$push": {"collaborators": &username}};
+    let result = app
+        .project_metadata
+        .update_one(query, update, None)
+        .await
+        .map_err(|_err| InternalError::DatabaseConnectionError)?; // TODO: wrap the error?
+
+    if result.matched_count == 1 {
+        Ok(HttpResponse::Ok().body("Collaborator added"))
+    } else {
+        Err(UserError::ProjectNotFoundError)
     }
 }
 
@@ -634,34 +604,28 @@ async fn remove_collaborator(
     app: web::Data<AppData>,
     path: web::Path<(ProjectId, String)>,
     session: Session,
-) -> Result<HttpResponse, std::io::Error> {
+) -> Result<HttpResponse, UserError> {
     let (project_id, username) = path.into_inner();
     let query = doc! {"id": project_id};
-    match app
+    let metadata = app
         .project_metadata
         .find_one(query.clone(), None)
         .await
-        .unwrap()
-    {
-        Some(metadata) => {
-            if !can_edit_project(&app, &session, None, &metadata).await {
-                return Ok(HttpResponse::Unauthorized().body("Not allowed."));
-            }
+        .map_err(|_err| InternalError::DatabaseConnectionError)? // TODO: wrap the error?
+        .ok_or_else(|| UserError::ProjectNotFoundError)?;
+    ensure_can_edit_project(&app, &session, None, &metadata).await?;
 
-            let update = doc! {"$pull": {"collaborators": &username}};
-            let result = app
-                .project_metadata
-                .update_one(query, update, None)
-                .await
-                .expect("Could not find project");
+    let update = doc! {"$pull": {"collaborators": &username}};
+    let result = app
+        .project_metadata
+        .update_one(query, update, None)
+        .await
+        .map_err(|_err| InternalError::DatabaseConnectionError)?; // TODO: wrap the error?
 
-            if result.matched_count == 1 {
-                Ok(HttpResponse::Ok().body("Collaborator added"))
-            } else {
-                Ok(HttpResponse::NotFound().body("Project not found"))
-            }
-        }
-        None => Ok(HttpResponse::NotFound().body("Project not found")),
+    if result.matched_count == 1 {
+        Ok(HttpResponse::Ok().body("Collaborator added"))
+    } else {
+        Err(UserError::ProjectNotFoundError)
     }
 }
 
