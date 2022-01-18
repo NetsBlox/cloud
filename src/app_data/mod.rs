@@ -8,13 +8,13 @@ use std::collections::{HashMap, HashSet};
 use uuid::Uuid;
 
 use crate::config::Settings;
-use crate::errors::UserError;
+use crate::errors::{InternalError, UserError};
 use crate::models::{CollaborationInvitation, FriendLink, Group, Project, ProjectMetadata, User};
 use crate::models::{RoleData, RoleMetadata};
 use crate::network::topology::{self, SetStorage, TopologyActor};
 use actix::{Actor, Addr};
 use futures::TryStreamExt;
-use mongodb::{Client, Collection, Database, IndexModel};
+use mongodb::{Client, Collection, Database};
 use rusoto_s3::{
     CreateBucketRequest, DeleteObjectOutput, DeleteObjectRequest, GetObjectRequest,
     PutObjectOutput, PutObjectRequest, S3Client, S3,
@@ -105,7 +105,8 @@ impl AppData {
                         {
                             "key": {"deleteAt": 1},
                             "name": "broken_project_ttl",
-                            "unique": true
+                            "sparse": true,
+                            "expireAfterSeconds": 15*60,
                         }
                     ],
                 },
@@ -125,7 +126,7 @@ impl AppData {
         owner: &str,
         name: &str,
         roles: Option<Vec<RoleData>>,
-    ) -> ProjectMetadata {
+    ) -> Result<ProjectMetadata, UserError> {
         let query = doc! {"owner": &owner};
         // FIXME: Update the type if we use the projection
         //let projection = doc! {"name": true};
@@ -134,7 +135,7 @@ impl AppData {
         let project_names = cursor
             .try_collect::<Vec<_>>()
             .await
-            .unwrap()
+            .map_err(|_err| InternalError::DatabaseConnectionError)?
             .iter()
             .map(|md| md.name.to_owned())
             .collect();
@@ -155,12 +156,13 @@ impl AppData {
         )
         .await;
 
-        let metadata = ProjectMetadata::new(owner, name, role_mds);
+        let metadata = ProjectMetadata::new(owner, &unique_name, role_mds);
         self.project_metadata
             .insert_one(metadata.clone(), None)
             .await
-            .unwrap();
-        metadata
+            .map_err(|_err| InternalError::DatabaseConnectionError)?;
+
+        Ok(metadata)
     }
 
     async fn upload_role(&self, owner: &str, project_name: &str, role: &RoleData) -> RoleMetadata {

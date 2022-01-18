@@ -35,7 +35,7 @@ async fn create_project(
     app: web::Data<AppData>,
     body: web::Json<CreateProjectData>,
     session: Session,
-) -> Result<HttpResponse, std::io::Error> {
+) -> Result<HttpResponse, UserError> {
     let owner = session
         .get::<String>("username")
         .unwrap_or(None)
@@ -44,7 +44,7 @@ async fn create_project(
     let name = body.name.to_owned();
     let metadata = app
         .import_project(&owner, &name, body.into_inner().roles)
-        .await;
+        .await?;
 
     let role_id = metadata.roles.keys().next().unwrap();
     let role_name = &metadata.roles.get(role_id).unwrap().project_name;
@@ -544,6 +544,7 @@ async fn rename_role(
 
 #[get("/id/{projectID}/{roleID}/latest")]
 async fn get_latest_role() -> Result<HttpResponse, std::io::Error> {
+    // TODO: Retrieve from an existing occupant
     todo!();
 }
 

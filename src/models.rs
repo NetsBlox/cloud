@@ -180,7 +180,7 @@ impl From<RoleMetadata> for Bson {
     }
 }
 
-#[derive(Deserialize, Serialize)]
+#[derive(Deserialize, Serialize, Debug, Clone)]
 #[serde(rename_all = "PascalCase")]
 pub struct RoleData {
     pub project_name: String,
