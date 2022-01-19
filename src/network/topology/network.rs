@@ -1,24 +1,27 @@
+use actix_web::rt::time::sleep;
 use futures::future::join_all;
 use mongodb::bson::{doc, DateTime};
 use serde::{Deserialize, Serialize};
+use serde_json::json;
 use std::collections::HashMap;
 use std::str::FromStr;
 use std::time::{Duration, SystemTime};
+use uuid::Uuid;
 
 use actix::Recipient;
 use mongodb::Collection;
 
-use crate::models::{ProjectId, ProjectMetadata, SaveState};
+use crate::errors::InternalError;
+use crate::models::{ProjectId, ProjectMetadata, RoleData, SaveState};
 use crate::network::topology::address::ClientAddress;
+use crate::network::AppID;
 
 pub use super::address::DEFAULT_APP_ID;
+use super::client::{Client, ClientID, RoleRequest};
 use super::{
     AddClient, BrokenClient, ClientMessage, RemoveClient, SendMessage, SendRoomState,
     SetClientState,
 };
-
-type ClientID = String; // TODO: use this everywhere
-type AppID = String;
 
 #[derive(Debug, Deserialize, Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -27,11 +30,11 @@ pub enum ClientState {
     External(ExternalClientState),
 }
 
-#[derive(Debug, Deserialize, Serialize)]
+#[derive(Debug, Deserialize, Serialize, Clone)]
 #[serde(rename_all = "camelCase")]
 pub struct BrowserClientState {
-    role_id: String,
-    project_id: String,
+    pub role_id: String,
+    pub project_id: String,
     // username: Option<String>, // TODO: do I need this?
 }
 
@@ -45,6 +48,15 @@ pub struct ExternalClientState {
 struct BrowserAddress {
     role_id: String,
     project_id: String,
+}
+
+impl From<BrowserClientState> for BrowserAddress {
+    fn from(state: BrowserClientState) -> BrowserAddress {
+        BrowserAddress {
+            project_id: state.project_id,
+            role_id: state.role_id,
+        }
+    }
 }
 
 #[derive(Serialize, Clone)]
@@ -115,12 +127,6 @@ impl From<RoomStateMessage> for ClientMessage {
         msg.insert("type".into(), serde_json::to_value("room-roles").unwrap());
         ClientMessage(value)
     }
-}
-
-#[derive(Clone, Debug)]
-pub struct Client {
-    pub id: ClientID,
-    pub addr: Recipient<ClientMessage>,
 }
 
 #[derive(Debug)]
@@ -313,10 +319,7 @@ impl Topology {
     }
 
     pub fn add_client(&mut self, msg: AddClient) {
-        let client = Client {
-            id: msg.id.clone(),
-            addr: msg.addr,
-        };
+        let client = Client::new(msg.id.clone(), msg.addr);
         self.clients.insert(msg.id, client);
     }
 
@@ -458,6 +461,15 @@ impl Topology {
                 let _ = client.addr.do_send(room_state.clone().into()); // TODO: handle error?
             });
         }
+    }
+
+    pub fn get_role_request(&self, state: BrowserClientState) -> Option<RoleRequest> {
+        self.rooms
+            .get(&state.project_id)
+            .and_then(|room| room.roles.get(&state.role_id))
+            .and_then(|client_ids| client_ids.first())
+            .and_then(|id| self.clients.get(id))
+            .map(|client| RoleRequest::new(client.addr.clone(), state.clone()))
     }
 }
 

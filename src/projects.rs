@@ -1,7 +1,7 @@
 use crate::app_data::AppData;
 use crate::errors::{InternalError, UserError};
 use crate::models::{ProjectId, ProjectMetadata, RoleData};
-use crate::network::topology;
+use crate::network::topology::{self, BrowserClientState};
 use crate::users::{can_edit_user, ensure_can_edit_user};
 use actix_session::Session;
 use actix_web::{delete, get, patch, post};
@@ -11,6 +11,7 @@ use mongodb::bson::doc;
 use mongodb::options::{FindOneAndUpdateOptions, ReturnDocument};
 use mongodb::Cursor;
 use serde::{Deserialize, Serialize};
+use uuid::Uuid;
 
 #[derive(Deserialize, Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -543,9 +544,89 @@ async fn rename_role(
 }
 
 #[get("/id/{projectID}/{roleID}/latest")]
-async fn get_latest_role() -> Result<HttpResponse, std::io::Error> {
-    // TODO: Retrieve from an existing occupant
-    todo!();
+async fn get_latest_role(
+    app: web::Data<AppData>,
+    path: web::Path<(ProjectId, String)>,
+    session: Session,
+) -> Result<HttpResponse, UserError> {
+    let (project_id, role_id) = path.into_inner();
+    let query = doc! {"id": &project_id};
+    let metadata = app
+        .project_metadata
+        .find_one(query, None)
+        .await
+        .map_err(|_err| InternalError::DatabaseConnectionError)? // TODO: wrap the error?
+        .ok_or_else(|| UserError::ProjectNotFoundError)?;
+
+    ensure_can_view_project(&app, &session, &metadata).await?;
+    let role_md = metadata
+        .roles
+        .get(&role_id)
+        .ok_or_else(|| UserError::RoleNotFoundError)?;
+
+    // Try to fetch the role data from the current occupants
+    let state = BrowserClientState {
+        project_id,
+        role_id,
+    };
+    let request_opt = app
+        .network
+        .send(topology::GetRoleRequest { state })
+        .await
+        .map_err(|_err| UserError::InternalError)
+        .and_then(|result| result.0.ok_or_else(|| UserError::InternalError));
+
+    let active_role = if let Ok(request) = request_opt {
+        request.send().await.ok()
+    } else {
+        None
+    };
+
+    // If unable to retrieve role data from current occupants (unoccupied or error),
+    // fetch the latest from the database
+    let role_data = match active_role {
+        Some(role_data) => role_data,
+        None => app.fetch_role(role_md).await,
+    };
+
+    Ok(HttpResponse::Ok().json(role_data))
+}
+
+#[derive(Deserialize, Serialize)]
+#[serde(rename_all = "camelCase")]
+struct RoleDataResponse {
+    id: String,
+    pub data: RoleData,
+}
+
+#[post("/id/{projectID}/{roleID}/latest")]
+async fn report_latest_role(
+    app: web::Data<AppData>,
+    path: web::Path<(ProjectId, String)>,
+    body: web::Json<RoleDataResponse>,
+    session: Session,
+) -> Result<HttpResponse, UserError> {
+    let (project_id, role_id) = path.into_inner();
+    let query = doc! {"id": project_id};
+    let id = Uuid::parse_str(&body.id).map_err(|_err| UserError::ProjectNotFoundError)?;
+    let metadata = app
+        .project_metadata
+        .find_one(query, None)
+        .await
+        .map_err(|_err| InternalError::DatabaseConnectionError)? // TODO: wrap the error?
+        .ok_or_else(|| UserError::ProjectNotFoundError)?;
+
+    if !metadata.roles.contains_key(&role_id) {
+        return Err(UserError::RoleNotFoundError);
+    }
+
+    ensure_can_edit_project(&app, &session, None, &metadata).await?;
+
+    app.network.do_send(topology::RoleDataResponse {
+        id,
+        data: body.into_inner().data,
+    });
+    Ok(HttpResponse::Ok().finish())
 }
 
 #[get("/id/{projectID}/collaborators/")]
@@ -644,6 +725,7 @@ pub fn config(cfg: &mut web::ServiceConfig) {
         .service(get_project_thumbnail)
         .service(get_role)
         .service(get_latest_role)
+        .service(report_latest_role)
         .service(create_role)
         .service(save_role)
         .service(rename_role)

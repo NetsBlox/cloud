@@ -1,16 +1,19 @@
 mod address;
+mod client;
 mod external;
 mod network;
 
-use crate::models::ProjectMetadata;
-use actix::prelude::{Message, Recipient};
-use actix::{Actor, AsyncContext, Context, Handler};
+use crate::models::{ProjectMetadata, RoleData};
+use actix::prelude::*;
+use actix::{Actor, AsyncContext, Context, Handler, MessageResult};
 use lazy_static::lazy_static;
 use mongodb::bson::doc;
 use mongodb::Collection;
 use serde_json::Value;
 use std::sync::{Arc, RwLock};
+use uuid::Uuid;
 
+use self::client::{RoleDataResponseState, RoleRequest, RESPONSE_BUFFER};
 use self::network::Topology;
 pub use self::network::{BrowserClientState, ClientState, ExternalClientState, DEFAULT_APP_ID};
 
@@ -166,6 +169,42 @@ impl Handler<SendRoomState> for TopologyActor {
         topology.send_room_state(msg);
     }
 }
+
+#[derive(Message)]
+#[rtype(result = "GetRoleRequestResult")]
+pub struct GetRoleRequest {
+    pub state: BrowserClientState,
+}
+
+#[derive(Message)]
+#[rtype(result = "()")]
+pub struct GetRoleRequestResult(pub Option<RoleRequest>);
+
+impl Handler<GetRoleRequest> for TopologyActor {
+    type Result = MessageResult<GetRoleRequest>;
+
+    fn handle(&mut self, msg: GetRoleRequest, _: &mut Context<Self>) -> Self::Result {
+        let topology = TOPOLOGY.read().unwrap();
+        MessageResult(GetRoleRequestResult(topology.get_role_request(msg.state)))
+    }
+}
+
+#[derive(Message)]
+#[rtype(result = "()")]
+pub struct RoleDataResponse {
+    pub id: Uuid,
+    pub data: RoleData,
+}
+
+impl Handler<RoleDataResponse> for TopologyActor {
+    type Result = ();
+
+    fn handle(&mut self, msg: RoleDataResponse, _: &mut Context<Self>) -> Self::Result {
+        let mut responses = RESPONSE_BUFFER.write().unwrap();
+        responses.insert(msg.id, RoleDataResponseState::Data(msg.data));
+    }
+}
+// TODO: add a method for reporting role dtaa
 
 // TODO: Add method for getting the usernames from the network
 // impl Handler<GetOnlineUsers> for TopologyActor {

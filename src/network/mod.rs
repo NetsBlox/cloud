@@ -10,6 +10,8 @@ use actix_web_actors::ws::{self, CloseCode};
 use serde::Deserialize;
 use serde_json::Value;
 
+pub type AppID = String;
+
 #[derive(Deserialize)]
 #[serde(rename_all = "camelCase")]
 struct ClientStateData {
@@ -150,8 +152,6 @@ impl WsSession {
             "user-action" => {
                 // TODO: Record: Can we get rid of these?
             }
-            "project-response" => { // TODO: move this to rest?
-            }
             "request-actions" => { // TODO: move this to REST?
             }
             "ping" => ctx.text("{\"type\": \"pong\"}"),
@@ -205,7 +205,7 @@ impl StreamHandler<Result<ws::Message, ws::ProtocolError>> for WsSession {
                 println!("Closing! Reason: {:?}", &reason_opt);
                 let is_broken = reason_opt
                     .map(|reason| match reason.code {
-                        CloseCode::Normal | CloseCode::Away => false,
+                        CloseCode::Normal | CloseCode::Away => false, // TODO: Should we mark "Away" as broken?
                         _ => true,
                     })
                     .unwrap_or(true);

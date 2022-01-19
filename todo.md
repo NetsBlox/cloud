@@ -1,64 +1,59 @@
 # To Do
-- [ ] add room update message support
-    - event system
-
 - [ ] update the services server connection (zmq)
     - add resolve endpoint?
         - (public role ID resolution)
         - Or the client could send this in the request...
             - context: {project: {name, id}, role: {name, id}}
 
+- [ ] add index to projects collection for "id"
+
+- [ ] add unvisited saveState (w/ a ttl)
+    - CREATED -> TRANSIENT -> BROKEN/SAVED
+
 - [ ] refactor errors...
     - define a user error for something specific - maybe a database error?
 
+- [ ] update collaboration?
+    - no more recording the latest one on the server?
+
 - [ ] connect the client code and start testing things!
-    - [x] refactor cloud
-    - [x] create project:
-        - [x] new project
-            - blob connection test (minio)
-        - [ ] save projects
-            - [x] need to fix the cookie problem first...
-        - [x] list projects
-            - [x] ObjectId is serializing very strangely ($oid)
-                - [x] changing project Id...
-        - [ ] cookie on initial load does not seem to be present
-        - [x] login
-        - [x] signup
-        - [x] cookie is blank
-            - it seems to be set correctly... Maybe this is an issue with fetch?
-
-        - [ ] the cookie still doesn't seem to persist...
-            - maybe if I set the expires_in value?
-                - this doesn't seem to be working...
-            - I think this is actually an issue on the client side...
-                - [x] set same-site...
-
-    - [x] set client state not working...
-        - how will this work with the new server?
-            - network/<client_id>/state
-
-    - [x] can I send a message to myself (unauthenticated)?
-        - [x] resolve "everyone in room"/"others in room" on the client
-        - [x] fix the async issue w/ actix...
-            - Can I move the ref into the async block?
-                - this fixed it!
-        - [x] is the state being set?
-            - checking...
-
-        - [x] why is the address quoted?
-            - json_serde (use as_str)
-
-    - [x] remove client on disconnect
     - [ ] send room messages
         - [x] detect project rename
         - [x] role rename
-        - [ ] add role
-        - [ ] delete role
+        - [x] add role
+            - [ ] is this a little slow?
+        - [x] delete role
         - [ ] duplicate role
+            - [ ] needs latest role endpoint
+            - [x] getting a 404 error
 
     - [ ] add the "latest" endpoints
         - project
         - role
+            - how can I perform req-reply over the ws connection?
+                - add a "mailbox" for the responses
+                - send then async sleep until a response is received
+
+            - How can I get an async result from ctx.spawn(fut)?
+                - Can I get it from the result?
+
+                - Can I just add a method to get a copy of the client(s) at a role?
+                    - then I could handle the async stuff on my end
+                    - we also shouldn't need a hashmap of requests, either
+
+                    - There might be a better abstraction rather than copying the client
+                        - maybe a ClientChannel?
+                            - channel.send().await?
+                        - maybe a RoleDataRequest?
+                            - request.send().await?
+
+                    - [x] we need some shared memory to write the response into...
+                        - make a shared response buffer (maybe a queue?)
+
+                - Should the response be over ws or http?
+                    - http would have access to cookies...
+                    - what is the benefit to using ws?
+                        - maybe slightly more efficient?
 
     - [ ] delete transient projects after inactivity
         - if we disable creating roles without saving, this would be good
