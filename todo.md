@@ -64,6 +64,8 @@
             - same for logging out?
 
         - [ ] set projects as "broken" on broken ws connections
+        - [ ] test this!
+            - make sure the broken project is not deleted once another client reconnects
 
 - [ ] validate user accounts on creation
     - [-] maybe we will need to whitelist email domains later
@@ -138,7 +140,7 @@
 
 - [ ] add benchmarks for message passing??
 
-- [ ] can the updates to the network topology stuff replace the "transient" projects?
+- [-] can the updates to the network topology stuff replace the "transient" projects?
     - I don't think so since we will need to know the existing (unopened) projects so their name isn't changed on open (given them priority, that is)
         - what if 
 
@@ -244,4 +246,50 @@
     - configuration should be:
 
 - [x] add configuration file
+
+- [x] refactor cloud
+- [x] create project:
+    - [x] new project
+        - blob connection test (minio)
+    - [ ] save projects
+        - [x] need to fix the cookie problem first...
+    - [x] list projects
+        - [x] ObjectId is serializing very strangely ($oid)
+            - [x] changing project Id...
+    - [ ] cookie on initial load does not seem to be present
+    - [x] login
+    - [x] signup
+    - [x] cookie is blank
+        - it seems to be set correctly... Maybe this is an issue with fetch?
+
+    - [/] the cookie still doesn't seem to persist...
+        - maybe if I set the expires_in value?
+            - this doesn't seem to be working...
+        - I think this is actually an issue on the client side...
+            - [x] set same-site...
+
+- [x] set client state not working...
+    - how will this work with the new server?
+        - network/<client_id>/state
+
+- [x] can I send a message to myself (unauthenticated)?
+    - [x] resolve "everyone in room"/"others in room" on the client
+    - [x] fix the async issue w/ actix...
+        - Can I move the ref into the async block?
+            - this fixed it!
+    - [x] is the state being set?
+        - checking...
+
+    - [x] why is the address quoted?
+        - json_serde (use as_str)
+
+- [x] remove client on disconnect
+
+- [-] add room update message support
+    - event system
+    - just notify the network from the app
+
+- [x] rename projects to avoid collisions
+    - I don't think this is currently working...
+    - it looks fine - except for the duplicate key error
 
