@@ -1,6 +1,7 @@
 use crate::app_data::AppData;
+use crate::errors::{InternalError, UserError};
 use crate::models::{FriendLink, FriendLinkState};
-use crate::users::can_edit_user;
+use crate::users::{can_edit_user, ensure_can_edit_user};
 use actix_session::Session;
 use actix_web::{get, post};
 use actix_web::{web, HttpResponse};
@@ -65,11 +66,9 @@ async fn unfriend(
     app: web::Data<AppData>,
     path: web::Path<(String, String)>,
     session: Session,
-) -> HttpResponse {
+) -> Result<HttpResponse, UserError> {
     let (owner, friend) = path.into_inner();
-    if !can_edit_user(&app, &session, &owner).await {
-        return HttpResponse::Unauthorized().body("Not allowed.");
-    }
+    ensure_can_edit_user(&app, &session, &owner).await?;
 
     let query = doc! {
         "$or": [
@@ -77,11 +76,16 @@ async fn unfriend(
             {"sender": &friend, "recipient": &owner, "state": FriendLinkState::APPROVED}
         ]
     };
-    let result = app.friends.delete_one(query, None).await.unwrap();
+    let result = app
+        .friends
+        .delete_one(query, None)
+        .await
+        .map_err(|_err| InternalError::DatabaseConnectionError)?;
+
     if result.deleted_count > 0 {
-        HttpResponse::Ok().body("User has been unfriended!")
+        Ok(HttpResponse::Ok().body("User has been unfriended!"))
     } else {
-        HttpResponse::NotFound().body("Not found.")
+        Ok(HttpResponse::NotFound().body("Not found."))
     }
 }
 
@@ -124,7 +128,6 @@ async fn list_invites(
     let invites = cursor.try_collect::<Vec<_>>().await.unwrap();
     HttpResponse::Ok().json(invites)
 }
-// TODO: sent invites?
 
 #[post("/{owner}/invite/{recipient}")]
 async fn send_invite(

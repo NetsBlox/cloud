@@ -3,20 +3,22 @@ use futures::join;
 use mongodb::bson::doc;
 use mongodb::options::{FindOneAndUpdateOptions, ReturnDocument};
 use rusoto_core::credential::StaticProvider;
-use rusoto_core::Region;
+use rusoto_core::{Region, RusotoError};
 use std::collections::{HashMap, HashSet};
 use uuid::Uuid;
 
 use crate::config::Settings;
 use crate::errors::{InternalError, UserError};
-use crate::models::{CollaborationInvitation, FriendLink, Group, Project, ProjectMetadata, User};
+use crate::models::{
+    CollaborationInvitation, FriendLink, Group, Project, ProjectMetadata, SaveState, User,
+};
 use crate::models::{RoleData, RoleMetadata};
 use crate::network::topology::{self, SetStorage, TopologyActor};
 use actix::{Actor, Addr};
 use futures::TryStreamExt;
 use mongodb::{Client, Collection, Database};
 use rusoto_s3::{
-    CreateBucketRequest, DeleteObjectOutput, DeleteObjectRequest, GetObjectRequest,
+    CreateBucketRequest, DeleteObjectOutput, DeleteObjectRequest, GetObjectRequest, PutObjectError,
     PutObjectOutput, PutObjectRequest, S3Client, S3,
 };
 
@@ -149,12 +151,15 @@ impl AppData {
             }]
         });
 
-        let role_mds = join_all(
+        let role_mds: Vec<RoleMetadata> = join_all(
             roles
                 .iter()
                 .map(|role| self.upload_role(owner, &unique_name, role)),
         )
-        .await;
+        .await
+        .into_iter()
+        .map(|res| res.unwrap())
+        .collect();
 
         let metadata = ProjectMetadata::new(owner, &unique_name, role_mds);
         self.project_metadata
@@ -165,7 +170,12 @@ impl AppData {
         Ok(metadata)
     }
 
-    async fn upload_role(&self, owner: &str, project_name: &str, role: &RoleData) -> RoleMetadata {
+    async fn upload_role(
+        &self,
+        owner: &str,
+        project_name: &str,
+        role: &RoleData,
+    ) -> Result<RoleMetadata, UserError> {
         let is_guest = owner.starts_with('_');
         let top_level = if is_guest { "guests" } else { "users" };
         let basepath = format!(
@@ -175,14 +185,14 @@ impl AppData {
         let src_path = format!("{}/source_code.xml", &basepath);
         let media_path = format!("{}/media.xml", &basepath);
 
-        self.upload(&media_path, role.media.to_owned()).await;
-        self.upload(&src_path, role.source_code.to_owned()).await;
+        self.upload(&media_path, role.media.to_owned()).await?;
+        self.upload(&src_path, role.source_code.to_owned()).await?;
 
-        RoleMetadata {
+        Ok(RoleMetadata {
             project_name: role.project_name.to_owned(),
             source_code: src_path,
             media: media_path,
-        }
+        })
     }
 
     async fn delete(&self, key: &str) -> DeleteObjectOutput {
@@ -194,33 +204,40 @@ impl AppData {
         self.s3.delete_object(request).await.unwrap()
     }
 
-    async fn upload(&self, key: &str, body: String) -> PutObjectOutput {
+    async fn upload(&self, key: &str, body: String) -> Result<PutObjectOutput, InternalError> {
         let request = PutObjectRequest {
             bucket: self.bucket.clone(),
             key: String::from(key),
             body: Some(String::into_bytes(body).into()),
             ..Default::default()
         };
-        self.s3.put_object(request).await.unwrap()
+        self.s3
+            .put_object(request)
+            .await
+            .map_err(|_err| InternalError::S3Error)
     }
 
-    async fn download(&self, key: &str) -> String {
+    async fn download(&self, key: &str) -> Result<String, InternalError> {
         let request = GetObjectRequest {
             bucket: self.bucket.clone(),
             key: String::from(key),
             ..Default::default()
         };
 
-        let output = self.s3.get_object(request).await.unwrap();
+        let output = self
+            .s3
+            .get_object(request)
+            .await
+            .map_err(|_err| InternalError::S3Error)?;
         let byte_str = output
             .body
             .unwrap()
             .map_ok(|b| b.to_vec())
             .try_concat()
             .await
-            .unwrap();
+            .map_err(|_err| InternalError::S3ContentError)?;
 
-        String::from_utf8(byte_str).unwrap()
+        Ok(String::from_utf8(byte_str).map_err(|_err| InternalError::S3ContentError)?)
     }
 
     pub async fn fetch_project(&self, metadata: &ProjectMetadata) -> Result<Project, UserError> {
@@ -228,7 +245,11 @@ impl AppData {
         // TODO: make fetch_role fallible
         let role_data = join_all(values.iter().map(|v| self.fetch_role(v))).await;
 
-        let roles = keys.into_iter().zip(role_data).collect::<HashMap<_, _>>();
+        let roles = keys
+            .into_iter()
+            .zip(role_data)
+            .filter_map(|(k, data)| data.map(|d| (k, d)).ok())
+            .collect::<HashMap<_, _>>();
 
         Ok(Project {
             id: metadata.id.to_owned(),
@@ -269,16 +290,16 @@ impl AppData {
         }
     }
 
-    pub async fn fetch_role(&self, metadata: &RoleMetadata) -> RoleData {
+    pub async fn fetch_role(&self, metadata: &RoleMetadata) -> Result<RoleData, InternalError> {
         let (source_code, media) = join!(
             self.download(&metadata.source_code),
             self.download(&metadata.media),
         );
-        RoleData {
+        Ok(RoleData {
             project_name: metadata.project_name.to_owned(),
-            source_code,
-            media,
-        }
+            source_code: source_code?,
+            media: media?,
+        })
     }
 
     pub async fn save_role(
@@ -286,12 +307,13 @@ impl AppData {
         metadata: &ProjectMetadata,
         role_id: &str,
         role: RoleData,
-    ) -> Option<RoleMetadata> {
+    ) -> Result<RoleMetadata, UserError> {
         let role_md = self
             .upload_role(&metadata.owner, &metadata.name, &role)
-            .await;
+            .await?;
         let query = doc! {"id": &metadata.id};
-        let update = doc! {"$set": {&format!("roles.{}", role_id): role_md, "transient": false}};
+        let update =
+            doc! {"$set": {&format!("roles.{}", role_id): role_md, "saveState": SaveState::SAVED}};
         let options = FindOneAndUpdateOptions::builder()
             .return_document(ReturnDocument::After)
             .build();
@@ -300,24 +322,28 @@ impl AppData {
             .project_metadata
             .find_one_and_update(query, update, options)
             .await
-            .unwrap()
-            .unwrap(); // TODO: not found error
+            .map_err(|_err| InternalError::DatabaseConnectionError)?
+            .ok_or_else(|| UserError::ProjectNotFoundError)?;
 
         self.network.do_send(topology::SendRoomState {
             project: updated_metadata.clone(),
         });
 
-        updated_metadata.roles.get(role_id).map(|md| md.to_owned())
+        Ok(updated_metadata
+            .roles
+            .get(role_id)
+            .map(|md| md.to_owned())
+            .unwrap())
     }
 
     pub async fn create_role(
         &self,
         metadata: ProjectMetadata,
         role_data: RoleData,
-    ) -> Result<ProjectMetadata, std::io::Error> {
+    ) -> Result<ProjectMetadata, UserError> {
         let mut role_md = self
             .upload_role(&metadata.owner, &metadata.name, &role_data)
-            .await;
+            .await?;
 
         let options = FindOneAndUpdateOptions::builder()
             .return_document(ReturnDocument::After)

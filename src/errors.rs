@@ -5,6 +5,8 @@ use derive_more::{Display, Error};
 pub enum InternalError {
     DatabaseConnectionError, // TODO: wrap the mongodb error
     TimeoutError,
+    S3Error,
+    S3ContentError,
 }
 
 #[derive(Debug, Display, Error)]

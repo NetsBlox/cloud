@@ -105,10 +105,7 @@ async fn has_group_containing(app: &AppData, owner: &str, member: &str) -> bool 
                     .await
                     .unwrap();
                 let groups = cursor.try_collect::<Vec<_>>().await.unwrap();
-                let group_ids = groups
-                    .iter()
-                    .map(|group| group._id)
-                    .collect::<HashSet<_>>();
+                let group_ids = groups.iter().map(|group| group._id).collect::<HashSet<_>>();
                 group_ids.contains(&group_id)
             }
             None => false,

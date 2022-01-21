@@ -6,6 +6,7 @@ use crate::users::{can_edit_user, ensure_can_edit_user};
 use actix_session::Session;
 use actix_web::{delete, get, patch, post};
 use actix_web::{web, HttpResponse};
+use futures::future::join_all;
 use futures::stream::TryStreamExt;
 use mongodb::bson::doc;
 use mongodb::options::{FindOneAndUpdateOptions, ReturnDocument};
@@ -345,9 +346,61 @@ async fn update_project(
 }
 
 #[get("/id/{projectID}/latest")] // Include unsaved data
-async fn get_latest_project() -> Result<HttpResponse, std::io::Error> {
-    todo!(); // TODO: return xml string
-             //Ok(HttpResponse::Ok().body(serialized_project))
+async fn get_latest_project(
+    app: web::Data<AppData>,
+    path: web::Path<(ProjectId,)>,
+    session: Session,
+) -> Result<HttpResponse, UserError> {
+    let (project_id,) = path.into_inner();
+
+    let query = doc! {"id": &project_id};
+    let metadata = app
+        .project_metadata
+        .find_one(query, None)
+        .await
+        .map_err(|_err| InternalError::DatabaseConnectionError)? // TODO: wrap the error?
+        .ok_or_else(|| UserError::ProjectNotFoundError)?;
+
+    ensure_can_view_project(&app, &session, &metadata).await?;
+
+    // Try to fetch the role data from the current occupants
+    let states = metadata
+        .roles
+        .into_keys()
+        .map(|role_id| BrowserClientState {
+            project_id: project_id.clone(),
+            role_id,
+        });
+
+    let requests: Vec<_> =
+        join_all(states.map(|state| app.network.send(topology::GetRoleRequest { state })))
+            .await
+            .into_iter()
+            .map(|req| {
+                req.map_err(|_err| UserError::InternalError)
+                    .and_then(|result| result.0.ok_or_else(|| UserError::InternalError))
+            })
+            .collect();
+
+    let mut role_data: Vec<RoleData> = Vec::new();
+    for request_opt in requests {
+        let active_role = if let Ok(request) = request_opt {
+            request.send().await.ok() // FIXME: send these in parallel
+        } else {
+            None
+        };
+        // let role_datum = match active_role {
+        //     Some(datum) => datum,
+        //     None => app.fetch_role(role_md).await?,
+        // };
+        // role_data.append(role_datum);
+    }
+
+    // If unable to retrieve role data from current occupants (unoccupied or error),
+    // fetch the latest from the database
+    todo!();
+
+    // Ok(HttpResponse::Ok().json(role_data))
 }
 
 #[get("/id/{projectID}/thumbnail")]
@@ -431,7 +484,7 @@ async fn get_role(
         .get(&role_id)
         .ok_or_else(|| UserError::RoleNotFoundError)?;
 
-    let role = app.fetch_role(role_md).await;
+    let role = app.fetch_role(role_md).await?;
     Ok(HttpResponse::Ok().json(role))
 }
 
@@ -586,7 +639,7 @@ async fn get_latest_role(
     // fetch the latest from the database
     let role_data = match active_role {
         Some(role_data) => role_data,
-        None => app.fetch_role(role_md).await,
+        None => app.fetch_role(role_md).await?,
     };
 
     Ok(HttpResponse::Ok().json(role_data))
