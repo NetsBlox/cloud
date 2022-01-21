@@ -205,7 +205,7 @@ impl StreamHandler<Result<ws::Message, ws::ProtocolError>> for WsSession {
                 println!("Closing! Reason: {:?}", &reason_opt);
                 let is_broken = reason_opt
                     .map(|reason| match reason.code {
-                        CloseCode::Normal | CloseCode::Away => false, // TODO: Should we mark "Away" as broken?
+                        CloseCode::Normal => false,
                         _ => true,
                     })
                     .unwrap_or(true);
