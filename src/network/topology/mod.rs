@@ -73,6 +73,7 @@ pub struct RemoveClient {
 pub struct SetClientState {
     pub id: String,
     pub state: ClientState,
+    pub username: Option<String>,
 }
 
 #[derive(Message)]

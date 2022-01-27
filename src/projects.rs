@@ -6,8 +6,9 @@ use crate::users::{can_edit_user, ensure_can_edit_user};
 use actix_session::Session;
 use actix_web::{delete, get, patch, post};
 use actix_web::{web, HttpResponse};
-use futures::future::join_all;
-use futures::stream::TryStreamExt;
+use futures::future::{join, join_all};
+use futures::stream::{FuturesUnordered, TryStreamExt};
+use futures::Future;
 use mongodb::bson::doc;
 use mongodb::options::{FindOneAndUpdateOptions, ReturnDocument};
 use mongodb::Cursor;
@@ -345,7 +346,7 @@ async fn update_project(
     Ok(HttpResponse::Ok().body("Project updated."))
 }
 
-#[get("/id/{projectID}/latest")] // Include unsaved data
+#[get("/id/{projectID}/latest")]
 async fn get_latest_project(
     app: web::Data<AppData>,
     path: web::Path<(ProjectId,)>,
@@ -363,44 +364,17 @@ async fn get_latest_project(
 
     ensure_can_view_project(&app, &session, &metadata).await?;
 
-    // Try to fetch the role data from the current occupants
-    let states = metadata
+    let role_data = metadata
         .roles
-        .into_keys()
-        .map(|role_id| BrowserClientState {
-            project_id: project_id.clone(),
-            role_id,
-        });
+        .keys()
+        .map(|role_id| fetch_role_data(&app, &metadata, role_id.to_owned()))
+        .collect::<FuturesUnordered<_>>()
+        .try_collect::<Vec<_>>()
+        .await
+        .unwrap(); // TODO: handle errors
 
-    let requests: Vec<_> =
-        join_all(states.map(|state| app.network.send(topology::GetRoleRequest { state })))
-            .await
-            .into_iter()
-            .map(|req| {
-                req.map_err(|_err| UserError::InternalError)
-                    .and_then(|result| result.0.ok_or_else(|| UserError::InternalError))
-            })
-            .collect();
-
-    let mut role_data: Vec<RoleData> = Vec::new();
-    for request_opt in requests {
-        let active_role = if let Ok(request) = request_opt {
-            request.send().await.ok() // FIXME: send these in parallel
-        } else {
-            None
-        };
-        // let role_datum = match active_role {
-        //     Some(datum) => datum,
-        //     None => app.fetch_role(role_md).await?,
-        // };
-        // role_data.append(role_datum);
-    }
-
-    // If unable to retrieve role data from current occupants (unoccupied or error),
-    // fetch the latest from the database
-    todo!();
-
-    // Ok(HttpResponse::Ok().json(role_data))
+    let xml = RoleData::to_project_xml(&metadata.name, role_data);
+    Ok(HttpResponse::Ok().body(xml))
 }
 
 #[get("/id/{projectID}/thumbnail")]
@@ -459,7 +433,7 @@ async fn create_role(
 
     ensure_can_edit_project(&app, &session, None, &metadata).await?;
 
-    app.create_role(metadata, body.into_inner().into()).await;
+    app.create_role(metadata, body.into_inner().into()).await?;
     Ok(HttpResponse::Ok().body("Role created"))
 }
 
@@ -612,6 +586,15 @@ async fn get_latest_role(
         .ok_or_else(|| UserError::ProjectNotFoundError)?;
 
     ensure_can_view_project(&app, &session, &metadata).await?;
+    let role_data = fetch_role_data(&app, &metadata, role_id).await?;
+    Ok(HttpResponse::Ok().json(role_data))
+}
+
+async fn fetch_role_data(
+    app: &AppData,
+    metadata: &ProjectMetadata,
+    role_id: String,
+) -> Result<RoleData, UserError> {
     let role_md = metadata
         .roles
         .get(&role_id)
@@ -619,7 +602,7 @@ async fn get_latest_role(
 
     // Try to fetch the role data from the current occupants
     let state = BrowserClientState {
-        project_id,
+        project_id: metadata.id.clone(),
         role_id,
     };
     let request_opt = app
@@ -641,8 +624,7 @@ async fn get_latest_role(
         Some(role_data) => role_data,
         None => app.fetch_role(role_md).await?,
     };
-
-    Ok(HttpResponse::Ok().json(role_data))
+    Ok(role_data)
 }
 
 #[derive(Deserialize, Serialize)]

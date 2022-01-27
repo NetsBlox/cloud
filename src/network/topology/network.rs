@@ -1,18 +1,13 @@
-use actix_web::rt::time::sleep;
 use futures::future::join_all;
 use mongodb::bson::{doc, DateTime};
 use serde::{Deserialize, Serialize};
-use serde_json::json;
 use std::collections::HashMap;
 use std::str::FromStr;
 use std::time::{Duration, SystemTime};
-use uuid::Uuid;
 
-use actix::Recipient;
 use mongodb::Collection;
 
-use crate::errors::InternalError;
-use crate::models::{ProjectId, ProjectMetadata, RoleData, SaveState};
+use crate::models::{ProjectId, ProjectMetadata, SaveState};
 use crate::network::topology::address::ClientAddress;
 use crate::network::AppID;
 
@@ -35,7 +30,6 @@ pub enum ClientState {
 pub struct BrowserClientState {
     pub role_id: String,
     pub project_id: String,
-    // username: Option<String>, // TODO: do I need this?
 }
 
 #[derive(Debug, Deserialize, Serialize)]
@@ -82,19 +76,24 @@ struct OccupantState {
 }
 
 impl RoomStateMessage {
-    fn new(project: ProjectMetadata, room: &ProjectNetwork) -> RoomStateMessage {
+    fn new(
+        project: ProjectMetadata,
+        room: &ProjectNetwork,
+        usernames: &HashMap<ClientID, String>,
+    ) -> RoomStateMessage {
         let empty = Vec::new();
         let roles: HashMap<String, RoleState> = project
             .roles
             .into_iter()
             .map(|(id, role)| {
                 let client_ids = room.roles.get(&id).unwrap_or(&empty);
+                println!("Resolving usernames: {:?} {:?}", client_ids, usernames);
                 // TODO: get the names...
                 let occupants = client_ids
                     .iter()
                     .map(|id| OccupantState {
                         id: id.to_owned(),
-                        name: "guest".to_owned(),
+                        name: usernames.get(id).unwrap_or(&"guest".to_owned()).to_owned(),
                     })
                     .collect();
 
@@ -149,6 +148,7 @@ pub struct Topology {
 
     clients: HashMap<ClientID, Client>,
     states: HashMap<ClientID, ClientState>,
+    usernames: HashMap<ClientID, String>,
 
     rooms: HashMap<String, ProjectNetwork>,
     // address_cache: HashMap<String, (String, String)>,
@@ -169,6 +169,7 @@ impl Topology {
             project_metadata: None,
             rooms: HashMap::new(),
             states: HashMap::new(),
+            usernames: HashMap::new(),
             external: HashMap::new(),
         }
     }
@@ -279,13 +280,16 @@ impl Topology {
     }
 
     pub async fn set_client_state(&mut self, msg: SetClientState) {
-        // TODO: no op if client doesn't exist
         if !self.has_client(&msg.id) {
             return;
         }
 
         println!("Setting client state to {:?}", msg.state);
         self.reset_client_state(&msg.id).await;
+        println!("Setting username? {:?}", msg.username);
+        if let Some(username) = msg.username {
+            self.usernames.insert(msg.id.clone(), username);
+        }
 
         match &msg.state {
             ClientState::Browser(state) => {
@@ -348,6 +352,7 @@ impl Topology {
     }
 
     async fn reset_client_state(&mut self, id: &str) {
+        self.usernames.remove(id);
         match self.states.remove(id) {
             Some(ClientState::Browser(state)) => {
                 let room = self.rooms.get_mut(&state.project_id);
@@ -455,8 +460,8 @@ impl Topology {
                 .flatten()
                 .filter_map(|id| self.clients.get(id));
 
-            let room_state = RoomStateMessage::new(msg.project, room);
-            println!("Sending room update: {}", room_state.name);
+            let room_state = RoomStateMessage::new(msg.project, room, &self.usernames);
+            println!(">>> Sending room update: {}", room_state.name);
             clients.for_each(|client| {
                 let _ = client.addr.do_send(room_state.clone().into()); // TODO: handle error?
             });

@@ -188,6 +188,28 @@ pub struct RoleData {
     pub media: String,
 }
 
+impl RoleData {
+    pub fn to_xml(self) -> String {
+        format!(
+            "<role name=\"{}\">{}{}</role>",
+            self.project_name, self.source_code, self.media
+        ) // TODO: escape the names?
+    }
+
+    pub fn to_project_xml(name: &str, roles: Vec<RoleData>) -> String {
+        let APP_NAME = "NetsBlox";
+        let role_str: String = roles
+            .into_iter()
+            .map(|role| role.to_xml())
+            .collect::<Vec<_>>()
+            .join(" ");
+        format!(
+            "<room name=\"{}\" app=\"{}\">{}</room>",
+            name, APP_NAME, role_str
+        )
+    }
+}
+
 #[derive(Serialize, Deserialize, Clone)]
 pub struct LinkedAccount {
     pub username: String,

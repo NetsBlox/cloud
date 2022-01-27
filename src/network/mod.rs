@@ -41,7 +41,7 @@ async fn set_client_state(
     let mut response = None;
     let mut state = body.into_inner().state;
     if let ClientState::External(client_state) = state {
-        let user_id = &username.unwrap_or_else(|| client_id.clone());
+        let user_id = username.as_ref().unwrap_or_else(|| &client_id).to_owned();
         let address = format!("{}@{}", client_state.address, user_id);
         let app_id = client_state.app_id;
         if app_id.to_lowercase() == topology::DEFAULT_APP_ID {
@@ -53,10 +53,11 @@ async fn set_client_state(
         state = ClientState::External(ExternalClientState { address, app_id });
     };
 
-    println!("setting state {:?}", &state);
+    println!("setting state {:?} {:?}", &state, &username);
     app.network.do_send(topology::SetClientState {
         id: client_id,
         state,
+        username,
     });
 
     HttpResponse::Ok().body(response.unwrap_or_else(String::new))
@@ -205,7 +206,7 @@ impl StreamHandler<Result<ws::Message, ws::ProtocolError>> for WsSession {
                 println!("Closing! Reason: {:?}", &reason_opt);
                 let is_broken = reason_opt
                     .map(|reason| match reason.code {
-                        CloseCode::Normal => false,
+                        CloseCode::Normal | CloseCode::Away => false,
                         _ => true,
                     })
                     .unwrap_or(true);
