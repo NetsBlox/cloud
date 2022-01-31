@@ -23,8 +23,7 @@ async fn list_group_hosts(
 
         match app.groups.find_one(query, None).await.unwrap() {
             Some(group) => {
-                Ok(HttpResponse::Ok()
-                    .json(group.services_hosts.unwrap_or_else(Vec::new)))
+                Ok(HttpResponse::Ok().json(group.services_hosts.unwrap_or_else(Vec::new)))
             }
             None => Ok(HttpResponse::NotFound().body("Not found.")),
         }
@@ -32,8 +31,6 @@ async fn list_group_hosts(
         Ok(HttpResponse::Unauthorized().body("Not allowed."))
     }
 }
-
-// TODO
 
 #[post("/group/{id}")]
 async fn set_group_hosts(
@@ -81,9 +78,7 @@ async fn list_user_hosts(
         .await
         .expect("User not found")
     {
-        Some(user) => Ok(
-            HttpResponse::Ok().json(user.services_hosts.unwrap_or_else(Vec::new))
-        ),
+        Some(user) => Ok(HttpResponse::Ok().json(user.services_hosts.unwrap_or_else(Vec::new))),
         None => Ok(HttpResponse::NotFound().finish()),
     } // FIXME: status code
 }
@@ -158,7 +153,7 @@ async fn list_all_hosts(
                 .chain(
                     groups
                         .into_iter()
-                        .flat_map(|g| g.services_hosts.unwrap_or_else(Vec::new))
+                        .flat_map(|g| g.services_hosts.unwrap_or_else(Vec::new)),
                 );
             Ok(HttpResponse::Ok().json(services_hosts.collect::<Vec<_>>()))
         }

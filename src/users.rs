@@ -43,18 +43,23 @@ impl From<NewUser> for User {
 
 pub async fn is_super_user(app: &AppData, session: &Session) -> bool {
     if let Some(username) = session.get::<String>("username").unwrap_or(None) {
+        println!("checking if {} is a super user.", &username);
         let query = doc! {"username": username};
-        match app
-            .collection::<User>("users")
-            .find_one(query, None)
-            .await
-            .unwrap()
-        {
+        match app.users.find_one(query, None).await.unwrap() {
             Some(user) => user.admin.unwrap_or(false),
             None => false,
         }
     } else {
+        println!("no username in the cookie");
         false
+    }
+}
+
+async fn ensure_is_super_user(app: &AppData, session: &Session) -> Result<(), UserError> {
+    if !is_super_user(app, session).await {
+        Err(UserError::PermissionsError)
+    } else {
+        Ok(())
     }
 }
 
@@ -144,36 +149,58 @@ struct NewUser {
     group_id: Option<ObjectId>,
 }
 
+#[get("/")]
+async fn list_users(app: web::Data<AppData>, session: Session) -> Result<HttpResponse, UserError> {
+    ensure_is_super_user(&app, &session).await?;
+    let query = doc! {};
+    let cursor = app.users.find(query, None).await.unwrap();
+    let usernames: Vec<String> = cursor
+        .try_collect::<Vec<_>>()
+        .await
+        .unwrap()
+        .into_iter()
+        .map(|user| user.username)
+        .collect();
+    Ok(HttpResponse::Ok().json(usernames))
+}
+
 #[post("/create")]
 async fn create_user(
     app: web::Data<AppData>,
     user_data: web::Json<NewUser>,
-) -> Result<HttpResponse, std::io::Error> {
-    if is_valid_username(&user_data.username) {
-        let user = User::from(user_data.into_inner());
-        let collection = app.collection::<User>("users");
-        let query = doc! {"username": &user.username};
-        let update = doc! {"$setOnInsert": &user};
-        let options = mongodb::options::UpdateOptions::builder()
-            .upsert(true)
-            .build();
-        let result = collection.update_one(query, update, options).await;
+) -> Result<HttpResponse, UserError> {
+    ensure_valid_username(&user_data.username)?;
+    println!("{:?}", user_data.password);
+    let user = User::from(user_data.into_inner());
 
-        match result {
-            Ok(update_result) => {
-                if update_result.matched_count == 0 {
-                    Ok(HttpResponse::Ok().body("User created"))
-                } else {
-                    Ok(HttpResponse::BadRequest().body("User already exists"))
-                }
-            }
-            Err(_err) => {
-                // TODO: log the error
-                Ok(HttpResponse::InternalServerError().body("User creation failed"))
+    println!("create user: {}, {}", &user.username, &user.hash);
+    let query = doc! {"username": &user.username};
+    let update = doc! {"$setOnInsert": &user};
+    let options = mongodb::options::UpdateOptions::builder()
+        .upsert(true)
+        .build();
+    let result = app.users.update_one(query, update, options).await;
+
+    match result {
+        Ok(update_result) => {
+            if update_result.matched_count == 0 {
+                Ok(HttpResponse::Ok().body("User created"))
+            } else {
+                Ok(HttpResponse::BadRequest().body("User already exists"))
             }
         }
+        Err(_err) => {
+            // TODO: log the error
+            Ok(HttpResponse::InternalServerError().body("User creation failed"))
+        }
+    }
+}
+
+fn ensure_valid_username(name: &str) -> Result<(), UserError> {
+    if !is_valid_username(name) {
+        Err(UserError::InvalidUsername)
     } else {
-        Ok(HttpResponse::BadRequest().body("Invalid username"))
+        Ok(())
     }
 }
 
@@ -184,7 +211,7 @@ fn is_valid_username(name: &str) -> bool {
     USERNAME_REGEX.is_match(name) && !name.is_inappropriate()
 }
 
-#[derive(Serialize, Deserialize)]
+#[derive(Serialize, Deserialize, Debug)]
 #[serde(rename_all = "camelCase")]
 struct LoginCredentials {
     username: String,
@@ -202,7 +229,13 @@ async fn login(
     session: Session,
 ) -> HttpResponse {
     // TODO: check if tor IP
-    let query = doc! {"username": &credentials.username, "hash": &credentials.password};
+    // TODO: hash the password
+    let mut hasher = Sha512::new();
+    hasher.update(&credentials.password);
+    let hash = hex::encode(hasher.finalize()); // TODO: add salt
+    println!("login attempt: {}, {}", &credentials.username, &hash);
+    let query = doc! {"username": &credentials.username, "hash": &hash};
+    println!("credentials: {:?}", &credentials);
 
     let banned_accounts = app.collection::<BannedAccount>("bannedAccounts");
     if let Some(_account) = banned_accounts
@@ -436,6 +469,7 @@ async fn unlink_account(
 
 pub fn config(cfg: &mut web::ServiceConfig) {
     cfg.service(create_user)
+        .service(list_users)
         .service(login)
         .service(logout)
         .service(delete_user)

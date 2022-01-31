@@ -17,6 +17,8 @@ pub enum UserError {
     ProjectNotFoundError,
     #[display(fmt = "Role not found.")]
     RoleNotFoundError,
+    #[display(fmt = "Invalid username.")]
+    InvalidUsername,
     #[display(fmt = "An internal error occurred. Please try again later.")]
     InternalError,
 }
@@ -32,6 +34,7 @@ impl error::ResponseError for UserError {
             UserError::PermissionsError => StatusCode::UNAUTHORIZED,
             UserError::ProjectNotFoundError | UserError::RoleNotFoundError => StatusCode::NOT_FOUND,
             UserError::InternalError => StatusCode::INTERNAL_SERVER_ERROR,
+            UserError::InvalidUsername => StatusCode::BAD_REQUEST,
         }
     }
 }

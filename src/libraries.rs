@@ -374,18 +374,8 @@ mod tests {
     #[actix_web::test]
     async fn test_list_community_libraries() {
         let libraries = vec![
-            LibraryMetadata::new(
-                "brian".into(),
-                "public example".into(),
-                true,
-                None,
-            ),
-            LibraryMetadata::new(
-                "brian".into(),
-                "private example".into(),
-                false,
-                None,
-            ),
+            LibraryMetadata::new("brian".into(), "public example".into(), true, None),
+            LibraryMetadata::new("brian".into(), "private example".into(), false, None),
         ];
         let database = init_database("list_community_libs", libraries)
             .await
@@ -502,12 +492,7 @@ mod tests {
         let publish_name = "to-publish-example";
         let libraries = vec![
             LibraryMetadata::new("brian".into(), publish_name.into(), false, None),
-            LibraryMetadata::new(
-                "brian".into(),
-                "private example".into(),
-                false,
-                None,
-            ),
+            LibraryMetadata::new("brian".into(), "private example".into(), false, None),
         ];
         let database = init_database("publish_user_lib", libraries)
             .await
