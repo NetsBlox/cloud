@@ -1,5 +1,6 @@
 use crate::app_data::AppData;
-use crate::errors::UserError;
+use crate::errors::{InternalError, UserError};
+use crate::groups::ensure_can_edit_group;
 use crate::models::{LinkedAccount, User};
 use actix_session::Session;
 use actix_web::{get, patch, post};
@@ -35,7 +36,7 @@ impl From<NewUser> for User {
                 .unwrap()
                 .as_secs() as u32,
             linked_accounts: std::vec::Vec::new(),
-            admin: None,
+            admin: user_data.admin,
             services_hosts: None,
         }
     }
@@ -87,30 +88,18 @@ pub async fn can_edit_user(app: &AppData, session: &Session, username: &str) -> 
     }
 }
 
-#[derive(Serialize, Deserialize)]
-struct Group {
-    _id: ObjectId,
-    owner: String,
-}
-
 async fn has_group_containing(app: &AppData, owner: &str, member: &str) -> bool {
     let query = doc! {"username": member};
-    match app
-        .collection::<User>("users")
-        .find_one(query, None)
-        .await
-        .unwrap()
-    {
+    match app.users.find_one(query, None).await.unwrap() {
         Some(user) => match user.group_id {
             Some(group_id) => {
                 let query = doc! {"owner": owner};
-                let cursor = app
-                    .collection::<Group>("groups")
-                    .find(query, None)
-                    .await
-                    .unwrap();
+                let cursor = app.groups.find(query, None).await.unwrap();
                 let groups = cursor.try_collect::<Vec<_>>().await.unwrap();
-                let group_ids = groups.iter().map(|group| group._id).collect::<HashSet<_>>();
+                let group_ids = groups
+                    .into_iter()
+                    .map(|group| group.id)
+                    .collect::<HashSet<_>>();
                 group_ids.contains(&group_id)
             }
             None => false,
@@ -144,9 +133,10 @@ impl UserCookie<'_> {
 #[derive(Serialize, Deserialize)]
 struct NewUser {
     username: String,
-    email: String,
+    email: String, // TODO: validate the email address
     password: Option<String>,
-    group_id: Option<ObjectId>,
+    group_id: Option<String>,
+    admin: Option<bool>,
 }
 
 #[get("/")]
@@ -168,9 +158,18 @@ async fn list_users(app: web::Data<AppData>, session: Session) -> Result<HttpRes
 async fn create_user(
     app: web::Data<AppData>,
     user_data: web::Json<NewUser>,
+    session: Session,
 ) -> Result<HttpResponse, UserError> {
     ensure_valid_username(&user_data.username)?;
+    ensure_valid_email(&user_data.email)?;
     println!("{:?}", user_data.password);
+
+    if user_data.admin.unwrap_or(false) {
+        ensure_is_super_user(&app, &session).await?;
+    } else if let Some(group_id) = &user_data.group_id {
+        ensure_can_edit_group(&app, &session, group_id).await?;
+    }
+
     let user = User::from(user_data.into_inner());
 
     println!("create user: {}, {}", &user.username, &user.hash);
@@ -193,6 +192,17 @@ async fn create_user(
             // TODO: log the error
             Ok(HttpResponse::InternalServerError().body("User creation failed"))
         }
+    }
+}
+
+fn ensure_valid_email(email: &str) -> Result<(), UserError> {
+    lazy_static! {
+        static ref EMAIL_REGEX: Regex = Regex::new(r"^.+@.+\..+$").unwrap();
+    }
+    if EMAIL_REGEX.is_match(email) {
+        Ok(())
+    } else {
+        Err(UserError::InvalidEmailAddress)
     }
 }
 
@@ -412,20 +422,21 @@ async fn view_user(
     app: web::Data<AppData>,
     path: web::Path<(String,)>,
     session: Session,
-) -> Result<HttpResponse, std::io::Error> {
+) -> Result<HttpResponse, UserError> {
     let (username,) = path.into_inner();
 
-    if !can_edit_user(&app, &session, &username).await {
-        return Ok(HttpResponse::Unauthorized().body("Not allowed."));
-    }
+    ensure_can_edit_user(&app, &session, &username).await?;
 
     let query = doc! {"username": username};
-    if let Some(user) = app.users.find_one(query, None).await.unwrap() {
-        // TODO: hide the hash field
-        Ok(HttpResponse::Ok().json(user))
-    } else {
-        Ok(HttpResponse::NotFound().finish())
-    }
+    let user = app
+        .users
+        .find_one(query, None)
+        .await
+        .map_err(|_err| InternalError::DatabaseConnectionError)? // TODO: wrap the error?
+        .ok_or_else(|| UserError::UserNotFoundError)?;
+
+    // TODO: hide the hash field
+    Ok(HttpResponse::Ok().json(user))
 }
 
 #[post("/{username}/link/{strategy}")]

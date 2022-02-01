@@ -3,13 +3,14 @@ use serde::{Deserialize, Serialize};
 use std::{collections::HashMap, time::SystemTime};
 use uuid::Uuid;
 
+pub type GroupId = String;
 #[derive(Serialize, Deserialize, Clone)]
 #[serde(rename_all = "camelCase")]
 pub struct User {
     pub username: String,
     pub email: String,
     pub hash: String,
-    pub group_id: Option<ObjectId>,
+    pub group_id: Option<GroupId>,
     pub admin: Option<bool>, // TODO: use roles instead? What other roles would we even have?
     pub created_at: u32,
     pub linked_accounts: Vec<LinkedAccount>,
@@ -228,7 +229,7 @@ impl From<LinkedAccount> for Bson {
 #[derive(Serialize, Deserialize, Clone)]
 #[serde(rename_all = "camelCase")]
 pub struct Group {
-    pub _id: ObjectId,
+    pub id: GroupId,
     pub owner: String,
     pub name: String,
     pub services_hosts: Option<Vec<ServiceHost>>,

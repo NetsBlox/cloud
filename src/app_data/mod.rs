@@ -133,7 +133,7 @@ impl AppData {
         // FIXME: Update the type if we use the projection
         //let projection = doc! {"name": true};
         //let options = FindOptions::builder().projection(projection).build();
-        let cursor = self.project_metadata.find(query, None).await.unwrap();
+        let cursor = self.project_metadata.find(query, None).await.unwrap(); // FIXME: This can throw an error
         let project_names = cursor
             .try_collect::<Vec<_>>()
             .await

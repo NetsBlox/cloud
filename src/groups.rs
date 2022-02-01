@@ -1,6 +1,7 @@
 use crate::app_data::AppData;
-use crate::models::{Group, User};
-use crate::users::{can_edit_user, is_super_user};
+use crate::errors::UserError;
+use crate::models::{Group, GroupId, User};
+use crate::users::{can_edit_user, ensure_can_edit_user, is_super_user};
 use actix_session::Session;
 use actix_web::{delete, get, patch, post};
 use actix_web::{web, HttpResponse};
@@ -13,7 +14,7 @@ async fn list_groups(
     app: web::Data<AppData>,
     path: web::Path<(String,)>,
     session: Session,
-) -> Result<HttpResponse, std::io::Error> {
+) -> Result<HttpResponse, UserError> {
     let (owner,) = path.into_inner();
     if !is_allowed(&app, &session, &owner).await {
         return Ok(HttpResponse::Unauthorized().body("Not allowed."));
@@ -50,23 +51,27 @@ async fn view_group(
 #[get("/id/{id}/members")]
 async fn list_members(
     app: web::Data<AppData>,
-    path: web::Path<(ObjectId,)>,
+    path: web::Path<(GroupId,)>,
     session: Session,
-) -> Result<HttpResponse, std::io::Error> {
+) -> Result<HttpResponse, UserError> {
     let (id,) = path.into_inner();
 
-    let query = doc! {"_id": id};
+    ensure_can_edit_group(&app, &session, &id).await?;
+    let query = doc! {"groupId": id};
+    let cursor = app.users.find(query, None).await.unwrap();
+    let members = cursor.try_collect::<Vec<_>>().await.unwrap();
+    Ok(HttpResponse::Ok().json(members))
+}
+
+pub async fn ensure_can_edit_group(
+    app: &AppData,
+    session: &Session,
+    group_id: &GroupId,
+) -> Result<(), UserError> {
+    let query = doc! {"id": group_id};
     match app.groups.find_one(query, None).await.unwrap() {
-        Some(group) => {
-            if !is_allowed(&app, &session, &group.owner).await {
-                return Ok(HttpResponse::Unauthorized().body("Not allowed"));
-            }
-            let query = doc! {"groupId": group._id};
-            let cursor = app.users.find(query, None).await.unwrap();
-            let members = cursor.try_collect::<Vec<_>>().await.unwrap();
-            Ok(HttpResponse::Ok().json(members))
-        }
-        None => Ok(HttpResponse::NotFound().body("Not found.")),
+        Some(group) => ensure_can_edit_user(app, session, &group.owner).await,
+        None => Err(UserError::GroupNotFoundError),
     }
 }
 

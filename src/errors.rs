@@ -17,8 +17,14 @@ pub enum UserError {
     ProjectNotFoundError,
     #[display(fmt = "Role not found.")]
     RoleNotFoundError,
+    #[display(fmt = "Group not found.")]
+    GroupNotFoundError,
+    #[display(fmt = "User not found.")]
+    UserNotFoundError,
     #[display(fmt = "Invalid username.")]
     InvalidUsername,
+    #[display(fmt = "Invalid email address.")]
+    InvalidEmailAddress,
     #[display(fmt = "An internal error occurred. Please try again later.")]
     InternalError,
 }
@@ -32,9 +38,12 @@ impl error::ResponseError for UserError {
     fn status_code(&self) -> StatusCode {
         match *self {
             UserError::PermissionsError => StatusCode::UNAUTHORIZED,
-            UserError::ProjectNotFoundError | UserError::RoleNotFoundError => StatusCode::NOT_FOUND,
+            UserError::ProjectNotFoundError
+            | UserError::RoleNotFoundError
+            | UserError::UserNotFoundError
+            | UserError::GroupNotFoundError => StatusCode::NOT_FOUND,
             UserError::InternalError => StatusCode::INTERNAL_SERVER_ERROR,
-            UserError::InvalidUsername => StatusCode::BAD_REQUEST,
+            UserError::InvalidUsername | UserError::InvalidEmailAddress => StatusCode::BAD_REQUEST,
         }
     }
 }

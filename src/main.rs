@@ -38,6 +38,11 @@ async fn get_client_config(
 ) -> Result<HttpResponse, std::io::Error> {
     // TODO: if authenticated,
     //  - [ ] retrieve services hosts
+    println!(
+        "Getting configuration for {:?}",
+        // session.get::<String>("username")
+        session.entries(),
+    );
     let default_hosts = app.settings.services_hosts.clone();
     let config = ClientConfig {
         client_id: format!("_netsblox{}", Uuid::new_v4()),
