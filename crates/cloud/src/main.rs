@@ -14,11 +14,11 @@ mod users;
 
 use crate::app_data::AppData;
 use crate::config::Settings;
-use crate::models::ServiceHost;
 use actix_cors::Cors;
 use actix_session::{CookieSession, Session};
 use actix_web::{cookie::SameSite, get, middleware, web, App, HttpResponse, HttpServer};
 use mongodb::Client;
+use netsblox_core::ServiceHost;
 use serde::Serialize;
 use uuid::Uuid;
 

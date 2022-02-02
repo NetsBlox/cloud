@@ -1,13 +1,14 @@
 use crate::app_data::AppData;
 use crate::errors::{InternalError, UserError};
 use crate::groups::ensure_can_edit_group;
-use crate::models::{LinkedAccount, User};
+use crate::models::User;
 use actix_session::Session;
 use actix_web::{get, patch, post};
 use actix_web::{web, HttpResponse};
 use futures::TryStreamExt;
 use lazy_static::lazy_static;
 use mongodb::bson::{doc, oid::ObjectId, DateTime};
+use netsblox_core::LinkedAccount;
 use regex::Regex;
 use rustrict::CensorStr;
 use serde::{Deserialize, Serialize};
@@ -428,14 +429,14 @@ async fn view_user(
     ensure_can_edit_user(&app, &session, &username).await?;
 
     let query = doc! {"username": username};
-    let user = app
+    let user: netsblox_core::User = app
         .users
         .find_one(query, None)
         .await
         .map_err(|_err| InternalError::DatabaseConnectionError)? // TODO: wrap the error?
-        .ok_or_else(|| UserError::UserNotFoundError)?;
+        .ok_or_else(|| UserError::UserNotFoundError)?
+        .into();
 
-    // TODO: hide the hash field
     Ok(HttpResponse::Ok().json(user))
 }
 

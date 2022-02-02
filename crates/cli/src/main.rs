@@ -3,12 +3,8 @@
 //  - add --user option to try to act as another user
 //
 //  capabilities:
-//    - login
-//    - logout
 //
 //    - users create --admin  --group --password? TODO: add set-password endpoint
-//    - users delete
-//    - users view
 //    - users link <snap_user>  <password> --strategy snap (include password?)
 //    - users unlink <snap_user>  --strategy snap
 //
@@ -76,7 +72,10 @@ enum Users {
         #[clap(short, long)]
         no_confirm: bool,
     },
-    View,
+    View {
+        #[clap(short, long)]
+        user: Option<String>,
+    },
     List,
     Link {
         account: String,
@@ -300,8 +299,10 @@ async fn main() -> Result<(), confy::ConfyError> {
                     println!("deleted {}", username);
                 }
             }
-            Users::View => {
-                todo!();
+            Users::View { user } => {
+                let username = user.clone().unwrap_or(current_user);
+                let user = client.view_user(&username).await;
+                println!("{:?}", user);
             }
             Users::Link {
                 account,

@@ -1,11 +1,12 @@
 use crate::app_data::AppData;
-use crate::models::{Group, ServiceHost};
+use crate::models::Group;
 use crate::users::{can_edit_user, is_super_user};
 use actix_session::Session;
 use actix_web::{get, post};
 use actix_web::{web, HttpResponse};
 use futures::TryStreamExt;
 use mongodb::bson::{doc, oid::ObjectId};
+use netsblox_core::ServiceHost;
 
 #[get("/group/{id}")]
 async fn list_group_hosts(

@@ -10,6 +10,32 @@ pub struct InvitationResponse {
     pub response: FriendLinkState,
 }
 
+pub type GroupId = String;
+#[derive(Serialize, Deserialize, Clone, Debug)]
+#[serde(rename_all = "camelCase")]
+pub struct User {
+    pub username: String,
+    pub email: String,
+    pub group_id: Option<GroupId>,
+    pub admin: Option<bool>, // TODO: use roles instead? What other roles would we even have?
+    pub created_at: u32,
+    pub linked_accounts: Vec<LinkedAccount>,
+    pub services_hosts: Option<Vec<ServiceHost>>,
+}
+
+#[derive(Serialize, Deserialize, Clone, Debug)]
+#[serde(rename_all = "camelCase")]
+pub struct ServiceHost {
+    pub url: String,
+    pub categories: Vec<String>,
+}
+
+#[derive(Serialize, Deserialize, Clone, Debug)]
+pub struct LinkedAccount {
+    pub username: String,
+    pub strategy: String, // TODO: migrate type -> strategy
+}
+
 #[derive(Deserialize, Serialize, Clone, Debug)]
 pub enum FriendLinkState {
     PENDING,

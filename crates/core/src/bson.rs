@@ -1,5 +1,23 @@
-use crate::{FriendInvite, FriendLinkState};
+use crate::{FriendInvite, FriendLinkState, LinkedAccount, ServiceHost};
 use bson::{doc, Bson, DateTime};
+
+impl From<ServiceHost> for Bson {
+    fn from(host: ServiceHost) -> Bson {
+        Bson::Document(doc! {
+            "url": host.url,
+            "categories": host.categories
+        })
+    }
+}
+
+impl From<LinkedAccount> for Bson {
+    fn from(account: LinkedAccount) -> Bson {
+        Bson::Document(doc! {
+            "username": account.username,
+            "strategy": account.strategy,
+        })
+    }
+}
 
 impl From<FriendLinkState> for Bson {
     fn from(link_state: FriendLinkState) -> Bson {

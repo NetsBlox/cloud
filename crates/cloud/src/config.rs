@@ -1,7 +1,7 @@
 use std::env;
 
-use crate::models::ServiceHost;
 use config::{Config, ConfigError, File};
+use netsblox_core::ServiceHost;
 use serde::Deserialize;
 
 #[derive(Clone, Deserialize)]

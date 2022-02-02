@@ -72,7 +72,7 @@
 
 - [ ] don't clean up projects when server goes down?
 
-- [ ] friends
+- [x] friends
     - [x] list friends
     - [x] list invites
     - [x] send invite
@@ -81,12 +81,14 @@
     - [x] unfriend
     - [ ] list (online) friends
         - include the app they are using?
+        - client IDs (if netsblox)
+        - addresses?
 
 
 
     - [x] invalid response unknown variant mongodb
 
-- [ ] invite latest
+- [ ] export latest
     - make a CLI to test some of this, too?
     - list networks?
     - send message?

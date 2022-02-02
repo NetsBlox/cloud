@@ -1,5 +1,5 @@
 use mongodb::bson::{doc, oid::ObjectId, Bson, DateTime};
-use netsblox_core::{FriendInvite, FriendLinkState};
+use netsblox_core::{FriendInvite, FriendLinkState, LinkedAccount, ServiceHost};
 use serde::{Deserialize, Serialize};
 use std::{collections::HashMap, time::SystemTime};
 use uuid::Uuid;
@@ -26,9 +26,25 @@ impl From<User> for Bson {
             "email": user.email,
             "hash": user.hash,
             "groupId": user.group_id,
+            "admin": user.admin,
             "createdAt": user.created_at,
             "linkedAccounts": user.linked_accounts,
+            "servicesHosts": user.services_hosts,
         })
+    }
+}
+
+impl From<User> for netsblox_core::User {
+    fn from(user: User) -> netsblox_core::User {
+        netsblox_core::User {
+            username: user.username,
+            email: user.email,
+            group_id: user.group_id,
+            admin: user.admin,
+            created_at: user.created_at,
+            linked_accounts: user.linked_accounts,
+            services_hosts: user.services_hosts,
+        }
     }
 }
 
@@ -204,43 +220,12 @@ impl RoleData {
 }
 
 #[derive(Serialize, Deserialize, Clone)]
-pub struct LinkedAccount {
-    pub username: String,
-    pub strategy: String, // TODO: migrate type -> strategy
-}
-
-impl From<LinkedAccount> for Bson {
-    fn from(account: LinkedAccount) -> Bson {
-        Bson::Document(doc! {
-            "username": account.username,
-            "strategy": account.strategy,
-        })
-    }
-}
-
-#[derive(Serialize, Deserialize, Clone)]
 #[serde(rename_all = "camelCase")]
 pub struct Group {
     pub id: GroupId,
     pub owner: String,
     pub name: String,
     pub services_hosts: Option<Vec<ServiceHost>>,
-}
-
-#[derive(Serialize, Deserialize, Clone)]
-#[serde(rename_all = "camelCase")]
-pub struct ServiceHost {
-    pub url: String,
-    pub categories: Vec<String>,
-}
-
-impl From<ServiceHost> for Bson {
-    fn from(host: ServiceHost) -> Bson {
-        Bson::Document(doc! {
-            "url": host.url,
-            "categories": host.categories
-        })
-    }
 }
 
 #[derive(Deserialize, Serialize, Clone)]

@@ -1,4 +1,4 @@
-pub use netsblox_core::{FriendInvite, FriendLinkState, InvitationResponse};
+pub use netsblox_core::{FriendInvite, FriendLinkState, InvitationResponse, User};
 use reqwest::{self, Method, RequestBuilder};
 use serde::{Deserialize, Serialize};
 
@@ -135,6 +135,16 @@ impl Client {
         println!("status: {}", response.status());
     }
 
+    pub async fn view_user(&self, username: &str) -> User {
+        let response = self
+            .request(Method::GET, &format!("/users/{}", username))
+            .send()
+            .await
+            .unwrap();
+        println!("status: {}", response.status());
+        response.json::<User>().await.unwrap()
+    }
+
     pub async fn link_account(
         &self,
         username: &str,
@@ -200,7 +210,8 @@ impl Client {
         let path = &format!("/friends/{}/online", username);
         let response = self.request(Method::GET, path).send().await.unwrap();
         println!("status {}", response.status());
-        response.json::<Vec<String>>().await.unwrap()
+        // response.json::<Vec<String>>().await.unwrap()
+        todo!();
     }
 
     pub async fn list_friend_invites(&self, username: &str) -> Vec<FriendInvite> {
