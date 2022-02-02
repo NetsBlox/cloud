@@ -62,7 +62,7 @@ static APP_NAME: &str = "netsblox-cli";
 
 use clap::{Parser, Subcommand};
 use inquire::{Confirm, Password, PasswordDisplayMode};
-use netsblox_api::{Client, Config, Credentials};
+use netsblox_api::{Client, Config, Credentials, FriendLinkState};
 
 #[derive(Subcommand, Debug)]
 enum Users {
@@ -134,6 +134,12 @@ enum Network {
 //    - projects publish
 //    - projects unpublish
 //    - projects delete
+#[derive(clap::ArgEnum, Clone, Debug)]
+enum FriendInviteResponse {
+    APPROVE,
+    REJECT,
+}
+
 #[derive(Subcommand, Debug)]
 enum Friends {
     List {
@@ -142,7 +148,34 @@ enum Friends {
         #[clap(short, long)]
         user: Option<String>,
     },
+    Remove {
+        username: String,
+        #[clap(short, long)]
+        user: Option<String>,
+    },
+    Block {
+        username: String,
+        #[clap(short, long)]
+        user: Option<String>,
+    },
+    Unblock {
+        username: String,
+        #[clap(short, long)]
+        user: Option<String>,
+    },
     ListInvites {
+        #[clap(short, long)]
+        user: Option<String>,
+    },
+    SendInvite {
+        username: String,
+        #[clap(short, long)]
+        user: Option<String>,
+    },
+    RespondTo {
+        sender: String,
+        #[clap(arg_enum)]
+        response: FriendInviteResponse,
         #[clap(short, long)]
         user: Option<String>,
     },
@@ -349,8 +382,38 @@ async fn main() -> Result<(), confy::ConfyError> {
             Friends::ListInvites { user } => {
                 let username = user.clone().unwrap_or(current_user);
                 for invite in client.list_friend_invites(&username).await {
-                    println!("{}", invite);
+                    println!("{:?}", invite);
                 }
+            }
+            Friends::Block { username, user } => {
+                let requestor = user.clone().unwrap_or(current_user);
+                client.block_user(&requestor, username).await;
+            }
+            Friends::Unblock { username, user } => {
+                let requestor = user.clone().unwrap_or(current_user);
+                client.unblock_user(&requestor, username).await;
+            }
+            Friends::Remove { username, user } => {
+                let owner = user.clone().unwrap_or(current_user);
+                client.unfriend(&owner, username).await;
+            }
+            Friends::SendInvite { username, user } => {
+                let sender = user.clone().unwrap_or(current_user);
+                client.send_friend_invite(&sender, &username).await;
+            }
+            Friends::RespondTo {
+                sender,
+                response,
+                user,
+            } => {
+                let recipient = user.clone().unwrap_or(current_user);
+                let state = match response {
+                    FriendInviteResponse::APPROVE => FriendLinkState::APPROVED,
+                    FriendInviteResponse::REJECT => FriendLinkState::REJECTED,
+                };
+                client
+                    .respond_to_friend_invite(&recipient, sender, state)
+                    .await;
             }
         },
     }

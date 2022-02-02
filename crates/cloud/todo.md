@@ -17,11 +17,6 @@
     - no more recording the latest one on the server?
     - maybe leave it as is for now?
 
-- rename to:
-    - netsblox-cloud
-    - netsblox-api/client?
-    - netsblox-cli
-
 - [ ] public URL is set when opening role
 - [ ] connect the client code and start testing things!
     - [x] send room messages
@@ -77,7 +72,19 @@
 
 - [ ] don't clean up projects when server goes down?
 
-- [ ] move the public types to an api crate or something?
+- [ ] friends
+    - [x] list friends
+    - [x] list invites
+    - [x] send invite
+    - [x] respond to invite
+    - [x] block user (unblock?)
+    - [x] unfriend
+    - [ ] list (online) friends
+        - include the app they are using?
+
+
+
+    - [x] invalid response unknown variant mongodb
 
 - [ ] invite latest
     - make a CLI to test some of this, too?
@@ -319,4 +326,11 @@
     - it looks fine - except for the duplicate key error
 
 - [x] show usernames in room state messages
+
+- [x] move the public types to an api crate or something?
+
+- rename to:
+    - netsblox-cloud
+    - netsblox-api/client?
+    - netsblox-cli
 

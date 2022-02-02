@@ -1,3 +1,4 @@
+pub use netsblox_core::{FriendInvite, FriendLinkState, InvitationResponse};
 use reqwest::{self, Method, RequestBuilder};
 use serde::{Deserialize, Serialize};
 
@@ -189,7 +190,7 @@ impl Client {
     }
 
     pub async fn list_friends(&self, username: &str) -> Vec<String> {
-        let path = &format!("/friends/{}", username);
+        let path = &format!("/friends/{}/", username);
         let response = self.request(Method::GET, path).send().await.unwrap();
         println!("status {}", response.status());
         response.json::<Vec<String>>().await.unwrap()
@@ -202,9 +203,57 @@ impl Client {
         response.json::<Vec<String>>().await.unwrap()
     }
 
-    pub async fn list_friend_invites(&self, username: &str) -> Vec<String> {
-        // FIXME: this is the wrong type
-        todo!();
+    pub async fn list_friend_invites(&self, username: &str) -> Vec<FriendInvite> {
+        let path = &format!("/friends/{}/invites/", username);
+        let response = self.request(Method::GET, path).send().await.unwrap();
+        println!("status {}", response.status());
+        response.json::<Vec<FriendInvite>>().await.unwrap()
+    }
+
+    pub async fn send_friend_invite(&self, username: &str, recipient: &str) {
+        let path = &format!("/friends/{}/invite/", username);
+        let response = self
+            .request(Method::POST, path)
+            .json(recipient)
+            .send()
+            .await
+            .unwrap();
+        println!("status {}", response.status());
+    }
+
+    pub async fn respond_to_friend_invite(
+        &self,
+        recipient: &str,
+        sender: &str,
+        state: FriendLinkState,
+    ) -> () {
+        let path = format!("/friends/{}/invites/{}", recipient, sender);
+        let response = self
+            .request(Method::POST, &path)
+            .json(&state)
+            .send()
+            .await
+            .unwrap();
+
+        println!("status {}", response.status());
+    }
+
+    pub async fn unfriend(&self, username: &str, friend: &str) -> () {
+        let path = format!("/friends/{}/unfriend/{}", username, friend);
+        let response = self.request(Method::POST, &path).send().await.unwrap();
+        println!("status {}", response.status());
+    }
+
+    pub async fn block_user(&self, username: &str, other_user: &str) {
+        let path = format!("/friends/{}/block/{}", username, other_user);
+        let response = self.request(Method::POST, &path).send().await.unwrap();
+        println!("status {}", response.status());
+    }
+
+    pub async fn unblock_user(&self, username: &str, other_user: &str) {
+        let path = format!("/friends/{}/unblock/{}", username, other_user);
+        let response = self.request(Method::POST, &path).send().await.unwrap();
+        println!("status {}", response.status());
     }
     // pub async fn view() -> {
     //     // FIXME: refactor into an API crate and use it here

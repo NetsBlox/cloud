@@ -1644,7 +1644,20 @@ dependencies = [
 ]
 
 [[package]]
-name = "netsblox-api"
+name = "netsblox-cli"
+version = "0.1.0"
+dependencies = [
+ "clap",
+ "confy",
+ "inquire",
+ "netsblox_api",
+ "reqwest",
+ "serde 1.0.136",
+ "tokio",
+]
+
+[[package]]
+name = "netsblox-cloud"
 version = "0.1.0"
 dependencies = [
  "actix",
@@ -1674,22 +1687,10 @@ dependencies = [
 ]
 
 [[package]]
-name = "netsblox-cli"
-version = "0.1.0"
-dependencies = [
- "clap",
- "confy",
- "inquire",
- "netsblox_api",
- "reqwest",
- "serde 1.0.136",
- "tokio",
-]
-
-[[package]]
 name = "netsblox_api"
 version = "0.1.0"
 dependencies = [
+ "netsblox_core",
  "reqwest",
  "serde 1.0.136",
 ]

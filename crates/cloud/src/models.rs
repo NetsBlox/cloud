@@ -1,5 +1,5 @@
 use mongodb::bson::{doc, oid::ObjectId, Bson, DateTime};
-use netsblox_core::FriendLinkState;
+use netsblox_core::{FriendInvite, FriendLinkState};
 use serde::{Deserialize, Serialize};
 use std::{collections::HashMap, time::SystemTime};
 use uuid::Uuid;
@@ -32,8 +32,8 @@ impl From<User> for Bson {
     }
 }
 
-type FriendLinkId = ObjectId;
-#[derive(Deserialize, Serialize, Clone)]
+type FriendLinkId = String;
+#[derive(Deserialize, Serialize, Clone, Debug)]
 #[serde(rename_all = "camelCase")]
 pub struct FriendLink {
     pub id: FriendLinkId,
@@ -48,7 +48,7 @@ impl FriendLink {
     pub fn new(sender: String, recipient: String, state: Option<FriendLinkState>) -> FriendLink {
         let created_at = DateTime::from_system_time(SystemTime::now());
         FriendLink {
-            id: ObjectId::new(),
+            id: Uuid::new_v4().to_string(),
             sender,
             recipient,
             state: state.unwrap_or(FriendLinkState::PENDING),
@@ -58,8 +58,20 @@ impl FriendLink {
     }
 }
 
+impl From<FriendLink> for FriendInvite {
+    fn from(link: FriendLink) -> FriendInvite {
+        FriendInvite {
+            id: link.id,
+            sender: link.sender,
+            recipient: link.recipient,
+            created_at: link.created_at.to_system_time(),
+        }
+    }
+}
+
 impl From<FriendLink> for Bson {
     fn from(link: FriendLink) -> Bson {
+        println!("from friend link! {:?}", link);
         Bson::Document(doc! {
             "id": link.id,
             "sender": link.sender,
