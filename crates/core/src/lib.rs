@@ -1,3 +1,6 @@
+#[cfg(feature = "bson")]
+mod bson;
+
 use serde::{Deserialize, Serialize};
 
 #[derive(Deserialize)]

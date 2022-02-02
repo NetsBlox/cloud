@@ -29,4 +29,4 @@ config = "0.11.0"
 itertools = "0.10.3"
 uuid = { version = "1.0.0-alpha.1", features = ["v4", "fast-rng"] }
 derive_more = "0.99.17"
-netsblox_core = { path = "../core", version = "0.1.0" }
+netsblox_core = { path = "../core", version = "0.1.0", features = ["to_bson"] }
