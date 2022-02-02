@@ -24,13 +24,6 @@
 //    - project collaborators add
 //    - project collaborators remove
 //
-//    - friends list --online
-//    - friends remove <username>
-//    - friends block <user>
-//    - friends invites list
-//    - friends invites send
-//    - friends invites respond
-//
 //    - libraries list --community --approval-needed
 //    - libraries export <name>
 //    - libraries import <name> <xmlPath>
@@ -208,6 +201,7 @@ struct FriendCommand {
 #[derive(Parser, Debug)]
 enum Command {
     Login,
+    Logout,
     Users(UserCommand),
     Projects(ProjectCommand),
     Network(NetworkCommand),
@@ -244,6 +238,7 @@ async fn main() -> Result<(), confy::ConfyError> {
     let is_logged_in = !(cfg.token.is_none() || cfg.username.is_none());
     let login_required = match &args.cmd {
         Command::Login => true,
+        Command::Logout => false,
         Command::Users(cmd) => match &cmd.subcmd {
             Users::Create { .. } => false,
             _ => !is_logged_in,
@@ -261,11 +256,16 @@ async fn main() -> Result<(), confy::ConfyError> {
         confy::store(&APP_NAME, &cfg)?;
     }
     let current_user = cfg.username.as_ref().unwrap().clone();
-    let client = Client::new(cfg);
+    let client = Client::new(cfg.clone());
 
-    // TODO: login if cookie is invalid
+    // TODO: login if cookie is invalid. Or just throw an error for user to re-login
     match &args.cmd {
         Command::Login => {}
+        Command::Logout => {
+            cfg.token = None;
+            cfg.username = None;
+            confy::store(&APP_NAME, &cfg)?;
+        }
         Command::Users(cmd) => match &cmd.subcmd {
             Users::Create {
                 username,
