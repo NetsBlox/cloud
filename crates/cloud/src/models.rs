@@ -1,4 +1,5 @@
 use mongodb::bson::{doc, oid::ObjectId, Bson, DateTime};
+use netsblox_core::FriendLinkState;
 use serde::{Deserialize, Serialize};
 use std::{collections::HashMap, time::SystemTime};
 use uuid::Uuid;
@@ -31,16 +32,6 @@ impl From<User> for Bson {
     }
 }
 
-#[derive(Deserialize, Serialize, Clone)]
-#[serde(rename_all = "camelCase")]
-pub enum FriendLinkState {
-    PENDING,
-    APPROVED,
-    REJECTED,
-    DELETED,
-    BLOCKED,
-}
-
 impl From<FriendLinkState> for Bson {
     fn from(link_state: FriendLinkState) -> Bson {
         match link_state {
@@ -53,10 +44,11 @@ impl From<FriendLinkState> for Bson {
     }
 }
 
+type FriendLinkId = ObjectId;
 #[derive(Deserialize, Serialize, Clone)]
 #[serde(rename_all = "camelCase")]
 pub struct FriendLink {
-    pub id: ObjectId,
+    pub id: FriendLinkId,
     pub sender: String,
     pub recipient: String,
     pub state: FriendLinkState,

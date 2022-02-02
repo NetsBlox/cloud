@@ -1,6 +1,7 @@
 pub mod topology;
 
 use crate::app_data::AppData;
+use crate::errors::UserError;
 use crate::network::topology::{ClientState, ExternalClientState};
 use actix::{Actor, Addr, AsyncContext, Handler, StreamHandler};
 use actix_session::Session;
@@ -93,9 +94,8 @@ async fn connect_client(
     ws::start(handler, &req, stream)
 }
 
-#[get("/id/{projectID}/occupants/")]
-async fn list_occupants() -> Result<HttpResponse, std::io::Error> {
-    // TODO: should this go to the network category?
+#[get("/id/{projectID}/")]
+async fn get_room_state() -> Result<HttpResponse, UserError> {
     todo!();
 }
 

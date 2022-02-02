@@ -3,7 +3,7 @@ use futures::join;
 use mongodb::bson::doc;
 use mongodb::options::{FindOneAndUpdateOptions, ReturnDocument};
 use rusoto_core::credential::StaticProvider;
-use rusoto_core::{Region, RusotoError};
+use rusoto_core::Region;
 use std::collections::{HashMap, HashSet};
 use uuid::Uuid;
 
@@ -18,7 +18,7 @@ use actix::{Actor, Addr};
 use futures::TryStreamExt;
 use mongodb::{Client, Collection, Database};
 use rusoto_s3::{
-    CreateBucketRequest, DeleteObjectOutput, DeleteObjectRequest, GetObjectRequest, PutObjectError,
+    CreateBucketRequest, DeleteObjectOutput, DeleteObjectRequest, GetObjectRequest,
     PutObjectOutput, PutObjectRequest, S3Client, S3,
 };
 

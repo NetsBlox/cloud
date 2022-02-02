@@ -439,19 +439,26 @@ async fn view_user(
     Ok(HttpResponse::Ok().json(user))
 }
 
-#[post("/{username}/link/{strategy}")]
+#[post("/{username}/link/")]
 async fn link_account(
     app: web::Data<AppData>,
-    path: web::Path<(String, String)>,
-) -> Result<HttpResponse, std::io::Error> {
-    let (username, strategy) = path.into_inner();
-    let collection = app.collection::<User>("users");
+    path: web::Path<(String,)>,
+    account: web::Json<LinkedAccount>,
+    session: Session,
+) -> Result<HttpResponse, UserError> {
+    let (username,) = path.into_inner();
+    ensure_can_edit_user(&app, &session, &username).await?;
     // TODO: add auth
     // TODO: check if already used
+    // TODO: ensure valid account
     let query = doc! {"username": &username};
-    let account = LinkedAccount { username, strategy };
-    let update = doc! {"$push": {"linkedAccounts": &account}};
-    let result = collection.update_one(query, update, None).await.unwrap();
+    let update = doc! {"$push": {"linkedAccounts": &account.into_inner()}};
+    let result = app
+        .users
+        .update_one(query, update, None)
+        .await
+        .map_err(|_err| InternalError::DatabaseConnectionError)?; // TODO: wrap the error?
+
     if result.matched_count == 0 {
         Ok(HttpResponse::NotFound().finish())
     } else {
@@ -464,13 +471,14 @@ async fn unlink_account(
     app: web::Data<AppData>,
     path: web::Path<(String,)>,
     account: web::Json<LinkedAccount>,
-) -> Result<HttpResponse, std::io::Error> {
+    session: Session,
+) -> Result<HttpResponse, UserError> {
     // TODO: add auth
     let (username,) = path.into_inner();
-    let collection = app.collection::<User>("users");
+    ensure_can_edit_user(&app, &session, &username).await?;
     let query = doc! {"username": username};
     let update = doc! {"$pull": {"linkedAccounts": &account.into_inner()}};
-    let result = collection.update_one(query, update, None).await.unwrap();
+    let result = app.users.update_one(query, update, None).await.unwrap();
     if result.matched_count == 0 {
         Ok(HttpResponse::NotFound().finish())
     } else {

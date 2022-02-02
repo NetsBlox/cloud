@@ -1,0 +1,15 @@
+[package]
+name = "netsblox-cli"
+version = "0.1.0"
+edition = "2021"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[dependencies]
+clap = { version = "3.0.13", features = ["derive"] }
+tokio = { version = "1", features = ["full"] }
+confy = "0.4.0"
+serde = { version = "1.0.130", features = ["derive"] }
+inquire = "0.3.0-alpha.1"
+reqwest = {version = "0.11.9", features = ["json", "cookies"]}
+netsblox_api = { path = "../api", version = "0.1.0" }

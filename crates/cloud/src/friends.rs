@@ -7,9 +7,8 @@ use actix_web::{get, post};
 use actix_web::{web, HttpResponse};
 use futures::TryStreamExt;
 use mongodb::bson::doc;
-use mongodb::bson::oid::ObjectId;
 use mongodb::options::UpdateOptions;
-use serde::Deserialize;
+use netsblox_core::InvitationResponse;
 
 #[get("/{owner}/")]
 async fn list_friends(
@@ -48,17 +47,15 @@ async fn list_online_friends(
     app: web::Data<AppData>,
     path: web::Path<(String,)>,
     session: Session,
-) -> HttpResponse {
+) -> Result<HttpResponse, UserError> {
     let (owner,) = path.into_inner();
-    if !can_edit_user(&app, &session, &owner).await {
-        return HttpResponse::Unauthorized().body("Not allowed.");
-    }
+    ensure_can_edit_user(&app, &session, &owner).await?;
 
     let friend_names = get_friends(&app, &owner).await;
     // TODO: Find the client IDs for these (and filter using them)
     // let online_friends = friend_names.iter().filter_map(|username| app.network.).collect();
     // TODO...
-    HttpResponse::Ok().json(friend_names)
+    Ok(HttpResponse::Ok().json(friend_names))
 }
 
 #[post("/{owner}/unfriend/{friend}")]
@@ -117,16 +114,14 @@ async fn list_invites(
     app: web::Data<AppData>,
     path: web::Path<(String,)>,
     session: Session,
-) -> HttpResponse {
+) -> Result<HttpResponse, UserError> {
     let (owner,) = path.into_inner();
-    if !can_edit_user(&app, &session, &owner).await {
-        return HttpResponse::Unauthorized().body("Not allowed.");
-    }
+    ensure_can_edit_user(&app, &session, &owner).await?;
 
-    let query = doc! {"recipient": &owner};
+    let query = doc! {"recipient": &owner, "state": FriendLinkState::PENDING}; // TODO: ensure they are still pending
     let cursor = app.friends.find(query, None).await.unwrap();
     let invites = cursor.try_collect::<Vec<_>>().await.unwrap();
-    HttpResponse::Ok().json(invites)
+    Ok(HttpResponse::Ok().json(invites))
 }
 
 #[post("/{owner}/invite/{recipient}")]
@@ -134,11 +129,9 @@ async fn send_invite(
     app: web::Data<AppData>,
     path: web::Path<(String, String)>,
     session: Session,
-) -> HttpResponse {
+) -> Result<HttpResponse, UserError> {
     let (owner, recipient) = path.into_inner();
-    if !can_edit_user(&app, &session, &owner).await {
-        return HttpResponse::Unauthorized().body("Not allowed.");
-    }
+    ensure_can_edit_user(&app, &session, &owner).await?;
 
     let query = doc! {
         "$or": [
@@ -156,16 +149,11 @@ async fn send_invite(
         .unwrap();
 
     if result.upserted_id.is_some() {
-        HttpResponse::Ok().body("Invitation sent.")
+        Ok(HttpResponse::Ok().body("Invitation sent."))
     } else {
         // TODO: Should we allow users to send multiple invitations (ie, after rejection)?
-        HttpResponse::Conflict().body("Invitation already exists.")
+        Ok(HttpResponse::Conflict().body("Invitation already exists."))
     }
-}
-
-#[derive(Deserialize)]
-struct InvitationResponse {
-    response: FriendLinkState,
 }
 
 #[post("/{owner}/invite/{id}")]

@@ -15,17 +15,25 @@
 
 - [ ] update collaboration?
     - no more recording the latest one on the server?
+    - maybe leave it as is for now?
 
+- rename to:
+    - netsblox-cloud
+    - netsblox-api/client?
+    - netsblox-cli
+
+- [ ] public URL is set when opening role
 - [ ] connect the client code and start testing things!
-    - [ ] send room messages
+    - [x] send room messages
         - [x] detect project rename
         - [x] role rename
         - [x] add role
             - [ ] is this a little slow?
         - [x] delete role
-        - [ ] duplicate role
-            - [ ] needs latest role endpoint
+        - [x] duplicate role
+            - [x] needs latest role endpoint
             - [x] getting a 404 error
+            - [x] getting a 404 error for createRole
 
     - [ ] add the "latest" endpoints
         - project
@@ -66,6 +74,23 @@
         - [ ] set projects as "broken" on broken ws connections
         - [ ] test this!
             - make sure the broken project is not deleted once another client reconnects
+
+- [ ] don't clean up projects when server goes down?
+
+- [ ] move the public types to an api crate or something?
+
+- [ ] invite latest
+    - make a CLI to test some of this, too?
+    - list networks?
+    - send message?
+        - should we be able to receive messages? Maybe send message and wait?
+            - #NetsBloxCLI
+
+    - create user?
+        - maybe only group members?
+        - how could we prevent malicious use?
+            - only group members is probably fine
+    - delete members?
 
 - [ ] validate user accounts on creation
     - [-] maybe we will need to whitelist email domains later
@@ -292,4 +317,6 @@
 - [x] rename projects to avoid collisions
     - I don't think this is currently working...
     - it looks fine - except for the duplicate key error
+
+- [x] show usernames in room state messages
 
