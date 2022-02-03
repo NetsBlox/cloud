@@ -30,7 +30,7 @@
             - [x] getting a 404 error
             - [x] getting a 404 error for createRole
 
-    - [ ] add the "latest" endpoints
+    - [x] add the "latest" endpoints
         - project
         - role
             - how can I perform req-reply over the ws connection?
@@ -84,9 +84,54 @@
         - client IDs (if netsblox)
         - addresses?
 
+- [ ] services hosts
+    - [ ] list --user-only --group-only --user
+    - [ ] add --group --user
+    - [ ] remove
 
+- [ ] libraries
+     - [ ] list --community --approval-needed
+     - [ ] delete
+     - [ ] publish
+     - [ ] unpublish
+     - [ ] approve
+
+     - [ ] import?
+
+- [ ] projects
+    - [ ] list
+    - [ ] export
+    - [ ] publish
+    - [ ] unpublish
+    - [ ] delete
+    - [ ] rename
+
+    - [ ] invite collaborator
+    - [ ] list invites
+    - [ ] respond to invite
+    - [ ] list collabs
+    - [ ] rm collab
+
+- [ ] users
+    - [x] create
+    - [x] list
+    - [ ] set-password
+    - [ ] list
+    - [x] delete
+    - [ ] view
+    - [ ] link
+    - [ ] unlink
+
+- [ ] network
+    - [ ] list
+    - [ ] view
+    - [ ] connect
 
     - [x] invalid response unknown variant mongodb
+
+- general
+    - [ ] finalize output formats (machine vs human?)
+    - [ ] finish updating the browser
 
 - [ ] export latest
     - make a CLI to test some of this, too?
