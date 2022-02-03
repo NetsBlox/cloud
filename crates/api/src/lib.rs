@@ -1,4 +1,4 @@
-pub use netsblox_core::{FriendInvite, FriendLinkState, InvitationResponse, User};
+pub use netsblox_core::{FriendInvite, FriendLinkState, InvitationResponse, ProjectMetadata, User};
 use reqwest::{self, Method, RequestBuilder};
 use serde::{Deserialize, Serialize};
 
@@ -171,7 +171,7 @@ impl Client {
         todo!();
     }
 
-    pub async fn list_projects(&self, owner: &str) -> Vec<String> {
+    pub async fn list_projects(&self, owner: &str) -> Vec<ProjectMetadata> {
         let response = self
             .request(Method::GET, &format!("/projects/user/{}", &owner))
             .send()
@@ -179,14 +179,46 @@ impl Client {
             .unwrap();
 
         println!("status {}", response.status());
-        response.json::<Vec<String>>().await.unwrap()
+        response.json::<Vec<ProjectMetadata>>().await.unwrap()
     }
 
-    pub async fn export_project(&self, owner: &str, name: &str, latest: &bool) {
-        todo!();
+    pub async fn export_project(&self, owner: &str, name: &str, latest: &bool) -> String {
+        let path = format!("/projects/user/{}/{}/metadata", owner, name);
+        let metadata = self
+            .request(Method::GET, &path)
+            .send()
+            .await
+            .unwrap()
+            .json::<ProjectMetadata>()
+            .await
+            .unwrap();
+
+        let path = if *latest {
+            format!("/projects/id/{}/latest", metadata.id)
+        } else {
+            format!("/projects/id/{}", metadata.id)
+        };
+        self.request(Method::GET, &path)
+            .send()
+            .await
+            .unwrap()
+            .text()
+            .await
+            .unwrap()
     }
 
-    pub async fn export_role(&self, owner: &str, name: &str, role: &str, latest: &bool) {
+    pub async fn export_role(&self, owner: &str, name: &str, role: &str, latest: &bool) -> String {
+        let path = format!("/projects/user/{}/{}/metadata", owner, name);
+        let metadata = self
+            .request(Method::GET, &path)
+            .send()
+            .await
+            .unwrap()
+            .json::<ProjectMetadata>()
+            .await
+            .unwrap();
+
+        // let role_id = metadata.roles
         todo!();
     }
 

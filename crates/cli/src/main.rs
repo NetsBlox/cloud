@@ -8,18 +8,6 @@
 //    - users link <snap_user>  <password> --strategy snap (include password?)
 //    - users unlink <snap_user>  --strategy snap
 //
-//    - projects export --latest --role
-//    - projects list --shared
-//    - projects publish
-//    - projects unpublish
-//    - projects delete
-//    - projects rename --role
-//    - projects create-role?
-//    - projects delete-role?
-//    - project collaborators list
-//    - project collaborators add
-//    - project collaborators remove
-//
 //    - libraries list --community --approval-needed
 //    - libraries export <name>
 //    - libraries import <name> <xmlPath>
@@ -94,6 +82,17 @@ enum Users {
     },
 }
 
+//    - projects export --latest --role
+//    - projects list --shared
+//    - projects publish
+//    - projects unpublish
+//    - projects delete
+//    - projects rename --role
+//    - projects create-role?
+//    - projects delete-role?
+//    - project collaborators list
+//    - project collaborators add
+//    - project collaborators remove
 #[derive(Subcommand, Debug)]
 enum Projects {
     Export {
@@ -345,17 +344,17 @@ async fn main() -> Result<(), confy::ConfyError> {
             } => {
                 let username = user.clone().unwrap_or(current_user);
                 //let data = if let Some(role) = role {
-                if let Some(role) = role {
+                let data = if let Some(role) = role {
                     client.export_role(&username, &name, &role, latest).await
                 } else {
                     client.export_project(&username, &name, latest).await
                 };
-                //println!("{}", data);
+                println!("{:?}", data);
             }
             Projects::List { user } => {
                 let username = user.clone().unwrap_or(current_user);
                 for project in client.list_projects(&username).await {
-                    println!("{}", project);
+                    println!("{}", project.name);
                 }
             }
         },

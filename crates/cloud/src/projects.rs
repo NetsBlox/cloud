@@ -1,6 +1,6 @@
 use crate::app_data::AppData;
 use crate::errors::{InternalError, UserError};
-use crate::models::{ProjectId, ProjectMetadata, RoleData};
+use crate::models::{ProjectMetadata, RoleData};
 use crate::network::topology::{self, BrowserClientState};
 use crate::users::{can_edit_user, ensure_can_edit_user};
 use actix_session::Session;
@@ -10,6 +10,7 @@ use futures::stream::{FuturesUnordered, TryStreamExt};
 use mongodb::bson::doc;
 use mongodb::options::{FindOneAndUpdateOptions, ReturnDocument};
 use mongodb::Cursor;
+use netsblox_core::ProjectId;
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
@@ -84,7 +85,7 @@ async fn get_visible_projects(
     session: &Session,
     owner: &str,
     cursor: Cursor<ProjectMetadata>,
-) -> Vec<ProjectMetadata> {
+) -> Vec<netsblox_core::ProjectMetadata> {
     let projects = if can_edit_user(app, session, owner).await {
         cursor.try_collect::<Vec<_>>().await.unwrap()
     } else {
@@ -96,7 +97,7 @@ async fn get_visible_projects(
             .filter(|p| p.public)
             .collect::<Vec<_>>()
     };
-    projects
+    projects.into_iter().map(|project| project.into()).collect()
 }
 
 #[get("/shared/{username}")]
@@ -137,6 +138,26 @@ async fn get_project_named(
 
     let project = app.fetch_project(&metadata).await?;
     Ok(HttpResponse::Ok().json(project)) // TODO: Update this to a responder?
+}
+
+#[get("/user/{owner}/{name}/metadata")]
+async fn get_project_metadata(
+    app: web::Data<AppData>,
+    path: web::Path<(String, String)>,
+    session: Session,
+) -> Result<HttpResponse, UserError> {
+    let (owner, name) = path.into_inner();
+    let query = doc! {"owner": owner, "name": name};
+    let metadata = app
+        .project_metadata
+        .find_one(query, None)
+        .await
+        .map_err(|_err| InternalError::DatabaseConnectionError)? // TODO: wrap the error?
+        .ok_or_else(|| UserError::ProjectNotFoundError)?;
+
+    ensure_can_view_project(&app, &session, &metadata).await?;
+
+    Ok(HttpResponse::Ok().json(metadata))
 }
 
 async fn ensure_can_view_project(
@@ -752,6 +773,7 @@ pub fn config(cfg: &mut web::ServiceConfig) {
         .service(list_shared_projects)
         .service(get_project)
         .service(get_project_named)
+        .service(get_project_metadata)
         .service(publish_project)
         .service(unpublish_project)
         .service(get_latest_project)

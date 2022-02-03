@@ -1,5 +1,7 @@
 use mongodb::bson::{doc, oid::ObjectId, Bson, DateTime};
-use netsblox_core::{FriendInvite, FriendLinkState, LinkedAccount, ServiceHost};
+pub use netsblox_core::{
+    FriendInvite, FriendLinkState, LinkedAccount, ProjectId, RoleMetadata, SaveState, ServiceHost,
+};
 use serde::{Deserialize, Serialize};
 use std::{collections::HashMap, time::SystemTime};
 use uuid::Uuid;
@@ -100,25 +102,6 @@ impl From<FriendLink> for Bson {
 }
 
 #[derive(Deserialize, Serialize, Clone)]
-pub enum SaveState {
-    TRANSIENT,
-    BROKEN,
-    SAVED,
-}
-
-impl From<SaveState> for Bson {
-    fn from(state: SaveState) -> Bson {
-        match state {
-            SaveState::TRANSIENT => Bson::Int32(0),
-            SaveState::BROKEN => Bson::Int32(1),
-            SaveState::SAVED => Bson::Int32(2),
-        }
-    }
-}
-
-pub type ProjectId = String;
-
-#[derive(Deserialize, Serialize, Clone)]
 #[serde(rename_all = "camelCase")]
 pub struct ProjectMetadata {
     pub id: ProjectId,
@@ -156,6 +139,23 @@ impl ProjectMetadata {
     }
 }
 
+impl From<ProjectMetadata> for netsblox_core::ProjectMetadata {
+    fn from(metadata: ProjectMetadata) -> netsblox_core::ProjectMetadata {
+        netsblox_core::ProjectMetadata {
+            id: metadata.id,
+            owner: metadata.owner,
+            name: metadata.name,
+            origin_time: metadata.origin_time.to_system_time(),
+            updated: metadata.updated.to_system_time(),
+            thumbnail: metadata.thumbnail,
+            public: metadata.public,
+            collaborators: metadata.collaborators,
+            save_state: metadata.save_state,
+            roles: metadata.roles,
+        }
+    }
+}
+
 #[derive(Deserialize, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct Project {
@@ -169,24 +169,6 @@ pub struct Project {
     pub origin_time: DateTime,
     pub save_state: SaveState,
     pub roles: HashMap<String, RoleData>,
-}
-
-#[derive(Deserialize, Serialize, Clone)]
-#[serde(rename_all = "PascalCase")]
-pub struct RoleMetadata {
-    pub project_name: String, // TODO: Change this to "name"?
-    pub source_code: String,
-    pub media: String,
-}
-
-impl From<RoleMetadata> for Bson {
-    fn from(role: RoleMetadata) -> Bson {
-        Bson::Document(doc! {
-            "ProjectName": role.project_name,
-            "SourceCode": role.source_code,
-            "Media": role.media,
-        })
-    }
 }
 
 #[derive(Deserialize, Serialize, Debug, Clone)]

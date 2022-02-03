@@ -3,7 +3,7 @@ mod bson;
 
 use core::fmt;
 use serde::{Deserialize, Serialize};
-use std::{str::FromStr, time::SystemTime};
+use std::{collections::HashMap, str::FromStr, time::SystemTime};
 
 #[derive(Deserialize, Serialize)]
 pub struct InvitationResponse {
@@ -76,4 +76,34 @@ pub struct FriendInvite {
     pub sender: String,
     pub recipient: String,
     pub created_at: SystemTime,
+}
+
+pub type ProjectId = String;
+#[derive(Deserialize, Serialize, Clone)]
+#[serde(rename_all = "camelCase")]
+pub struct ProjectMetadata {
+    pub id: ProjectId,
+    pub owner: String,
+    pub name: String,
+    pub updated: SystemTime,
+    pub thumbnail: String,
+    pub public: bool,
+    pub collaborators: std::vec::Vec<String>,
+    pub origin_time: SystemTime,
+    pub save_state: SaveState,
+    pub roles: HashMap<String, RoleMetadata>,
+}
+
+#[derive(Deserialize, Serialize, Clone)]
+pub enum SaveState {
+    TRANSIENT,
+    BROKEN,
+    SAVED,
+}
+#[derive(Deserialize, Serialize, Clone)]
+#[serde(rename_all = "PascalCase")]
+pub struct RoleMetadata {
+    pub project_name: String, // TODO: Change this to "name"?
+    pub source_code: String,
+    pub media: String,
 }

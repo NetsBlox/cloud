@@ -1,4 +1,4 @@
-use crate::{FriendInvite, FriendLinkState, LinkedAccount, ServiceHost};
+use crate::{FriendInvite, FriendLinkState, LinkedAccount, RoleMetadata, SaveState, ServiceHost};
 use bson::{doc, Bson, DateTime};
 
 impl From<ServiceHost> for Bson {
@@ -38,6 +38,26 @@ impl From<FriendInvite> for Bson {
             "sender": invite.sender,
             "recipient": invite.recipient,
             "createdAt": DateTime::from_system_time(invite.created_at),
+        })
+    }
+}
+
+impl From<SaveState> for Bson {
+    fn from(state: SaveState) -> Bson {
+        match state {
+            SaveState::TRANSIENT => Bson::String("TRANSIENT".to_string()),
+            SaveState::BROKEN => Bson::String("BROKEN".to_string()),
+            SaveState::SAVED => Bson::String("SAVED".to_string()),
+        }
+    }
+}
+
+impl From<RoleMetadata> for Bson {
+    fn from(role: RoleMetadata) -> Bson {
+        Bson::Document(doc! {
+            "ProjectName": role.project_name,
+            "SourceCode": role.source_code,
+            "Media": role.media,
         })
     }
 }
