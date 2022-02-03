@@ -8,18 +8,6 @@
 //    - users link <snap_user>  <password> --strategy snap (include password?)
 //    - users unlink <snap_user>  --strategy snap
 //
-//    - libraries list --community --approval-needed
-//    - libraries export <name>
-//    - libraries import <name> <xmlPath>
-//    - libraries delete <name>
-//    - libraries publish <name>
-//    - libraries unpublish <name>
-//    - libraries approve <id>
-//
-//    - service-hosts list --user-only --group-only
-//    - service-hosts add <url> <categories> --group
-//    - service-hosts remove <url> --group
-//
 //    - groups list
 //    - groups view <name>
 //    - groups members <name>
@@ -168,6 +156,46 @@ enum ServiceHosts {
     },
 }
 
+#[derive(Subcommand, Debug)]
+enum Libraries {
+    List {
+        // TODO: add an --all option?
+        #[clap(short, long)]
+        community: bool,
+        #[clap(short, long)]
+        approval_needed: bool,
+        #[clap(short, long)]
+        user: Option<String>,
+    },
+    Export {
+        name: String,
+        #[clap(short, long)]
+        user: Option<String>,
+    },
+    Delete {
+        name: String,
+        #[clap(short, long)]
+        user: Option<String>,
+    },
+    Publish {
+        name: String,
+        #[clap(short, long)]
+        user: Option<String>,
+    },
+    Unpublish {
+        name: String,
+        #[clap(short, long)]
+        user: Option<String>,
+    },
+    Approve {
+        name: String,
+        #[clap(short, long)]
+        user: Option<String>,
+    },
+}
+//    - libraries list --community --approval-needed
+//    - libraries import <name> <xmlPath>
+
 //    - network send {"some": "content"} --type MSG_TYPE --listen
 #[derive(Subcommand, Debug)]
 enum Network {
@@ -264,6 +292,17 @@ struct FriendCommand {
 }
 
 #[derive(Parser, Debug)]
+struct ServiceHostCommand {
+    #[clap(subcommand)]
+    subcmd: ServiceHosts,
+}
+
+#[derive(Parser, Debug)]
+struct LibraryCommand {
+    #[clap(subcommand)]
+    subcmd: Libraries,
+}
+#[derive(Parser, Debug)]
 enum Command {
     Login,
     Logout,
@@ -271,6 +310,8 @@ enum Command {
     Projects(ProjectCommand),
     Network(NetworkCommand),
     Friends(FriendCommand),
+    ServiceHosts(ServiceHostCommand),
+    Libraries(LibraryCommand),
 }
 
 #[derive(Parser, Debug)]
@@ -528,6 +569,50 @@ async fn main() -> Result<(), confy::ConfyError> {
                 client
                     .respond_to_friend_invite(&recipient, sender, state)
                     .await;
+            }
+        },
+        Command::ServiceHosts(cmd) => match &cmd.subcmd {
+            ServiceHosts::List {
+                user_only,
+                group_only,
+                user,
+            } => {
+                todo!();
+            }
+            ServiceHosts::Add {
+                url,
+                categories,
+                group,
+                user,
+            } => {
+                todo!();
+            }
+            ServiceHosts::Remove { url, group, user } => {
+                todo!();
+            }
+        },
+        Command::Libraries(cmd) => match &cmd.subcmd {
+            Libraries::List {
+                community,
+                user,
+                approval_needed,
+            } => {
+                todo!();
+            }
+            Libraries::Export { name, user } => {
+                todo!();
+            }
+            Libraries::Delete { name, user } => {
+                todo!();
+            }
+            Libraries::Publish { name, user } => {
+                todo!();
+            }
+            Libraries::Unpublish { name, user } => {
+                todo!();
+            }
+            Libraries::Approve { name, user } => {
+                todo!();
             }
         },
     }
