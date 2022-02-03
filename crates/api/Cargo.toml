@@ -1,5 +1,5 @@
 [package]
-name = "netsblox_api"
+name = "netsblox-api"
 version = "0.1.0"
 edition = "2021"
 
@@ -8,4 +8,8 @@ edition = "2021"
 [dependencies]
 serde = { version = "1.0.130", features = ["derive"] }
 reqwest = {version = "0.11.9", features = ["json", "cookies"]}
+futures-util = "0.3.19"
 netsblox_core = { path = "../core", version = "0.1.0" }
+tokio-tungstenite = "0.16.1"
+tungstenite = "0.16.0"
+tokio = "1.0.0"

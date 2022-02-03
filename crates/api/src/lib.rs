@@ -1,10 +1,17 @@
+use futures_util::{stream::SplitSink, stream::SplitStream, StreamExt};
+use netsblox_core::{
+    ClientConfig, ClientState, ClientStateData, ExternalClientState, Project, RoleData,
+};
 pub use netsblox_core::{FriendInvite, FriendLinkState, InvitationResponse, ProjectMetadata, User};
-use netsblox_core::{Project, RoleData};
 use reqwest::{self, Method, RequestBuilder};
 use serde::{Deserialize, Serialize};
+use tokio::net::TcpStream;
+use tokio_tungstenite::{connect_async, MaybeTlsStream, WebSocketStream};
+use tungstenite::Message;
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct Config {
+    pub app_id: Option<String>,
     pub url: String,
     pub token: Option<String>,
     pub username: Option<String>,
@@ -13,6 +20,7 @@ pub struct Config {
 impl Default for Config {
     fn default() -> Self {
         Self {
+            app_id: None,
             username: None,
             token: None,
             url: "http://editor.netsblox.org".to_owned(),
@@ -195,6 +203,7 @@ impl Client {
     }
 
     pub async fn export_project(&self, owner: &str, name: &str, latest: &bool) -> Project {
+        // TODO: Should this logic happen in the CLI instead?
         let path = format!("/projects/user/{}/{}/metadata", owner, name);
         let metadata = self
             .request(Method::GET, &path)
@@ -221,6 +230,7 @@ impl Client {
         role: &str,
         latest: &bool,
     ) -> RoleData {
+        // TODO: Should this logic happen in the CLI instead?
         let path = format!("/projects/user/{}/{}/metadata", owner, name);
         let metadata = self
             .request(Method::GET, &path)
@@ -322,10 +332,63 @@ impl Client {
         let response = self.request(Method::POST, &path).send().await.unwrap();
         println!("status {}", response.status());
     }
-    // pub async fn view() -> {
-    //     // FIXME: refactor into an API crate and use it here
 
-    // }
+    pub async fn connect(&self, address: &str) -> MessageChannel {
+        let response = self
+            .request(Method::GET, "/configuration")
+            .send()
+            .await
+            .unwrap();
+
+        let config = response.json::<ClientConfig>().await.unwrap();
+
+        let url = format!(
+            "{}/network/{}/connect",
+            self.cfg.url.replace("http", "ws"),
+            config.client_id
+        );
+        println!("trying to connect to: {}", &url);
+        let (ws_stream, _) = connect_async(&url).await.unwrap();
+
+        let state = ClientStateData {
+            state: ClientState::External(ExternalClientState {
+                address: address.to_owned(),
+                app_id: self.cfg.app_id.as_ref().unwrap().clone(),
+                // .ok_or(ClientError::NoAppID)?,
+            }),
+        };
+
+        let response = self
+            .request(
+                Method::POST,
+                &format!("/network/{}/state", config.client_id),
+            )
+            .json(&state)
+            .send()
+            .await
+            .unwrap();
+        println!("status {}", response.status());
+
+        let (write, read) = ws_stream.split();
+        MessageChannel {
+            id: config.client_id,
+            read,
+            write,
+        }
+    }
+}
+
+pub struct MessageChannel {
+    pub id: String,
+    write: SplitSink<WebSocketStream<MaybeTlsStream<TcpStream>>, Message>,
+    pub read: SplitStream<WebSocketStream<MaybeTlsStream<TcpStream>>>,
+}
+
+impl MessageChannel {
+    // TODO: do we need a method for sending other types?
+    pub async fn send(&self, msg_type: &str) {
+        todo!();
+    }
 }
 
 #[cfg(test)]

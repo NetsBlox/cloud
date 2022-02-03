@@ -1,6 +1,7 @@
 use futures::future::join_all;
 use mongodb::bson::{doc, DateTime};
-use serde::{Deserialize, Serialize};
+pub use netsblox_core::{BrowserClientState, ClientState, ExternalClientState};
+use serde::Serialize;
 use std::collections::HashMap;
 use std::str::FromStr;
 use std::time::{Duration, SystemTime};
@@ -17,27 +18,6 @@ use super::{
     AddClient, BrokenClient, ClientMessage, RemoveClient, SendMessage, SendRoomState,
     SetClientState,
 };
-
-#[derive(Debug, Deserialize, Serialize)]
-#[serde(rename_all = "camelCase")]
-pub enum ClientState {
-    Browser(BrowserClientState),
-    External(ExternalClientState),
-}
-
-#[derive(Debug, Deserialize, Serialize, Clone)]
-#[serde(rename_all = "camelCase")]
-pub struct BrowserClientState {
-    pub role_id: String,
-    pub project_id: String,
-}
-
-#[derive(Debug, Deserialize, Serialize)]
-#[serde(rename_all = "camelCase")]
-pub struct ExternalClientState {
-    pub address: String,
-    pub app_id: String,
-}
 
 struct BrowserAddress {
     role_id: String,

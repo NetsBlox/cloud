@@ -8,17 +8,11 @@ use actix_session::Session;
 use actix_web::{delete, get, post};
 use actix_web::{web, Error, HttpRequest, HttpResponse};
 use actix_web_actors::ws::{self, CloseCode};
+use netsblox_core::ClientStateData;
 use serde::Deserialize;
 use serde_json::Value;
 
 pub type AppID = String;
-
-#[derive(Deserialize)]
-#[serde(rename_all = "camelCase")]
-struct ClientStateData {
-    state: ClientState,
-    // pub token: Option<String>, // TODO: token for accessing the project; secret for controlling client
-}
 
 #[post("/{client}/state")] // TODO: add token here, too
 async fn set_client_state(

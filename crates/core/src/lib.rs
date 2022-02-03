@@ -7,6 +7,15 @@ use std::{collections::HashMap, str::FromStr, time::SystemTime};
 const APP_NAME: &str = "NetsBlox";
 
 #[derive(Deserialize, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ClientConfig {
+    pub client_id: String,
+    pub username: Option<String>,
+    pub services_hosts: Vec<ServiceHost>,
+    pub cloud_url: String,
+}
+
+#[derive(Deserialize, Serialize)]
 pub struct InvitationResponse {
     pub response: FriendLinkState,
 }
@@ -155,4 +164,32 @@ impl RoleData {
             self.name, self.code, self.media
         ) // TODO: escape the names?
     }
+}
+
+#[derive(Deserialize, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ClientStateData {
+    pub state: ClientState,
+    // pub token: Option<String>, // TODO: token for accessing the project; secret for controlling client
+}
+
+#[derive(Debug, Deserialize, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub enum ClientState {
+    Browser(BrowserClientState),
+    External(ExternalClientState),
+}
+
+#[derive(Debug, Deserialize, Serialize, Clone)]
+#[serde(rename_all = "camelCase")]
+pub struct BrowserClientState {
+    pub role_id: String,
+    pub project_id: String,
+}
+
+#[derive(Debug, Deserialize, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ExternalClientState {
+    pub address: String,
+    pub app_id: String,
 }

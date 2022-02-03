@@ -1644,13 +1644,27 @@ dependencies = [
 ]
 
 [[package]]
+name = "netsblox-api"
+version = "0.1.0"
+dependencies = [
+ "futures-util",
+ "netsblox_core",
+ "reqwest",
+ "serde 1.0.136",
+ "tokio",
+ "tokio-tungstenite",
+ "tungstenite",
+]
+
+[[package]]
 name = "netsblox-cli"
 version = "0.1.0"
 dependencies = [
  "clap",
  "confy",
+ "futures-util",
  "inquire",
- "netsblox_api",
+ "netsblox-api",
  "reqwest",
  "serde 1.0.136",
  "tokio",
@@ -1684,15 +1698,6 @@ dependencies = [
  "serde_json",
  "sha2 0.10.1",
  "uuid 1.0.0-alpha.1",
-]
-
-[[package]]
-name = "netsblox_api"
-version = "0.1.0"
-dependencies = [
- "netsblox_core",
- "reqwest",
- "serde 1.0.136",
 ]
 
 [[package]]
@@ -2939,6 +2944,18 @@ dependencies = [
 ]
 
 [[package]]
+name = "tokio-tungstenite"
+version = "0.16.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "e80b39df6afcc12cdf752398ade96a6b9e99c903dfdc36e53ad10b9c366bca72"
+dependencies = [
+ "futures-util",
+ "log",
+ "tokio",
+ "tungstenite",
+]
+
+[[package]]
 name = "tokio-util"
 version = "0.6.9"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -3039,6 +3056,25 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "59547bce71d9c38b83d9c0e92b6066c4253371f15005def0c30d9657f50c7642"
 
 [[package]]
+name = "tungstenite"
+version = "0.16.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "6ad3713a14ae247f22a728a0456a545df14acf3867f905adff84be99e23b3ad1"
+dependencies = [
+ "base64",
+ "byteorder",
+ "bytes",
+ "http",
+ "httparse",
+ "log",
+ "rand",
+ "sha-1 0.9.8",
+ "thiserror",
+ "url",
+ "utf-8",
+]
+
+[[package]]
 name = "typed-builder"
 version = "0.9.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -3121,6 +3157,12 @@ dependencies = [
  "matches",
  "percent-encoding",
 ]
+
+[[package]]
+name = "utf-8"
+version = "0.7.6"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "09cc8ee72d2a9becf2f2febe0205bbed8fc6615b7cb429ad062dc7b7ddd036a9"
 
 [[package]]
 name = "uuid"

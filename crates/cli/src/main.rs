@@ -1,8 +1,10 @@
 static APP_NAME: &str = "netsblox-cli";
 
 use clap::{Parser, Subcommand};
+use futures_util::StreamExt;
 use inquire::{Confirm, Password, PasswordDisplayMode};
 use netsblox_api::{Client, Config, Credentials, FriendLinkState};
+use tokio::io::AsyncWriteExt;
 
 #[derive(Subcommand, Debug)]
 enum Users {
@@ -210,12 +212,11 @@ enum Network {
         #[clap(short, long)]
         user: Option<String>,
     },
-    Send {
-        #[clap(short, long)]
-        listen: bool,
-    },
     /// Connect to NetsBlox and listen for messages
-    Listen,
+    Connect {
+        #[clap(short, long, default_value = "project")]
+        address: String,
+    },
 }
 
 #[derive(Subcommand, Debug)]
@@ -369,6 +370,7 @@ fn prompt_credentials() -> Credentials {
 #[tokio::main]
 async fn main() -> Result<(), confy::ConfyError> {
     let mut cfg: Config = confy::load(&APP_NAME)?;
+    cfg.app_id = Some("NetsBloxCLI".to_owned());
     println!("Using config: {:?}", &cfg);
 
     let args = Cli::parse();
@@ -564,11 +566,29 @@ async fn main() -> Result<(), confy::ConfyError> {
             Network::View { room, app, user } => {
                 todo!();
             }
-            Network::Send { listen } => {
-                todo!();
-            }
-            Network::Listen => {
-                todo!(); // connect, print the address, then print any received msgs
+            Network::Connect { address } => {
+                // TODO: request a client_id
+                // TODO: connect to NetsBlox
+                // let config = client.connect().await;
+
+                // TODO: do we need a client ID for anything else?
+                // Maybe this can be kept internal to the client?
+                // setting the client state...
+                // probably can still be kept internal
+                let channel = client.connect(address).await;
+                println!(
+                    "Listening for messages at {}@{}#NetsBloxCLI",
+                    address,
+                    cfg.username.unwrap_or(channel.id)
+                );
+
+                channel
+                    .read
+                    .for_each(|msg| async {
+                        let data = msg.unwrap().into_data();
+                        tokio::io::stdout().write_all(&data).await.unwrap();
+                    })
+                    .await;
             }
         },
         Command::Friends(cmd) => match &cmd.subcmd {

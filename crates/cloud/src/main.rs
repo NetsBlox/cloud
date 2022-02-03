@@ -18,18 +18,8 @@ use actix_cors::Cors;
 use actix_session::{CookieSession, Session};
 use actix_web::{cookie::SameSite, get, middleware, web, App, HttpResponse, HttpServer};
 use mongodb::Client;
-use netsblox_core::ServiceHost;
-use serde::Serialize;
+use netsblox_core::ClientConfig;
 use uuid::Uuid;
-
-#[derive(Serialize)]
-#[serde(rename_all = "camelCase")]
-struct ClientConfig<'a> {
-    client_id: String,
-    username: Option<String>,
-    services_hosts: Vec<ServiceHost>,
-    cloud_url: &'a str,
-}
 
 #[get("/configuration")]
 async fn get_client_config(
@@ -48,7 +38,7 @@ async fn get_client_config(
         client_id: format!("_netsblox{}", Uuid::new_v4()),
         username: session.get::<String>("username").unwrap_or(None),
         services_hosts: default_hosts,
-        cloud_url: &app.settings.public_url,
+        cloud_url: app.settings.public_url.to_owned(),
     };
     Ok(HttpResponse::Ok().json(config))
 }
