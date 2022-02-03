@@ -1,25 +1,3 @@
-// Commands for the CLI:
-//
-//  - add --user option to try to act as another user
-//
-//  capabilities:
-//
-//    - users create --admin  --group --password? TODO: add set-password endpoint
-//    - users link <snap_user>  <password> --strategy snap (include password?)
-//    - users unlink <snap_user>  --strategy snap
-//
-//    - groups list
-//    - groups view <name>
-//    - groups members <name>
-//    - groups create <name>
-//    - groups rename <name> <new name>
-//    - groups delete <name>
-//
-//    - collaboration invite <username> <project>
-//    - collaboration list
-//    - collaboration respond <invite/user> <response>
-//
-//
 static APP_NAME: &str = "netsblox-cli";
 
 use clap::{Parser, Subcommand};
@@ -33,10 +11,10 @@ enum Users {
         email: String,
         #[clap(short, long)]
         password: Option<String>,
-        // #[clap(short, long)]
-        // group: Option<String>,
-        // #[clap(short, long)]
-        // user: Option<String>,
+        #[clap(short, long)]
+        group: Option<String>,
+        #[clap(short, long)]
+        user: Option<String>,
         #[clap(short, long)]
         admin: bool,
     },
@@ -49,7 +27,14 @@ enum Users {
         #[clap(short, long)]
         user: Option<String>,
     },
-    List,
+    SetPassword {
+        username: String,
+        password: String,
+        #[clap(short, long)]
+        user: Option<String>,
+    },
+    List, // TODO: add verbose option?
+    //
     Link {
         account: String,
         password: String,
@@ -110,14 +95,27 @@ enum Projects {
         #[clap(short, long)]
         user: Option<String>,
     },
-    ListCollaborators {
+    InviteCollaborator {
         project: String,
+        username: String,
         #[clap(short, long)]
         user: Option<String>,
     },
-    AddCollaborator {
+    ListInvites {
+        #[clap(short, long)]
+        user: Option<String>,
+    },
+    RespondToInvite {
         project: String,
         username: String,
+        #[clap(arg_enum)]
+        response: InviteResponse,
+
+        #[clap(short, long)]
+        user: Option<String>,
+    },
+    ListCollaborators {
+        project: String,
         #[clap(short, long)]
         user: Option<String>,
     },
@@ -220,8 +218,41 @@ enum Network {
     Listen,
 }
 
+#[derive(Subcommand, Debug)]
+enum Groups {
+    Create {
+        #[clap(short, long)]
+        user: Option<String>,
+    },
+    List {
+        #[clap(short, long)]
+        user: Option<String>,
+    },
+    View {
+        group: String,
+        #[clap(short, long)]
+        user: Option<String>,
+    },
+    Delete {
+        group: String,
+        #[clap(short, long)]
+        user: Option<String>,
+    },
+    Members {
+        group: String,
+        #[clap(short, long)]
+        user: Option<String>,
+    },
+    Rename {
+        group: String,
+        new_name: String,
+        #[clap(short, long)]
+        user: Option<String>,
+    },
+}
+
 #[derive(clap::ArgEnum, Clone, Debug)]
-enum FriendInviteResponse {
+enum InviteResponse {
     APPROVE,
     REJECT,
 }
@@ -261,7 +292,7 @@ enum Friends {
     RespondTo {
         sender: String,
         #[clap(arg_enum)]
-        response: FriendInviteResponse,
+        response: InviteResponse,
         #[clap(short, long)]
         user: Option<String>,
     },
@@ -378,12 +409,21 @@ async fn main() -> Result<(), confy::ConfyError> {
                 email,
                 password,
                 admin,
+                group,
+                user,
             } => {
                 // TODO: resolve group name to ID
                 println!("Creating user: {:?}", username);
                 client
                     .create_user(&username, email, password.as_deref(), None, admin)
                     .await;
+            }
+            Users::SetPassword {
+                username,
+                password,
+                user,
+            } => {
+                todo!();
             }
             Users::List => {
                 for user in client.list_users().await {
@@ -471,14 +511,25 @@ async fn main() -> Result<(), confy::ConfyError> {
             Projects::Unpublish { project, user } => {
                 todo!();
             }
-            Projects::ListCollaborators { project, user } => {
-                todo!();
-            }
-            Projects::AddCollaborator {
+            Projects::InviteCollaborator {
                 project,
                 username,
                 user,
             } => {
+                todo!();
+            }
+            Projects::ListInvites { user } => {
+                todo!();
+            }
+            Projects::RespondToInvite {
+                project,
+                username,
+                response,
+                user,
+            } => {
+                todo!();
+            }
+            Projects::ListCollaborators { project, user } => {
                 todo!();
             }
             Projects::RemoveCollaborator {
@@ -563,8 +614,8 @@ async fn main() -> Result<(), confy::ConfyError> {
             } => {
                 let recipient = user.clone().unwrap_or(current_user);
                 let state = match response {
-                    FriendInviteResponse::APPROVE => FriendLinkState::APPROVED,
-                    FriendInviteResponse::REJECT => FriendLinkState::REJECTED,
+                    InviteResponse::APPROVE => FriendLinkState::APPROVED,
+                    InviteResponse::REJECT => FriendLinkState::REJECTED,
                 };
                 client
                     .respond_to_friend_invite(&recipient, sender, state)

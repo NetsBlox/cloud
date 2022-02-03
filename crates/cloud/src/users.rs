@@ -355,12 +355,13 @@ async fn ban_user(
 async fn delete_user(
     app: web::Data<AppData>,
     path: web::Path<(String,)>,
-) -> Result<HttpResponse, std::io::Error> {
-    // TODO: check auth
+    session: Session,
+) -> Result<HttpResponse, UserError> {
     let (username,) = path.into_inner();
-    let collection = app.collection::<User>("users");
+    ensure_can_edit_user(&app, &session, &username).await?;
+
     let query = doc! {"username": username};
-    let result = collection.delete_one(query, None).await.unwrap();
+    let result = app.users.delete_one(query, None).await.unwrap();
     if result.deleted_count > 0 {
         Ok(HttpResponse::Ok().finish())
     } else {
@@ -369,9 +370,14 @@ async fn delete_user(
 }
 
 #[post("/{username}/password")]
-async fn reset_password(app: web::Data<AppData>, path: web::Path<(String,)>) -> HttpResponse {
-    // TODO: authenticate?
+async fn reset_password(
+    app: web::Data<AppData>,
+    path: web::Path<(String,)>,
+    session: Session,
+) -> Result<HttpResponse, UserError> {
     let (username,) = path.into_inner();
+    ensure_can_edit_user(&app, &session, &username).await?;
+
     let pg = passwords::PasswordGenerator::new()
         .length(8)
         .exclude_similar_characters(true)
@@ -384,14 +390,17 @@ async fn reset_password(app: web::Data<AppData>, path: web::Path<(String,)>) -> 
     let hash = hasher.finalize();
     // TODO: This will need to send an email...
 
-    let collection = app.collection::<User>("users");
     let query = doc! {"username": username};
     let update = doc! {"hash": &hex::encode(hash)};
-    let result = collection.update_one(query, update, None).await.unwrap();
+    let result = app
+        .users
+        .update_one(query, update, None)
+        .await
+        .map_err(|_err| InternalError::DatabaseConnectionError)?;
     if result.modified_count > 0 {
-        HttpResponse::Ok().finish()
+        Ok(HttpResponse::Ok().finish())
     } else {
-        HttpResponse::NotFound().finish()
+        Err(UserError::UserNotFoundError)
     }
 }
 
@@ -405,16 +414,20 @@ async fn change_password(
     app: web::Data<AppData>,
     path: web::Path<(String,)>,
     data: web::Json<PasswordChangeData>,
-) -> Result<HttpResponse, std::io::Error> {
+) -> Result<HttpResponse, UserError> {
     let (username,) = path.into_inner();
-    let collection = app.collection::<User>("users");
     let query = doc! {"username": username};
     let update = doc! {"hash": &data.password_hash};
-    let result = collection.update_one(query, update, None).await.unwrap();
+    let result = app
+        .users
+        .update_one(query, update, None)
+        .await
+        .map_err(|_err| InternalError::DatabaseConnectionError)?;
+
     if result.modified_count > 0 {
         Ok(HttpResponse::Ok().finish())
     } else {
-        Ok(HttpResponse::NotFound().finish())
+        Err(UserError::UserNotFoundError)
     }
 }
 
@@ -449,7 +462,6 @@ async fn link_account(
 ) -> Result<HttpResponse, UserError> {
     let (username,) = path.into_inner();
     ensure_can_edit_user(&app, &session, &username).await?;
-    // TODO: add auth
     // TODO: check if already used
     // TODO: ensure valid account
     let query = doc! {"username": &username};
@@ -474,7 +486,6 @@ async fn unlink_account(
     account: web::Json<LinkedAccount>,
     session: Session,
 ) -> Result<HttpResponse, UserError> {
-    // TODO: add auth
     let (username,) = path.into_inner();
     ensure_can_edit_user(&app, &session, &username).await?;
     let query = doc! {"username": username};
