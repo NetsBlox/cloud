@@ -101,13 +101,14 @@ pub enum SaveState {
     BROKEN,
     SAVED,
 }
+
 #[derive(Deserialize, Serialize, Clone)]
-#[serde(rename_all = "PascalCase")]
 pub struct RoleMetadata {
     pub name: String,
     pub code: String,
     pub media: String,
 }
+
 #[derive(Deserialize, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct Project {

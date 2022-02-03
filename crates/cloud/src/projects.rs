@@ -12,7 +12,7 @@ use futures::stream::{FuturesUnordered, TryStreamExt};
 use mongodb::bson::doc;
 use mongodb::options::{FindOneAndUpdateOptions, ReturnDocument};
 use mongodb::Cursor;
-use netsblox_core::{Project, ProjectId};
+use netsblox_core::{Project, ProjectId, SaveState};
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
@@ -71,7 +71,7 @@ async fn list_user_projects(
     session: Session,
 ) -> Result<HttpResponse, std::io::Error> {
     let (username,) = path.into_inner();
-    let query = doc! {"owner": &username};
+    let query = doc! {"owner": &username, "state": SaveState::SAVED};
     let cursor = app
         .project_metadata
         .find(query, None)
@@ -107,9 +107,11 @@ async fn list_shared_projects(
     app: web::Data<AppData>,
     path: web::Path<(String,)>,
     session: Session,
-) -> Result<HttpResponse, std::io::Error> {
+) -> Result<HttpResponse, UserError> {
     let (username,) = path.into_inner();
-    let query = doc! {"collaborators": &username}; // FIXME
+    ensure_can_edit_user(&app, &session, &username).await?;
+
+    let query = doc! {"collaborators": &username, "state": SaveState::SAVED};
     let cursor = app
         .project_metadata
         .find(query, None)
@@ -226,7 +228,6 @@ async fn get_project(
 ) -> Result<HttpResponse, UserError> {
     let (project_id,) = path.into_inner();
     let query = doc! {"id": project_id};
-    // TODO: better error handling
     let metadata = app
         .project_metadata
         .find_one(query, None)
@@ -237,7 +238,6 @@ async fn get_project(
     ensure_can_view_project(&app, &session, &metadata).await?;
 
     let project: netsblox_core::Project = app.fetch_project(&metadata).await?.into();
-    // TODO: bring this in sync with get_latest_project (return xml or project??)
     Ok(HttpResponse::Ok().json(project)) // TODO: Update this to a responder?
 }
 
@@ -314,7 +314,6 @@ async fn delete_project(
         .ok_or_else(|| UserError::ProjectNotFoundError)?;
 
     // collaborators cannot delete -> only user/admin/etc
-
     ensure_can_edit_user(&app, &session, &metadata.owner).await?;
     app.delete_project(metadata).await?; // TODO:
     Ok(HttpResponse::Ok().body("Project deleted"))
