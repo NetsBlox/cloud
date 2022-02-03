@@ -183,6 +183,17 @@ impl Client {
         response.json::<Vec<ProjectMetadata>>().await.unwrap()
     }
 
+    pub async fn list_shared_projects(&self, owner: &str) -> Vec<ProjectMetadata> {
+        let response = self
+            .request(Method::GET, &format!("/projects/shared/{}", &owner))
+            .send()
+            .await
+            .unwrap();
+
+        println!("status {}", response.status());
+        response.json::<Vec<ProjectMetadata>>().await.unwrap()
+    }
+
     pub async fn export_project(&self, owner: &str, name: &str, latest: &bool) -> Project {
         let path = format!("/projects/user/{}/{}/metadata", owner, name);
         let metadata = self

@@ -31,9 +31,6 @@
 //    - collaboration list
 //    - collaboration respond <invite/user> <response>
 //
-//    - network list --external
-//    - network view --room <name> | --app
-//    - network send {"some": "content"} --type MSG_TYPE --listen
 //
 static APP_NAME: &str = "netsblox-cli";
 
@@ -82,21 +79,11 @@ enum Users {
     },
 }
 
-//    - projects export --latest --role
-//    - projects list --shared
-//    - projects publish
-//    - projects unpublish
-//    - projects delete
-//    - projects rename --role
 //    - projects create-role?
-//    - projects delete-role?
-//    - project collaborators list
-//    - project collaborators add
-//    - project collaborators remove
 #[derive(Subcommand, Debug)]
 enum Projects {
     Export {
-        name: String,
+        project: String,
         #[clap(short, long)]
         latest: bool,
         #[clap(short, long)]
@@ -106,25 +93,105 @@ enum Projects {
     },
     List {
         #[clap(short, long)]
+        shared: bool,
+        #[clap(short, long)]
+        user: Option<String>,
+    },
+    Publish {
+        project: String,
+        #[clap(short, long)]
+        user: Option<String>,
+    },
+    Unpublish {
+        project: String,
+        #[clap(short, long)]
+        user: Option<String>,
+    },
+    Delete {
+        project: String,
+        #[clap(short, long)]
+        role: Option<String>,
+        #[clap(short, long)]
+        user: Option<String>,
+    },
+    Rename {
+        project: String,
+        new_name: String,
+        #[clap(short, long)]
+        role: Option<String>, // TODO: not sure if this makes sense
+        #[clap(short, long)]
+        user: Option<String>,
+    },
+    ListCollaborators {
+        project: String,
+        #[clap(short, long)]
+        user: Option<String>,
+    },
+    AddCollaborator {
+        project: String,
+        username: String,
+        #[clap(short, long)]
+        user: Option<String>,
+    },
+    RemoveCollaborator {
+        project: String,
+        username: String,
+        #[clap(short, long)]
         user: Option<String>,
     },
 }
 
 #[derive(Subcommand, Debug)]
-enum Network {
+enum ServiceHosts {
     List {
         #[clap(short, long)]
-        external: Option<String>,
+        user_only: bool,
+        #[clap(short, long)]
+        group_only: bool,
+        #[clap(short, long)]
+        user: Option<String>,
     },
-    // View {
-
-    // }
+    Add {
+        url: String,
+        categories: String, // TODO: Should this be optional?
+        #[clap(short, long)]
+        group: Option<String>,
+        #[clap(short, long)]
+        user: Option<String>,
+    },
+    Remove {
+        url: String,
+        #[clap(short, long)]
+        group: Option<String>,
+        #[clap(short, long)]
+        user: Option<String>,
+    },
 }
-//    - projects export --latest --role
-//    - projects list --shared
-//    - projects publish
-//    - projects unpublish
-//    - projects delete
+
+//    - network send {"some": "content"} --type MSG_TYPE --listen
+#[derive(Subcommand, Debug)]
+enum Network {
+    List {
+        #[clap(short, long)] // TODO: Add an --all flag??
+        external: bool,
+    },
+    View {
+        // FIXME: or should we just accept the address?
+        #[clap(short, long)]
+        room: Option<String>,
+        #[clap(short, long)]
+        app: Option<String>,
+        #[clap(short, long)]
+        user: Option<String>,
+    },
+    Send {
+        #[clap(short, long)]
+        listen: bool,
+    },
+    /// Connect to NetsBlox and listen for messages
+    Listen,
+}
+
 #[derive(clap::ArgEnum, Clone, Debug)]
 enum FriendInviteResponse {
     APPROVE,
@@ -323,21 +390,11 @@ async fn main() -> Result<(), confy::ConfyError> {
                 let username = user.clone().unwrap_or(current_user);
                 client.unlink_account(&username, account, strategy).await;
                 todo!();
-            } //    - projects export --latest --role
-              //    - projects list --shared
-              //    - projects publish
-              //    - projects unpublish
-              //    - projects delete
-              //    - projects rename --role
-              //    - projects create-role?
-              //    - projects delete-role?
-              //    - project collaborators list
-              //    - project collaborators add
-              //    - project collaborators remove
+            }
         },
         Command::Projects(cmd) => match &cmd.subcmd {
             Projects::Export {
-                name,
+                project,
                 role,
                 latest,
                 user,
@@ -345,24 +402,65 @@ async fn main() -> Result<(), confy::ConfyError> {
                 let username = user.clone().unwrap_or(current_user);
                 let xml = if let Some(role) = role {
                     client
-                        .export_role(&username, &name, &role, latest)
+                        .export_role(&username, &project, &role, latest)
                         .await
                         .to_xml()
                 } else {
                     // TODO: Should this output the Project or an xml?
                     // maybe the Project which contains a toXML method?
                     client
-                        .export_project(&username, &name, latest)
+                        .export_project(&username, &project, latest)
                         .await
                         .to_xml()
                 };
                 println!("{}", xml);
             }
-            Projects::List { user } => {
+            Projects::List { user, shared } => {
                 let username = user.clone().unwrap_or(current_user);
+                // TODO: respect shared flag
                 for project in client.list_projects(&username).await {
                     println!("{}", project.name);
                 }
+            }
+            Projects::Publish { project, user } => {
+                let username = user.clone().unwrap_or(current_user);
+                //client.publish_project(user, project).await;
+                todo!();
+            }
+            Projects::Unpublish { project, user } => {
+                todo!();
+            }
+            Projects::ListCollaborators { project, user } => {
+                todo!();
+            }
+            Projects::AddCollaborator {
+                project,
+                username,
+                user,
+            } => {
+                todo!();
+            }
+            Projects::RemoveCollaborator {
+                project,
+                username,
+                user,
+            } => {
+                todo!();
+            }
+            Projects::Delete {
+                project,
+                role,
+                user,
+            } => {
+                todo!();
+            }
+            Projects::Rename {
+                project,
+                new_name,
+                role,
+                user,
+            } => {
+                todo!();
             }
         },
         Command::Network(cmd) => match &cmd.subcmd {
@@ -370,6 +468,15 @@ async fn main() -> Result<(), confy::ConfyError> {
                 for network in client.list_networks().await {
                     println!("{}", network);
                 }
+            }
+            Network::View { room, app, user } => {
+                todo!();
+            }
+            Network::Send { listen } => {
+                todo!();
+            }
+            Network::Listen => {
+                todo!(); // connect, print the address, then print any received msgs
             }
         },
         Command::Friends(cmd) => match &cmd.subcmd {
