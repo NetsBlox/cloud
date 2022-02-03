@@ -343,13 +343,20 @@ async fn main() -> Result<(), confy::ConfyError> {
                 user,
             } => {
                 let username = user.clone().unwrap_or(current_user);
-                //let data = if let Some(role) = role {
-                let data = if let Some(role) = role {
-                    client.export_role(&username, &name, &role, latest).await
+                let xml = if let Some(role) = role {
+                    client
+                        .export_role(&username, &name, &role, latest)
+                        .await
+                        .to_xml()
                 } else {
-                    client.export_project(&username, &name, latest).await
+                    // TODO: Should this output the Project or an xml?
+                    // maybe the Project which contains a toXML method?
+                    client
+                        .export_project(&username, &name, latest)
+                        .await
+                        .to_xml()
                 };
-                println!("{:?}", data);
+                println!("{}", xml);
             }
             Projects::List { user } => {
                 let username = user.clone().unwrap_or(current_user);

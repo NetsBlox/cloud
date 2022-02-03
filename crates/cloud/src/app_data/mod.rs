@@ -145,8 +145,8 @@ impl AppData {
         let unique_name = get_unique_name(project_names, name);
         let roles = roles.unwrap_or_else(|| {
             vec![RoleData {
-                project_name: "myRole".to_owned(),
-                source_code: "".to_owned(),
+                name: "myRole".to_owned(),
+                code: "".to_owned(),
                 media: "".to_owned(),
             }]
         });
@@ -178,19 +178,16 @@ impl AppData {
     ) -> Result<RoleMetadata, UserError> {
         let is_guest = owner.starts_with('_');
         let top_level = if is_guest { "guests" } else { "users" };
-        let basepath = format!(
-            "{}/{}/{}/{}",
-            top_level, owner, project_name, &role.project_name
-        );
-        let src_path = format!("{}/source_code.xml", &basepath);
+        let basepath = format!("{}/{}/{}/{}", top_level, owner, project_name, &role.name);
+        let src_path = format!("{}/code.xml", &basepath);
         let media_path = format!("{}/media.xml", &basepath);
 
         self.upload(&media_path, role.media.to_owned()).await?;
-        self.upload(&src_path, role.source_code.to_owned()).await?;
+        self.upload(&src_path, role.code.to_owned()).await?;
 
         Ok(RoleMetadata {
-            project_name: role.project_name.to_owned(),
-            source_code: src_path,
+            name: role.name.to_owned(),
+            code: src_path,
             media: media_path,
         })
     }
@@ -252,6 +249,7 @@ impl AppData {
             .collect::<HashMap<_, _>>();
 
         Ok(Project {
+            // TODO: refactor?
             id: metadata.id.to_owned(),
             name: metadata.name.to_owned(),
             owner: metadata.owner.to_owned(),
@@ -277,7 +275,7 @@ impl AppData {
             let paths: Vec<_> = metadata
                 .roles
                 .into_values()
-                .flat_map(|role| vec![role.source_code, role.media])
+                .flat_map(|role| vec![role.code, role.media])
                 .collect();
 
             for path in paths {
@@ -291,13 +289,13 @@ impl AppData {
     }
 
     pub async fn fetch_role(&self, metadata: &RoleMetadata) -> Result<RoleData, InternalError> {
-        let (source_code, media) = join!(
-            self.download(&metadata.source_code),
+        let (code, media) = join!(
+            self.download(&metadata.code),
             self.download(&metadata.media),
         );
         Ok(RoleData {
-            project_name: metadata.project_name.to_owned(),
-            source_code: source_code?,
+            name: metadata.name.to_owned(),
+            code: code?,
             media: media?,
         })
     }
@@ -352,10 +350,10 @@ impl AppData {
         let role_names = metadata
             .roles
             .into_values()
-            .map(|r| r.project_name)
+            .map(|r| r.name)
             .collect::<Vec<_>>();
-        let role_name = get_unique_name(role_names, &role_md.project_name);
-        role_md.project_name = role_name;
+        let role_name = get_unique_name(role_names, &role_md.name);
+        role_md.name = role_name;
 
         let role_id = Uuid::new_v4();
         let query = doc! {"id": metadata.id};

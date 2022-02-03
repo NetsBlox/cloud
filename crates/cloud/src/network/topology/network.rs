@@ -98,7 +98,7 @@ impl RoomStateMessage {
                     .collect();
 
                 let state = RoleState {
-                    name: role.project_name,
+                    name: role.name,
                     occupants,
                 };
                 (id, state)
@@ -231,14 +231,14 @@ impl Topology {
                     metadata
                         .roles
                         .iter()
-                        .map(|(_, role)| role.project_name.to_owned())
+                        .map(|(_, role)| role.name.to_owned())
                         .collect()
                 });
 
                 let name2id = metadata
                     .roles
                     .into_iter()
-                    .map(|(k, v)| (v.project_name, k))
+                    .map(|(k, v)| (v.name, k))
                     .collect::<HashMap<_, _>>();
 
                 role_names

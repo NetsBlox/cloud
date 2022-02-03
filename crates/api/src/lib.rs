@@ -1,4 +1,5 @@
 pub use netsblox_core::{FriendInvite, FriendLinkState, InvitationResponse, ProjectMetadata, User};
+use netsblox_core::{Project, RoleData};
 use reqwest::{self, Method, RequestBuilder};
 use serde::{Deserialize, Serialize};
 
@@ -182,7 +183,7 @@ impl Client {
         response.json::<Vec<ProjectMetadata>>().await.unwrap()
     }
 
-    pub async fn export_project(&self, owner: &str, name: &str, latest: &bool) -> String {
+    pub async fn export_project(&self, owner: &str, name: &str, latest: &bool) -> Project {
         let path = format!("/projects/user/{}/{}/metadata", owner, name);
         let metadata = self
             .request(Method::GET, &path)
@@ -198,16 +199,17 @@ impl Client {
         } else {
             format!("/projects/id/{}", metadata.id)
         };
-        self.request(Method::GET, &path)
-            .send()
-            .await
-            .unwrap()
-            .text()
-            .await
-            .unwrap()
+        let response = self.request(Method::GET, &path).send().await.unwrap();
+        response.json::<Project>().await.unwrap()
     }
 
-    pub async fn export_role(&self, owner: &str, name: &str, role: &str, latest: &bool) -> String {
+    pub async fn export_role(
+        &self,
+        owner: &str,
+        name: &str,
+        role: &str,
+        latest: &bool,
+    ) -> RoleData {
         let path = format!("/projects/user/{}/{}/metadata", owner, name);
         let metadata = self
             .request(Method::GET, &path)
@@ -218,8 +220,19 @@ impl Client {
             .await
             .unwrap();
 
-        // let role_id = metadata.roles
-        todo!();
+        let role_id = metadata
+            .roles
+            .into_iter()
+            .find(|(_id, role_md)| role_md.name == role)
+            .map(|(id, _role_md)| id)
+            .unwrap();
+        let path = if *latest {
+            format!("/projects/id/{}/{}/latest", metadata.id, role_id)
+        } else {
+            format!("/projects/id/{}/{}", metadata.id, role_id)
+        };
+        let response = self.request(Method::GET, &path).send().await.unwrap();
+        response.json::<RoleData>().await.unwrap()
     }
 
     pub async fn list_networks(&self) -> Vec<String> {

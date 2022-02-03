@@ -1,3 +1,5 @@
+use std::collections::HashMap;
+
 use crate::app_data::AppData;
 use crate::errors::{InternalError, UserError};
 use crate::models::{ProjectMetadata, RoleData};
@@ -10,7 +12,7 @@ use futures::stream::{FuturesUnordered, TryStreamExt};
 use mongodb::bson::doc;
 use mongodb::options::{FindOneAndUpdateOptions, ReturnDocument};
 use mongodb::Cursor;
-use netsblox_core::ProjectId;
+use netsblox_core::{Project, ProjectId};
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
@@ -49,7 +51,7 @@ async fn create_project(
         .await?;
 
     let role_id = metadata.roles.keys().next().unwrap();
-    let role_name = &metadata.roles.get(role_id).unwrap().project_name;
+    let role_name = &metadata.roles.get(role_id).unwrap().name;
     Ok(HttpResponse::Ok().json(CreatedRole {
         project_id: metadata.id.to_string(),
         role_id,
@@ -157,6 +159,7 @@ async fn get_project_metadata(
 
     ensure_can_view_project(&app, &session, &metadata).await?;
 
+    let metadata: netsblox_core::ProjectMetadata = metadata.into();
     Ok(HttpResponse::Ok().json(metadata))
 }
 
@@ -233,7 +236,8 @@ async fn get_project(
 
     ensure_can_view_project(&app, &session, &metadata).await?;
 
-    let project = app.fetch_project(&metadata).await?;
+    let project: netsblox_core::Project = app.fetch_project(&metadata).await?.into();
+    // TODO: bring this in sync with get_latest_project (return xml or project??)
     Ok(HttpResponse::Ok().json(project)) // TODO: Update this to a responder?
 }
 
@@ -383,17 +387,28 @@ async fn get_latest_project(
 
     ensure_can_view_project(&app, &session, &metadata).await?;
 
-    let role_data = metadata
+    let roles = metadata
         .roles
         .keys()
         .map(|role_id| fetch_role_data(&app, &metadata, role_id.to_owned()))
         .collect::<FuturesUnordered<_>>()
-        .try_collect::<Vec<_>>()
+        .try_collect::<HashMap<String, RoleData>>()
         .await
         .unwrap(); // TODO: handle errors
 
-    let xml = RoleData::to_project_xml(&metadata.name, role_data);
-    Ok(HttpResponse::Ok().body(xml))
+    let project = Project {
+        id: metadata.id.to_owned(),
+        name: metadata.name.to_owned(),
+        owner: metadata.owner.to_owned(),
+        updated: metadata.updated.to_system_time(),
+        thumbnail: metadata.thumbnail.to_owned(),
+        public: metadata.public.to_owned(),
+        collaborators: metadata.collaborators.to_owned(),
+        origin_time: metadata.origin_time.to_system_time(),
+        save_state: metadata.save_state.to_owned(),
+        roles,
+    };
+    Ok(HttpResponse::Ok().json(project))
 }
 
 #[get("/id/{projectID}/thumbnail")]
@@ -427,8 +442,8 @@ struct CreateRoleData {
 impl From<CreateRoleData> for RoleData {
     fn from(data: CreateRoleData) -> RoleData {
         RoleData {
-            project_name: data.name,
-            source_code: data.source_code.unwrap_or_else(String::new),
+            name: data.name,
+            code: data.source_code.unwrap_or_else(String::new),
             media: data.media.unwrap_or_else(String::new),
         }
     }
@@ -605,7 +620,7 @@ async fn get_latest_role(
         .ok_or_else(|| UserError::ProjectNotFoundError)?;
 
     ensure_can_view_project(&app, &session, &metadata).await?;
-    let role_data = fetch_role_data(&app, &metadata, role_id).await?;
+    let (_, role_data) = fetch_role_data(&app, &metadata, role_id).await?;
     Ok(HttpResponse::Ok().json(role_data))
 }
 
@@ -613,7 +628,7 @@ async fn fetch_role_data(
     app: &AppData,
     metadata: &ProjectMetadata,
     role_id: String,
-) -> Result<RoleData, UserError> {
+) -> Result<(String, RoleData), UserError> {
     let role_md = metadata
         .roles
         .get(&role_id)
@@ -622,7 +637,7 @@ async fn fetch_role_data(
     // Try to fetch the role data from the current occupants
     let state = BrowserClientState {
         project_id: metadata.id.clone(),
-        role_id,
+        role_id: role_id.clone(),
     };
     let request_opt = app
         .network
@@ -643,7 +658,7 @@ async fn fetch_role_data(
         Some(role_data) => role_data,
         None => app.fetch_role(role_md).await?,
     };
-    Ok(role_data)
+    Ok((role_id, role_data))
 }
 
 #[derive(Deserialize, Serialize)]

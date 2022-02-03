@@ -55,8 +55,8 @@ impl From<SaveState> for Bson {
 impl From<RoleMetadata> for Bson {
     fn from(role: RoleMetadata) -> Bson {
         Bson::Document(doc! {
-            "ProjectName": role.project_name,
-            "SourceCode": role.source_code,
+            "ProjectName": role.name,
+            "SourceCode": role.code,
             "Media": role.media,
         })
     }

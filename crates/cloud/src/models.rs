@@ -1,6 +1,7 @@
 use mongodb::bson::{doc, oid::ObjectId, Bson, DateTime};
 pub use netsblox_core::{
-    FriendInvite, FriendLinkState, LinkedAccount, ProjectId, RoleMetadata, SaveState, ServiceHost,
+    FriendInvite, FriendLinkState, LinkedAccount, ProjectId, RoleData, RoleMetadata, SaveState,
+    ServiceHost,
 };
 use serde::{Deserialize, Serialize};
 use std::{collections::HashMap, time::SystemTime};
@@ -171,33 +172,20 @@ pub struct Project {
     pub roles: HashMap<String, RoleData>,
 }
 
-#[derive(Deserialize, Serialize, Debug, Clone)]
-#[serde(rename_all = "PascalCase")]
-pub struct RoleData {
-    pub project_name: String,
-    pub source_code: String,
-    pub media: String,
-}
-
-impl RoleData {
-    pub fn to_xml(self) -> String {
-        format!(
-            "<role name=\"{}\">{}{}</role>",
-            self.project_name, self.source_code, self.media
-        ) // TODO: escape the names?
-    }
-
-    pub fn to_project_xml(name: &str, roles: Vec<RoleData>) -> String {
-        let APP_NAME = "NetsBlox";
-        let role_str: String = roles
-            .into_iter()
-            .map(|role| role.to_xml())
-            .collect::<Vec<_>>()
-            .join(" ");
-        format!(
-            "<room name=\"{}\" app=\"{}\">{}</room>",
-            name, APP_NAME, role_str
-        )
+impl From<Project> for netsblox_core::Project {
+    fn from(project: Project) -> netsblox_core::Project {
+        netsblox_core::Project {
+            id: project.id,
+            owner: project.owner,
+            name: project.name,
+            origin_time: project.origin_time.to_system_time(),
+            updated: project.updated.to_system_time(),
+            thumbnail: project.thumbnail,
+            public: project.public,
+            collaborators: project.collaborators,
+            save_state: project.save_state,
+            roles: project.roles,
+        }
     }
 }
 

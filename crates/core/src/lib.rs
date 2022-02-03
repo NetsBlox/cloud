@@ -4,6 +4,7 @@ mod bson;
 use core::fmt;
 use serde::{Deserialize, Serialize};
 use std::{collections::HashMap, str::FromStr, time::SystemTime};
+const APP_NAME: &str = "NetsBlox";
 
 #[derive(Deserialize, Serialize)]
 pub struct InvitationResponse {
@@ -103,7 +104,54 @@ pub enum SaveState {
 #[derive(Deserialize, Serialize, Clone)]
 #[serde(rename_all = "PascalCase")]
 pub struct RoleMetadata {
-    pub project_name: String, // TODO: Change this to "name"?
-    pub source_code: String,
+    pub name: String,
+    pub code: String,
     pub media: String,
+}
+#[derive(Deserialize, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct Project {
+    pub id: ProjectId,
+    pub owner: String,
+    pub name: String,
+    pub updated: SystemTime,
+    pub thumbnail: String,
+    pub public: bool,
+    pub collaborators: std::vec::Vec<String>,
+    pub origin_time: SystemTime,
+    pub save_state: SaveState,
+    pub roles: HashMap<String, RoleData>,
+}
+
+impl Project {
+    pub fn to_xml(&self) -> String {
+        let role_str: String = self
+            .roles
+            .clone()
+            .into_values()
+            // .into_iter()
+            .map(|role| role.to_xml())
+            .collect::<Vec<_>>()
+            .join(" ");
+        format!(
+            "<room name=\"{}\" app=\"{}\">{}</room>",
+            self.name, APP_NAME, role_str
+        )
+    }
+}
+
+#[derive(Deserialize, Serialize, Debug, Clone)]
+pub struct RoleData {
+    pub name: String,
+    pub code: String,
+    pub media: String,
+}
+
+impl RoleData {
+    pub fn to_xml(self) -> String {
+        format!(
+            "<role name=\"{}\">{}{}</role>",
+            self.name, self.code, self.media
+        ) // TODO: escape the names?
+    }
 }
