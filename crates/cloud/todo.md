@@ -112,6 +112,8 @@
     - [ ] list collabs
     - [ ] rm collab
 
+- [ ] add password salts
+
 - [ ] users
     - [x] create
     - [x] list

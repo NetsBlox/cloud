@@ -647,6 +647,7 @@ async fn main() -> Result<(), confy::ConfyError> {
                 group_only,
                 user,
             } => {
+                // TODO
                 todo!();
             }
             ServiceHosts::Add {

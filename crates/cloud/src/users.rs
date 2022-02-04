@@ -7,7 +7,7 @@ use actix_web::{get, patch, post};
 use actix_web::{web, HttpResponse};
 use futures::TryStreamExt;
 use lazy_static::lazy_static;
-use mongodb::bson::{doc, oid::ObjectId, DateTime};
+use mongodb::bson::{doc, DateTime};
 use netsblox_core::LinkedAccount;
 use regex::Regex;
 use rustrict::CensorStr;
@@ -18,15 +18,24 @@ use std::time::SystemTime;
 
 impl From<NewUser> for User {
     fn from(user_data: NewUser) -> Self {
+        let salt = passwords::PasswordGenerator::new()
+            .length(8)
+            .exclude_similar_characters(true)
+            .numbers(true)
+            .spaces(false)
+            .generate_one()
+            .unwrap_or("salt".to_owned());
+
         let hash: String = if let Some(pwd) = user_data.password {
-            sha512(&pwd)
+            sha512(&(pwd + &salt))
         } else {
             "None".to_owned()
         };
 
         User {
             username: user_data.username,
-            hash, // FIXME: This will double hash new users
+            hash,
+            salt,
             email: user_data.email,
             group_id: user_data.group_id,
             created_at: SystemTime::now()
@@ -103,28 +112,6 @@ async fn has_group_containing(app: &AppData, owner: &str, member: &str) -> bool 
             None => false,
         },
         None => false,
-    }
-}
-
-#[derive(Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
-struct UserCookie<'a> {
-    username: &'a str,
-    //group_id: String,
-    issue_date: u64,
-    remember: bool,
-}
-
-impl UserCookie<'_> {
-    pub fn new(username: &str, remember: Option<bool>) -> UserCookie {
-        UserCookie {
-            username,
-            remember: remember.unwrap_or(false),
-            issue_date: SystemTime::now()
-                .duration_since(SystemTime::UNIX_EPOCH)
-                .unwrap()
-                .as_secs(),
-        }
     }
 }
 
@@ -235,38 +222,42 @@ async fn login(
     app: web::Data<AppData>,
     credentials: web::Json<LoginCredentials>,
     session: Session,
-) -> HttpResponse {
+) -> Result<HttpResponse, UserError> {
     // TODO: check if tor IP
-    // TODO: hash the password
-    let hash = sha512(&credentials.password);
-    println!("login attempt: {}, {}", &credentials.username, &hash);
-    let query = doc! {"username": &credentials.username, "hash": &hash};
-    println!("credentials: {:?}", &credentials);
+    println!("login attempt: {}", &credentials.username);
+    let query = doc! {"username": &credentials.username};
 
     let banned_accounts = app.collection::<BannedAccount>("bannedAccounts");
     if let Some(_account) = banned_accounts
-        .find_one(doc! {"username": &credentials.username}, None)
+        .find_one(query.clone(), None)
         .await
-        .expect("Unable to verify account isn't banned.")
+        .map_err(|_err| InternalError::DatabaseConnectionError)?
     {
-        return HttpResponse::Unauthorized().body("Account has been banned");
+        return Err(UserError::BannedUserError);
     }
 
-    match app
+    let user = app
         .users
         .find_one(query, None)
         .await
-        .expect("Unable to retrieve user from database.")
-    {
-        Some(user) => {
-            session.insert("username", &user.username).unwrap();
+        .map_err(|_err| InternalError::DatabaseConnectionError)?
+        .ok_or_else(|| UserError::UserNotFoundError)?;
 
-            match update_ownership(&app, &credentials.client_id, &user.username).await {
-                Err(msg) => HttpResponse::BadRequest().body(msg),
-                _ => HttpResponse::Ok().body(user.username),
-            }
-        }
-        None => HttpResponse::Unauthorized().finish(),
+    println!("credentials: {:?}", &credentials);
+    let LoginCredentials {
+        client_id,
+        password,
+        ..
+    } = credentials.into_inner();
+    let hash = sha512(&(password + &user.salt));
+    if hash != user.hash {
+        return Err(UserError::IncorrectPasswordError);
+    }
+
+    session.insert("username", &user.username).unwrap();
+    match update_ownership(&app, &client_id, &user.username).await {
+        Err(msg) => Ok(HttpResponse::BadRequest().body(msg)),
+        _ => Ok(HttpResponse::Ok().body(user.username)),
     }
 }
 
@@ -382,18 +373,8 @@ async fn reset_password(
 
     // TODO: This will need to send an email...
 
-    let query = doc! {"username": username};
-    let update = doc! {"hash": sha512(&new_password)};
-    let result = app
-        .users
-        .update_one(query, update, None)
-        .await
-        .map_err(|_err| InternalError::DatabaseConnectionError)?;
-    if result.modified_count > 0 {
-        Ok(HttpResponse::Ok().finish())
-    } else {
-        Err(UserError::UserNotFoundError)
-    }
+    set_password(&app, &username, new_password).await?;
+    Ok(HttpResponse::Ok().finish())
 }
 
 #[patch("/{username}/password")]
@@ -407,10 +388,22 @@ async fn change_password(
 
     ensure_can_edit_user(&app, &session, &username).await?;
 
+    set_password(&app, &username, data.into_inner()).await?;
+    Ok(HttpResponse::Ok().finish())
+}
+
+async fn set_password(app: &AppData, username: &str, password: String) -> Result<(), UserError> {
     let query = doc! {"username": username};
+    let user = app
+        .users
+        .find_one(query.clone(), None)
+        .await
+        .map_err(|_err| InternalError::DatabaseConnectionError)?
+        .ok_or_else(|| UserError::UserNotFoundError)?;
+
     let update = doc! {
         "$set": {
-            "hash": sha512(&data.into_inner())
+            "hash": sha512(&(password + &user.salt))
         }
     };
     let result = app
@@ -419,10 +412,10 @@ async fn change_password(
         .await
         .map_err(|_err| InternalError::DatabaseConnectionError)?;
 
-    if result.modified_count > 0 {
-        Ok(HttpResponse::Ok().finish())
-    } else {
+    if result.modified_count == 0 {
         Err(UserError::UserNotFoundError)
+    } else {
+        Ok(())
     }
 }
 

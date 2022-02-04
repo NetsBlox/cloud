@@ -1,4 +1,5 @@
 use crate::app_data::AppData;
+use crate::errors::{InternalError, UserError};
 use crate::models::Group;
 use crate::users::{can_edit_user, is_super_user};
 use actix_session::Session;
@@ -8,12 +9,12 @@ use futures::TryStreamExt;
 use mongodb::bson::{doc, oid::ObjectId};
 use netsblox_core::ServiceHost;
 
-#[get("/group/{id}")]
+#[get("/group/{id}")] // TODO: should we use the name instead? Probably not...
 async fn list_group_hosts(
     app: web::Data<AppData>,
     path: web::Path<(ObjectId,)>,
     session: Session,
-) -> Result<HttpResponse, std::io::Error> {
+) -> Result<HttpResponse, UserError> {
     let (id,) = path.into_inner();
     if let Some(username) = session.get::<String>("username").unwrap() {
         let query = if is_super_user(&app, &session).await {
@@ -22,14 +23,16 @@ async fn list_group_hosts(
             doc! {"_id": id, "owner": username}
         };
 
-        match app.groups.find_one(query, None).await.unwrap() {
-            Some(group) => {
-                Ok(HttpResponse::Ok().json(group.services_hosts.unwrap_or_else(Vec::new)))
-            }
-            None => Ok(HttpResponse::NotFound().body("Not found.")),
-        }
+        let group = app
+            .groups
+            .find_one(query, None)
+            .await
+            .map_err(|_err| InternalError::DatabaseConnectionError)?
+            .ok_or_else(|| UserError::GroupNotFoundError)?;
+
+        Ok(HttpResponse::Ok().json(group.services_hosts.unwrap_or_else(Vec::new)))
     } else {
-        Ok(HttpResponse::Unauthorized().body("Not allowed."))
+        Err(UserError::PermissionsError)
     }
 }
 

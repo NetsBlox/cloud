@@ -21,6 +21,10 @@ pub enum UserError {
     GroupNotFoundError,
     #[display(fmt = "User not found.")]
     UserNotFoundError,
+    #[display(fmt = "Incorrect password.")]
+    IncorrectPasswordError,
+    #[display(fmt = "User has been banned.")]
+    BannedUserError,
     #[display(fmt = "Invalid username.")]
     InvalidUsername,
     #[display(fmt = "Invalid email address.")]
@@ -37,7 +41,9 @@ impl error::ResponseError for UserError {
 
     fn status_code(&self) -> StatusCode {
         match *self {
-            UserError::PermissionsError => StatusCode::UNAUTHORIZED,
+            UserError::PermissionsError
+            | UserError::BannedUserError
+            | UserError::IncorrectPasswordError => StatusCode::UNAUTHORIZED,
             UserError::ProjectNotFoundError
             | UserError::RoleNotFoundError
             | UserError::UserNotFoundError

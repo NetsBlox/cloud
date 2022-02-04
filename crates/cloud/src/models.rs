@@ -14,13 +14,13 @@ pub struct User {
     pub username: String,
     pub email: String,
     pub hash: String,
+    pub salt: String,
     pub group_id: Option<GroupId>,
     pub admin: Option<bool>, // TODO: use roles instead? What other roles would we even have?
     pub created_at: u32,
     pub linked_accounts: Vec<LinkedAccount>,
     pub services_hosts: Option<Vec<ServiceHost>>,
 }
-// TODO: implement Responder (omit the hash)
 
 impl From<User> for Bson {
     fn from(user: User) -> Bson {
@@ -28,6 +28,7 @@ impl From<User> for Bson {
             "username": user.username,
             "email": user.email,
             "hash": user.hash,
+            "salt": user.salt,
             "groupId": user.group_id,
             "admin": user.admin,
             "createdAt": user.created_at,
