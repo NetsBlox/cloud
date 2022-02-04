@@ -30,7 +30,6 @@ enum Users {
         user: Option<String>,
     },
     SetPassword {
-        username: String,
         password: String,
         #[clap(short, long)]
         user: Option<String>,
@@ -93,7 +92,7 @@ enum Projects {
         project: String,
         new_name: String,
         #[clap(short, long)]
-        role: Option<String>, // TODO: not sure if this makes sense
+        role: Option<String>,
         #[clap(short, long)]
         user: Option<String>,
     },
@@ -420,12 +419,9 @@ async fn main() -> Result<(), confy::ConfyError> {
                     .create_user(&username, email, password.as_deref(), None, admin)
                     .await;
             }
-            Users::SetPassword {
-                username,
-                password,
-                user,
-            } => {
-                todo!();
+            Users::SetPassword { password, user } => {
+                let username = user.clone().unwrap_or(current_user);
+                client.set_password(&username, &password).await;
             }
             Users::List => {
                 for user in client.list_users().await {
@@ -582,13 +578,16 @@ async fn main() -> Result<(), confy::ConfyError> {
                     cfg.username.unwrap_or(channel.id)
                 );
 
-                channel
-                    .read
-                    .for_each(|msg| async {
-                        let data = msg.unwrap().into_data();
-                        tokio::io::stdout().write_all(&data).await.unwrap();
-                    })
-                    .await;
+                // FIXME:
+                // channel
+                //     .read
+                //     .for_each(|msg| async {
+                //         println!("received message");
+                //         let data = msg.unwrap().into_data();
+                //         println!("{:?}", &data);
+                //         tokio::io::stdout().write_all(&data).await.unwrap();
+                //     })
+                //     .await;
             }
         },
         Command::Friends(cmd) => match &cmd.subcmd {

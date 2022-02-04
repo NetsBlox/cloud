@@ -115,10 +115,10 @@
 - [ ] users
     - [x] create
     - [x] list
-    - [ ] set-password
-    - [ ] list
+    - [x] set-password
+    - [x] list
     - [x] delete
-    - [ ] view
+    - [x] view
     - [ ] link
     - [ ] unlink
 

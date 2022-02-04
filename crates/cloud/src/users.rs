@@ -19,10 +19,7 @@ use std::time::SystemTime;
 impl From<NewUser> for User {
     fn from(user_data: NewUser) -> Self {
         let hash: String = if let Some(pwd) = user_data.password {
-            let mut hasher = Sha512::new();
-            hasher.update(pwd);
-            let hash = hasher.finalize();
-            hex::encode(hash)
+            sha512(&pwd)
         } else {
             "None".to_owned()
         };
@@ -241,9 +238,7 @@ async fn login(
 ) -> HttpResponse {
     // TODO: check if tor IP
     // TODO: hash the password
-    let mut hasher = Sha512::new();
-    hasher.update(&credentials.password);
-    let hash = hex::encode(hasher.finalize()); // TODO: add salt
+    let hash = sha512(&credentials.password);
     println!("login attempt: {}, {}", &credentials.username, &hash);
     let query = doc! {"username": &credentials.username, "hash": &hash};
     println!("credentials: {:?}", &credentials);
@@ -385,13 +380,10 @@ async fn reset_password(
         .spaces(false);
     let new_password = pg.generate_one().unwrap();
 
-    let mut hasher = Sha512::new();
-    hasher.update(new_password);
-    let hash = hasher.finalize();
     // TODO: This will need to send an email...
 
     let query = doc! {"username": username};
-    let update = doc! {"hash": &hex::encode(hash)};
+    let update = doc! {"hash": sha512(&new_password)};
     let result = app
         .users
         .update_one(query, update, None)
@@ -402,22 +394,25 @@ async fn reset_password(
     } else {
         Err(UserError::UserNotFoundError)
     }
-}
-
-#[derive(Deserialize)]
-struct PasswordChangeData {
-    password_hash: String,
 }
 
 #[patch("/{username}/password")]
 async fn change_password(
     app: web::Data<AppData>,
     path: web::Path<(String,)>,
-    data: web::Json<PasswordChangeData>,
+    data: web::Json<String>,
+    session: Session,
 ) -> Result<HttpResponse, UserError> {
     let (username,) = path.into_inner();
+
+    ensure_can_edit_user(&app, &session, &username).await?;
+
     let query = doc! {"username": username};
-    let update = doc! {"hash": &data.password_hash};
+    let update = doc! {
+        "$set": {
+            "hash": sha512(&data.into_inner())
+        }
+    };
     let result = app
         .users
         .update_one(query, update, None)
@@ -429,6 +424,13 @@ async fn change_password(
     } else {
         Err(UserError::UserNotFoundError)
     }
+}
+
+fn sha512(text: &str) -> String {
+    let mut hasher = Sha512::new();
+    hasher.update(text);
+    let hash = hasher.finalize();
+    hex::encode(hash)
 }
 
 #[get("/{username}")]

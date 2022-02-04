@@ -1,4 +1,4 @@
-use futures_util::{stream::SplitSink, stream::SplitStream, StreamExt};
+use futures_util::{future, stream::SplitSink, stream::SplitStream, Stream, StreamExt};
 use netsblox_core::{
     ClientConfig, ClientState, ClientStateData, ExternalClientState, Project, RoleData,
 };
@@ -333,6 +333,17 @@ impl Client {
         println!("status {}", response.status());
     }
 
+    pub async fn set_password(&self, username: &str, password: &str) {
+        let path = format!("/users/{}/password", username);
+        let response = self
+            .request(Method::PATCH, &path)
+            .json(&password)
+            .send()
+            .await
+            .unwrap();
+        println!("status {}", response.status());
+    }
+
     pub async fn connect(&self, address: &str) -> MessageChannel {
         let response = self
             .request(Method::GET, "/configuration")
@@ -342,6 +353,7 @@ impl Client {
 
         let config = response.json::<ClientConfig>().await.unwrap();
 
+        println!("Connecting with client ID: {}", &config.client_id);
         let url = format!(
             "{}/network/{}/connect",
             self.cfg.url.replace("http", "ws"),
@@ -370,18 +382,38 @@ impl Client {
         println!("status {}", response.status());
 
         let (write, read) = ws_stream.split();
+        let read_channel = read.filter_map(|msg| {
+            future::ready(match msg {
+                Ok(Message::Text(txt)) => Some(txt),
+                _ => None,
+            })
+        });
+        // let read_channel = read.filter(|msg| future::ready(msg.is_ok()));
         MessageChannel {
             id: config.client_id,
-            read,
+            read: Box::new(read_channel),
+            //     .filter_map(|msg| match msg {
+            //     Ok(Message::Text(txt)) => Some(txt),
+            //     _ => None,
+            // }),
             write,
         }
     }
 }
 
+struct MessageReadStream {
+    read: SplitStream<WebSocketStream<MaybeTlsStream<TcpStream>>>,
+}
+
+// impl Stream for MessageReadStream {
+// type Item =
+// }
+
 pub struct MessageChannel {
     pub id: String,
     write: SplitSink<WebSocketStream<MaybeTlsStream<TcpStream>>, Message>,
-    pub read: SplitStream<WebSocketStream<MaybeTlsStream<TcpStream>>>,
+    pub read: Box<dyn Stream<Item = String>>,
+    //SplitStream<WebSocketStream<MaybeTlsStream<TcpStream>>>,
 }
 
 impl MessageChannel {
