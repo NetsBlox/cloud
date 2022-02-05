@@ -179,12 +179,12 @@ enum Libraries {
         user: Option<String>,
     },
     Export {
-        name: String,
+        library: String,
         #[clap(short, long)]
         user: Option<String>,
     },
     Delete {
-        name: String,
+        library: String,
         #[clap(short, long)]
         user: Option<String>,
     },
@@ -199,7 +199,7 @@ enum Libraries {
         user: Option<String>,
     },
     Approve {
-        name: String,
+        library: String,
         #[clap(short, long)]
         user: Option<String>,
     },
@@ -711,11 +711,14 @@ async fn main() -> Result<(), confy::ConfyError> {
                 });
                 client.save_library(&username, &name, &blocks, notes).await;
             }
-            Libraries::Export { name, user } => {
-                todo!();
+            Libraries::Export { library, user } => {
+                let username = user.clone().unwrap_or(current_user);
+                let xml = client.get_library(&username, &library).await;
+                println!("{}", xml);
             }
-            Libraries::Delete { name, user } => {
-                todo!();
+            Libraries::Delete { library, user } => {
+                let username = user.clone().unwrap_or(current_user);
+                client.delete_library(&username, &library).await;
             }
             Libraries::Publish { library, user } => {
                 let username = user.clone().unwrap_or(current_user);
@@ -725,7 +728,7 @@ async fn main() -> Result<(), confy::ConfyError> {
                 let username = user.clone().unwrap_or(current_user);
                 client.unpublish_library(&username, &library).await;
             }
-            Libraries::Approve { name, user } => {
+            Libraries::Approve { library, user } => {
                 todo!();
             }
         },

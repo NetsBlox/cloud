@@ -1,5 +1,5 @@
 use futures_util::{future, stream::SplitSink, stream::SplitStream, Stream, StreamExt};
-use netsblox_core::{
+pub use netsblox_core::{
     ClientConfig, ClientState, ClientStateData, CreateLibraryData, ExternalClientState,
     LibraryMetadata, Project, RoleData,
 };
@@ -373,6 +373,13 @@ impl Client {
         response.json::<Vec<LibraryMetadata>>().await.unwrap()
     }
 
+    pub async fn get_library(&self, username: &str, name: &str) -> String {
+        let path = format!("/libraries/user/{}/{}", username, name); // TODO: URI escape?
+        let response = self.request(Method::GET, &path).send().await.unwrap();
+        println!("status {}", response.status());
+        response.text().await.unwrap()
+    }
+
     pub async fn save_library(&self, username: &str, name: &str, blocks: &str, notes: &str) {
         let path = format!("/libraries/user/{}/", username);
         let response = self
@@ -385,6 +392,12 @@ impl Client {
             .send()
             .await
             .unwrap();
+        println!("status {}", response.status());
+    }
+
+    pub async fn delete_library(&self, username: &str, library: &str) {
+        let path = format!("/libraries/user/{}/{}", username, library);
+        let response = self.request(Method::DELETE, &path).send().await.unwrap();
         println!("status {}", response.status());
     }
 
