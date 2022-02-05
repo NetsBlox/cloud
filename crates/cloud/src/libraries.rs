@@ -311,7 +311,9 @@ pub fn config(cfg: &mut web::ServiceConfig) {
         .service(save_user_library)
         .service(delete_user_library)
         .service(publish_user_library)
-        .service(unpublish_user_library);
+        .service(unpublish_user_library)
+        .service(list_approval_needed)
+        .service(approve_library);
 }
 
 #[cfg(test)]

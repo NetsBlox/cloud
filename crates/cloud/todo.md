@@ -90,13 +90,13 @@
     - [ ] remove
 
 - [ ] libraries
-     - [ ] list --community --approval-needed
-     - [ ] delete
-     - [ ] publish
-     - [ ] unpublish
+     - [x] list --community --approval-needed
+     - [x] delete
+     - [x] publish
+     - [x] unpublish
      - [ ] approve
 
-     - [ ] import?
+     - [x] import?
         - save?
 
 - [ ] projects
