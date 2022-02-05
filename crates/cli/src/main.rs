@@ -1,9 +1,12 @@
 static APP_NAME: &str = "netsblox-cli";
 
+use std::fs;
+
 use clap::{Parser, Subcommand};
 use futures_util::StreamExt;
 use inquire::{Confirm, Password, PasswordDisplayMode};
 use netsblox_api::{Client, Config, Credentials, FriendLinkState};
+use std::path::Path;
 use tokio::io::AsyncWriteExt;
 
 #[derive(Subcommand, Debug)]
@@ -158,11 +161,20 @@ enum ServiceHosts {
 #[derive(Subcommand, Debug)]
 enum Libraries {
     List {
-        // TODO: add an --all option?
         #[clap(short, long)]
         community: bool,
         #[clap(short, long)]
         approval_needed: bool,
+        #[clap(short, long)]
+        user: Option<String>,
+    },
+    Save {
+        /// The path to the exported blocks to save
+        filename: String,
+        #[clap(long, default_value = "")]
+        notes: String,
+        #[clap(short, long)]
+        name: Option<String>,
         #[clap(short, long)]
         user: Option<String>,
     },
@@ -177,12 +189,12 @@ enum Libraries {
         user: Option<String>,
     },
     Publish {
-        name: String,
+        library: String,
         #[clap(short, long)]
         user: Option<String>,
     },
     Unpublish {
-        name: String,
+        library: String,
         #[clap(short, long)]
         user: Option<String>,
     },
@@ -668,7 +680,36 @@ async fn main() -> Result<(), confy::ConfyError> {
                 user,
                 approval_needed,
             } => {
-                todo!();
+                let username = user.clone().unwrap_or(current_user);
+                let libraries = if *community {
+                    client.get_public_libraries().await
+                } else if *approval_needed {
+                    client.get_submitted_libraries().await
+                } else {
+                    client.get_libraries(&username).await
+                };
+
+                for library in libraries {
+                    println!("{}", library.name);
+                }
+            }
+            Libraries::Save {
+                filename,
+                notes,
+                name,
+                user,
+            } => {
+                let username = user.clone().unwrap_or(current_user);
+                let blocks = fs::read_to_string(filename).expect("Unable to read file");
+                let name = name.clone().unwrap_or_else(|| {
+                    Path::new(filename)
+                        .file_stem()
+                        .expect("Could not determine library name. Try passing --name")
+                        .to_str()
+                        .unwrap()
+                        .to_owned()
+                });
+                client.save_library(&username, &name, &blocks, notes).await;
             }
             Libraries::Export { name, user } => {
                 todo!();
@@ -676,11 +717,13 @@ async fn main() -> Result<(), confy::ConfyError> {
             Libraries::Delete { name, user } => {
                 todo!();
             }
-            Libraries::Publish { name, user } => {
-                todo!();
+            Libraries::Publish { library, user } => {
+                let username = user.clone().unwrap_or(current_user);
+                client.publish_library(&username, &library).await;
             }
-            Libraries::Unpublish { name, user } => {
-                todo!();
+            Libraries::Unpublish { library, user } => {
+                let username = user.clone().unwrap_or(current_user);
+                client.unpublish_library(&username, &library).await;
             }
             Libraries::Approve { name, user } => {
                 todo!();

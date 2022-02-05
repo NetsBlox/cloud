@@ -1,4 +1,5 @@
 use crate::app_data::AppData;
+use crate::errors::UserError;
 use crate::users::{can_edit_user, is_super_user};
 use actix_session::Session;
 use actix_web::{delete, get, post};
@@ -7,33 +8,13 @@ use futures::stream::TryStreamExt;
 use lazy_static::lazy_static;
 use mongodb::bson::doc;
 use mongodb::options::{FindOneAndUpdateOptions, FindOptions};
+use netsblox_core::{CreateLibraryData, LibraryMetadata};
 use regex::Regex;
 use rustrict::CensorStr;
 use serde::{Deserialize, Serialize};
 
-#[derive(Serialize, Deserialize)]
-struct LibraryMetadata {
-    owner: String,
-    name: String,
-    notes: String,
-    public: bool,
-}
-
-impl LibraryMetadata {
-    pub fn new(
-        owner: String,
-        name: String,
-        public: bool,
-        notes: Option<String>,
-    ) -> LibraryMetadata {
-        LibraryMetadata {
-            owner,
-            name,
-            notes: notes.unwrap_or_else(String::new),
-            public,
-        }
-    }
-    pub fn from_lib(library: &Library) -> LibraryMetadata {
+impl From<Library> for LibraryMetadata {
+    fn from(library: Library) -> LibraryMetadata {
         LibraryMetadata::new(
             library.owner.clone(),
             library.name.clone(),
@@ -70,7 +51,7 @@ async fn list_community_libraries(db: web::Data<AppData>) -> Result<HttpResponse
     Ok(HttpResponse::Ok().json(libraries))
 }
 
-#[get("/user/{owner}")]
+#[get("/user/{owner}/")]
 async fn list_user_libraries(
     app: web::Data<AppData>,
     path: web::Path<(String,)>,
@@ -88,6 +69,7 @@ async fn list_user_libraries(
     let mut libraries = Vec::new();
     while let Some(library) = cursor.try_next().await.expect("Could not fetch library") {
         if can_view_library(&app, &session, &library).await {
+            // TODO: do this in the outer loop
             libraries.push(library);
         }
     }
@@ -109,8 +91,9 @@ async fn get_user_library(
         .await
         .expect("Unable to retrieve from database")
     {
-        if can_view_library(&app, &session, &LibraryMetadata::from_lib(&library)).await {
-            Ok(HttpResponse::Ok().body(library.blocks))
+        let blocks = library.blocks.to_owned();
+        if can_view_library(&app, &session, &library.into()).await {
+            Ok(HttpResponse::Ok().body(blocks))
         } else {
             Ok(HttpResponse::Unauthorized().body("Not allowed."))
         }
@@ -119,34 +102,29 @@ async fn get_user_library(
     }
 }
 
-#[derive(Serialize, Deserialize)]
-struct CreateLibraryData {
-    notes: String,
-    blocks: String,
-}
-#[post("/user/{owner}/{name}")]
+#[post("/user/{owner}/")]
 async fn save_user_library(
     app: web::Data<AppData>,
-    path: web::Path<(String, String)>,
+    path: web::Path<(String,)>,
     data: web::Json<CreateLibraryData>,
     session: Session,
-) -> Result<HttpResponse, std::io::Error> {
-    let (owner, name) = path.into_inner();
-    if !is_valid_name(&name) {
+) -> Result<HttpResponse, UserError> {
+    let (owner,) = path.into_inner();
+    if !is_valid_name(&data.name) {
         return Ok(HttpResponse::BadRequest().body("Invalid library name"));
     }
-    if !can_edit_library(&app, &session, &owner).await {
-        return Ok(HttpResponse::Unauthorized().body("Not allowed."));
-    }
+    ensure_can_edit_library(&app, &session, &owner).await?;
 
     let collection = app.collection::<Library>("libraries");
-    let query = doc! {"owner": &owner, "name": &name};
+    let query = doc! {"owner": &owner, "name": &data.name};
     let update = doc! {
-        "notes": &data.notes,
-        "blocks": &data.blocks,
+        "$set": {
+            "notes": &data.notes,
+            "blocks": &data.blocks,
+        },
         "$setOnInsert": {
             "owner": &owner,
-            "name": &name,
+            "name": &data.name,
             "public": false,
             "needsApproval": false,
         }
@@ -184,11 +162,10 @@ async fn delete_user_library(
     app: web::Data<AppData>,
     path: web::Path<(String, String)>,
     session: Session,
-) -> Result<HttpResponse, std::io::Error> {
+) -> Result<HttpResponse, UserError> {
     let (owner, name) = path.into_inner();
-    if !can_edit_library(&app, &session, &owner).await {
-        return Ok(HttpResponse::Unauthorized().body("Not allowed."));
-    }
+    ensure_can_edit_library(&app, &session, &owner).await?;
+
     let collection = app.collection::<LibraryMetadata>("libraries");
     let query = doc! {"owner": owner, "name": name};
     let result = collection
@@ -207,11 +184,9 @@ async fn publish_user_library(
     app: web::Data<AppData>,
     path: web::Path<(String, String)>,
     session: Session,
-) -> Result<HttpResponse, std::io::Error> {
+) -> Result<HttpResponse, UserError> {
     let (owner, name) = path.into_inner();
-    if !can_edit_library(&app, &session, &owner).await {
-        return Ok(HttpResponse::Unauthorized().body("Not allowed."));
-    }
+    ensure_can_edit_library(&app, &session, &owner).await?;
 
     let collection = app.collection::<Library>("libraries");
     let query = doc! {"owner": owner, "name": name};
@@ -223,7 +198,7 @@ async fn publish_user_library(
         .expect("Library publish operation failed")
     {
         Some(library) => {
-            if !is_approval_required(&library.blocks) {
+            if !is_approval_required(&library.blocks) || is_super_user(&app, &session).await {
                 let update = doc! {"$set": {"public": true, "needsApproval": false}};
                 collection.update_one(query, update, None).await.unwrap();
                 Ok(HttpResponse::Ok().body("Library published!"))
@@ -240,11 +215,9 @@ async fn unpublish_user_library(
     db: web::Data<AppData>,
     path: web::Path<(String, String)>,
     session: Session,
-) -> Result<HttpResponse, std::io::Error> {
+) -> Result<HttpResponse, UserError> {
     let (owner, name) = path.into_inner();
-    if !can_edit_library(&db, &session, &owner).await {
-        return Ok(HttpResponse::Unauthorized().body("Not allowed."));
-    }
+    ensure_can_edit_library(&db, &session, &owner).await?;
 
     let collection = db.collection::<LibraryMetadata>("libraries");
 
@@ -254,6 +227,7 @@ async fn unpublish_user_library(
         .update_one(query, update, None)
         .await
         .expect("Library unpublish operation failed");
+
     if result.matched_count == 0 {
         Ok(HttpResponse::NotFound().finish())
     } else {
@@ -261,9 +235,21 @@ async fn unpublish_user_library(
     }
 }
 
+async fn ensure_can_edit_library(
+    app: &AppData,
+    session: &Session,
+    owner: &str,
+) -> Result<(), UserError> {
+    if !can_edit_library(app, session, owner).await {
+        Err(UserError::PermissionsError)
+    } else {
+        Ok(())
+    }
+}
+
 async fn can_edit_library(app: &AppData, session: &Session, owner: &str) -> bool {
     match session.get::<String>("username").unwrap_or(None) {
-        Some(username) => can_edit_user(app, session, owner).await,
+        Some(_username) => can_edit_user(app, session, owner).await,
         None => false,
     }
 }
@@ -273,13 +259,11 @@ async fn can_view_library(app: &AppData, session: &Session, library: &LibraryMet
         return true;
     }
 
-    match session.get::<String>("username").unwrap_or(None) {
-        Some(username) => can_edit_user(app, session, &library.owner).await,
-        None => false,
-    }
+    can_edit_library(app, session, &library.owner).await
 }
 
-#[get("/admin/approval_needed")]
+// TODO: Should we be able to reject, reapply, etc? If so, we may want to record the decision timestamp
+#[get("/admin/pending")]
 async fn list_approval_needed(
     app: web::Data<AppData>,
     session: Session,

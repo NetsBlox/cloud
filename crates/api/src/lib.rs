@@ -1,6 +1,7 @@
 use futures_util::{future, stream::SplitSink, stream::SplitStream, Stream, StreamExt};
 use netsblox_core::{
-    ClientConfig, ClientState, ClientStateData, ExternalClientState, Project, RoleData,
+    ClientConfig, ClientState, ClientStateData, CreateLibraryData, ExternalClientState,
+    LibraryMetadata, Project, RoleData,
 };
 pub use netsblox_core::{FriendInvite, FriendLinkState, InvitationResponse, ProjectMetadata, User};
 use reqwest::{self, Method, RequestBuilder};
@@ -341,6 +342,61 @@ impl Client {
             .send()
             .await
             .unwrap();
+        println!("status {}", response.status());
+    }
+
+    pub async fn get_libraries(&self, username: &str) -> Vec<LibraryMetadata> {
+        let path = format!("/libraries/user/{}/", username);
+        let response = self.request(Method::GET, &path).send().await.unwrap();
+        response.json::<Vec<LibraryMetadata>>().await.unwrap()
+    }
+
+    pub async fn get_submitted_libraries(&self) -> Vec<LibraryMetadata> {
+        let response = self
+            .request(Method::GET, "/libraries/admin/pending")
+            .send()
+            .await
+            .unwrap();
+
+        println!("status {}", response.status());
+        response.json::<Vec<LibraryMetadata>>().await.unwrap()
+    }
+
+    pub async fn get_public_libraries(&self) -> Vec<LibraryMetadata> {
+        let response = self
+            .request(Method::GET, "/libraries/community")
+            .send()
+            .await
+            .unwrap();
+
+        println!("status {}", response.status());
+        response.json::<Vec<LibraryMetadata>>().await.unwrap()
+    }
+
+    pub async fn save_library(&self, username: &str, name: &str, blocks: &str, notes: &str) {
+        let path = format!("/libraries/user/{}/", username);
+        let response = self
+            .request(Method::POST, &path)
+            .json(&CreateLibraryData {
+                name: name.to_owned(),
+                blocks: blocks.to_owned(),
+                notes: notes.to_owned(),
+            })
+            .send()
+            .await
+            .unwrap();
+        println!("status {}", response.status());
+    }
+
+    pub async fn publish_library(&self, username: &str, library: &str) {
+        let path = format!("/libraries/user/{}/{}/publish", username, library);
+        let response = self.request(Method::POST, &path).send().await.unwrap();
+        println!("status {}", response.status());
+    }
+
+    pub async fn unpublish_library(&self, username: &str, library: &str) {
+        let path = format!("/libraries/user/{}/{}/unpublish", username, library);
+        let response = self.request(Method::POST, &path).send().await.unwrap();
         println!("status {}", response.status());
     }
 

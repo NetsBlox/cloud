@@ -193,3 +193,34 @@ pub struct ExternalClientState {
     pub address: String,
     pub app_id: String,
 }
+
+#[derive(Serialize, Deserialize)]
+pub struct CreateLibraryData {
+    pub name: String,
+    pub notes: String,
+    pub blocks: String,
+}
+
+#[derive(Serialize, Deserialize)]
+pub struct LibraryMetadata {
+    pub owner: String,
+    pub name: String,
+    pub notes: String,
+    pub public: bool,
+}
+
+impl LibraryMetadata {
+    pub fn new(
+        owner: String,
+        name: String,
+        public: bool,
+        notes: Option<String>,
+    ) -> LibraryMetadata {
+        LibraryMetadata {
+            owner,
+            name,
+            notes: notes.unwrap_or_else(String::new),
+            public,
+        }
+    }
+}

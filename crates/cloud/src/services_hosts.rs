@@ -1,7 +1,7 @@
 use crate::app_data::AppData;
 use crate::errors::{InternalError, UserError};
 use crate::models::Group;
-use crate::users::{can_edit_user, is_super_user};
+use crate::users::{can_edit_user, ensure_can_edit_user, is_super_user};
 use actix_session::Session;
 use actix_web::{get, post};
 use actix_web::{web, HttpResponse};
@@ -68,23 +68,20 @@ async fn list_user_hosts(
     app: web::Data<AppData>,
     path: web::Path<(String,)>,
     session: Session,
-) -> Result<HttpResponse, std::io::Error> {
+) -> Result<HttpResponse, UserError> {
     let username = path.into_inner().0;
 
-    if !can_edit_user(&app, &session, &username).await {
-        return Ok(HttpResponse::Unauthorized().body("Not allowed."));
-    }
+    ensure_can_edit_user(&app, &session, &username).await?;
 
     let query = doc! {"username": username};
-    match app
+    let user = app
         .users
         .find_one(query, None)
         .await
-        .expect("User not found")
-    {
-        Some(user) => Ok(HttpResponse::Ok().json(user.services_hosts.unwrap_or_else(Vec::new))),
-        None => Ok(HttpResponse::NotFound().finish()),
-    } // FIXME: status code
+        .map_err(|_err| InternalError::DatabaseConnectionError)?
+        .ok_or_else(|| UserError::UserNotFoundError)?;
+
+    Ok(HttpResponse::Ok().json(user.services_hosts.unwrap_or_else(Vec::new)))
 }
 
 #[post("/user/{username}")]
@@ -93,12 +90,10 @@ async fn set_user_hosts(
     path: web::Path<(String,)>,
     hosts: web::Json<Vec<ServiceHost>>,
     session: Session,
-) -> Result<HttpResponse, std::io::Error> {
+) -> Result<HttpResponse, UserError> {
     // TODO: set up auth
     let username = path.into_inner().0;
-    if !can_edit_user(&app, &session, &username).await {
-        return Ok(HttpResponse::Unauthorized().body("Not allowed."));
-    }
+    ensure_can_edit_user(&app, &session, &username).await?;
 
     let service_hosts: Vec<ServiceHost> = hosts.into_inner();
     let update = doc! {"$set": {"servicesHosts": &service_hosts }};
@@ -107,7 +102,7 @@ async fn set_user_hosts(
         .users
         .update_one(filter, update, None)
         .await
-        .expect("Unable to update user");
+        .map_err(|_err| InternalError::DatabaseConnectionError)?;
 
     if result.modified_count == 1 {
         Ok(HttpResponse::Ok().finish())

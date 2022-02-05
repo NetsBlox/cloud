@@ -97,6 +97,7 @@
      - [ ] approve
 
      - [ ] import?
+        - save?
 
 - [ ] projects
     - [ ] list
@@ -112,7 +113,7 @@
     - [ ] list collabs
     - [ ] rm collab
 
-- [ ] add password salts
+- [x] add password salts
 
 - [ ] users
     - [x] create
