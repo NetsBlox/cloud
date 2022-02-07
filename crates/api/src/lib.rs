@@ -1,7 +1,7 @@
 use futures_util::{future, stream::SplitSink, stream::SplitStream, Stream, StreamExt};
 pub use netsblox_core::{
     ClientConfig, ClientState, ClientStateData, CreateLibraryData, ExternalClientState,
-    LibraryMetadata, LibraryPublishState, Project, RoleData,
+    LibraryMetadata, LibraryPublishState, Project, RoleData, ServiceHost,
 };
 pub use netsblox_core::{FriendInvite, FriendLinkState, InvitationResponse, ProjectMetadata, User};
 use reqwest::{self, Method, RequestBuilder};
@@ -101,6 +101,7 @@ impl Client {
         Ok(cookie.value().to_owned())
     }
 
+    // User management
     pub async fn create_user(
         // TODO: How to pass the proxy user?
         &self,
@@ -155,6 +156,17 @@ impl Client {
         response.json::<User>().await.unwrap()
     }
 
+    pub async fn set_password(&self, username: &str, password: &str) {
+        let path = format!("/users/{}/password", username);
+        let response = self
+            .request(Method::PATCH, &path)
+            .json(&password)
+            .send()
+            .await
+            .unwrap();
+        println!("status {}", response.status());
+    }
+
     pub async fn link_account(
         &self,
         username: &str,
@@ -181,6 +193,7 @@ impl Client {
         todo!();
     }
 
+    // Project management
     pub async fn list_projects(&self, owner: &str) -> Vec<ProjectMetadata> {
         let response = self
             .request(Method::GET, &format!("/projects/user/{}", &owner))
@@ -257,15 +270,7 @@ impl Client {
         response.json::<RoleData>().await.unwrap()
     }
 
-    pub async fn list_networks(&self) -> Vec<String> {
-        let response = self.request(Method::GET, "/network/").send().await.unwrap();
-        // TODO: Return addresses? or IDs?. Probably addresses since this is universal
-        // This can't be used for fetching the room though...
-
-        println!("status {}", response.status());
-        response.json::<Vec<String>>().await.unwrap()
-    }
-
+    // Friend capabilities
     pub async fn list_friends(&self, username: &str) -> Vec<String> {
         let path = &format!("/friends/{}/", username);
         let response = self.request(Method::GET, path).send().await.unwrap();
@@ -334,17 +339,7 @@ impl Client {
         println!("status {}", response.status());
     }
 
-    pub async fn set_password(&self, username: &str, password: &str) {
-        let path = format!("/users/{}/password", username);
-        let response = self
-            .request(Method::PATCH, &path)
-            .json(&password)
-            .send()
-            .await
-            .unwrap();
-        println!("status {}", response.status());
-    }
-
+    // Library capabilities
     pub async fn get_libraries(&self, username: &str) -> Vec<LibraryMetadata> {
         let path = format!("/libraries/user/{}/", username);
         let response = self.request(Method::GET, &path).send().await.unwrap();
@@ -428,6 +423,37 @@ impl Client {
             .unwrap();
 
         println!("status {}", response.status());
+    }
+
+    // Service host management
+    pub async fn list_user_hosts(&self, username: &str) -> Vec<ServiceHost> {
+        let response = self
+            .request(Method::GET, &format!("/service-hosts/user/{}", username))
+            .send()
+            .await
+            .unwrap();
+
+        response.json::<Vec<ServiceHost>>().await.unwrap()
+    }
+
+    pub async fn list_hosts(&self, username: &str) -> Vec<ServiceHost> {
+        let response = self
+            .request(Method::GET, &format!("/service-hosts/all/{}", username))
+            .send()
+            .await
+            .unwrap();
+
+        response.json::<Vec<ServiceHost>>().await.unwrap()
+    }
+
+    // NetsBlox network capabilities
+    pub async fn list_networks(&self) -> Vec<String> {
+        let response = self.request(Method::GET, "/network/").send().await.unwrap();
+        // TODO: Return addresses? or IDs?. Probably addresses since this is universal
+        // This can't be used for fetching the room though...
+
+        println!("status {}", response.status());
+        response.json::<Vec<String>>().await.unwrap()
     }
 
     pub async fn connect(&self, address: &str) -> MessageChannel {

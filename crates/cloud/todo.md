@@ -86,21 +86,23 @@
 
 - [ ] services hosts
     - [ ] list --user-only --group-only --user
+        - [ ] need the group-only option...
     - [ ] add --group --user
-    - [ ] remove
+        - user is overloaded now...
+    - [ ] remove --group --user
 
-- [ ] libraries
+- [x] libraries
      - [x] list --community --approval-needed
      - [x] delete
      - [x] publish
      - [x] unpublish
-     - [ ] approve
+     - [x] approve
 
      - [x] import?
         - save?
 
 - [ ] projects
-    - [ ] list
+    - [ ] list  --shared
     - [ ] export
     - [ ] publish
     - [ ] unpublish
@@ -266,6 +268,8 @@
 - [ ] email Tom about the big update?
 
 - [ ] change "project_name" to "name"
+
+- [ ] gallery
 
 ## CLI
 - add CLI

@@ -134,7 +134,7 @@ enum Projects {
 #[derive(Subcommand, Debug)]
 enum ServiceHosts {
     List {
-        #[clap(short, long)]
+        #[clap(long)]
         user_only: bool,
         #[clap(short, long)]
         group_only: bool,
@@ -511,7 +511,13 @@ async fn main() -> Result<(), confy::ConfyError> {
             Projects::List { user, shared } => {
                 let username = user.clone().unwrap_or(current_user);
                 // TODO: respect shared flag
-                for project in client.list_projects(&username).await {
+                let projects = if *shared {
+                    client.list_shared_projects(&username).await
+                } else {
+                    client.list_projects(&username).await
+                };
+
+                for project in projects {
                     println!("{}", project.name);
                 }
             }
@@ -519,8 +525,10 @@ async fn main() -> Result<(), confy::ConfyError> {
                 let username = user.clone().unwrap_or(current_user);
                 //client.publish_project(user, project).await;
                 todo!();
+                // TODO: add moderation here, too?
             }
             Projects::Unpublish { project, user } => {
+                let username = user.clone().unwrap_or(current_user);
                 todo!();
             }
             Projects::InviteCollaborator {
@@ -661,8 +669,19 @@ async fn main() -> Result<(), confy::ConfyError> {
                 group_only,
                 user,
             } => {
-                // TODO
-                todo!();
+                let username = user.clone().unwrap_or(current_user);
+                let service_hosts = if *user_only {
+                    client.list_user_hosts(&username).await
+                } else if *group_only {
+                    todo!();
+                    //client.list_group_hosts(&username).await
+                } else {
+                    client.list_hosts(&username).await
+                };
+
+                for host in service_hosts {
+                    println!("{:?}", host);
+                }
             }
             ServiceHosts::Add {
                 url,

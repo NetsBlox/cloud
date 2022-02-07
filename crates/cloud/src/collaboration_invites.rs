@@ -22,10 +22,7 @@ async fn list_invites(
 
     let query = doc! {"recipient": recipient};
     let cursor = app.collab_invites.find(query, None).await.unwrap();
-    let invites = cursor
-        .try_collect::<Vec<_>>()
-        .await
-        .unwrap();
+    let invites = cursor.try_collect::<Vec<_>>().await.unwrap();
 
     Ok(HttpResponse::Ok().json(invites))
 }

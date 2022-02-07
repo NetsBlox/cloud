@@ -9,7 +9,7 @@ use futures::TryStreamExt;
 use mongodb::bson::{doc, oid::ObjectId};
 use netsblox_core::ServiceHost;
 
-#[get("/group/{id}")] // TODO: should we use the name instead? Probably not...
+#[get("/group/{id}")]
 async fn list_group_hosts(
     app: web::Data<AppData>,
     path: web::Path<(ObjectId,)>,

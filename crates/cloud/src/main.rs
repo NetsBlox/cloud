@@ -76,7 +76,7 @@ async fn main() -> std::io::Result<()> {
             .wrap(middleware::Logger::default())
             .app_data(web::Data::new(app_data.clone()))
             .service(web::scope("/libraries").configure(libraries::config))
-            .service(web::scope("/services-hosts").configure(services_hosts::config))
+            .service(web::scope("/service-hosts").configure(services_hosts::config))
             .service(web::scope("/users").configure(users::config))
             .service(web::scope("/projects").configure(projects::config))
             .service(web::scope("/groups").configure(groups::config))
