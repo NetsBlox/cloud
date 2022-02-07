@@ -1,6 +1,6 @@
 use crate::app_data::AppData;
 use crate::errors::UserError;
-use crate::users::{can_edit_user, is_super_user};
+use crate::users::{can_edit_user, ensure_is_super_user, is_super_user};
 use actix_session::Session;
 use actix_web::{delete, get, post};
 use actix_web::{web, HttpResponse};
@@ -8,7 +8,7 @@ use futures::stream::TryStreamExt;
 use lazy_static::lazy_static;
 use mongodb::bson::doc;
 use mongodb::options::{FindOneAndUpdateOptions, FindOptions};
-use netsblox_core::{CreateLibraryData, LibraryMetadata};
+use netsblox_core::{CreateLibraryData, LibraryMetadata, LibraryPublishState};
 use regex::Regex;
 use rustrict::CensorStr;
 use serde::{Deserialize, Serialize};
@@ -18,7 +18,7 @@ impl From<Library> for LibraryMetadata {
         LibraryMetadata::new(
             library.owner.clone(),
             library.name.clone(),
-            library.public,
+            library.state,
             Some(library.notes.clone()),
         )
     }
@@ -30,9 +30,8 @@ struct Library {
     owner: String,
     name: String,
     notes: String,
-    public: bool,
     blocks: String,
-    needs_approval: bool,
+    state: LibraryPublishState,
 }
 
 // TODO: add an endpoint for the official ones?
@@ -41,7 +40,7 @@ async fn list_community_libraries(db: web::Data<AppData>) -> Result<HttpResponse
     let collection = db.collection::<LibraryMetadata>("libraries");
 
     let options = FindOptions::builder().sort(doc! {"name": 1}).build();
-    let public_filter = doc! {"public": true};
+    let public_filter = doc! {"state": LibraryPublishState::Public};
     let cursor = collection
         .find(public_filter, options)
         .await
@@ -125,8 +124,7 @@ async fn save_user_library(
         "$setOnInsert": {
             "owner": &owner,
             "name": &data.name,
-            "public": false,
-            "needsApproval": false,
+            "state": LibraryPublishState::Private,
         }
     };
     let options = FindOneAndUpdateOptions::builder().upsert(true).build();
@@ -136,8 +134,13 @@ async fn save_user_library(
         .unwrap()
     {
         Some(library) => {
-            if library.public && is_approval_required(&data.blocks) {
-                let update = doc! {"public": false, "needsApproval": true};
+            let needs_approval = match library.state {
+                LibraryPublishState::Private => false,
+                _ => is_approval_required(&data.blocks),
+            };
+
+            if needs_approval {
+                let update = doc! {"state": LibraryPublishState::PendingApproval};
                 collection.update_one(query, update, None).await.unwrap();
             }
             Ok(HttpResponse::Ok().body("Library saved."))
@@ -190,7 +193,7 @@ async fn publish_user_library(
 
     let collection = app.collection::<Library>("libraries");
     let query = doc! {"owner": owner, "name": name};
-    let update = doc! {"$set": {"needsApproval": true}};
+    let update = doc! {"$set": {"state": LibraryPublishState::PendingApproval}};
 
     match collection
         .find_one_and_update(query.clone(), update, None)
@@ -199,7 +202,7 @@ async fn publish_user_library(
     {
         Some(library) => {
             if !is_approval_required(&library.blocks) || is_super_user(&app, &session).await {
-                let update = doc! {"$set": {"public": true, "needsApproval": false}};
+                let update = doc! {"$set": {"state": LibraryPublishState::Public}};
                 collection.update_one(query, update, None).await.unwrap();
                 Ok(HttpResponse::Ok().body("Library published!"))
             } else {
@@ -222,7 +225,7 @@ async fn unpublish_user_library(
     let collection = db.collection::<LibraryMetadata>("libraries");
 
     let query = doc! {"owner": owner, "name": name};
-    let update = doc! {"$set": {"public": false}};
+    let update = doc! {"$set": {"state": LibraryPublishState::Private}};
     let result = collection
         .update_one(query, update, None)
         .await
@@ -255,11 +258,10 @@ async fn can_edit_library(app: &AppData, session: &Session, owner: &str) -> bool
 }
 
 async fn can_view_library(app: &AppData, session: &Session, library: &LibraryMetadata) -> bool {
-    if library.public {
-        return true;
+    match library.state {
+        LibraryPublishState::Public => true,
+        _ => can_edit_library(app, session, &library.owner).await,
     }
-
-    can_edit_library(app, session, &library.owner).await
 }
 
 // TODO: Should we be able to reject, reapply, etc? If so, we may want to record the decision timestamp
@@ -267,14 +269,12 @@ async fn can_view_library(app: &AppData, session: &Session, library: &LibraryMet
 async fn list_approval_needed(
     app: web::Data<AppData>,
     session: Session,
-) -> Result<HttpResponse, std::io::Error> {
-    if !is_super_user(&app, &session).await {
-        return Ok(HttpResponse::Unauthorized().body("Not allowed."));
-    }
+) -> Result<HttpResponse, UserError> {
+    ensure_is_super_user(&app, &session).await?;
 
     let collection = app.collection::<LibraryMetadata>("libraries");
     let cursor = collection
-        .find(doc! {"needs_approval": true}, None)
+        .find(doc! {"state": LibraryPublishState::PendingApproval}, None) // TODO
         .await
         .expect("Could not retrieve libraries");
 
@@ -288,15 +288,13 @@ async fn approve_library(
     app: web::Data<AppData>,
     path: web::Path<(String, String)>,
     session: Session,
-) -> Result<HttpResponse, std::io::Error> {
-    if !is_super_user(&app, &session).await {
-        return Ok(HttpResponse::Unauthorized().body("Not allowed."));
-    }
+) -> Result<HttpResponse, UserError> {
+    ensure_is_super_user(&app, &session).await?;
 
     let collection = app.collection::<LibraryMetadata>("libraries");
     let (owner, name) = path.into_inner();
     let query = doc! {"owner": owner, "name": name};
-    let update = doc! {"$set": {"public": true, "needsApproval": false}};
+    let update = doc! {"$set": {"state": LibraryPublishState::Public}};
     collection
         .update_one(query, update, None)
         .await
@@ -380,7 +378,7 @@ mod tests {
         assert_eq!(response.status(), http::StatusCode::OK);
         let pub_libs: std::vec::Vec<LibraryMetadata> = test::read_body_json(response).await;
         assert_eq!(pub_libs.len(), 1);
-        assert_eq!(pub_libs[0].public, true);
+        assert_eq!(pub_libs[0].state, LibraryPublishState::Public);
     }
 
     #[actix_web::test]
@@ -507,9 +505,13 @@ mod tests {
 
         let libraries = cursor.try_collect::<Vec<_>>().await.unwrap();
         libraries.into_iter().for_each(|library| {
-            let expected_public = library.name == publish_name;
+            let expected_public = if library.name == publish_name {
+                LibraryPublishState::Public
+            } else {
+                LibraryPublishState::Private
+            };
             assert_eq!(
-                library.public, expected_public,
+                library.state, expected_public,
                 "Expected \"{}\" to have public value of {}",
                 library.name, expected_public
             );

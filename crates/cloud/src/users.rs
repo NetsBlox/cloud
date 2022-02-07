@@ -63,7 +63,7 @@ pub async fn is_super_user(app: &AppData, session: &Session) -> bool {
     }
 }
 
-async fn ensure_is_super_user(app: &AppData, session: &Session) -> Result<(), UserError> {
+pub async fn ensure_is_super_user(app: &AppData, session: &Session) -> Result<(), UserError> {
     if !is_super_user(app, session).await {
         Err(UserError::PermissionsError)
     } else {

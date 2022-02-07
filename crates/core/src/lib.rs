@@ -202,25 +202,33 @@ pub struct CreateLibraryData {
 }
 
 #[derive(Serialize, Deserialize)]
+pub enum LibraryPublishState {
+    Private,
+    PendingApproval,
+    ApprovalDenied,
+    Public,
+}
+
+#[derive(Serialize, Deserialize)]
 pub struct LibraryMetadata {
     pub owner: String,
     pub name: String,
     pub notes: String,
-    pub public: bool,
+    pub state: LibraryPublishState,
 }
 
 impl LibraryMetadata {
     pub fn new(
         owner: String,
         name: String,
-        public: bool,
+        state: LibraryPublishState,
         notes: Option<String>,
     ) -> LibraryMetadata {
         LibraryMetadata {
             owner,
             name,
             notes: notes.unwrap_or_else(String::new),
-            public,
+            state,
         }
     }
 }
