@@ -1,7 +1,7 @@
 use futures_util::{future, stream::SplitSink, stream::SplitStream, Stream, StreamExt};
 pub use netsblox_core::{
     ClientConfig, ClientState, ClientStateData, CreateLibraryData, ExternalClientState,
-    LibraryMetadata, Project, RoleData,
+    LibraryMetadata, LibraryPublishState, Project, RoleData,
 };
 pub use netsblox_core::{FriendInvite, FriendLinkState, InvitationResponse, ProjectMetadata, User};
 use reqwest::{self, Method, RequestBuilder};
@@ -353,7 +353,7 @@ impl Client {
 
     pub async fn get_submitted_libraries(&self) -> Vec<LibraryMetadata> {
         let response = self
-            .request(Method::GET, "/libraries/admin/pending")
+            .request(Method::GET, "/libraries/mod/pending")
             .send()
             .await
             .unwrap();
@@ -410,6 +410,23 @@ impl Client {
     pub async fn unpublish_library(&self, username: &str, library: &str) {
         let path = format!("/libraries/user/{}/{}/unpublish", username, library);
         let response = self.request(Method::POST, &path).send().await.unwrap();
+        println!("status {}", response.status());
+    }
+
+    pub async fn approve_library(
+        &self,
+        username: &str,
+        library: &str,
+        state: &LibraryPublishState,
+    ) {
+        let path = format!("/libraries/mod/{}/{}", username, library);
+        let response = self
+            .request(Method::POST, &path)
+            .json(&state)
+            .send()
+            .await
+            .unwrap();
+
         println!("status {}", response.status());
     }
 

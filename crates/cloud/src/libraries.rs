@@ -1,5 +1,5 @@
 use crate::app_data::AppData;
-use crate::errors::UserError;
+use crate::errors::{InternalError, UserError};
 use crate::users::{can_edit_user, ensure_is_super_user, is_super_user};
 use actix_session::Session;
 use actix_web::{delete, get, post};
@@ -264,9 +264,8 @@ async fn can_view_library(app: &AppData, session: &Session, library: &LibraryMet
     }
 }
 
-// TODO: Should we be able to reject, reapply, etc? If so, we may want to record the decision timestamp
-#[get("/admin/pending")]
-async fn list_approval_needed(
+#[get("/mod/pending")]
+async fn list_pending_libraries(
     app: web::Data<AppData>,
     session: Session,
 ) -> Result<HttpResponse, UserError> {
@@ -274,7 +273,7 @@ async fn list_approval_needed(
 
     let collection = app.collection::<LibraryMetadata>("libraries");
     let cursor = collection
-        .find(doc! {"state": LibraryPublishState::PendingApproval}, None) // TODO
+        .find(doc! {"state": LibraryPublishState::PendingApproval}, None)
         .await
         .expect("Could not retrieve libraries");
 
@@ -283,10 +282,11 @@ async fn list_approval_needed(
     Ok(HttpResponse::Ok().json(libraries))
 }
 
-#[post("/admin/{owner}/{name}/approve")]
-async fn approve_library(
+#[post("/mod/{owner}/{name}")]
+async fn set_library_state(
     app: web::Data<AppData>,
     path: web::Path<(String, String)>,
+    state: web::Json<LibraryPublishState>,
     session: Session,
 ) -> Result<HttpResponse, UserError> {
     ensure_is_super_user(&app, &session).await?;
@@ -294,11 +294,12 @@ async fn approve_library(
     let collection = app.collection::<LibraryMetadata>("libraries");
     let (owner, name) = path.into_inner();
     let query = doc! {"owner": owner, "name": name};
-    let update = doc! {"$set": {"state": LibraryPublishState::Public}};
+    let update = doc! {"$set": {"state": state.into_inner()}};
     collection
         .update_one(query, update, None)
         .await
-        .expect("Unable to update library");
+        .map_err(|_err| InternalError::DatabaseConnectionError)?;
+
     Ok(HttpResponse::Ok().finish())
 }
 
@@ -310,8 +311,8 @@ pub fn config(cfg: &mut web::ServiceConfig) {
         .service(delete_user_library)
         .service(publish_user_library)
         .service(unpublish_user_library)
-        .service(list_approval_needed)
-        .service(approve_library);
+        .service(list_pending_libraries)
+        .service(set_library_state);
 }
 
 #[cfg(test)]

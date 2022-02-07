@@ -5,7 +5,7 @@ use std::fs;
 use clap::{Parser, Subcommand};
 use futures_util::StreamExt;
 use inquire::{Confirm, Password, PasswordDisplayMode};
-use netsblox_api::{Client, Config, Credentials, FriendLinkState};
+use netsblox_api::{Client, Config, Credentials, FriendLinkState, LibraryPublishState};
 use std::path::Path;
 use tokio::io::AsyncWriteExt;
 
@@ -200,6 +200,8 @@ enum Libraries {
     },
     Approve {
         library: String,
+        #[clap(long)]
+        reject: bool,
         #[clap(short, long)]
         user: Option<String>,
     },
@@ -728,8 +730,18 @@ async fn main() -> Result<(), confy::ConfyError> {
                 let username = user.clone().unwrap_or(current_user);
                 client.unpublish_library(&username, &library).await;
             }
-            Libraries::Approve { library, user } => {
-                todo!();
+            Libraries::Approve {
+                library,
+                user,
+                reject,
+            } => {
+                let username = user.clone().unwrap_or(current_user);
+                let state = if *reject {
+                    LibraryPublishState::ApprovalDenied
+                } else {
+                    LibraryPublishState::Public
+                };
+                client.approve_library(&username, &library, &state).await;
             }
         },
     }
