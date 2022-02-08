@@ -5,9 +5,9 @@ use actix_session::Session;
 use actix_web::{delete, get, patch, post};
 use actix_web::{web, HttpResponse};
 use futures::stream::TryStreamExt;
-use mongodb::bson::{doc, oid::ObjectId};
-use netsblox_core::{CreateGroupData, Group, GroupId};
-use serde::Deserialize;
+use mongodb::bson::doc;
+
+use netsblox_core::{CreateGroupData, Group, GroupId, UpdateGroupData, User};
 use uuid::Uuid;
 
 #[get("/user/{owner}")]
@@ -28,7 +28,7 @@ async fn list_groups(
 #[get("/id/{id}")]
 async fn view_group(
     app: web::Data<AppData>,
-    path: web::Path<(ObjectId,)>,
+    path: web::Path<(GroupId,)>,
     session: Session,
 ) -> Result<HttpResponse, UserError> {
     let (id,) = path.into_inner();
@@ -38,9 +38,9 @@ async fn view_group(
         .ok_or_else(|| UserError::PermissionsError)?;
 
     let query = if is_super_user(&app, &session).await {
-        doc! {"_id": id}
+        doc! {"id": id}
     } else {
-        doc! {"_id": id, "owner": username}
+        doc! {"id": id, "owner": username}
     };
 
     let group = app
@@ -64,7 +64,14 @@ async fn list_members(
     ensure_can_edit_group(&app, &session, &id).await?;
     let query = doc! {"groupId": id};
     let cursor = app.users.find(query, None).await.unwrap();
-    let members = cursor.try_collect::<Vec<_>>().await.unwrap();
+    let members: Vec<User> = cursor
+        .try_collect::<Vec<_>>()
+        .await
+        .unwrap()
+        .into_iter()
+        .map(|u| u.into())
+        .collect();
+
     Ok(HttpResponse::Ok().json(members))
 }
 
@@ -115,58 +122,68 @@ async fn create_group(
     }
 }
 
-#[derive(Deserialize)]
-struct UpdateGroupData {
-    name: String,
-}
-
 #[patch("/id/{id}")]
 async fn update_group(
     app: web::Data<AppData>,
-    path: web::Path<(ObjectId,)>,
+    path: web::Path<(GroupId,)>,
     data: web::Json<UpdateGroupData>,
     session: Session,
-) -> Result<HttpResponse, std::io::Error> {
+) -> Result<HttpResponse, UserError> {
     let (id,) = path.into_inner();
-    if let Some(username) = session.get::<String>("username").unwrap() {
-        let query = if is_super_user(&app, &session).await {
-            doc! {"_id": id}
-        } else {
-            doc! {"_id": id, "owner": username}
-        };
-        let update = doc! {"$set": {"name": &data.name}};
-        let result = app.groups.update_one(query, update, None).await.unwrap();
-        if result.matched_count > 0 {
-            Ok(HttpResponse::Ok().body("Group deleted."))
-        } else {
-            Ok(HttpResponse::NotFound().body("Not found."))
-        }
+
+    let username = session
+        .get::<String>("username")
+        .unwrap()
+        .ok_or_else(|| UserError::PermissionsError)?;
+
+    let query = if is_super_user(&app, &session).await {
+        doc! {"id": id}
     } else {
-        Ok(HttpResponse::Unauthorized().body("Not allowed."))
+        doc! {"id": id, "owner": username}
+    };
+    let update = doc! {"$set": {"name": &data.name}};
+    let result = app
+        .groups
+        .update_one(query, update, None)
+        .await
+        .map_err(|_err| InternalError::DatabaseConnectionError)?;
+
+    if result.matched_count > 0 {
+        Ok(HttpResponse::Ok().body("Group deleted."))
+    } else {
+        Err(UserError::GroupNotFoundError)
     }
 }
 
 #[delete("/id/{id}")]
 async fn delete_group(
     app: web::Data<AppData>,
-    path: web::Path<(ObjectId,)>,
+    path: web::Path<(GroupId,)>,
     session: Session,
 ) -> Result<HttpResponse, UserError> {
     let (id,) = path.into_inner();
-    if let Some(username) = session.get::<String>("username").unwrap() {
-        let query = if is_super_user(&app, &session).await {
-            doc! {"_id": id}
-        } else {
-            doc! {"_id": id, "owner": username}
-        };
-        let result = app.groups.delete_one(query, None).await.unwrap();
-        if result.deleted_count > 0 {
-            Ok(HttpResponse::Ok().body("Group deleted."))
-        } else {
-            Ok(HttpResponse::NotFound().body("Not found."))
-        }
+
+    let username = session
+        .get::<String>("username")
+        .unwrap()
+        .ok_or_else(|| UserError::PermissionsError)?;
+
+    let query = if is_super_user(&app, &session).await {
+        doc! {"id": id}
     } else {
-        Ok(HttpResponse::Unauthorized().body("Not allowed."))
+        doc! {"id": id, "owner": username}
+    };
+
+    let result = app
+        .groups
+        .delete_one(query, None)
+        .await
+        .map_err(|_err| InternalError::DatabaseConnectionError)?;
+
+    if result.deleted_count > 0 {
+        Ok(HttpResponse::Ok().body("Group deleted."))
+    } else {
+        Err(UserError::GroupNotFoundError)
     }
 }
 

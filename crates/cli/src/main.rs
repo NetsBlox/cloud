@@ -435,10 +435,25 @@ async fn main() -> Result<(), confy::ConfyError> {
                 group,
                 user,
             } => {
-                // TODO: resolve group name to ID
-                println!("Creating user: {:?}", username);
+                let group_id = if let Some(group_name) = group {
+                    let username = user.clone().unwrap_or(current_user);
+                    let groups = client.list_groups(&username).await;
+                    groups
+                        .into_iter()
+                        .find(|g| g.name == *group_name)
+                        .map(|group| group.id)
+                } else {
+                    None
+                };
+
                 client
-                    .create_user(&username, email, password.as_deref(), None, admin)
+                    .create_user(
+                        &username,
+                        email,
+                        password.as_deref(),
+                        group_id.as_deref(),
+                        admin,
+                    )
                     .await;
             }
             Users::SetPassword { password, user } => {
@@ -785,21 +800,54 @@ async fn main() -> Result<(), confy::ConfyError> {
             }
             Groups::Delete { group, user } => {
                 let username = user.clone().unwrap_or(current_user);
-                // TODO: delete using the ID or owner/name combo?
-                //client.delete_group(&username, &name).await;
+                let groups = client.list_groups(&username).await;
+                let group_id = groups
+                    .into_iter()
+                    .find(|g| g.name == *group)
+                    .map(|group| group.id)
+                    .unwrap();
+
+                client.delete_group(&group_id).await;
             }
             Groups::Members { group, user } => {
-                todo!();
+                let username = user.clone().unwrap_or(current_user);
+                let groups = client.list_groups(&username).await;
+                let group_id = groups
+                    .into_iter()
+                    .find(|g| g.name == *group)
+                    .map(|group| group.id)
+                    .unwrap(); // FIXME
+
+                for member in client.list_members(&group_id).await {
+                    println!("{:?}", member);
+                }
             }
             Groups::Rename {
                 group,
                 new_name,
                 user,
             } => {
-                todo!();
+                let username = user.clone().unwrap_or(current_user);
+                let groups = client.list_groups(&username).await;
+                let group_id = groups
+                    .into_iter()
+                    .find(|g| g.name == *group)
+                    .map(|group| group.id)
+                    .unwrap();
+
+                client.rename_group(&group_id, &new_name).await;
             }
             Groups::View { group, user } => {
-                todo!();
+                let username = user.clone().unwrap_or(current_user);
+                let groups = client.list_groups(&username).await;
+                let group_id = groups
+                    .into_iter()
+                    .find(|g| g.name == *group)
+                    .map(|group| group.id)
+                    .unwrap();
+
+                let group = client.view_group(&group_id).await;
+                println!("{:?}", group);
             }
         },
     }

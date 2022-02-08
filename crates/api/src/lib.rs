@@ -1,9 +1,9 @@
 use futures_util::{future, stream::SplitSink, stream::SplitStream, Stream, StreamExt};
-use netsblox_core::CreateGroupData;
 pub use netsblox_core::{
     ClientConfig, ClientState, ClientStateData, CreateLibraryData, ExternalClientState, Group,
     LibraryMetadata, LibraryPublishState, Project, RoleData, ServiceHost,
 };
+use netsblox_core::{CreateGroupData, UpdateGroupData};
 pub use netsblox_core::{FriendInvite, FriendLinkState, InvitationResponse, ProjectMetadata, User};
 use reqwest::{self, Method, RequestBuilder};
 use serde::{Deserialize, Serialize};
@@ -126,7 +126,11 @@ impl Client {
             .send()
             .await?;
 
-        println!("status {}", response.status());
+        println!(
+            "status {} {}",
+            response.status(),
+            response.text().await.unwrap()
+        );
         Ok(())
         // TODO: return the user data?
     }
@@ -474,6 +478,43 @@ impl Client {
             .unwrap();
 
         println!("status {}", response.status());
+    }
+
+    pub async fn delete_group(&self, id: &str) {
+        let path = format!("/groups/id/{}", id);
+        let response = self.request(Method::DELETE, &path).send().await.unwrap();
+
+        println!("status {}", response.status());
+    }
+
+    pub async fn list_members(&self, id: &str) -> Vec<User> {
+        let path = format!("/groups/id/{}/members", id);
+        let response = self.request(Method::GET, &path).send().await.unwrap();
+
+        println!("status {}", response.status());
+        response.json::<Vec<User>>().await.unwrap()
+    }
+
+    pub async fn rename_group(&self, id: &str, name: &str) {
+        let path = format!("/groups/id/{}", id);
+        let response = self
+            .request(Method::PATCH, &path)
+            .json(&UpdateGroupData {
+                name: name.to_owned(),
+            })
+            .send()
+            .await
+            .unwrap();
+
+        println!("status {}", response.status());
+    }
+
+    pub async fn view_group(&self, id: &str) -> Group {
+        let path = format!("/groups/id/{}", id);
+        let response = self.request(Method::GET, &path).send().await.unwrap();
+
+        println!("status {}", response.status());
+        response.json::<Group>().await.unwrap()
     }
 
     // Service host management

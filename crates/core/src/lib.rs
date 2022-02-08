@@ -241,11 +241,16 @@ pub struct CreateGroupData {
     //pub api_keys: Option<Vec<ServiceHost>>,
 }
 
-#[derive(Serialize, Deserialize, Clone)]
+#[derive(Serialize, Deserialize, Clone, Debug)]
 #[serde(rename_all = "camelCase")]
 pub struct Group {
     pub id: GroupId,
     pub owner: String,
     pub name: String,
     pub services_hosts: Option<Vec<ServiceHost>>,
+}
+
+#[derive(Serialize, Deserialize)]
+pub struct UpdateGroupData {
+    pub name: String,
 }

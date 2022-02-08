@@ -5,6 +5,14 @@
         - Or the client could send this in the request...
             - context: {project: {name, id}, role: {name, id}}
 
+- [x] groups
+    - [x] view group
+    - [x] list groups 
+    - [x] create groups 
+    - [x] delete group
+    - [x] rename group
+    - [x] list members group
+
 - [x] friends
     - [x] list friends
     - [x] list invites
