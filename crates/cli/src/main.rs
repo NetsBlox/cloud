@@ -235,6 +235,7 @@ enum Network {
 #[derive(Subcommand, Debug)]
 enum Groups {
     Create {
+        name: String,
         #[clap(short, long)]
         user: Option<String>,
     },
@@ -337,6 +338,12 @@ struct FriendCommand {
 }
 
 #[derive(Parser, Debug)]
+struct GroupCommand {
+    #[clap(subcommand)]
+    subcmd: Groups,
+}
+
+#[derive(Parser, Debug)]
 struct ServiceHostCommand {
     #[clap(subcommand)]
     subcmd: ServiceHosts,
@@ -354,6 +361,7 @@ enum Command {
     Users(UserCommand),
     Projects(ProjectCommand),
     Network(NetworkCommand),
+    Groups(GroupCommand),
     Friends(FriendCommand),
     ServiceHosts(ServiceHostCommand),
     Libraries(LibraryCommand),
@@ -761,6 +769,37 @@ async fn main() -> Result<(), confy::ConfyError> {
                     LibraryPublishState::Public
                 };
                 client.approve_library(&username, &library, &state).await;
+            }
+        },
+        Command::Groups(cmd) => match &cmd.subcmd {
+            Groups::List { user } => {
+                let username = user.clone().unwrap_or(current_user);
+                let groups = client.list_groups(&username).await;
+                for group in groups {
+                    println!("{}", group.name);
+                }
+            }
+            Groups::Create { name, user } => {
+                let username = user.clone().unwrap_or(current_user);
+                client.create_group(&username, &name).await;
+            }
+            Groups::Delete { group, user } => {
+                let username = user.clone().unwrap_or(current_user);
+                // TODO: delete using the ID or owner/name combo?
+                //client.delete_group(&username, &name).await;
+            }
+            Groups::Members { group, user } => {
+                todo!();
+            }
+            Groups::Rename {
+                group,
+                new_name,
+                user,
+            } => {
+                todo!();
+            }
+            Groups::View { group, user } => {
+                todo!();
             }
         },
     }

@@ -1,13 +1,12 @@
 use mongodb::bson::{doc, oid::ObjectId, Bson, DateTime};
 pub use netsblox_core::{
-    FriendInvite, FriendLinkState, LinkedAccount, ProjectId, RoleData, RoleMetadata, SaveState,
-    ServiceHost,
+    CreateGroupData, FriendInvite, FriendLinkState, Group, GroupId, LinkedAccount, ProjectId,
+    RoleData, RoleMetadata, SaveState, ServiceHost,
 };
 use serde::{Deserialize, Serialize};
 use std::{collections::HashMap, time::SystemTime};
 use uuid::Uuid;
 
-pub type GroupId = String;
 #[derive(Serialize, Deserialize, Clone)]
 #[serde(rename_all = "camelCase")]
 pub struct User {
@@ -190,15 +189,6 @@ impl From<Project> for netsblox_core::Project {
     }
 }
 
-#[derive(Serialize, Deserialize, Clone)]
-#[serde(rename_all = "camelCase")]
-pub struct Group {
-    pub id: GroupId,
-    pub owner: String,
-    pub name: String,
-    pub services_hosts: Option<Vec<ServiceHost>>,
-}
-
 #[derive(Deserialize, Serialize, Clone)]
 pub enum InvitationState {
     PENDING,
@@ -222,13 +212,13 @@ pub struct CollaborationInvitation {
     pub _id: Option<ObjectId>,
     pub sender: String,
     pub receiver: String,
-    pub project_id: ObjectId,
+    pub project_id: String,
     pub state: InvitationState,
     pub created_at: DateTime,
 }
 
 impl CollaborationInvitation {
-    pub fn new(sender: String, receiver: String, project_id: ObjectId) -> CollaborationInvitation {
+    pub fn new(sender: String, receiver: String, project_id: String) -> CollaborationInvitation {
         let created_at = DateTime::from_system_time(SystemTime::now());
         CollaborationInvitation {
             _id: None,

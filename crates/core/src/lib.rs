@@ -232,3 +232,20 @@ impl LibraryMetadata {
         }
     }
 }
+
+#[derive(Serialize, Deserialize, Clone)]
+#[serde(rename_all = "camelCase")]
+pub struct CreateGroupData {
+    pub name: String,
+    pub services_hosts: Option<Vec<ServiceHost>>,
+    //pub api_keys: Option<Vec<ServiceHost>>,
+}
+
+#[derive(Serialize, Deserialize, Clone)]
+#[serde(rename_all = "camelCase")]
+pub struct Group {
+    pub id: GroupId,
+    pub owner: String,
+    pub name: String,
+    pub services_hosts: Option<Vec<ServiceHost>>,
+}

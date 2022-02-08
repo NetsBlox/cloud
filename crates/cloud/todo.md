@@ -5,13 +5,77 @@
         - Or the client could send this in the request...
             - context: {project: {name, id}, role: {name, id}}
 
+- [x] friends
+    - [x] list friends
+    - [x] list invites
+    - [x] send invite
+    - [x] respond to invite
+    - [x] block user (unblock?)
+    - [x] unfriend
+    - [ ] list (online) friends
+        - include the app they are using?
+        - client IDs (if netsblox)
+        - addresses?
+
+- [ ] services hosts
+    - [ ] list --user-only --group-only --user
+        - [ ] need the group-only option...
+    - [ ] add --group --user
+        - user is overloaded now...
+    - [ ] remove --group --user
+
+- [ ] projects
+    - [ ] list  --shared
+    - [ ] export
+    - [ ] publish
+    - [ ] unpublish
+    - [ ] delete
+    - [ ] rename
+
+    - [ ] invite collaborator
+    - [ ] list invites
+    - [ ] respond to invite
+    - [ ] list collabs
+    - [ ] rm collab
+
+- [ ] users
+    - [x] create
+    - [x] list
+    - [x] set-password
+    - [x] list
+    - [x] delete
+    - [x] view
+    - [ ] link
+    - [ ] unlink
+
+- [ ] network
+    - [ ] list
+    - [ ] view
+    - [ ] connect
+
+    - [x] invalid response unknown variant mongodb
+
+- general
+    - [ ] finalize output formats (machine vs human?)
+    - [ ] finish updating the browser
+
+- [ ] export latest
+    - make a CLI to test some of this, too?
+    - list networks?
+    - send message?
+        - should we be able to receive messages? Maybe send message and wait?
+            - #NetsBloxCLI
+
+    - [x] create user?
+        - maybe only group members?
+        - how could we prevent malicious use?
+            - only group members is probably fine
+    - delete members?
+
 - [ ] add index to projects collection for "id"
 
 - [ ] add unvisited saveState (w/ a ttl)
     - CREATED -> TRANSIENT -> BROKEN/SAVED
-
-- [ ] refactor errors...
-    - define a user error for something specific - maybe a database error?
 
 - [ ] update collaboration?
     - no more recording the latest one on the server?
@@ -72,84 +136,6 @@
 
 - [ ] don't clean up projects when server goes down?
 
-- [x] friends
-    - [x] list friends
-    - [x] list invites
-    - [x] send invite
-    - [x] respond to invite
-    - [x] block user (unblock?)
-    - [x] unfriend
-    - [ ] list (online) friends
-        - include the app they are using?
-        - client IDs (if netsblox)
-        - addresses?
-
-- [ ] services hosts
-    - [ ] list --user-only --group-only --user
-        - [ ] need the group-only option...
-    - [ ] add --group --user
-        - user is overloaded now...
-    - [ ] remove --group --user
-
-- [x] libraries
-     - [x] list --community --approval-needed
-     - [x] delete
-     - [x] publish
-     - [x] unpublish
-     - [x] approve
-
-     - [x] import?
-        - save?
-
-- [ ] projects
-    - [ ] list  --shared
-    - [ ] export
-    - [ ] publish
-    - [ ] unpublish
-    - [ ] delete
-    - [ ] rename
-
-    - [ ] invite collaborator
-    - [ ] list invites
-    - [ ] respond to invite
-    - [ ] list collabs
-    - [ ] rm collab
-
-- [x] add password salts
-
-- [ ] users
-    - [x] create
-    - [x] list
-    - [x] set-password
-    - [x] list
-    - [x] delete
-    - [x] view
-    - [ ] link
-    - [ ] unlink
-
-- [ ] network
-    - [ ] list
-    - [ ] view
-    - [ ] connect
-
-    - [x] invalid response unknown variant mongodb
-
-- general
-    - [ ] finalize output formats (machine vs human?)
-    - [ ] finish updating the browser
-
-- [ ] export latest
-    - make a CLI to test some of this, too?
-    - list networks?
-    - send message?
-        - should we be able to receive messages? Maybe send message and wait?
-            - #NetsBloxCLI
-
-    - create user?
-        - maybe only group members?
-        - how could we prevent malicious use?
-            - only group members is probably fine
-    - delete members?
 
 - [ ] validate user accounts on creation
     - [-] maybe we will need to whitelist email domains later
@@ -387,4 +373,19 @@
     - netsblox-cloud
     - netsblox-api/client?
     - netsblox-cli
+
+- [x] refactor errors...
+    - define a user error for something specific - maybe a database error?
+
+- [x] libraries
+     - [x] list --community --approval-needed
+     - [x] delete
+     - [x] publish
+     - [x] unpublish
+     - [x] approve
+
+     - [x] import?
+        - save?
+
+- [x] add password salts
 

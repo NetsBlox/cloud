@@ -2,23 +2,21 @@ use actix_session::Session;
 use actix_web::{get, post};
 use actix_web::{web, HttpResponse};
 use futures::TryStreamExt;
-use mongodb::bson::{doc, oid::ObjectId};
-use serde::Deserialize;
+use mongodb::bson::doc;
 
 use crate::app_data::AppData;
+use crate::errors::{InternalError, UserError};
 use crate::models::{CollaborationInvitation, InvitationState};
-use crate::users::can_edit_user;
+use crate::users::ensure_can_edit_user;
 
 #[get("/{recipient}/")]
 async fn list_invites(
     app: web::Data<AppData>,
     path: web::Path<(String,)>,
     session: Session,
-) -> Result<HttpResponse, std::io::Error> {
+) -> Result<HttpResponse, UserError> {
     let (recipient,) = path.into_inner();
-    if !can_edit_user(&app, &session, &recipient).await {
-        return Ok(HttpResponse::Unauthorized().body("Not allowed"));
-    }
+    ensure_can_edit_user(&app, &session, &recipient).await?;
 
     let query = doc! {"recipient": recipient};
     let cursor = app.collab_invites.find(query, None).await.unwrap();
@@ -27,70 +25,65 @@ async fn list_invites(
     Ok(HttpResponse::Ok().json(invites))
 }
 
-#[derive(Deserialize)]
-struct CollaborateRequestBody {
-    sender: Option<String>,
-    project_id: ObjectId,
-}
-
-#[post("/{recipient}/")]
+#[post("/{project_id}/invite/{recipient}")]
 async fn send_invite(
     app: web::Data<AppData>,
     session: Session,
-    path: web::Path<(String,)>,
-    body: web::Json<CollaborateRequestBody>,
-) -> Result<HttpResponse, std::io::Error> {
-    let (recipient,) = path.into_inner();
-    if let Some(username) = session.get::<String>("username").unwrap_or(None) {
-        let body = body.into_inner();
-        let sender = body.sender.unwrap_or(username);
-        let invitation =
-            CollaborationInvitation::new(sender.clone(), recipient.clone(), body.project_id);
-        if !can_edit_user(&app, &session, &sender).await {
-            return Ok(HttpResponse::Unauthorized().body("Not allowed"));
-        }
-        let query =
-            doc! {"sender": &sender, "recipient": &recipient, "projectId": &invitation.project_id};
-        let update = doc! {
-            "$setOnInsert": invitation
-        };
-        let options = mongodb::options::UpdateOptions::builder()
-            .upsert(true)
-            .build();
+    path: web::Path<(String, String)>,
+) -> Result<HttpResponse, UserError> {
+    let (project_id, recipient) = path.into_inner();
 
-        let result = app
-            .collab_invites
-            .update_one(query, update, Some(options))
-            .await
-            .unwrap();
+    let query = doc! {"id": &project_id};
+    let metadata = app
+        .project_metadata
+        .find_one(query, None)
+        .await
+        .map_err(|_err| InternalError::DatabaseConnectionError)? // TODO: wrap the error?
+        .ok_or_else(|| UserError::ProjectNotFoundError)?;
 
-        if result.matched_count == 1 {
-            Ok(HttpResponse::Conflict().body("Invitation already exists."))
-        } else {
-            Ok(HttpResponse::Ok().body("Invitation sent!"))
-        }
+    ensure_can_edit_user(&app, &session, &metadata.owner).await?;
+    let sender = session
+        .get::<String>("username")
+        .unwrap_or(None)
+        .ok_or_else(|| UserError::PermissionsError)?;
+
+    let invitation = CollaborationInvitation::new(sender.clone(), recipient.clone(), project_id);
+
+    let query = doc! {
+        "sender": &sender,
+        "recipient": &recipient,
+        "projectId": &invitation.project_id
+    };
+    let update = doc! {
+        "$setOnInsert": invitation
+    };
+    let options = mongodb::options::UpdateOptions::builder()
+        .upsert(true)
+        .build();
+
+    let result = app
+        .collab_invites
+        .update_one(query, update, Some(options))
+        .await
+        .unwrap();
+
+    if result.matched_count == 1 {
+        Ok(HttpResponse::Conflict().body("Invitation already exists."))
     } else {
-        Ok(HttpResponse::Unauthorized().body("Not allowed"))
+        Ok(HttpResponse::Ok().body("Invitation sent!"))
     }
-}
-
-#[derive(Deserialize)]
-struct CollaborateResponse {
-    state: InvitationState,
 }
 
 #[post("/{recipient}/{id}")]
 async fn respond_to_invite(
     app: web::Data<AppData>,
-    body: web::Json<CollaborateResponse>,
-    path: web::Path<(String, ObjectId)>,
+    state: web::Json<InvitationState>,
+    path: web::Path<(String, String)>,
     session: Session,
-) -> Result<HttpResponse, std::io::Error> {
+) -> Result<HttpResponse, UserError> {
     let (recipient, id) = path.into_inner();
     let query = doc! {"_id": id};
-    if !can_edit_user(&app, &session, &recipient).await {
-        return Ok(HttpResponse::Unauthorized().body("Not allowed."));
-    }
+    ensure_can_edit_user(&app, &session, &recipient).await?;
 
     if let Some(invite) = app
         .collab_invites
@@ -98,6 +91,7 @@ async fn respond_to_invite(
         .await
         .unwrap()
     {
+        // TODO: set the invites to collaborator list?
         if app
             .project_metadata
             .find_one(doc! {"_id": &invite.project_id}, None)
@@ -111,7 +105,7 @@ async fn respond_to_invite(
 
         let update = doc! {
             "$set": {
-                "state": body.state.to_owned()
+                "state": state.into_inner()
             }
         };
         app.collab_invites

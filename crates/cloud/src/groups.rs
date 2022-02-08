@@ -1,13 +1,14 @@
 use crate::app_data::AppData;
-use crate::errors::UserError;
-use crate::models::{Group, GroupId, User};
-use crate::users::{can_edit_user, ensure_can_edit_user, is_super_user};
+use crate::errors::{InternalError, UserError};
+use crate::users::{ensure_can_edit_user, is_super_user};
 use actix_session::Session;
 use actix_web::{delete, get, patch, post};
 use actix_web::{web, HttpResponse};
 use futures::stream::TryStreamExt;
 use mongodb::bson::{doc, oid::ObjectId};
+use netsblox_core::{CreateGroupData, Group, GroupId};
 use serde::Deserialize;
+use uuid::Uuid;
 
 #[get("/user/{owner}")]
 async fn list_groups(
@@ -16,9 +17,8 @@ async fn list_groups(
     session: Session,
 ) -> Result<HttpResponse, UserError> {
     let (owner,) = path.into_inner();
-    if !is_allowed(&app, &session, &owner).await {
-        return Ok(HttpResponse::Unauthorized().body("Not allowed."));
-    }
+    ensure_can_edit_user(&app, &session, &owner).await?;
+
     let query = doc! {"owner": owner};
     let cursor = app.groups.find(query, None).await.unwrap();
     let groups = cursor.try_collect::<Vec<_>>().await.unwrap();
@@ -30,22 +30,27 @@ async fn view_group(
     app: web::Data<AppData>,
     path: web::Path<(ObjectId,)>,
     session: Session,
-) -> Result<HttpResponse, std::io::Error> {
+) -> Result<HttpResponse, UserError> {
     let (id,) = path.into_inner();
-    if let Some(username) = session.get::<String>("username").unwrap() {
-        let query = if is_super_user(&app, &session).await {
-            doc! {"_id": id}
-        } else {
-            doc! {"_id": id, "owner": username}
-        };
-        if let Some(group) = app.groups.find_one(query, None).await.unwrap() {
-            Ok(HttpResponse::Ok().json(group))
-        } else {
-            Ok(HttpResponse::NotFound().body("Not found."))
-        }
+    let username = session
+        .get::<String>("username")
+        .unwrap_or(None)
+        .ok_or_else(|| UserError::PermissionsError)?;
+
+    let query = if is_super_user(&app, &session).await {
+        doc! {"_id": id}
     } else {
-        Ok(HttpResponse::Unauthorized().body("Not allowed."))
-    }
+        doc! {"_id": id, "owner": username}
+    };
+
+    let group = app
+        .groups
+        .find_one(query, None)
+        .await
+        .map_err(|_err| InternalError::DatabaseConnectionError)?
+        .ok_or_else(|| UserError::GroupNotFoundError)?;
+
+    Ok(HttpResponse::Ok().json(group))
 }
 
 #[get("/id/{id}/members")]
@@ -75,25 +80,33 @@ pub async fn ensure_can_edit_group(
     }
 }
 
-#[post("/user/{owner}/{name}")]
+// TODO: Should this send the data, too?
+#[post("/user/{owner}")]
 async fn create_group(
     app: web::Data<AppData>,
-    path: web::Path<(String, String)>,
+    path: web::Path<(String,)>,
     session: Session,
-) -> Result<HttpResponse, std::io::Error> {
-    let (owner, name) = path.into_inner();
-    if !can_edit_user(&app, &session, &owner).await {
-        return Ok(HttpResponse::Unauthorized().body("Not allowed."));
-    }
-    let group = doc! {"owner": &owner, "name": &name};
+    body: web::Json<CreateGroupData>,
+) -> Result<HttpResponse, UserError> {
+    let (owner,) = path.into_inner();
+    ensure_can_edit_user(&app, &session, &owner).await?;
+
+    let group = Group {
+        id: Uuid::new_v4().to_string(),
+        name: body.name.to_owned(),
+        owner: owner.to_owned(),
+        services_hosts: body.into_inner().services_hosts,
+    };
+    let query = doc! {"name": &group.name, "owner": &group.owner};
+    let update = doc! {"$setOnInsert": group};
     let options = mongodb::options::UpdateOptions::builder()
         .upsert(true)
         .build();
     let result = app
         .groups
-        .update_one(group.clone(), group, options)
+        .update_one(query, update, options)
         .await
-        .unwrap();
+        .map_err(|_err| InternalError::DatabaseConnectionError)?;
 
     if result.matched_count == 1 {
         Ok(HttpResponse::Conflict().body("Group with name already exists."))
@@ -138,7 +151,7 @@ async fn delete_group(
     app: web::Data<AppData>,
     path: web::Path<(ObjectId,)>,
     session: Session,
-) -> Result<HttpResponse, std::io::Error> {
+) -> Result<HttpResponse, UserError> {
     let (id,) = path.into_inner();
     if let Some(username) = session.get::<String>("username").unwrap() {
         let query = if is_super_user(&app, &session).await {
@@ -155,10 +168,6 @@ async fn delete_group(
     } else {
         Ok(HttpResponse::Unauthorized().body("Not allowed."))
     }
-}
-
-async fn is_allowed(app: &AppData, session: &Session, owner: &str) -> bool {
-    can_edit_user(app, session, owner).await
 }
 
 pub fn config(cfg: &mut web::ServiceConfig) {

@@ -1,6 +1,7 @@
 use futures_util::{future, stream::SplitSink, stream::SplitStream, Stream, StreamExt};
+use netsblox_core::CreateGroupData;
 pub use netsblox_core::{
-    ClientConfig, ClientState, ClientStateData, CreateLibraryData, ExternalClientState,
+    ClientConfig, ClientState, ClientStateData, CreateLibraryData, ExternalClientState, Group,
     LibraryMetadata, LibraryPublishState, Project, RoleData, ServiceHost,
 };
 pub use netsblox_core::{FriendInvite, FriendLinkState, InvitationResponse, ProjectMetadata, User};
@@ -270,6 +271,31 @@ impl Client {
         response.json::<RoleData>().await.unwrap()
     }
 
+    // Project collaborators
+    pub async fn list_collaborators(&self, project_id: &str) -> Vec<String> {
+        let response = self
+            .request(Method::GET, &format!("/id/{}/collaborators/", project_id))
+            .send()
+            .await
+            .unwrap();
+
+        response.json::<Vec<String>>().await.unwrap()
+    }
+
+    pub async fn list_collaboration_invites(&self, username: &str) -> Vec<String> {
+        let response = self
+            .request(
+                Method::GET,
+                &format!("/collaboration-invites/{}/", username),
+            )
+            .send()
+            .await
+            .unwrap();
+
+        response.json::<Vec<String>>().await.unwrap()
+    }
+    // TODO
+
     // Friend capabilities
     pub async fn list_friends(&self, username: &str) -> Vec<String> {
         let path = &format!("/friends/{}/", username);
@@ -418,6 +444,31 @@ impl Client {
         let response = self
             .request(Method::POST, &path)
             .json(&state)
+            .send()
+            .await
+            .unwrap();
+
+        println!("status {}", response.status());
+    }
+
+    // Group management
+    pub async fn list_groups(&self, username: &str) -> Vec<Group> {
+        let path = format!("/groups/user/{}", username);
+        let response = self.request(Method::GET, &path).send().await.unwrap();
+
+        println!("status {}", response.status());
+        response.json::<Vec<Group>>().await.unwrap()
+    }
+
+    pub async fn create_group(&self, owner: &str, name: &str) {
+        let path = format!("/groups/user/{}", owner);
+        let group = CreateGroupData {
+            name: name.to_owned(),
+            services_hosts: None,
+        };
+        let response = self
+            .request(Method::POST, &path)
+            .json(&group)
             .send()
             .await
             .unwrap();

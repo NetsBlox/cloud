@@ -103,12 +103,15 @@ async fn remove_occupant() -> Result<HttpResponse, std::io::Error> {
 struct OccupantInvite {
     username: String,
     role_id: String,
+    token: String, // TODO
 }
 
 #[post("/id/{projectID}/occupants/invite")] // TODO: add role ID
 async fn invite_occupant(
     invite: web::Json<OccupantInvite>,
 ) -> Result<HttpResponse, std::io::Error> {
+    // TODO: generate a token for the user?
+    // TODO: these are probably fine to be transient
     todo!();
 }
 

@@ -1,6 +1,6 @@
 use crate::{
-    FriendInvite, FriendLinkState, LibraryPublishState, LinkedAccount, RoleMetadata, SaveState,
-    ServiceHost,
+    FriendInvite, FriendLinkState, Group, LibraryPublishState, LinkedAccount, RoleMetadata,
+    SaveState, ServiceHost,
 };
 use bson::{doc, Bson, DateTime};
 
@@ -58,9 +58,9 @@ impl From<SaveState> for Bson {
 impl From<RoleMetadata> for Bson {
     fn from(role: RoleMetadata) -> Bson {
         Bson::Document(doc! {
-            "ProjectName": role.name,
-            "SourceCode": role.code,
-            "Media": role.media,
+            "name": role.name,
+            "code": role.code,
+            "media": role.media,
         })
     }
 }
@@ -73,5 +73,16 @@ impl From<LibraryPublishState> for Bson {
             LibraryPublishState::ApprovalDenied => Bson::String("ApprovalDenied".into()),
             LibraryPublishState::Public => Bson::String("Public".into()),
         }
+    }
+}
+
+impl From<Group> for Bson {
+    fn from(group: Group) -> Bson {
+        Bson::Document(doc! {
+            "id": group.id,
+            "name": group.name,
+            "owner": group.owner,
+            "servicesHosts": group.services_hosts,
+        })
     }
 }
