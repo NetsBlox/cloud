@@ -678,7 +678,6 @@ async fn main() -> Result<(), confy::ConfyError> {
                     .stream
                     // .read
                     .for_each(|msg| async {
-                        println!("received message");
                         let data = msg.unwrap().into_data();
                         let message = std::str::from_utf8(&data).unwrap();
                         println!("{}", &message);
