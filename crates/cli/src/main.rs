@@ -666,17 +666,25 @@ async fn main() -> Result<(), confy::ConfyError> {
                     address,
                     cfg.username.unwrap_or(channel.id)
                 );
+                // channel.stream.filter_map(|msg| {
+                //     future::ready(match msg {
+                //         Ok(Message::Text(txt)) => Some(txt),
+                //         _ => None,
+                //     })
+                // });
 
                 // FIXME:
-                // channel
-                //     .read
-                //     .for_each(|msg| async {
-                //         println!("received message");
-                //         let data = msg.unwrap().into_data();
-                //         println!("{:?}", &data);
-                //         tokio::io::stdout().write_all(&data).await.unwrap();
-                //     })
-                //     .await;
+                channel
+                    .stream
+                    // .read
+                    .for_each(|msg| async {
+                        println!("received message");
+                        let data = msg.unwrap().into_data();
+                        let message = std::str::from_utf8(&data).unwrap();
+                        println!("{}", &message);
+                        // tokio::io::stdout().write_all(&data).await.unwrap();
+                    })
+                    .await;
             }
         },
         Command::Friends(cmd) => match &cmd.subcmd {

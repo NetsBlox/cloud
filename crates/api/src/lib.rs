@@ -714,25 +714,30 @@ impl Client {
             .send()
             .await
             .unwrap();
+
         println!("status {}", response.status());
 
-        let (write, read) = ws_stream.split();
-        let read_channel = read.filter_map(|msg| {
-            future::ready(match msg {
-                Ok(Message::Text(txt)) => Some(txt),
-                _ => None,
-            })
-        });
-        // let read_channel = read.filter(|msg| future::ready(msg.is_ok()));
         MessageChannel {
             id: config.client_id,
-            read: Box::new(read_channel),
-            //     .filter_map(|msg| match msg {
-            //     Ok(Message::Text(txt)) => Some(txt),
-            //     _ => None,
-            // }),
-            write,
+            stream: ws_stream,
         }
+        // let (write, read) = ws_stream.split();
+        // let read_channel = read.filter_map(|msg| {
+        //     future::ready(match msg {
+        //         Ok(Message::Text(txt)) => Some(txt),
+        //         _ => None,
+        //     })
+        // });
+        // // let read_channel = read.filter(|msg| future::ready(msg.is_ok()));
+        // MessageChannel {
+        //     id: config.client_id,
+        //     read: Box::new(read_channel),
+        //     //     .filter_map(|msg| match msg {
+        //     //     Ok(Message::Text(txt)) => Some(txt),
+        //     //     _ => None,
+        //     // }),
+        //     write,
+        // }
     }
 }
 
@@ -746,9 +751,7 @@ struct MessageReadStream {
 
 pub struct MessageChannel {
     pub id: String,
-    write: SplitSink<WebSocketStream<MaybeTlsStream<TcpStream>>, Message>,
-    pub read: Box<dyn Stream<Item = String>>,
-    //SplitStream<WebSocketStream<MaybeTlsStream<TcpStream>>>,
+    pub stream: WebSocketStream<MaybeTlsStream<TcpStream>>,
 }
 
 impl MessageChannel {
