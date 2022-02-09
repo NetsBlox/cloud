@@ -1,6 +1,6 @@
 use crate::{
-    FriendInvite, FriendLinkState, Group, LibraryPublishState, LinkedAccount, RoleMetadata,
-    SaveState, ServiceHost,
+    CollaborationInvite, FriendInvite, FriendLinkState, Group, InvitationState,
+    LibraryPublishState, LinkedAccount, RoleMetadata, SaveState, ServiceHost,
 };
 use bson::{doc, Bson, DateTime};
 
@@ -83,6 +83,28 @@ impl From<Group> for Bson {
             "name": group.name,
             "owner": group.owner,
             "servicesHosts": group.services_hosts,
+        })
+    }
+}
+
+impl From<InvitationState> for Bson {
+    fn from(state: InvitationState) -> Bson {
+        match state {
+            InvitationState::PENDING => Bson::String("PENDING".to_owned()),
+            InvitationState::ACCEPTED => Bson::String("ACCEPTED".to_owned()),
+            InvitationState::REJECTED => Bson::String("REJECTED".to_owned()),
+        }
+    }
+}
+impl From<CollaborationInvite> for Bson {
+    fn from(invite: CollaborationInvite) -> Self {
+        Bson::Document(doc! {
+            "id": invite.id,
+            "sender": invite.sender,
+            "receiver": invite.receiver,
+            "projectId": invite.project_id,
+            "state": invite.state,
+            "created_at": DateTime::from_system_time(invite.created_at),
         })
     }
 }

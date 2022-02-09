@@ -1,4 +1,7 @@
 # To Do
+- [ ] collaborative editing action acceptance
+    - maybe we don't need to persist them...
+
 - [ ] update the services server connection (zmq)
     - add resolve endpoint?
         - (public role ID resolution)

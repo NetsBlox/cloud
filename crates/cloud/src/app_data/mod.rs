@@ -10,7 +10,7 @@ use uuid::Uuid;
 use crate::config::Settings;
 use crate::errors::{InternalError, UserError};
 use crate::models::{
-    CollaborationInvitation, FriendLink, Group, Project, ProjectMetadata, SaveState, User,
+    CollaborationInvite, FriendLink, Group, Project, ProjectMetadata, SaveState, User,
 };
 use crate::models::{RoleData, RoleMetadata};
 use crate::network::topology::{self, SetStorage, TopologyActor};
@@ -34,7 +34,7 @@ pub struct AppData {
     pub users: Collection<User>,
     pub friends: Collection<FriendLink>,
     pub project_metadata: Collection<ProjectMetadata>,
-    pub collab_invites: Collection<CollaborationInvitation>,
+    pub collab_invites: Collection<CollaborationInvite>,
 }
 
 impl AppData {
@@ -66,9 +66,8 @@ impl AppData {
         let users = db.collection::<User>(&(prefix.to_owned() + "users"));
         let project_metadata = db.collection::<ProjectMetadata>(&(prefix.to_owned() + "projects"));
 
-        let collab_invites = db.collection::<CollaborationInvitation>(
-            &(prefix.to_owned() + "collaborationInvitations"),
-        );
+        let collab_invites =
+            db.collection::<CollaborationInvite>(&(prefix.to_owned() + "collaborationInvitations"));
         let friends = db.collection::<FriendLink>(&(prefix.to_owned() + "friends"));
         let network = network.unwrap_or_else(|| TopologyActor {}.start());
         network.do_send(SetStorage {
@@ -311,7 +310,7 @@ impl AppData {
             .await?;
         let query = doc! {"id": &metadata.id};
         let update =
-            doc! {"$set": {&format!("roles.{}", role_id): role_md, "saveState": SaveState::SAVED}};
+            doc! {"$set": {&format!("roles.{}", role_id): role_md, "state": SaveState::SAVED}};
         let options = FindOneAndUpdateOptions::builder()
             .return_document(ReturnDocument::After)
             .build();

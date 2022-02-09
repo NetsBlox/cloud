@@ -6,10 +6,10 @@ use mongodb::bson::doc;
 
 use crate::app_data::AppData;
 use crate::errors::{InternalError, UserError};
-use crate::models::{CollaborationInvitation, InvitationState};
+use crate::models::{CollaborationInvite, InvitationState};
 use crate::users::ensure_can_edit_user;
 
-#[get("/{recipient}/")]
+#[get("/user/{recipient}/")]
 async fn list_invites(
     app: web::Data<AppData>,
     path: web::Path<(String,)>,
@@ -47,7 +47,7 @@ async fn send_invite(
         .unwrap_or(None)
         .ok_or_else(|| UserError::PermissionsError)?;
 
-    let invitation = CollaborationInvitation::new(sender.clone(), recipient.clone(), project_id);
+    let invitation = CollaborationInvite::new(sender.clone(), recipient.clone(), project_id);
 
     let query = doc! {
         "sender": &sender,
@@ -74,7 +74,7 @@ async fn send_invite(
     }
 }
 
-#[post("/{recipient}/{id}")]
+#[post("/id/{id}")]
 async fn respond_to_invite(
     app: web::Data<AppData>,
     state: web::Json<InvitationState>,
@@ -94,7 +94,7 @@ async fn respond_to_invite(
         // TODO: set the invites to collaborator list?
         if app
             .project_metadata
-            .find_one(doc! {"_id": &invite.project_id}, None)
+            .find_one(doc! {"id": &invite.project_id}, None)
             .await
             .unwrap()
             .is_none()
@@ -108,6 +108,7 @@ async fn respond_to_invite(
                 "state": state.into_inner()
             }
         };
+        // TODO: Update the project
         app.collab_invites
             .update_one(query, update, None)
             .await

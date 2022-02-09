@@ -4,6 +4,7 @@ mod bson;
 use core::fmt;
 use serde::{Deserialize, Serialize};
 use std::{collections::HashMap, str::FromStr, time::SystemTime};
+use uuid::Uuid;
 const APP_NAME: &str = "NetsBlox";
 
 #[derive(Deserialize, Serialize)]
@@ -89,7 +90,7 @@ pub struct FriendInvite {
 }
 
 pub type ProjectId = String;
-#[derive(Deserialize, Serialize, Clone)]
+#[derive(Deserialize, Serialize, Clone, Debug)]
 #[serde(rename_all = "camelCase")]
 pub struct ProjectMetadata {
     pub id: ProjectId,
@@ -104,14 +105,14 @@ pub struct ProjectMetadata {
     pub roles: HashMap<String, RoleMetadata>,
 }
 
-#[derive(Deserialize, Serialize, Clone)]
+#[derive(Deserialize, Serialize, Clone, Debug)]
 pub enum SaveState {
     TRANSIENT,
     BROKEN,
     SAVED,
 }
 
-#[derive(Deserialize, Serialize, Clone)]
+#[derive(Deserialize, Serialize, Clone, Debug)]
 pub struct RoleMetadata {
     pub name: String,
     pub code: String,
@@ -253,4 +254,37 @@ pub struct Group {
 #[derive(Serialize, Deserialize)]
 pub struct UpdateGroupData {
     pub name: String,
+}
+
+#[derive(Deserialize, Serialize, Clone, Debug)]
+pub enum InvitationState {
+    PENDING,
+    ACCEPTED,
+    REJECTED,
+}
+
+pub type InvitationId = String;
+#[derive(Deserialize, Serialize, Clone, Debug)]
+#[serde(rename_all = "camelCase")]
+pub struct CollaborationInvite {
+    pub id: String,
+    pub sender: String,
+    pub receiver: String,
+    pub project_id: String,
+    pub state: InvitationState,
+    pub created_at: SystemTime,
+}
+
+impl CollaborationInvite {
+    pub fn new(sender: String, receiver: String, project_id: String) -> Self {
+        let created_at = SystemTime::now();
+        CollaborationInvite {
+            id: Uuid::new_v4().to_string(),
+            sender,
+            receiver,
+            project_id,
+            state: InvitationState::PENDING,
+            created_at,
+        }
+    }
 }

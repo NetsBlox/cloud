@@ -46,6 +46,7 @@ async fn create_project(
         .unwrap_or_else(|| body.client_id.to_owned());
 
     let name = body.name.to_owned();
+    // TODO: validate name
     let metadata = app
         .import_project(&owner, &name, body.into_inner().roles)
         .await?;
@@ -69,16 +70,18 @@ async fn list_user_projects(
     app: web::Data<AppData>,
     path: web::Path<(String,)>,
     session: Session,
-) -> Result<HttpResponse, std::io::Error> {
+) -> Result<HttpResponse, UserError> {
     let (username,) = path.into_inner();
-    let query = doc! {"owner": &username, "state": SaveState::SAVED};
+    let query = doc! {"owner": &username, "saveState": SaveState::SAVED};
+    println!("query is: {:?}", query);
     let cursor = app
         .project_metadata
         .find(query, None)
         .await
-        .expect("Could not retrieve projects");
+        .map_err(|_err| InternalError::DatabaseConnectionError)?;
 
     let projects = get_visible_projects(&app, &session, &username, cursor).await;
+    println!("Found {} projects for {}", projects.len(), username);
     Ok(HttpResponse::Ok().json(projects))
 }
 
@@ -111,7 +114,7 @@ async fn list_shared_projects(
     let (username,) = path.into_inner();
     ensure_can_edit_user(&app, &session, &username).await?;
 
-    let query = doc! {"collaborators": &username, "state": SaveState::SAVED};
+    let query = doc! {"collaborators": &username, "saveState": SaveState::SAVED};
     let cursor = app
         .project_metadata
         .find(query, None)
@@ -253,16 +256,17 @@ async fn publish_project(
         .project_metadata
         .find_one(query.clone(), None)
         .await
-        .map_err(|_err| UserError::InternalError)? // TODO: wrap the error?
+        .map_err(|_err| InternalError::DatabaseConnectionError)? // TODO: wrap the error?
         .ok_or_else(|| UserError::ProjectNotFoundError)?;
 
     ensure_can_edit_project(&app, &session, None, &metadata).await?;
 
-    let update = doc! {"public": true};
+    // TODO: add moderation?
+    let update = doc! {"$set": {"public": true}};
     app.project_metadata
         .update_one(query, update, None)
         .await
-        .map_err(|_err| UserError::InternalError)?; // TODO: wrap the error?
+        .map_err(|_err| InternalError::DatabaseConnectionError)?;
 
     Ok(HttpResponse::Ok().body("Project published!"))
 }
@@ -279,12 +283,12 @@ async fn unpublish_project(
         .project_metadata
         .find_one(query.clone(), None)
         .await
-        .map_err(|_err| UserError::InternalError)? // TODO: wrap the error?
+        .map_err(|_err| InternalError::DatabaseConnectionError)? // TODO: wrap the error?
         .ok_or_else(|| UserError::ProjectNotFoundError)?;
 
     ensure_can_edit_project(&app, &session, None, &metadata).await?;
 
-    let update = doc! {"public": false};
+    let update = doc! {"$set": {"public": false}};
     let result = app
         .project_metadata
         .update_one(query, update, None)
@@ -511,6 +515,7 @@ async fn delete_role(
         .ok_or_else(|| UserError::ProjectNotFoundError)?;
 
     // TODO: Move this to AppData
+    // TODO: what if it is the last role??
     ensure_can_edit_project(&app, &session, None, &metadata).await?;
     let update = doc! {"$unset": {format!("roles.{}", role_id): &""}};
     let options = FindOneAndUpdateOptions::builder()

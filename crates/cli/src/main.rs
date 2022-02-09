@@ -6,7 +6,7 @@ use clap::{Parser, Subcommand};
 use futures_util::StreamExt;
 use inquire::{Confirm, Password, PasswordDisplayMode};
 use netsblox_api::{
-    Client, Config, Credentials, FriendLinkState, LibraryPublishState, ServiceHost,
+    Client, Config, Credentials, FriendLinkState, InvitationState, LibraryPublishState, ServiceHost,
 };
 use std::path::Path;
 use tokio::io::AsyncWriteExt;
@@ -507,8 +507,7 @@ async fn main() -> Result<(), confy::ConfyError> {
             } => {
                 let username = user.clone().unwrap_or(current_user);
                 client.unlink_account(&username, account, strategy).await;
-                todo!();
-            }
+            } // TODO: list linked accounts?
         },
         Command::Projects(cmd) => match &cmd.subcmd {
             Projects::Export {
@@ -535,7 +534,6 @@ async fn main() -> Result<(), confy::ConfyError> {
             }
             Projects::List { user, shared } => {
                 let username = user.clone().unwrap_or(current_user);
-                // TODO: respect shared flag
                 let projects = if *shared {
                     client.list_shared_projects(&username).await
                 } else {
@@ -543,28 +541,40 @@ async fn main() -> Result<(), confy::ConfyError> {
                 };
 
                 for project in projects {
-                    println!("{}", project.name);
+                    println!("{:?}", project);
                 }
             }
             Projects::Publish { project, user } => {
                 let username = user.clone().unwrap_or(current_user);
-                //client.publish_project(user, project).await;
-                todo!();
+                let metadata = client.get_project_metadata(&username, &project).await;
+                let project_id = metadata.id;
+
+                client.publish_project(&project_id).await;
                 // TODO: add moderation here, too?
             }
             Projects::Unpublish { project, user } => {
                 let username = user.clone().unwrap_or(current_user);
-                todo!();
+                let metadata = client.get_project_metadata(&username, &project).await;
+                let project_id = metadata.id;
+
+                client.unpublish_project(&project_id).await;
             }
             Projects::InviteCollaborator {
                 project,
                 username,
                 user,
             } => {
-                todo!();
+                let owner = user.clone().unwrap_or(current_user);
+                let metadata = client.get_project_metadata(&owner, &project).await;
+                let project_id = metadata.id;
+                client.invite_collaborator(&project_id, &username).await;
             }
             Projects::ListInvites { user } => {
-                todo!();
+                let username = user.clone().unwrap_or(current_user);
+                let invites = client.list_collaboration_invites(&username).await;
+                for invite in invites {
+                    println!("{:?}", invite);
+                }
             }
             Projects::RespondToInvite {
                 project,
@@ -572,24 +582,56 @@ async fn main() -> Result<(), confy::ConfyError> {
                 response,
                 user,
             } => {
-                todo!();
+                let invites = client.list_collaboration_invites(&username).await;
+                let sender = user.clone().unwrap_or(current_user);
+                let invite = invites
+                    .iter()
+                    .find(|inv| inv.sender == sender)
+                    .expect("Invitation not found.");
+
+                let state = match response {
+                    InviteResponse::APPROVE => InvitationState::ACCEPTED,
+                    InviteResponse::REJECT => InvitationState::REJECTED,
+                };
+                client
+                    .respond_to_collaboration_invite(&invite.id, &state)
+                    .await;
             }
             Projects::ListCollaborators { project, user } => {
-                todo!();
+                let owner = user.clone().unwrap_or(current_user);
+                let metadata = client.get_project_metadata(&owner, &project).await;
+                for user in metadata.collaborators {
+                    println!("{}", user);
+                }
             }
             Projects::RemoveCollaborator {
                 project,
                 username,
                 user,
             } => {
-                todo!();
+                let owner = user.clone().unwrap_or(current_user);
+                let metadata = client.get_project_metadata(&owner, &project).await;
+                client.remove_collaborator(&metadata.id, &username).await;
             }
             Projects::Delete {
                 project,
                 role,
                 user,
             } => {
-                todo!();
+                let owner = user.clone().unwrap_or(current_user);
+                let metadata = client.get_project_metadata(&owner, &project).await;
+                if let Some(role_name) = role {
+                    let role_id = metadata
+                        .roles
+                        .into_iter()
+                        .find(|(id, role)| role.name == *role_name)
+                        .map(|(id, _role)| id)
+                        .expect("Role not found.");
+
+                    client.delete_role(&metadata.id, &role_id).await;
+                } else {
+                    client.delete_project(&metadata.id).await;
+                }
             }
             Projects::Rename {
                 project,

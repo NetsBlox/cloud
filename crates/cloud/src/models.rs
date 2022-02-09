@@ -1,7 +1,7 @@
-use mongodb::bson::{doc, oid::ObjectId, Bson, DateTime};
+use mongodb::bson::{doc, Bson, DateTime};
 pub use netsblox_core::{
-    CreateGroupData, FriendInvite, FriendLinkState, Group, GroupId, LinkedAccount, ProjectId,
-    RoleData, RoleMetadata, SaveState, ServiceHost,
+    CollaborationInvite, CreateGroupData, FriendInvite, FriendLinkState, Group, GroupId,
+    InvitationState, LinkedAccount, ProjectId, RoleData, RoleMetadata, SaveState, ServiceHost,
 };
 use serde::{Deserialize, Serialize};
 use std::{collections::HashMap, time::SystemTime};
@@ -186,65 +186,6 @@ impl From<Project> for netsblox_core::Project {
             save_state: project.save_state,
             roles: project.roles,
         }
-    }
-}
-
-#[derive(Deserialize, Serialize, Clone)]
-pub enum InvitationState {
-    PENDING,
-    ACCEPTED,
-    REJECTED,
-}
-
-impl From<InvitationState> for Bson {
-    fn from(state: InvitationState) -> Bson {
-        match state {
-            InvitationState::PENDING => Bson::String("PENDING".to_owned()),
-            InvitationState::ACCEPTED => Bson::String("ACCEPTED".to_owned()),
-            InvitationState::REJECTED => Bson::String("REJECTED".to_owned()),
-        }
-    }
-}
-
-#[derive(Deserialize, Serialize, Clone)]
-#[serde(rename_all = "camelCase")]
-pub struct CollaborationInvitation {
-    pub _id: Option<ObjectId>,
-    pub sender: String,
-    pub receiver: String,
-    pub project_id: String,
-    pub state: InvitationState,
-    pub created_at: DateTime,
-}
-
-impl CollaborationInvitation {
-    pub fn new(sender: String, receiver: String, project_id: String) -> CollaborationInvitation {
-        let created_at = DateTime::from_system_time(SystemTime::now());
-        CollaborationInvitation {
-            _id: None,
-            sender,
-            receiver,
-            project_id,
-            state: InvitationState::PENDING,
-            created_at,
-        }
-    }
-}
-impl From<CollaborationInvitation> for Bson {
-    fn from(invite: CollaborationInvitation) -> Self {
-        let doc = Bson::Document(doc! {
-            "sender": invite.sender,
-            "receiver": invite.receiver,
-            "projectId": invite.project_id,
-            "state": invite.state,
-            "created_at": invite.created_at,
-        });
-        // TODO: add _id
-        // if let Some(id) = self._id {
-        //     doc.as_document().unwrap().insert
-
-        // }
-        doc
     }
 }
 

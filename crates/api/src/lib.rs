@@ -1,7 +1,8 @@
 use futures_util::{future, stream::SplitSink, stream::SplitStream, Stream, StreamExt};
 pub use netsblox_core::{
-    ClientConfig, ClientState, ClientStateData, CreateLibraryData, ExternalClientState, Group,
-    LibraryMetadata, LibraryPublishState, Project, RoleData, ServiceHost,
+    ClientConfig, ClientState, ClientStateData, CollaborationInvite, CreateLibraryData,
+    ExternalClientState, Group, InvitationId, InvitationState, LibraryMetadata,
+    LibraryPublishState, Project, ProjectId, RoleData, ServiceHost,
 };
 use netsblox_core::{CreateGroupData, UpdateGroupData};
 pub use netsblox_core::{FriendInvite, FriendLinkState, InvitationResponse, ProjectMetadata, User};
@@ -221,6 +222,64 @@ impl Client {
         response.json::<Vec<ProjectMetadata>>().await.unwrap()
     }
 
+    pub async fn get_project_metadata(&self, owner: &str, name: &str) -> ProjectMetadata {
+        let response = self
+            .request(
+                Method::GET,
+                &format!("/projects/user/{}/{}/metadata", &owner, name),
+            )
+            .send()
+            .await
+            .unwrap();
+
+        println!("status {}", response.status());
+        response.json::<ProjectMetadata>().await.unwrap()
+    }
+
+    pub async fn delete_project(&self, id: &ProjectId) {
+        let response = self
+            .request(Method::DELETE, &format!("/projects/id/{}", id))
+            .send()
+            .await
+            .unwrap();
+
+        println!("status {}", response.status());
+    }
+
+    pub async fn delete_role(&self, id: &ProjectId, role_id: &str) {
+        let response = self
+            .request(Method::DELETE, &format!("/projects/id/{}/{}", id, role_id))
+            .send()
+            .await
+            .unwrap();
+
+        println!("status {}", response.status());
+    }
+
+    pub async fn publish_project(&self, id: &ProjectId) {
+        let response = self
+            .request(Method::POST, &format!("/projects/id/{}/publish", id))
+            .send()
+            .await
+            .unwrap();
+
+        println!(
+            "status {} {}",
+            response.status(),
+            response.text().await.unwrap()
+        );
+    }
+
+    pub async fn unpublish_project(&self, id: &ProjectId) {
+        let response = self
+            .request(Method::POST, &format!("/projects/id/{}/unpublish", id))
+            .send()
+            .await
+            .unwrap();
+
+        println!("status {}", response.status());
+    }
+
     pub async fn export_project(&self, owner: &str, name: &str, latest: &bool) -> Project {
         // TODO: Should this logic happen in the CLI instead?
         let path = format!("/projects/user/{}/{}/metadata", owner, name);
@@ -286,7 +345,20 @@ impl Client {
         response.json::<Vec<String>>().await.unwrap()
     }
 
-    pub async fn list_collaboration_invites(&self, username: &str) -> Vec<String> {
+    pub async fn remove_collaborator(&self, project_id: &ProjectId, username: &str) {
+        let response = self
+            .request(
+                Method::DELETE,
+                &format!("/id/{}/collaborators/{}", project_id, username),
+            )
+            .send()
+            .await
+            .unwrap();
+
+        println!("status {}", response.status());
+    }
+
+    pub async fn list_collaboration_invites(&self, username: &str) -> Vec<CollaborationInvite> {
         let response = self
             .request(
                 Method::GET,
@@ -296,9 +368,36 @@ impl Client {
             .await
             .unwrap();
 
-        response.json::<Vec<String>>().await.unwrap()
+        response.json::<Vec<CollaborationInvite>>().await.unwrap()
     }
-    // TODO
+
+    pub async fn invite_collaborator(&self, id: &ProjectId, username: &str) {
+        let response = self
+            .request(
+                Method::POST,
+                &format!("/collaboration-invites/{}/invite/{}", id, username),
+            )
+            .send()
+            .await
+            .unwrap();
+
+        println!("status {}", response.status());
+    }
+
+    pub async fn respond_to_collaboration_invite(
+        &self,
+        id: &InvitationId,
+        state: &InvitationState,
+    ) {
+        let response = self
+            .request(Method::POST, &format!("/collaboration-invites/id/{}", id))
+            .json(state)
+            .send()
+            .await
+            .unwrap();
+
+        println!("status {}", response.status());
+    }
 
     // Friend capabilities
     pub async fn list_friends(&self, username: &str) -> Vec<String> {
