@@ -17,14 +17,6 @@
         - client IDs (if netsblox)
         - addresses?
 
-- [x] services hosts
-    - [x] list --user-only --group --user
-        - [x] need the group-only option...
-    - [x] add --group --user
-        - user is overloaded now...
-        - I think it is fine
-    - [x] remove --group --user
-
 - [ ] projects
     - [ ] list  --shared
     - [ ] export
@@ -397,4 +389,12 @@
     - [x] delete group
     - [x] rename group
     - [x] list members group
+
+- [x] services hosts
+    - [x] list --user-only --group --user
+        - [x] need the group-only option...
+    - [x] add --group --user
+        - user is overloaded now...
+        - I think it is fine
+    - [x] remove --group --user
 

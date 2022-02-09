@@ -93,7 +93,6 @@ async fn set_user_hosts(
     hosts: web::Json<Vec<ServiceHost>>,
     session: Session,
 ) -> Result<HttpResponse, UserError> {
-    // TODO: set up auth
     let username = path.into_inner().0;
     ensure_can_edit_user(&app, &session, &username).await?;
 
@@ -118,48 +117,48 @@ async fn list_all_hosts(
     app: web::Data<AppData>,
     path: web::Path<(String,)>,
     session: Session,
-) -> Result<HttpResponse, std::io::Error> {
+) -> Result<HttpResponse, UserError> {
     let (username,) = path.into_inner();
-    if !can_edit_user(&app, &session, &username).await {
-        return Ok(HttpResponse::Unauthorized().body("Not allowed."));
-    }
+    ensure_can_edit_user(&app, &session, &username).await?;
 
     let query = doc! {"username": &username};
-    match app.users.find_one(query, None).await.unwrap() {
-        Some(user) => {
-            let mut groups = app
-                .groups
-                .find(doc! {"owner": &username}, None)
-                .await
-                .unwrap()
-                .try_collect::<Vec<_>>()
-                .await
-                .unwrap();
+    let user = app
+        .users
+        .find_one(query, None)
+        .await
+        .map_err(|_err| InternalError::DatabaseConnectionError)?
+        .ok_or_else(|| UserError::UserNotFoundError)?;
 
-            if let Some(group_id) = user.group_id {
-                if let Some(in_group) = app
-                    .groups
-                    .find_one(doc! {"id": group_id}, None)
-                    .await
-                    .unwrap()
-                {
-                    groups.push(in_group);
-                }
-            };
+    let mut groups = app
+        .groups
+        .find(doc! {"owner": &username}, None)
+        .await
+        .unwrap()
+        .try_collect::<Vec<_>>()
+        .await
+        .unwrap();
 
-            let services_hosts = user
-                .services_hosts
-                .unwrap_or_else(Vec::new)
-                .into_iter()
-                .chain(
-                    groups
-                        .into_iter()
-                        .flat_map(|g| g.services_hosts.unwrap_or_else(Vec::new)),
-                );
-            Ok(HttpResponse::Ok().json(services_hosts.collect::<Vec<_>>()))
+    if let Some(group_id) = user.group_id {
+        if let Some(in_group) = app
+            .groups
+            .find_one(doc! {"id": group_id}, None)
+            .await
+            .map_err(|_err| InternalError::DatabaseConnectionError)?
+        {
+            groups.push(in_group);
         }
-        None => Ok(HttpResponse::NotFound().body("Not found.")),
-    }
+    };
+
+    let services_hosts = user
+        .services_hosts
+        .unwrap_or_else(Vec::new)
+        .into_iter()
+        .chain(
+            groups
+                .into_iter()
+                .flat_map(|g| g.services_hosts.unwrap_or_else(Vec::new)),
+        );
+    Ok(HttpResponse::Ok().json(services_hosts.collect::<Vec<_>>()))
 }
 
 pub fn config(cfg: &mut web::ServiceConfig) {
