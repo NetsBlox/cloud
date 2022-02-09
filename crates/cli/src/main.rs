@@ -5,7 +5,9 @@ use std::fs;
 use clap::{Parser, Subcommand};
 use futures_util::StreamExt;
 use inquire::{Confirm, Password, PasswordDisplayMode};
-use netsblox_api::{Client, Config, Credentials, FriendLinkState, LibraryPublishState};
+use netsblox_api::{
+    Client, Config, Credentials, FriendLinkState, LibraryPublishState, ServiceHost,
+};
 use std::path::Path;
 use tokio::io::AsyncWriteExt;
 
@@ -137,7 +139,7 @@ enum ServiceHosts {
         #[clap(long)]
         user_only: bool,
         #[clap(short, long)]
-        group_only: bool,
+        group: Option<String>,
         #[clap(short, long)]
         user: Option<String>,
     },
@@ -689,15 +691,20 @@ async fn main() -> Result<(), confy::ConfyError> {
         Command::ServiceHosts(cmd) => match &cmd.subcmd {
             ServiceHosts::List {
                 user_only,
-                group_only,
+                group,
                 user,
             } => {
                 let username = user.clone().unwrap_or(current_user);
                 let service_hosts = if *user_only {
                     client.list_user_hosts(&username).await
-                } else if *group_only {
-                    todo!();
-                    //client.list_group_hosts(&username).await
+                } else if let Some(group_name) = group {
+                    let groups = client.list_groups(&username).await;
+                    let group_id = groups
+                        .into_iter()
+                        .find(|g| g.name == *group_name)
+                        .map(|group| group.id)
+                        .unwrap();
+                    client.list_group_hosts(&group_id).await
                 } else {
                     client.list_hosts(&username).await
                 };
@@ -712,10 +719,62 @@ async fn main() -> Result<(), confy::ConfyError> {
                 group,
                 user,
             } => {
-                todo!();
+                let username = user.clone().unwrap_or(current_user);
+                let group_id = if let Some(group_name) = group {
+                    let groups = client.list_groups(&username).await;
+                    groups
+                        .into_iter()
+                        .find(|g| g.name == *group_name)
+                        .map(|group| group.id)
+                } else {
+                    None
+                };
+                let mut service_hosts = if let Some(group_id) = group_id.clone() {
+                    client.list_group_hosts(&group_id).await
+                } else {
+                    client.list_user_hosts(&username).await
+                };
+
+                service_hosts.push(ServiceHost {
+                    url: url.to_owned(),
+                    categories: categories.split(",").map(|s| s.to_owned()).collect(),
+                });
+
+                if let Some(group_id) = group_id {
+                    client.set_group_hosts(&group_id, service_hosts).await;
+                } else {
+                    client.set_user_hosts(&username, service_hosts).await;
+                }
             }
             ServiceHosts::Remove { url, group, user } => {
-                todo!();
+                let username = user.clone().unwrap_or(current_user);
+                let group_id = if let Some(group_name) = group {
+                    let groups = client.list_groups(&username).await;
+                    groups
+                        .into_iter()
+                        .find(|g| g.name == *group_name)
+                        .map(|group| group.id)
+                } else {
+                    None
+                };
+                let mut service_hosts = if let Some(group_id) = group_id.clone() {
+                    client.list_group_hosts(&group_id).await
+                } else {
+                    client.list_user_hosts(&username).await
+                };
+
+                let index = service_hosts
+                    .iter()
+                    .position(|host| host.url == *url)
+                    .unwrap();
+
+                service_hosts.swap_remove(index);
+
+                if let Some(group_id) = group_id {
+                    client.set_group_hosts(&group_id, service_hosts).await;
+                } else {
+                    client.set_user_hosts(&username, service_hosts).await;
+                }
             }
         },
         Command::Libraries(cmd) => match &cmd.subcmd {

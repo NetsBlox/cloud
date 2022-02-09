@@ -528,6 +528,16 @@ impl Client {
         response.json::<Vec<ServiceHost>>().await.unwrap()
     }
 
+    pub async fn list_group_hosts(&self, group_id: &str) -> Vec<ServiceHost> {
+        let response = self
+            .request(Method::GET, &format!("/service-hosts/group/{}", group_id))
+            .send()
+            .await
+            .unwrap();
+
+        response.json::<Vec<ServiceHost>>().await.unwrap()
+    }
+
     pub async fn list_hosts(&self, username: &str) -> Vec<ServiceHost> {
         let response = self
             .request(Method::GET, &format!("/service-hosts/all/{}", username))
@@ -536,6 +546,28 @@ impl Client {
             .unwrap();
 
         response.json::<Vec<ServiceHost>>().await.unwrap()
+    }
+
+    pub async fn set_user_hosts(&self, username: &str, hosts: Vec<ServiceHost>) {
+        let response = self
+            .request(Method::POST, &format!("/service-hosts/user/{}", username))
+            .json(&hosts)
+            .send()
+            .await
+            .unwrap();
+
+        println!("status {}", response.status());
+    }
+
+    pub async fn set_group_hosts(&self, group_id: &str, hosts: Vec<ServiceHost>) {
+        let response = self
+            .request(Method::POST, &format!("/service-hosts/group/{}", group_id))
+            .json(&hosts)
+            .send()
+            .await
+            .unwrap();
+
+        println!("status {}", response.status());
     }
 
     // NetsBlox network capabilities

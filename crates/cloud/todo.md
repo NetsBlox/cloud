@@ -5,14 +5,6 @@
         - Or the client could send this in the request...
             - context: {project: {name, id}, role: {name, id}}
 
-- [x] groups
-    - [x] view group
-    - [x] list groups 
-    - [x] create groups 
-    - [x] delete group
-    - [x] rename group
-    - [x] list members group
-
 - [x] friends
     - [x] list friends
     - [x] list invites
@@ -25,12 +17,13 @@
         - client IDs (if netsblox)
         - addresses?
 
-- [ ] services hosts
-    - [ ] list --user-only --group-only --user
-        - [ ] need the group-only option...
-    - [ ] add --group --user
+- [x] services hosts
+    - [x] list --user-only --group --user
+        - [x] need the group-only option...
+    - [x] add --group --user
         - user is overloaded now...
-    - [ ] remove --group --user
+        - I think it is fine
+    - [x] remove --group --user
 
 - [ ] projects
     - [ ] list  --shared
@@ -396,4 +389,12 @@
         - save?
 
 - [x] add password salts
+
+- [x] groups
+    - [x] view group
+    - [x] list groups 
+    - [x] create groups 
+    - [x] delete group
+    - [x] rename group
+    - [x] list members group
 

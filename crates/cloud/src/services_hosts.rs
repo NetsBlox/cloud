@@ -1,65 +1,67 @@
 use crate::app_data::AppData;
 use crate::errors::{InternalError, UserError};
-use crate::models::Group;
 use crate::users::{can_edit_user, ensure_can_edit_user, is_super_user};
 use actix_session::Session;
 use actix_web::{get, post};
 use actix_web::{web, HttpResponse};
 use futures::TryStreamExt;
-use mongodb::bson::{doc, oid::ObjectId};
-use netsblox_core::ServiceHost;
+use mongodb::bson::doc;
+use netsblox_core::{GroupId, ServiceHost};
 
 #[get("/group/{id}")]
 async fn list_group_hosts(
     app: web::Data<AppData>,
-    path: web::Path<(ObjectId,)>,
+    path: web::Path<(GroupId,)>,
     session: Session,
 ) -> Result<HttpResponse, UserError> {
     let (id,) = path.into_inner();
-    if let Some(username) = session.get::<String>("username").unwrap() {
-        let query = if is_super_user(&app, &session).await {
-            doc! {"_id": id}
-        } else {
-            doc! {"_id": id, "owner": username}
-        };
+    let username = session
+        .get::<String>("username")
+        .unwrap()
+        .ok_or_else(|| UserError::PermissionsError)?;
 
-        let group = app
-            .groups
-            .find_one(query, None)
-            .await
-            .map_err(|_err| InternalError::DatabaseConnectionError)?
-            .ok_or_else(|| UserError::GroupNotFoundError)?;
-
-        Ok(HttpResponse::Ok().json(group.services_hosts.unwrap_or_else(Vec::new)))
+    let query = if is_super_user(&app, &session).await {
+        doc! {"id": id}
     } else {
-        Err(UserError::PermissionsError)
-    }
+        doc! {"id": id, "owner": username}
+    };
+
+    let group = app
+        .groups
+        .find_one(query, None)
+        .await
+        .map_err(|_err| InternalError::DatabaseConnectionError)?
+        .ok_or_else(|| UserError::GroupNotFoundError)?;
+
+    Ok(HttpResponse::Ok().json(group.services_hosts.unwrap_or_else(Vec::new)))
 }
 
 #[post("/group/{id}")]
 async fn set_group_hosts(
     app: web::Data<AppData>,
-    path: web::Path<(ObjectId,)>,
+    path: web::Path<(GroupId,)>,
     hosts: web::Json<Vec<ServiceHost>>,
     session: Session,
-) -> Result<HttpResponse, std::io::Error> {
+) -> Result<HttpResponse, UserError> {
     let (id,) = path.into_inner();
-    if let Some(username) = session.get::<String>("username").unwrap() {
-        let query = if is_super_user(&app, &session).await {
-            doc! {"_id": id}
-        } else {
-            doc! {"_id": id, "owner": username}
-        };
 
-        let update = doc! {"$set": {"servicesHosts": &hosts.into_inner()}};
-        let result = app.groups.update_one(query, update, None).await.unwrap();
-        if result.matched_count > 0 {
-            Ok(HttpResponse::Ok().body("Group updated"))
-        } else {
-            Ok(HttpResponse::NotFound().body("Not found."))
-        }
+    let username = session
+        .get::<String>("username")
+        .unwrap()
+        .ok_or_else(|| UserError::PermissionsError)?;
+
+    let query = if is_super_user(&app, &session).await {
+        doc! {"id": id}
     } else {
-        Ok(HttpResponse::Unauthorized().body("Not allowed."))
+        doc! {"id": id, "owner": username}
+    };
+
+    let update = doc! {"$set": {"servicesHosts": &hosts.into_inner()}};
+    let result = app.groups.update_one(query, update, None).await.unwrap();
+    if result.matched_count > 0 {
+        Ok(HttpResponse::Ok().body("Group updated"))
+    } else {
+        Err(UserError::GroupNotFoundError)
     }
 }
 
@@ -137,7 +139,7 @@ async fn list_all_hosts(
             if let Some(group_id) = user.group_id {
                 if let Some(in_group) = app
                     .groups
-                    .find_one(doc! {"_id": group_id}, None)
+                    .find_one(doc! {"id": group_id}, None)
                     .await
                     .unwrap()
                 {
