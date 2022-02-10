@@ -11,7 +11,6 @@ use reqwest::{self, Method, RequestBuilder};
 use serde::{Deserialize, Serialize};
 use tokio::net::TcpStream;
 use tokio_tungstenite::{connect_async, MaybeTlsStream, WebSocketStream};
-use tungstenite::Message;
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct Config {

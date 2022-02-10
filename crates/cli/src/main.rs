@@ -9,7 +9,6 @@ use netsblox_api::{
     Client, Config, Credentials, FriendLinkState, InvitationState, LibraryPublishState, ServiceHost,
 };
 use std::path::Path;
-use tokio::io::AsyncWriteExt;
 
 #[derive(Subcommand, Debug)]
 enum Users {
@@ -665,36 +664,18 @@ async fn main() -> Result<(), confy::ConfyError> {
                 todo!();
             }
             Network::Connect { address } => {
-                // TODO: request a client_id
-                // TODO: connect to NetsBlox
-                // let config = client.connect().await;
-
-                // TODO: do we need a client ID for anything else?
-                // Maybe this can be kept internal to the client?
-                // setting the client state...
-                // probably can still be kept internal
                 let channel = client.connect(address).await;
                 println!(
                     "Listening for messages at {}@{}#NetsBloxCLI",
                     address,
                     cfg.username.unwrap_or(channel.id)
                 );
-                // channel.stream.filter_map(|msg| {
-                //     future::ready(match msg {
-                //         Ok(Message::Text(txt)) => Some(txt),
-                //         _ => None,
-                //     })
-                // });
-
-                // FIXME:
                 channel
                     .stream
-                    // .read
                     .for_each(|msg| async {
                         let data = msg.unwrap().into_data();
                         let message = std::str::from_utf8(&data).unwrap();
                         println!("{}", &message);
-                        // tokio::io::stdout().write_all(&data).await.unwrap();
                     })
                     .await;
             }
