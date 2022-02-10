@@ -26,7 +26,7 @@
     - [x] publish
     - [x] unpublish
     - [x] delete
-    - [ ] rename
+    - [x] rename
 
     - [ ] invite collaborator
     - [ ] list invites

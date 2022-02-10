@@ -118,11 +118,12 @@ enum Projects {
         #[clap(short, long)]
         user: Option<String>,
     },
-    RespondToInvite {
+    AcceptInvite {
         project: String,
         username: String,
-        #[clap(arg_enum)]
-        response: InviteResponse,
+
+        #[clap(long)]
+        reject: bool,
 
         #[clap(short, long)]
         user: Option<String>,
@@ -598,22 +599,38 @@ async fn main() -> Result<(), confy::ConfyError> {
                     println!("{:?}", invite);
                 }
             }
-            Projects::RespondToInvite {
+            Projects::AcceptInvite {
                 project,
                 username,
-                response,
+                reject,
                 user,
             } => {
-                let invites = client.list_collaboration_invites(&username).await;
-                let sender = user.clone().unwrap_or(current_user);
+                let receiver = user.clone().unwrap_or(current_user);
+                let invites = client.list_collaboration_invites(&receiver).await;
+                let project_id = client.get_project_metadata(&username, &project).await.id;
+                println!(
+                    "found {} invites. Looking for {} from {}",
+                    invites.len(),
+                    project_id,
+                    username
+                );
+                println!("{:?}", invites);
                 let invite = invites
                     .iter()
-                    .find(|inv| inv.sender == sender)
+                    //.find(|inv| inv.sender == *username && inv.project_id == project_id)
+                    .find(|inv| {
+                        println!(
+                            "{}",
+                            inv.sender == *username && inv.project_id == project_id
+                        );
+                        inv.sender == *username && inv.project_id == project_id
+                    })
                     .expect("Invitation not found.");
 
-                let state = match response {
-                    InviteResponse::APPROVE => InvitationState::ACCEPTED,
-                    InviteResponse::REJECT => InvitationState::REJECTED,
+                let state = if *reject {
+                    InvitationState::REJECTED
+                } else {
+                    InvitationState::ACCEPTED
                 };
                 client
                     .respond_to_collaboration_invite(&invite.id, &state)

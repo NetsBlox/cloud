@@ -96,15 +96,3 @@ impl From<InvitationState> for Bson {
         }
     }
 }
-impl From<CollaborationInvite> for Bson {
-    fn from(invite: CollaborationInvite) -> Self {
-        Bson::Document(doc! {
-            "id": invite.id,
-            "sender": invite.sender,
-            "receiver": invite.receiver,
-            "projectId": invite.project_id,
-            "state": invite.state,
-            "created_at": DateTime::from_system_time(invite.created_at),
-        })
-    }
-}

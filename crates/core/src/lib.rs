@@ -29,7 +29,7 @@ pub struct User {
     pub email: String,
     pub group_id: Option<GroupId>,
     pub admin: Option<bool>, // TODO: use roles instead? What other roles would we even have?
-    pub created_at: u32,
+    pub created_at: SystemTime,
     pub linked_accounts: Vec<LinkedAccount>,
     pub services_hosts: Option<Vec<ServiceHost>>,
 }
@@ -277,14 +277,13 @@ pub struct CollaborationInvite {
 
 impl CollaborationInvite {
     pub fn new(sender: String, receiver: String, project_id: String) -> Self {
-        let created_at = SystemTime::now();
         CollaborationInvite {
             id: Uuid::new_v4().to_string(),
             sender,
             receiver,
             project_id,
             state: InvitationState::PENDING,
-            created_at,
+            created_at: SystemTime::now(),
         }
     }
 }

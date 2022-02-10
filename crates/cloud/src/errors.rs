@@ -21,6 +21,8 @@ pub enum UserError {
     GroupNotFoundError,
     #[display(fmt = "User not found.")]
     UserNotFoundError,
+    #[display(fmt = "Invitation not found.")]
+    InviteNotFoundError,
     #[display(fmt = "Incorrect password.")]
     IncorrectPasswordError,
     #[display(fmt = "User has been banned.")]
@@ -46,6 +48,7 @@ impl error::ResponseError for UserError {
             | UserError::IncorrectPasswordError => StatusCode::UNAUTHORIZED,
             UserError::ProjectNotFoundError
             | UserError::RoleNotFoundError
+            | UserError::InviteNotFoundError
             | UserError::UserNotFoundError
             | UserError::GroupNotFoundError => StatusCode::NOT_FOUND,
             UserError::InternalError => StatusCode::INTERNAL_SERVER_ERROR,

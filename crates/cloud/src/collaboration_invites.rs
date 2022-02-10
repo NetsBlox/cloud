@@ -20,7 +20,13 @@ async fn list_invites(
 
     let query = doc! {"recipient": recipient};
     let cursor = app.collab_invites.find(query, None).await.unwrap();
-    let invites = cursor.try_collect::<Vec<_>>().await.unwrap();
+    let invites: Vec<netsblox_core::CollaborationInvite> = cursor
+        .try_collect::<Vec<_>>()
+        .await
+        .unwrap()
+        .into_iter()
+        .map(|invite| invite.into())
+        .collect();
 
     Ok(HttpResponse::Ok().json(invites))
 }
@@ -78,46 +84,43 @@ async fn send_invite(
 async fn respond_to_invite(
     app: web::Data<AppData>,
     state: web::Json<InvitationState>,
-    path: web::Path<(String, String)>,
+    path: web::Path<(String,)>,
     session: Session,
 ) -> Result<HttpResponse, UserError> {
-    let (recipient, id) = path.into_inner();
-    let query = doc! {"_id": id};
-    ensure_can_edit_user(&app, &session, &recipient).await?;
+    let (id,) = path.into_inner();
+    let query = doc! {"id": id};
 
-    if let Some(invite) = app
+    let invite = app
         .collab_invites
         .find_one(query.clone(), None)
         .await
-        .unwrap()
-    {
-        // TODO: set the invites to collaborator list?
-        if app
-            .project_metadata
-            .find_one(doc! {"id": &invite.project_id}, None)
-            .await
-            .unwrap()
-            .is_none()
-        {
-            app.collab_invites.delete_one(query, None).await.unwrap();
-            return Ok(HttpResponse::NotFound().body("Project no longer exists."));
-        }
+        .map_err(|_err| InternalError::DatabaseConnectionError)?
+        .ok_or_else(|| UserError::InviteNotFoundError)?;
 
-        let update = doc! {
-            "$set": {
-                "state": state.into_inner()
+    ensure_can_edit_user(&app, &session, &invite.sender).await?;
+
+    app.collab_invites
+        .delete_one(query, None)
+        .await
+        .map_err(|_err| InternalError::DatabaseConnectionError)?;
+
+    println!("state: {:?}", state);
+    match state.into_inner() {
+        InvitationState::ACCEPTED => {
+            let update = doc! {"$addToSet": {"collaborators": &invite.receiver}};
+            let result = app
+                .project_metadata
+                .update_one(doc! {"id": &invite.project_id}, update, None)
+                .await
+                .map_err(|_err| InternalError::DatabaseConnectionError)?;
+
+            if result.matched_count == 1 {
+                Ok(HttpResponse::Ok().body("Invitation accepted."))
+            } else {
+                Err(UserError::ProjectNotFoundError)
             }
-        };
-        // TODO: Update the project
-        app.collab_invites
-            .update_one(query, update, None)
-            .await
-            .unwrap();
-
-        // TODO: Should this send something else? Maybe a token or something to use to join the project?
-        Ok(HttpResponse::Ok().body("Invitation updated!"))
-    } else {
-        Ok(HttpResponse::NotFound().body("Invitation not found."))
+        }
+        _ => Ok(HttpResponse::Ok().body("Invitation rejected.")),
     }
 }
 

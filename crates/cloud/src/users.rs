@@ -38,10 +38,7 @@ impl From<NewUser> for User {
             salt,
             email: user_data.email,
             group_id: user_data.group_id,
-            created_at: SystemTime::now()
-                .duration_since(SystemTime::UNIX_EPOCH)
-                .unwrap()
-                .as_secs() as u32,
+            created_at: DateTime::from_system_time(SystemTime::now()),
             linked_accounts: std::vec::Vec::new(),
             admin: user_data.admin,
             services_hosts: None,

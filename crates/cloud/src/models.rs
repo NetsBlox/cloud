@@ -1,7 +1,7 @@
 use mongodb::bson::{doc, Bson, DateTime};
 pub use netsblox_core::{
-    CollaborationInvite, CreateGroupData, FriendInvite, FriendLinkState, Group, GroupId,
-    InvitationState, LinkedAccount, ProjectId, RoleData, RoleMetadata, SaveState, ServiceHost,
+    CreateGroupData, FriendInvite, FriendLinkState, Group, GroupId, InvitationState, LinkedAccount,
+    ProjectId, RoleData, RoleMetadata, SaveState, ServiceHost,
 };
 use serde::{Deserialize, Serialize};
 use std::{collections::HashMap, time::SystemTime};
@@ -16,7 +16,7 @@ pub struct User {
     pub salt: String,
     pub group_id: Option<GroupId>,
     pub admin: Option<bool>, // TODO: use roles instead? What other roles would we even have?
-    pub created_at: u32,
+    pub created_at: DateTime,
     pub linked_accounts: Vec<LinkedAccount>,
     pub services_hosts: Option<Vec<ServiceHost>>,
 }
@@ -44,9 +44,59 @@ impl From<User> for netsblox_core::User {
             email: user.email,
             group_id: user.group_id,
             admin: user.admin,
-            created_at: user.created_at,
+            created_at: user.created_at.to_system_time(),
             linked_accounts: user.linked_accounts,
             services_hosts: user.services_hosts,
+        }
+    }
+}
+
+#[derive(Serialize, Deserialize, Clone)]
+#[serde(rename_all = "camelCase")]
+pub struct CollaborationInvite {
+    pub id: String,
+    pub sender: String,
+    pub receiver: String,
+    pub project_id: String,
+    pub state: InvitationState,
+    pub created_at: DateTime,
+}
+
+impl CollaborationInvite {
+    pub fn new(sender: String, receiver: String, project_id: String) -> Self {
+        CollaborationInvite {
+            id: Uuid::new_v4().to_string(),
+            sender,
+            receiver,
+            project_id,
+            state: InvitationState::PENDING,
+            created_at: DateTime::from_system_time(SystemTime::now()),
+        }
+    }
+}
+
+impl From<CollaborationInvite> for Bson {
+    fn from(invite: CollaborationInvite) -> Self {
+        Bson::Document(doc! {
+            "id": invite.id,
+            "sender": invite.sender,
+            "receiver": invite.receiver,
+            "projectId": invite.project_id,
+            "state": invite.state,
+            "createdAt": invite.created_at,
+        })
+    }
+}
+
+impl From<CollaborationInvite> for netsblox_core::CollaborationInvite {
+    fn from(user: CollaborationInvite) -> netsblox_core::CollaborationInvite {
+        netsblox_core::CollaborationInvite {
+            id: user.id,
+            sender: user.sender,
+            receiver: user.receiver,
+            project_id: user.project_id,
+            state: user.state,
+            created_at: user.created_at.to_system_time(),
         }
     }
 }

@@ -390,7 +390,7 @@ impl Client {
         let response = self
             .request(
                 Method::GET,
-                &format!("/collaboration-invites/{}/", username),
+                &format!("/collaboration-invites/user/{}/", username),
             )
             .send()
             .await
