@@ -308,55 +308,21 @@ impl Client {
         println!("status {}", response.status());
     }
 
-    pub async fn export_project(&self, owner: &str, name: &str, latest: &bool) -> Project {
-        // TODO: Should this logic happen in the CLI instead?
-        let path = format!("/projects/user/{}/{}/metadata", owner, name);
-        let metadata = self
-            .request(Method::GET, &path)
-            .send()
-            .await
-            .unwrap()
-            .json::<ProjectMetadata>()
-            .await
-            .unwrap();
-
+    pub async fn get_project(&self, id: &ProjectId, latest: &bool) -> Project {
         let path = if *latest {
-            format!("/projects/id/{}/latest", metadata.id)
+            format!("/projects/id/{}/latest", id)
         } else {
-            format!("/projects/id/{}", metadata.id)
+            format!("/projects/id/{}", id)
         };
         let response = self.request(Method::GET, &path).send().await.unwrap();
         response.json::<Project>().await.unwrap()
     }
 
-    pub async fn export_role(
-        &self,
-        owner: &str,
-        name: &str,
-        role: &str,
-        latest: &bool,
-    ) -> RoleData {
-        // TODO: Should this logic happen in the CLI instead?
-        let path = format!("/projects/user/{}/{}/metadata", owner, name);
-        let metadata = self
-            .request(Method::GET, &path)
-            .send()
-            .await
-            .unwrap()
-            .json::<ProjectMetadata>()
-            .await
-            .unwrap();
-
-        let role_id = metadata
-            .roles
-            .into_iter()
-            .find(|(_id, role_md)| role_md.name == role)
-            .map(|(id, _role_md)| id)
-            .unwrap();
+    pub async fn get_role(&self, id: &ProjectId, role_id: &str, latest: &bool) -> RoleData {
         let path = if *latest {
-            format!("/projects/id/{}/{}/latest", metadata.id, role_id)
+            format!("/projects/id/{}/{}/latest", id, role_id)
         } else {
-            format!("/projects/id/{}/{}", metadata.id, role_id)
+            format!("/projects/id/{}/{}", id, role_id)
         };
         let response = self.request(Method::GET, &path).send().await.unwrap();
         response.json::<RoleData>().await.unwrap()

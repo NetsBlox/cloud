@@ -540,18 +540,22 @@ async fn main() -> Result<(), confy::ConfyError> {
                 user,
             } => {
                 let username = user.clone().unwrap_or(current_user);
+                let metadata = client.get_project_metadata(&username, &project).await;
+                let project_id = metadata.id;
                 let xml = if let Some(role) = role {
+                    let role_id = metadata
+                        .roles
+                        .into_iter()
+                        .find(|(_id, role_md)| role_md.name == *role)
+                        .map(|(id, _role_md)| id)
+                        .expect("Role not found");
+
                     client
-                        .export_role(&username, &project, &role, latest)
+                        .get_role(&project_id, &role_id, latest)
                         .await
                         .to_xml()
                 } else {
-                    // TODO: Should this output the Project or an xml?
-                    // maybe the Project which contains a toXML method?
-                    client
-                        .export_project(&username, &project, latest)
-                        .await
-                        .to_xml()
+                    client.get_project(&project_id, latest).await.to_xml()
                 };
                 println!("{}", xml);
             }
@@ -649,7 +653,7 @@ async fn main() -> Result<(), confy::ConfyError> {
                     let role_id = metadata
                         .roles
                         .into_iter()
-                        .find(|(id, role)| role.name == *role_name)
+                        .find(|(_id, role)| role.name == *role_name)
                         .map(|(id, _role)| id)
                         .expect("Role not found.");
 

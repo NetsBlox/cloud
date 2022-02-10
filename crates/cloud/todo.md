@@ -6,7 +6,7 @@
     - add resolve endpoint?
         - (public role ID resolution)
         - Or the client could send this in the request...
-            - context: {project: {name, id}, role: {name, id}}
+            - context: {project: {name, id}, role: {name, id}, app: ''}
 
 - [x] friends
     - [x] list friends
@@ -19,6 +19,8 @@
         - include the app they are using?
         - client IDs (if netsblox)
         - addresses?
+            
+            {username, contexts: {clientId, app?}}
 
 - [ ] projects
     - [ ] list  --shared
@@ -28,11 +30,11 @@
     - [x] delete
     - [x] rename
 
-    - [ ] invite collaborator
-    - [ ] list invites
-    - [ ] respond to invite
-    - [ ] list collabs
-    - [ ] rm collab
+    - [x] invite collaborator
+    - [x] list invites
+    - [x] respond to invite
+    - [x] list collabs
+    - [x] rm collab
 
 - [ ] users
     - [x] create
@@ -49,8 +51,9 @@
       - should this just list the networks for a given user?
       - since this will be an admin endpoint to start anyway, it would probably be good to just keep it simple - we can extend it later
         - it should probably just list the browser networks (or external)
-    - [ ] view
-    - [ ] connect
+    - [ ] view --app NetsBloxCLI
+    - [x] connect
+        - mostly works for now. Probably fine
 
     - [x] invalid response unknown variant mongodb
 
