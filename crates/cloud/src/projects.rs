@@ -707,38 +707,6 @@ async fn list_collaborators(
     Ok(HttpResponse::Ok().json(metadata.collaborators))
 }
 
-// TODO: Should we use this or the invite endpoints?
-#[post("/id/{projectID}/collaborators/{username}")]
-async fn add_collaborator(
-    app: web::Data<AppData>,
-    path: web::Path<(ProjectId, String)>,
-    session: Session,
-) -> Result<HttpResponse, UserError> {
-    let (project_id, username) = path.into_inner();
-    let query = doc! {"id": project_id};
-    let metadata = app
-        .project_metadata
-        .find_one(query.clone(), None)
-        .await
-        .map_err(|_err| InternalError::DatabaseConnectionError)? // TODO: wrap the error?
-        .ok_or_else(|| UserError::ProjectNotFoundError)?;
-
-    ensure_can_edit_project(&app, &session, None, &metadata).await?;
-
-    let update = doc! {"$push": {"collaborators": &username}};
-    let result = app
-        .project_metadata
-        .update_one(query, update, None)
-        .await
-        .map_err(|_err| InternalError::DatabaseConnectionError)?; // TODO: wrap the error?
-
-    if result.matched_count == 1 {
-        Ok(HttpResponse::Ok().body("Collaborator added"))
-    } else {
-        Err(UserError::ProjectNotFoundError)
-    }
-}
-
 #[delete("/id/{projectID}/collaborators/{username}")]
 async fn remove_collaborator(
     app: web::Data<AppData>,
@@ -753,6 +721,7 @@ async fn remove_collaborator(
         .await
         .map_err(|_err| InternalError::DatabaseConnectionError)? // TODO: wrap the error?
         .ok_or_else(|| UserError::ProjectNotFoundError)?;
+
     ensure_can_edit_project(&app, &session, None, &metadata).await?;
 
     let update = doc! {"$pull": {"collaborators": &username}};
@@ -789,7 +758,6 @@ pub fn config(cfg: &mut web::ServiceConfig) {
         .service(save_role)
         .service(rename_role)
         .service(delete_role)
-        .service(add_collaborator)
         .service(list_collaborators)
         .service(remove_collaborator);
 }

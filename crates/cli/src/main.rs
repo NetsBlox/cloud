@@ -608,23 +608,9 @@ async fn main() -> Result<(), confy::ConfyError> {
                 let receiver = user.clone().unwrap_or(current_user);
                 let invites = client.list_collaboration_invites(&receiver).await;
                 let project_id = client.get_project_metadata(&username, &project).await.id;
-                println!(
-                    "found {} invites. Looking for {} from {}",
-                    invites.len(),
-                    project_id,
-                    username
-                );
-                println!("{:?}", invites);
                 let invite = invites
                     .iter()
-                    //.find(|inv| inv.sender == *username && inv.project_id == project_id)
-                    .find(|inv| {
-                        println!(
-                            "{}",
-                            inv.sender == *username && inv.project_id == project_id
-                        );
-                        inv.sender == *username && inv.project_id == project_id
-                    })
+                    .find(|inv| inv.sender == *username && inv.project_id == project_id)
                     .expect("Invitation not found.");
 
                 let state = if *reject {

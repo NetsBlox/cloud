@@ -377,7 +377,7 @@ impl Client {
         let response = self
             .request(
                 Method::DELETE,
-                &format!("/id/{}/collaborators/{}", project_id, username),
+                &format!("/projects/id/{}/collaborators/{}", project_id, username),
             )
             .send()
             .await
