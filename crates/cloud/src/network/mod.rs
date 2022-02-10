@@ -94,6 +94,19 @@ async fn get_room_state() -> Result<HttpResponse, UserError> {
     todo!();
 }
 
+#[get("/")]
+async fn get_rooms(app: web::Data<AppData>, session: Session) -> Result<HttpResponse, UserError> {
+    ensure_is_super_user(&app, &session).await?;
+
+    let rooms = app
+        .network
+        .send(topology::GetActiveRooms {})
+        .await
+        .map_err(|_err| UserError::InternalError)?
+        .0;
+
+    Ok(HttpResponse::Ok().json(rooms))
+}
 #[delete("/id/{projectID}/occupants/{clientID}")]
 async fn remove_occupant() -> Result<HttpResponse, std::io::Error> {
     todo!();

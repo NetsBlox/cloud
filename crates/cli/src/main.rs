@@ -60,6 +60,14 @@ enum Users {
 //    - projects create-role?
 #[derive(Subcommand, Debug)]
 enum Projects {
+    Import {
+        /// The path to the project to save
+        filename: String,
+        #[clap(short, long)]
+        name: Option<String>,
+        #[clap(short, long)]
+        user: Option<String>,
+    },
     Export {
         project: String,
         #[clap(short, long)]
@@ -161,21 +169,29 @@ enum ServiceHosts {
 
 #[derive(Subcommand, Debug)]
 enum Libraries {
+    /// List available libraries. Lists own libraries by default.
     List {
+        /// List community libraries
         #[clap(short, long)]
         community: bool,
+        /// List libraries that require moderator approval for publishing
         #[clap(short, long)]
         approval_needed: bool,
+        /// List libraries owned by the given user
         #[clap(short, long)]
         user: Option<String>,
     },
-    Save {
-        /// The path to the exported blocks to save
+    /// Import a file of exported blocks as a library
+    Import {
+        /// The path to the exported blocks to import
         filename: String,
+        /// Notes describing the new library
         #[clap(long, default_value = "")]
         notes: String,
+        /// Name of the library (filename used by default)
         #[clap(short, long)]
         name: Option<String>,
+        /// User to save the library for (logged in user by default)
         #[clap(short, long)]
         user: Option<String>,
     },
@@ -509,6 +525,13 @@ async fn main() -> Result<(), confy::ConfyError> {
             } // TODO: list linked accounts?
         },
         Command::Projects(cmd) => match &cmd.subcmd {
+            Projects::Import {
+                filename,
+                name,
+                user,
+            } => {
+                todo!();
+            }
             Projects::Export {
                 project,
                 role,
@@ -839,7 +862,7 @@ async fn main() -> Result<(), confy::ConfyError> {
                     println!("{}", library.name);
                 }
             }
-            Libraries::Save {
+            Libraries::Import {
                 filename,
                 notes,
                 name,

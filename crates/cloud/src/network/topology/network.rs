@@ -1,5 +1,6 @@
 use futures::future::join_all;
 use mongodb::bson::{doc, DateTime};
+use netsblox_core::RoomMetadata;
 pub use netsblox_core::{BrowserClientState, ClientState, ExternalClientState};
 use serde::Serialize;
 use std::collections::HashMap;
@@ -455,6 +456,13 @@ impl Topology {
             .and_then(|client_ids| client_ids.first())
             .and_then(|id| self.clients.get(id))
             .map(|client| RoleRequest::new(client.addr.clone(), state.clone()))
+    }
+
+    pub fn get_active_rooms(&self) -> Vec<RoomMetadata> {
+        self.rooms
+            .iter()
+            .map(|(id, _room)| RoomMetadata { id: id.to_owned() })
+            .collect()
     }
 }
 

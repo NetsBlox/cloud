@@ -46,6 +46,9 @@
 
 - [ ] network
     - [ ] list
+      - should this just list the networks for a given user?
+      - since this will be an admin endpoint to start anyway, it would probably be good to just keep it simple - we can extend it later
+        - it should probably just list the browser networks (or external)
     - [ ] view
     - [ ] connect
 

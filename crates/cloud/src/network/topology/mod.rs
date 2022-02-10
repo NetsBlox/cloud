@@ -9,6 +9,7 @@ use actix::{Actor, AsyncContext, Context, Handler, MessageResult};
 use lazy_static::lazy_static;
 use mongodb::bson::doc;
 use mongodb::Collection;
+use netsblox_core::RoomMetadata;
 use serde_json::Value;
 use std::sync::{Arc, RwLock};
 use uuid::Uuid;
@@ -205,7 +206,23 @@ impl Handler<RoleDataResponse> for TopologyActor {
         responses.insert(msg.id, RoleDataResponseState::Data(msg.data));
     }
 }
-// TODO: add a method for reporting role dtaa
+
+#[derive(Message)]
+#[rtype(result = "GetActiveRoomsResult")]
+pub struct GetActiveRooms;
+
+#[derive(Message)]
+#[rtype(result = "()")]
+pub struct GetActiveRoomsResult(pub Vec<RoomMetadata>);
+
+impl Handler<GetActiveRooms> for TopologyActor {
+    type Result = MessageResult<GetActiveRooms>;
+
+    fn handle(&mut self, msg: GetActiveRooms, _: &mut Context<Self>) -> Self::Result {
+        let topology = TOPOLOGY.read().unwrap();
+        MessageResult(GetActiveRoomsResult(topology.get_active_rooms()))
+    }
+}
 
 // TODO: Add method for getting the usernames from the network
 // impl Handler<GetOnlineUsers> for TopologyActor {
