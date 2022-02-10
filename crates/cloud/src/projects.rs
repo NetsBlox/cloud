@@ -12,18 +12,11 @@ use futures::stream::{FuturesUnordered, TryStreamExt};
 use mongodb::bson::doc;
 use mongodb::options::{FindOneAndUpdateOptions, ReturnDocument};
 use mongodb::Cursor;
-use netsblox_core::{Project, ProjectId, SaveState};
+use netsblox_core::{
+    CreateProjectData, Project, ProjectId, SaveState, UpdateProjectData, UpdateRoleData,
+};
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
-
-#[derive(Deserialize, Serialize)]
-#[serde(rename_all = "camelCase")]
-struct CreateProjectData {
-    owner: Option<String>,
-    name: String,
-    roles: Option<Vec<RoleData>>,
-    client_id: String,
-}
 
 #[derive(Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -40,11 +33,17 @@ async fn create_project(
     body: web::Json<CreateProjectData>,
     session: Session,
 ) -> Result<HttpResponse, UserError> {
-    let owner = session
-        .get::<String>("username")
-        .unwrap_or(None)
-        .unwrap_or_else(|| body.client_id.to_owned());
+    let username = session.get::<String>("username").unwrap_or(None);
+    // TODO: If the user is logged in, require permissions
+    let owner = if let Some(username) = username {
+        ensure_can_edit_user(&app, &session, &username).await?;
+        username
+    } else {
+        // TODO: make sure it is a valid client ID
+        body.client_id.to_owned()
+    };
 
+    // TODO: add authentication
     let name = body.name.to_owned();
     // TODO: validate name
     let metadata = app
@@ -323,18 +322,11 @@ async fn delete_project(
     Ok(HttpResponse::Ok().body("Project deleted"))
 }
 
-#[derive(Deserialize)]
-#[serde(rename_all = "camelCase")]
-struct UpdateProjectBody {
-    name: String,
-    client_id: Option<String>,
-}
-
 #[patch("/id/{projectID}")]
 async fn update_project(
     app: web::Data<AppData>,
     path: web::Path<(ProjectId,)>,
-    body: web::Json<UpdateProjectBody>,
+    body: web::Json<UpdateProjectData>,
     session: Session,
 ) -> Result<HttpResponse, UserError> {
     let (project_id,) = path.into_inner();
@@ -559,17 +551,10 @@ async fn save_role(
     Ok(HttpResponse::Ok().body("Saved!"))
 }
 
-#[derive(Deserialize)]
-#[serde(rename_all = "camelCase")]
-struct RenameRoleData {
-    name: String,
-    client_id: Option<String>,
-}
-
 #[patch("/id/{projectID}/{roleID}")]
 async fn rename_role(
     app: web::Data<AppData>,
-    body: web::Json<RenameRoleData>,
+    body: web::Json<UpdateRoleData>,
     path: web::Path<(ProjectId, String)>,
     session: Session,
 ) -> Result<HttpResponse, UserError> {
@@ -587,7 +572,7 @@ async fn rename_role(
     ensure_can_edit_project(&app, &session, body.client_id, &metadata).await?;
 
     if metadata.roles.contains_key(&role_id) {
-        let update = doc! {"$set": {format!("roles.{}.ProjectName", role_id): &body.name}};
+        let update = doc! {"$set": {format!("roles.{}.name", role_id): &body.name}};
         let options = FindOneAndUpdateOptions::builder()
             .return_document(ReturnDocument::After)
             .build();

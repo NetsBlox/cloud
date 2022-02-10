@@ -2,7 +2,8 @@ use futures_util::{future, stream::SplitSink, stream::SplitStream, Stream, Strea
 pub use netsblox_core::{
     ClientConfig, ClientState, ClientStateData, CollaborationInvite, CreateLibraryData,
     ExternalClientState, Group, InvitationId, InvitationState, LibraryMetadata,
-    LibraryPublishState, Project, ProjectId, RoleData, ServiceHost,
+    LibraryPublishState, Project, ProjectId, RoleData, ServiceHost, UpdateProjectData,
+    UpdateRoleData,
 };
 use netsblox_core::{CreateGroupData, UpdateGroupData};
 pub use netsblox_core::{FriendInvite, FriendLinkState, InvitationResponse, ProjectMetadata, User};
@@ -234,6 +235,34 @@ impl Client {
 
         println!("status {}", response.status());
         response.json::<ProjectMetadata>().await.unwrap()
+    }
+
+    pub async fn rename_project(&self, id: &ProjectId, name: &str) {
+        let response = self
+            .request(Method::PATCH, &format!("/projects/id/{}", &id))
+            .json(&UpdateProjectData {
+                name: name.to_owned(),
+                client_id: None,
+            })
+            .send()
+            .await
+            .unwrap();
+
+        println!("status {}", response.status());
+    }
+
+    pub async fn rename_role(&self, id: &ProjectId, role_id: &str, name: &str) {
+        let response = self
+            .request(Method::PATCH, &format!("/projects/id/{}/{}", &id, &role_id))
+            .json(&UpdateRoleData {
+                name: name.to_owned(),
+                client_id: None,
+            })
+            .send()
+            .await
+            .unwrap();
+
+        println!("status {}", response.status());
     }
 
     pub async fn delete_project(&self, id: &ProjectId) {

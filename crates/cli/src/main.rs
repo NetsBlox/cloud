@@ -639,7 +639,20 @@ async fn main() -> Result<(), confy::ConfyError> {
                 role,
                 user,
             } => {
-                todo!();
+                let owner = user.clone().unwrap_or(current_user);
+                let metadata = client.get_project_metadata(&owner, &project).await;
+                if let Some(role_name) = role {
+                    let role_id = metadata
+                        .roles
+                        .into_iter()
+                        .find(|(_id, role)| role.name == *role_name)
+                        .map(|(id, _role)| id)
+                        .expect("Role not found.");
+
+                    client.rename_role(&metadata.id, &role_id, new_name).await;
+                } else {
+                    client.rename_project(&metadata.id, new_name).await;
+                }
             }
         },
         Command::Network(cmd) => match &cmd.subcmd {

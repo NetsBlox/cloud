@@ -310,7 +310,7 @@ impl AppData {
             .await?;
         let query = doc! {"id": &metadata.id};
         let update =
-            doc! {"$set": {&format!("roles.{}", role_id): role_md, "state": SaveState::SAVED}};
+            doc! {"$set": {&format!("roles.{}", role_id): role_md, "saveState": SaveState::SAVED}};
         let options = FindOneAndUpdateOptions::builder()
             .return_document(ReturnDocument::After)
             .build();

@@ -23,9 +23,9 @@
 - [ ] projects
     - [ ] list  --shared
     - [ ] export
-    - [ ] publish
-    - [ ] unpublish
-    - [ ] delete
+    - [x] publish
+    - [x] unpublish
+    - [x] delete
     - [ ] rename
 
     - [ ] invite collaborator

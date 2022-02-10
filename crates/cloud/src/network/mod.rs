@@ -3,6 +3,7 @@ pub mod topology;
 use crate::app_data::AppData;
 use crate::errors::UserError;
 use crate::network::topology::{ClientState, ExternalClientState};
+use crate::users::ensure_is_super_user;
 use actix::{Actor, Addr, AsyncContext, Handler, StreamHandler};
 use actix_session::Session;
 use actix_web::{delete, get, post};

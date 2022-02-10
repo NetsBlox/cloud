@@ -288,3 +288,33 @@ impl CollaborationInvite {
         }
     }
 }
+
+#[derive(Deserialize, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct UpdateProjectData {
+    pub name: String,
+    pub client_id: Option<String>,
+}
+
+#[derive(Deserialize, Serialize, Debug)]
+#[serde(rename_all = "camelCase")]
+pub struct UpdateRoleData {
+    pub name: String,
+    pub client_id: Option<String>,
+}
+
+#[derive(Deserialize, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct CreateProjectData {
+    pub owner: Option<String>,
+    pub name: String,
+    pub roles: Option<Vec<RoleData>>,
+    pub client_id: String,
+}
+
+#[derive(Deserialize, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct RoomMetadata {
+    pub id: ProjectId,
+    //pub occupants: Vec<String>,
+}
