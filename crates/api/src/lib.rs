@@ -1,8 +1,8 @@
 use futures_util::{future, stream::SplitSink, stream::SplitStream, Stream, StreamExt};
 pub use netsblox_core::{
     ClientConfig, ClientState, ClientStateData, CollaborationInvite, CreateLibraryData,
-    ExternalClientState, Group, InvitationId, InvitationState, LibraryMetadata,
-    LibraryPublishState, Project, ProjectId, RoleData, ServiceHost, UpdateProjectData,
+    ExternalClient, ExternalClientState, Group, InvitationId, InvitationState, LibraryMetadata,
+    LibraryPublishState, Project, ProjectId, RoleData, RoomState, ServiceHost, UpdateProjectData,
     UpdateRoleData,
 };
 use netsblox_core::{CreateGroupData, UpdateGroupData};
@@ -405,8 +405,7 @@ impl Client {
         let path = &format!("/friends/{}/online", username);
         let response = self.request(Method::GET, path).send().await.unwrap();
         println!("status {}", response.status());
-        // response.json::<Vec<String>>().await.unwrap()
-        todo!();
+        response.json::<Vec<String>>().await.unwrap()
     }
 
     pub async fn list_friend_invites(&self, username: &str) -> Vec<FriendInvite> {
@@ -664,13 +663,24 @@ impl Client {
     }
 
     // NetsBlox network capabilities
-    pub async fn list_networks(&self) -> Vec<String> {
-        let response = self.request(Method::GET, "/network/").send().await.unwrap();
-        // TODO: Return addresses? or IDs?. Probably addresses since this is universal
-        // This can't be used for fetching the room though...
+    pub async fn list_external_clients(&self) -> Vec<ExternalClient> {
+        let response = self
+            .request(Method::GET, "/network/external")
+            .send()
+            .await
+            .unwrap();
 
-        println!("status {}", response.status());
-        response.json::<Vec<String>>().await.unwrap()
+        response.json::<Vec<ExternalClient>>().await.unwrap()
+    }
+
+    pub async fn list_networks(&self) -> Vec<ProjectId> {
+        let response = self.request(Method::GET, "/network/").send().await.unwrap();
+
+        response.json::<Vec<ProjectId>>().await.unwrap()
+    }
+
+    pub async fn get_room_state(&self, id: &ProjectId) -> RoomState {
+        todo!();
     }
 
     pub async fn connect(&self, address: &str) -> MessageChannel {

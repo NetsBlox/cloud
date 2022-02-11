@@ -1,9 +1,8 @@
 use futures::future::join_all;
 use mongodb::bson::{doc, DateTime};
-use netsblox_core::RoomMetadata;
 pub use netsblox_core::{BrowserClientState, ClientState, ExternalClientState};
-use serde::Serialize;
-use std::collections::HashMap;
+use netsblox_core::{ExternalClient, OccupantState, RoleState, RoomState};
+use std::collections::{HashMap, HashSet};
 use std::str::FromStr;
 use std::time::{Duration, SystemTime};
 
@@ -34,74 +33,8 @@ impl From<BrowserClientState> for BrowserAddress {
     }
 }
 
-#[derive(Serialize, Clone)]
-struct RoomStateMessage {
-    id: String,
-    owner: String,
-    name: String,
-    roles: HashMap<String, RoleState>,
-    collaborators: Vec<String>,
-    version: u64,
-}
-
-#[derive(Serialize, Clone)]
-struct RoleState {
-    name: String,
-    occupants: Vec<OccupantState>,
-}
-
-#[derive(Serialize, Clone)]
-struct OccupantState {
-    id: ClientID,
-    name: String,
-}
-
-impl RoomStateMessage {
-    fn new(
-        project: ProjectMetadata,
-        room: &ProjectNetwork,
-        usernames: &HashMap<ClientID, String>,
-    ) -> RoomStateMessage {
-        let empty = Vec::new();
-        let roles: HashMap<String, RoleState> = project
-            .roles
-            .into_iter()
-            .map(|(id, role)| {
-                let client_ids = room.roles.get(&id).unwrap_or(&empty);
-                println!("Resolving usernames: {:?} {:?}", client_ids, usernames);
-                // TODO: get the names...
-                let occupants = client_ids
-                    .iter()
-                    .map(|id| OccupantState {
-                        id: id.to_owned(),
-                        name: usernames.get(id).unwrap_or(&"guest".to_owned()).to_owned(),
-                    })
-                    .collect();
-
-                let state = RoleState {
-                    name: role.name,
-                    occupants,
-                };
-                (id, state)
-            })
-            .collect();
-
-        RoomStateMessage {
-            id: room.id.to_owned(),
-            owner: project.owner,
-            name: project.name,
-            roles,
-            collaborators: project.collaborators,
-            version: SystemTime::now()
-                .duration_since(SystemTime::UNIX_EPOCH)
-                .expect("Could not get system time")
-                .as_secs(),
-        }
-    }
-}
-
-impl From<RoomStateMessage> for ClientMessage {
-    fn from(msg: RoomStateMessage) -> ClientMessage {
+impl From<RoomState> for ClientMessage {
+    fn from(msg: RoomState) -> ClientMessage {
         let mut value = serde_json::to_value(msg).unwrap();
         let msg = value.as_object_mut().unwrap();
         msg.insert("type".into(), serde_json::to_value("room-roles").unwrap());
@@ -120,6 +53,48 @@ impl ProjectNetwork {
         ProjectNetwork {
             id,
             roles: HashMap::new(),
+        }
+    }
+
+    fn get_state(
+        &self,
+        project: ProjectMetadata,
+        usernames: &HashMap<ClientID, String>,
+    ) -> RoomState {
+        let empty = Vec::new();
+        let roles: HashMap<String, RoleState> = project
+            .roles
+            .into_iter()
+            .map(|(id, role)| {
+                let client_ids = self.roles.get(&id).unwrap_or(&empty);
+                println!("Resolving usernames: {:?} {:?}", client_ids, usernames);
+                // TODO: get the names...
+                let occupants = client_ids
+                    .iter()
+                    .map(|id| OccupantState {
+                        id: id.to_owned(),
+                        name: usernames.get(id).unwrap_or(&"guest".to_owned()).to_owned(),
+                    })
+                    .collect();
+
+                let state = RoleState {
+                    name: role.name,
+                    occupants,
+                };
+                (id, state)
+            })
+            .collect();
+
+        RoomState {
+            id: self.id.to_owned(),
+            owner: project.owner,
+            name: project.name,
+            roles,
+            collaborators: project.collaborators,
+            version: SystemTime::now()
+                .duration_since(SystemTime::UNIX_EPOCH)
+                .expect("Could not get system time")
+                .as_secs(),
         }
     }
 }
@@ -432,6 +407,18 @@ impl Topology {
         }
     }
 
+    fn get_room_state(&self, project: ProjectMetadata) -> Option<RoomState> {
+        self.rooms.get(&project.id).map(|room| {
+            let clients = room
+                .roles
+                .values()
+                .flatten()
+                .filter_map(|id| self.clients.get(id));
+
+            room.get_state(project, &self.usernames)
+        })
+    }
+
     pub fn send_room_state(&self, msg: SendRoomState) {
         let id = msg.project.id.to_string();
         if let Some(room) = self.rooms.get(&id) {
@@ -441,8 +428,7 @@ impl Topology {
                 .flatten()
                 .filter_map(|id| self.clients.get(id));
 
-            let room_state = RoomStateMessage::new(msg.project, room, &self.usernames);
-            println!(">>> Sending room update: {}", room_state.name);
+            let room_state = room.get_state(msg.project, &self.usernames);
             clients.for_each(|client| {
                 let _ = client.addr.do_send(room_state.clone().into()); // TODO: handle error?
             });
@@ -458,11 +444,32 @@ impl Topology {
             .map(|client| RoleRequest::new(client.addr.clone(), state.clone()))
     }
 
-    pub fn get_active_rooms(&self) -> Vec<RoomMetadata> {
-        self.rooms
+    pub fn get_active_rooms(&self) -> Vec<ProjectId> {
+        self.rooms.keys().map(|k| k.to_owned()).collect::<Vec<_>>()
+    }
+
+    pub fn get_external_clients(&self) -> Vec<ExternalClient> {
+        self.states
             .iter()
-            .map(|(id, _room)| RoomMetadata { id: id.to_owned() })
-            .collect()
+            .filter_map(|(id, state)| match state {
+                ClientState::External(state) => Some(ExternalClient {
+                    username: self.usernames.get(id).map(|name| name.to_owned()),
+                    address: state.address.to_owned(),
+                    app_id: state.app_id.to_owned(),
+                }),
+                _ => None,
+            })
+            .collect::<Vec<_>>()
+    }
+
+    pub fn get_online_users(&self, usernames: Vec<String>) -> Vec<String> {
+        let online = self.usernames.values().collect::<HashSet<_>>();
+        println!("Online users: {:?}", online);
+
+        return usernames
+            .into_iter()
+            .filter(|username| online.contains(&username))
+            .collect();
     }
 }
 

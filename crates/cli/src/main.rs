@@ -224,22 +224,21 @@ enum Libraries {
         user: Option<String>,
     },
 }
-//    - libraries list --community --approval-needed
-//    - libraries import <name> <xmlPath>
 
 //    - network send {"some": "content"} --type MSG_TYPE --listen
 #[derive(Subcommand, Debug)]
 enum Network {
+    /// List the active NetsBlox rooms or external clients
     List {
-        #[clap(short, long)] // TODO: Add an --all flag??
+        #[clap(short, long)]
         external: bool,
     },
+    /// View the network state of a given project
     View {
-        // FIXME: or should we just accept the address?
+        project: String,
+        /// Interpret <project> argument as a project ID rather than name
         #[clap(short, long)]
-        room: Option<String>,
-        #[clap(short, long)]
-        app: Option<String>,
+        as_id: bool,
         #[clap(short, long)]
         user: Option<String>,
     },
@@ -284,12 +283,6 @@ enum Groups {
     },
 }
 
-#[derive(clap::ArgEnum, Clone, Debug)]
-enum InviteResponse {
-    APPROVE,
-    REJECT,
-}
-
 #[derive(Subcommand, Debug)]
 enum Friends {
     List {
@@ -322,10 +315,10 @@ enum Friends {
         #[clap(short, long)]
         user: Option<String>,
     },
-    RespondTo {
+    AcceptInvite {
         sender: String,
-        #[clap(arg_enum)]
-        response: InviteResponse,
+        #[clap(long)]
+        reject: bool,
         #[clap(short, long)]
         user: Option<String>,
     },
@@ -686,12 +679,29 @@ async fn main() -> Result<(), confy::ConfyError> {
         },
         Command::Network(cmd) => match &cmd.subcmd {
             Network::List { external } => {
-                for network in client.list_networks().await {
-                    println!("{}", network);
+                if *external {
+                    for client in client.list_external_clients().await {
+                        println!("{:?}", client);
+                    }
+                } else {
+                    for project_id in client.list_networks().await {
+                        println!("{}", project_id);
+                    }
                 }
             }
-            Network::View { room, app, user } => {
-                todo!();
+            Network::View {
+                project,
+                as_id,
+                user,
+            } => {
+                let project_id = if *as_id {
+                    project.to_owned()
+                } else {
+                    let owner = user.clone().unwrap_or(current_user);
+                    client.get_project_metadata(&owner, &project).await.id
+                };
+                let state = client.get_room_state(&project_id).await;
+                println!("{:?}", state);
             }
             Network::Connect { address } => {
                 let channel = client.connect(address).await;
@@ -746,15 +756,16 @@ async fn main() -> Result<(), confy::ConfyError> {
                 let sender = user.clone().unwrap_or(current_user);
                 client.send_friend_invite(&sender, &username).await;
             }
-            Friends::RespondTo {
+            Friends::AcceptInvite {
                 sender,
-                response,
+                reject,
                 user,
             } => {
                 let recipient = user.clone().unwrap_or(current_user);
-                let state = match response {
-                    InviteResponse::APPROVE => FriendLinkState::APPROVED,
-                    InviteResponse::REJECT => FriendLinkState::REJECTED,
+                let state = if *reject {
+                    FriendLinkState::REJECTED
+                } else {
+                    FriendLinkState::APPROVED
                 };
                 client
                     .respond_to_friend_invite(&recipient, sender, state)

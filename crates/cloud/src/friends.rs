@@ -1,14 +1,15 @@
 use crate::app_data::AppData;
 use crate::errors::{InternalError, UserError};
 use crate::models::FriendLink;
-use crate::users::{can_edit_user, ensure_can_edit_user};
+use crate::network::topology;
+use crate::users::ensure_can_edit_user;
 use actix_session::Session;
 use actix_web::{get, post};
 use actix_web::{web, HttpResponse};
 use futures::TryStreamExt;
 use mongodb::bson::doc;
 use mongodb::options::UpdateOptions;
-use netsblox_core::{FriendInvite, FriendLinkState, InvitationResponse};
+use netsblox_core::{FriendInvite, FriendLinkState};
 
 #[get("/{owner}/")]
 async fn list_friends(
@@ -50,10 +51,15 @@ async fn list_online_friends(
     ensure_can_edit_user(&app, &session, &owner).await?;
 
     let friend_names = get_friends(&app, &owner).await;
-    // TODO: Find the client IDs for these (and filter using them)
-    // let online_friends = friend_names.iter().filter_map(|username| app.network.).collect();
-    // TODO...
-    Ok(HttpResponse::Ok().json(friend_names))
+    let online_friends = app
+        .network
+        .send(topology::GetOnlineUsers {
+            usernames: friend_names,
+        })
+        .await
+        .map_err(|_err| UserError::InternalError)?;
+
+    Ok(HttpResponse::Ok().json(online_friends))
 }
 
 #[post("/{owner}/unfriend/{friend}")]

@@ -98,15 +98,33 @@ async fn get_room_state() -> Result<HttpResponse, UserError> {
 async fn get_rooms(app: web::Data<AppData>, session: Session) -> Result<HttpResponse, UserError> {
     ensure_is_super_user(&app, &session).await?;
 
-    let rooms = app
+    let state = app
         .network
         .send(topology::GetActiveRooms {})
         .await
         .map_err(|_err| UserError::InternalError)?
         .0;
 
-    Ok(HttpResponse::Ok().json(rooms))
+    Ok(HttpResponse::Ok().json(state))
 }
+
+#[get("/external")]
+async fn get_external_clients(
+    app: web::Data<AppData>,
+    session: Session,
+) -> Result<HttpResponse, UserError> {
+    ensure_is_super_user(&app, &session).await?;
+
+    let clients = app
+        .network
+        .send(topology::GetExternalClients {})
+        .await
+        .map_err(|_err| UserError::InternalError)?
+        .0;
+
+    Ok(HttpResponse::Ok().json(clients))
+}
+
 #[delete("/id/{projectID}/occupants/{clientID}")]
 async fn remove_occupant() -> Result<HttpResponse, std::io::Error> {
     todo!();
@@ -130,7 +148,10 @@ async fn invite_occupant(
 }
 
 pub fn config(cfg: &mut web::ServiceConfig) {
-    cfg.service(set_client_state).service(connect_client);
+    cfg.service(set_client_state)
+        .service(connect_client)
+        .service(get_external_clients)
+        .service(get_rooms);
 }
 
 struct WsSession {

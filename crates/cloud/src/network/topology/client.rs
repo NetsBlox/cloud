@@ -1,6 +1,7 @@
 use actix::prelude::{Message, Recipient};
 use actix_web::rt::time::sleep;
 use lazy_static::lazy_static;
+pub use netsblox_core::ClientID;
 use serde_json::json;
 use std::{
     collections::HashMap,
@@ -16,8 +17,6 @@ lazy_static! {
     pub static ref RESPONSE_BUFFER: Arc<RwLock<HashMap<Uuid, RoleDataResponseState>>> =
         Arc::new(RwLock::new(HashMap::new()));
 }
-
-pub type ClientID = String; // TODO: use this everywhere
 
 #[derive(Clone)]
 struct RoleRequestMessage(pub Uuid);

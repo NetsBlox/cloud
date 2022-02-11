@@ -9,7 +9,7 @@ use actix::{Actor, AsyncContext, Context, Handler, MessageResult};
 use lazy_static::lazy_static;
 use mongodb::bson::doc;
 use mongodb::Collection;
-use netsblox_core::RoomMetadata;
+use netsblox_core::{ExternalClient, ProjectId};
 use serde_json::Value;
 use std::sync::{Arc, RwLock};
 use uuid::Uuid;
@@ -49,12 +49,6 @@ pub struct SetStorage {
 #[rtype(result = "()")]
 pub struct SendRoomState {
     pub project: ProjectMetadata,
-}
-
-#[derive(Message)]
-#[rtype(result = "()")]
-pub struct GetOnlineUsers {
-    pub usernames: Vec<String>,
 }
 
 #[derive(Message)]
@@ -213,24 +207,45 @@ pub struct GetActiveRooms;
 
 #[derive(Message)]
 #[rtype(result = "()")]
-pub struct GetActiveRoomsResult(pub Vec<RoomMetadata>);
+pub struct GetActiveRoomsResult(pub Vec<ProjectId>);
 
 impl Handler<GetActiveRooms> for TopologyActor {
     type Result = MessageResult<GetActiveRooms>;
 
-    fn handle(&mut self, msg: GetActiveRooms, _: &mut Context<Self>) -> Self::Result {
+    fn handle(&mut self, _: GetActiveRooms, _: &mut Context<Self>) -> Self::Result {
         let topology = TOPOLOGY.read().unwrap();
         MessageResult(GetActiveRoomsResult(topology.get_active_rooms()))
     }
 }
 
-// TODO: Add method for getting the usernames from the network
-// impl Handler<GetOnlineUsers> for TopologyActor {
-//     type Result = Vec<String>;
+#[derive(Message)]
+#[rtype(result = "Vec<String>")]
+pub struct GetOnlineUsers {
+    pub usernames: Vec<String>,
+}
 
-//     fn handle(&mut self, msg: GetOnlineUsers, _: &mut Context<Self>) -> Self::Result {
-//         let topology = TOPOLOGY.read().unwrap();
-//         msg.usernames.filter(|name| topology.clients)
-//         topology.send_room_state(msg);
-//     }
-// }
+impl Handler<GetOnlineUsers> for TopologyActor {
+    type Result = Vec<String>;
+
+    fn handle(&mut self, msg: GetOnlineUsers, _: &mut Context<Self>) -> Self::Result {
+        let topology = TOPOLOGY.read().unwrap();
+        topology.get_online_users(msg.usernames)
+    }
+}
+
+#[derive(Message)]
+#[rtype(result = "GetExternalClientsResult")]
+pub struct GetExternalClients;
+
+#[derive(Message)]
+#[rtype(result = "()")]
+pub struct GetExternalClientsResult(pub Vec<ExternalClient>);
+
+impl Handler<GetExternalClients> for TopologyActor {
+    type Result = MessageResult<GetExternalClients>;
+
+    fn handle(&mut self, _: GetExternalClients, _: &mut Context<Self>) -> Self::Result {
+        let topology = TOPOLOGY.read().unwrap();
+        MessageResult(GetExternalClientsResult(topology.get_external_clients()))
+    }
+}

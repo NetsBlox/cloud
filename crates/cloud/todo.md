@@ -7,34 +7,13 @@
         - (public role ID resolution)
         - Or the client could send this in the request...
             - context: {project: {name, id}, role: {name, id}, app: ''}
+    - add a REST endpoint for this?
 
-- [x] friends
-    - [x] list friends
-    - [x] list invites
-    - [x] send invite
-    - [x] respond to invite
-    - [x] block user (unblock?)
-    - [x] unfriend
-    - [ ] list (online) friends
-        - include the app they are using?
-        - client IDs (if netsblox)
-        - addresses?
-            
-            {username, contexts: {clientId, app?}}
-
-- [ ] projects
-    - [ ] list  --shared
-    - [ ] export
-    - [x] publish
-    - [x] unpublish
-    - [x] delete
-    - [x] rename
-
-    - [x] invite collaborator
-    - [x] list invites
-    - [x] respond to invite
-    - [x] list collabs
-    - [x] rm collab
+- [ ] occupants
+    - [ ] invite occupant
+        - these can probably be transient invitations
+    - [ ] respond-to-invite
+        - this probably doesn't make sense from the CLI
 
 - [ ] users
     - [x] create
@@ -47,11 +26,20 @@
     - [ ] unlink
 
 - [ ] network
-    - [ ] list
+    - [x] list
       - should this just list the networks for a given user?
       - since this will be an admin endpoint to start anyway, it would probably be good to just keep it simple - we can extend it later
         - it should probably just list the browser networks (or external)
-    - [ ] view --app NetsBloxCLI
+
+        - what about?
+                
+            network list -> <project IDs>
+            network list --external -> (address, username, app)[]
+
+    - [ ] view <project> -> RoomState
+
+            skip for external
+
     - [x] connect
         - mostly works for now. Probably fine
 
@@ -406,4 +394,34 @@
         - user is overloaded now...
         - I think it is fine
     - [x] remove --group --user
+
+- [x] projects
+    - [x] list  --shared
+    - [x] export
+    - [x] publish
+    - [x] unpublish
+    - [x] delete
+    - [x] rename
+
+    - [x] invite collaborator
+    - [x] list invites
+    - [x] respond to invite
+    - [x] list collabs
+    - [x] rm collab
+
+- [x] friends
+    - [x] list friends
+    - [x] list invites
+    - [x] send invite
+    - [x] respond to invite
+    - [x] block user (unblock?)
+    - [x] unfriend
+    - [x] list (online) friends
+        - include the app they are using?
+        - client IDs (if netsblox)
+        - addresses?
+            
+            {username, contexts: {clientId, app?}}
+
+        - just usernames for now...
 

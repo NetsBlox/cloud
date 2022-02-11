@@ -311,9 +311,35 @@ pub struct CreateProjectData {
     pub client_id: String,
 }
 
-#[derive(Deserialize, Serialize)]
+// Network debugging data
+pub type ClientID = String;
+
+#[derive(Deserialize, Serialize, Debug)]
 #[serde(rename_all = "camelCase")]
-pub struct RoomMetadata {
-    pub id: ProjectId,
-    //pub occupants: Vec<String>,
+pub struct ExternalClient {
+    pub username: Option<String>,
+    pub address: String,
+    pub app_id: String,
+}
+
+#[derive(Deserialize, Serialize, Clone, Debug)]
+pub struct RoomState {
+    pub id: String,
+    pub owner: String,
+    pub name: String,
+    pub roles: HashMap<String, RoleState>,
+    pub collaborators: Vec<String>,
+    pub version: u64,
+}
+
+#[derive(Deserialize, Serialize, Clone, Debug)]
+pub struct RoleState {
+    pub name: String,
+    pub occupants: Vec<OccupantState>,
+}
+
+#[derive(Deserialize, Serialize, Clone, Debug)]
+pub struct OccupantState {
+    pub id: ClientID,
+    pub name: String,
 }
