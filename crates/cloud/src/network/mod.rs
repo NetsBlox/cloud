@@ -1,15 +1,17 @@
 pub mod topology;
 
 use crate::app_data::AppData;
-use crate::errors::UserError;
+use crate::errors::{InternalError, UserError};
 use crate::network::topology::{ClientState, ExternalClientState};
+use crate::projects::ensure_can_edit_project;
 use crate::users::ensure_is_super_user;
 use actix::{Actor, Addr, AsyncContext, Handler, StreamHandler};
 use actix_session::Session;
 use actix_web::{delete, get, post};
 use actix_web::{web, Error, HttpRequest, HttpResponse};
 use actix_web_actors::ws::{self, CloseCode};
-use netsblox_core::ClientStateData;
+use mongodb::bson::doc;
+use netsblox_core::{ClientStateData, ProjectId};
 use serde::Deserialize;
 use serde_json::Value;
 
@@ -90,8 +92,31 @@ async fn connect_client(
 }
 
 #[get("/id/{projectID}/")]
-async fn get_room_state() -> Result<HttpResponse, UserError> {
-    todo!();
+async fn get_room_state(
+    app: web::Data<AppData>,
+    path: web::Path<(ProjectId,)>,
+    session: Session,
+) -> Result<HttpResponse, UserError> {
+    let (project_id,) = path.into_inner();
+    let query = doc! {"id": project_id};
+    let metadata = app
+        .project_metadata
+        .find_one(query, None)
+        .await
+        .map_err(|_err| InternalError::DatabaseConnectionError)?
+        .ok_or_else(|| UserError::ProjectNotFoundError)?;
+
+    ensure_can_edit_project(&app, &session, None, &metadata).await?;
+
+    let state = app
+        .network
+        .send(topology::GetRoomState { metadata })
+        .await
+        .map_err(|_err| UserError::InternalError)?
+        .0
+        .ok_or_else(|| UserError::ProjectNotActiveError)?;
+
+    Ok(HttpResponse::Ok().json(state))
 }
 
 #[get("/")]

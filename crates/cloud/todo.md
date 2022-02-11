@@ -1,4 +1,8 @@
 # To Do
+- [ ] apiKeys. Should these be managed from the services server?
+    - probably
+    - how can we have services servers register data for a user/group?
+
 - [ ] collaborative editing action acceptance
     - maybe we don't need to persist them...
 
@@ -12,6 +16,7 @@
 - [ ] occupants
     - [ ] invite occupant
         - these can probably be transient invitations
+        - maybe persist in mongo with a short ttl (a few minutes or something)
     - [ ] respond-to-invite
         - this probably doesn't make sense from the CLI
 
@@ -49,27 +54,10 @@
     - [ ] finalize output formats (machine vs human?)
     - [ ] finish updating the browser
 
-- [ ] export latest
-    - make a CLI to test some of this, too?
-    - list networks?
-    - send message?
-        - should we be able to receive messages? Maybe send message and wait?
-            - #NetsBloxCLI
-
-    - [x] create user?
-        - maybe only group members?
-        - how could we prevent malicious use?
-            - only group members is probably fine
-    - delete members?
-
 - [ ] add index to projects collection for "id"
 
 - [ ] add unvisited saveState (w/ a ttl)
     - CREATED -> TRANSIENT -> BROKEN/SAVED
-
-- [ ] update collaboration?
-    - no more recording the latest one on the server?
-    - maybe leave it as is for now?
 
 - [ ] public URL is set when opening role
 - [ ] connect the client code and start testing things!
@@ -139,10 +127,6 @@
     - [ ] project-response
     - [ ] request-actions
 
-- [ ] user routes
-    - [ ] remove client-side password hashing?
-        - [ ] test that the hashing algs are the same?
-
 - [ ] network routes
     - [ ] message passing
 
@@ -173,10 +157,6 @@
         - roles?
         - [x] add blob support
 
-    - [ ] apiKeys. Should these be managed from the services server?
-        - probably
-        - how can we have services servers register data for a user/group?
-
     - [x] external client support
         - when/where should I differentiate? I don't think a single network will be able to handle them all
         - maybe have a "app_networks" which can send messages?
@@ -193,16 +173,9 @@
                 - moved to different location
 
 
-- Do I need "transient" projects on the server?
-    - Can I handle name collisions some other way?
-
 - [ ] add address caching to the message sending?
 
 - [ ] add benchmarks for message passing??
-
-- [-] can the updates to the network topology stuff replace the "transient" projects?
-    - I don't think so since we will need to know the existing (unopened) projects so their name isn't changed on open (given them priority, that is)
-        - what if 
 
 - [ ] session doesn't ensure logged in...
      - new extractor that ensures authenticated?
@@ -242,8 +215,6 @@
 - [ ] update mobile apps
 
 - [ ] email Tom about the big update?
-
-- [ ] change "project_name" to "name"
 
 - [ ] gallery
 
@@ -424,4 +395,35 @@
             {username, contexts: {clientId, app?}}
 
         - just usernames for now...
+
+- [x] export latest
+    - make a CLI to test some of this, too?
+    - list networks?
+    - send message?
+        - should we be able to receive messages? Maybe send message and wait?
+            - #NetsBloxCLI
+
+    - [x] create user?
+        - maybe only group members?
+        - how could we prevent malicious use?
+            - only group members is probably fine
+    - delete members?
+
+- [-] update collaboration?
+    - no more recording the latest one on the server?
+    - maybe leave it as is for now?
+    - moved to separate bullet point
+        
+- [x] user routes
+    - [x] remove client-side password hashing?
+        - [ ] test that the hashing algs are the same?
+
+- [x] Do I need "transient" projects on the server?
+    - Can I handle name collisions some other way?
+
+- [x] change "project_name" to "name"
+
+- [-] can the updates to the network topology stuff replace the "transient" projects?
+    - I don't think so since we will need to know the existing (unopened) projects so their name isn't changed on open (given them priority, that is)
+        - what if 
 

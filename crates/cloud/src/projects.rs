@@ -186,7 +186,7 @@ async fn can_view_project(app: &AppData, session: &Session, project: &ProjectMet
     can_edit_project(app, session, None, project).await
 }
 
-async fn ensure_can_edit_project(
+pub async fn ensure_can_edit_project(
     app: &AppData,
     session: &Session,
     client_id: Option<String>,

@@ -680,7 +680,13 @@ impl Client {
     }
 
     pub async fn get_room_state(&self, id: &ProjectId) -> RoomState {
-        todo!();
+        let response = self
+            .request(Method::GET, &format!("/network/{}", id))
+            .send()
+            .await
+            .unwrap();
+
+        response.json::<RoomState>().await.unwrap()
     }
 
     pub async fn connect(&self, address: &str) -> MessageChannel {

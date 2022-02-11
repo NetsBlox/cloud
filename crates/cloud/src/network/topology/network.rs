@@ -407,18 +407,6 @@ impl Topology {
         }
     }
 
-    fn get_room_state(&self, project: ProjectMetadata) -> Option<RoomState> {
-        self.rooms.get(&project.id).map(|room| {
-            let clients = room
-                .roles
-                .values()
-                .flatten()
-                .filter_map(|id| self.clients.get(id));
-
-            room.get_state(project, &self.usernames)
-        })
-    }
-
     pub fn send_room_state(&self, msg: SendRoomState) {
         let id = msg.project.id.to_string();
         if let Some(room) = self.rooms.get(&id) {
@@ -470,6 +458,12 @@ impl Topology {
             .into_iter()
             .filter(|username| online.contains(&username))
             .collect();
+    }
+
+    pub fn get_room_state(&self, metadata: ProjectMetadata) -> Option<RoomState> {
+        self.rooms
+            .get(&metadata.id)
+            .map(|room| room.get_state(metadata, &self.usernames))
     }
 }
 

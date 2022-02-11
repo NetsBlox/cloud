@@ -23,6 +23,8 @@ pub enum UserError {
     UserNotFoundError,
     #[display(fmt = "Invitation not found.")]
     InviteNotFoundError,
+    #[display(fmt = "Project not active.")]
+    ProjectNotActiveError,
     #[display(fmt = "Incorrect password.")]
     IncorrectPasswordError,
     #[display(fmt = "User has been banned.")]
@@ -52,7 +54,9 @@ impl error::ResponseError for UserError {
             | UserError::UserNotFoundError
             | UserError::GroupNotFoundError => StatusCode::NOT_FOUND,
             UserError::InternalError => StatusCode::INTERNAL_SERVER_ERROR,
-            UserError::InvalidUsername | UserError::InvalidEmailAddress => StatusCode::BAD_REQUEST,
+            UserError::InvalidUsername
+            | UserError::InvalidEmailAddress
+            | UserError::ProjectNotActiveError => StatusCode::BAD_REQUEST,
         }
     }
 }

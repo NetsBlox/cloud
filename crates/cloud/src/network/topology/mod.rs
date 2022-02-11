@@ -9,7 +9,7 @@ use actix::{Actor, AsyncContext, Context, Handler, MessageResult};
 use lazy_static::lazy_static;
 use mongodb::bson::doc;
 use mongodb::Collection;
-use netsblox_core::{ExternalClient, ProjectId};
+use netsblox_core::{ExternalClient, ProjectId, RoomState};
 use serde_json::Value;
 use std::sync::{Arc, RwLock};
 use uuid::Uuid;
@@ -247,5 +247,24 @@ impl Handler<GetExternalClients> for TopologyActor {
     fn handle(&mut self, _: GetExternalClients, _: &mut Context<Self>) -> Self::Result {
         let topology = TOPOLOGY.read().unwrap();
         MessageResult(GetExternalClientsResult(topology.get_external_clients()))
+    }
+}
+
+#[derive(Message)]
+#[rtype(result = "GetRoomStateResult")]
+pub struct GetRoomState {
+    pub metadata: ProjectMetadata,
+}
+
+#[derive(Message)]
+#[rtype(result = "()")]
+pub struct GetRoomStateResult(pub Option<RoomState>);
+
+impl Handler<GetRoomState> for TopologyActor {
+    type Result = MessageResult<GetRoomState>;
+
+    fn handle(&mut self, msg: GetRoomState, _: &mut Context<Self>) -> Self::Result {
+        let topology = TOPOLOGY.read().unwrap();
+        MessageResult(GetRoomStateResult(topology.get_room_state(msg.metadata)))
     }
 }
