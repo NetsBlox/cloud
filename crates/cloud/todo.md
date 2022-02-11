@@ -122,6 +122,7 @@
 - [ ] ws support
     - [x] sending (netsblox) messages
     - [ ] client-message
+        - refactor a lot of things to use this...
     - [ ] user-action
         - how should we handle collaboration?
     - [ ] project-response
@@ -134,44 +135,6 @@
     - [ ] group routes
 
 - [ ] api docs with paperclip?
-
-- [ ] routes
-    - [x] collaboration invites
-        - keep the invites (only can send one per person/project)
-    - [ ] friends
-        - store these as a list of usernames?
-            - what if the friend deletes his/her account?
-        - store these in an "edges" collection?
-            - easier to update on deletion
-            - this is probably the better way to go
-    - [ ] friend requests?
-        - should we have "block"/decline
-        - should reject auto block?
-            - probably not
-    - [x] service hosts
-    - [ ] projects
-        - project_metadata
-            - maybe add a method for only the public fields?
-        - projects
-            - get the project source from the blob
-        - roles?
-        - [x] add blob support
-
-    - [x] external client support
-        - when/where should I differentiate? I don't think a single network will be able to handle them all
-        - maybe have a "app_networks" which can send messages?
-            - NetsBlox
-
-            - These would have two levels of hierarchy
-            - The saved versions might be different (and might so we probably shouldn't 
-
-        - Let's keep them separate so we can add optimizations to the netsblox one
-
-        - what else might a client state need to include?
-            - group IDs?
-            - [/] probably only needs to take affect on login.
-                - moved to different location
-
 
 - [ ] add address caching to the message sending?
 
@@ -197,8 +160,9 @@
 
 - [ ] require login to send messages?
 
-- [x] admin users
-    - [ ] add tests
+- [ ] store additional info in the cookie:
+    - groups (for networking things)?
+    - admin?
 
 - [ ] add the group IDs (+ GLOBAL) to the clients in the network topology?
     - these would be the user's group + any owned groups
@@ -426,4 +390,44 @@
 - [-] can the updates to the network topology stuff replace the "transient" projects?
     - I don't think so since we will need to know the existing (unopened) projects so their name isn't changed on open (given them priority, that is)
         - what if 
+
+- [x] routes
+    - [x] collaboration invites
+        - keep the invites (only can send one per person/project)
+    - [x] friends
+        - store these as a list of usernames?
+            - what if the friend deletes his/her account?
+        - store these in an "edges" collection?
+            - easier to update on deletion
+            - this is probably the better way to go
+    - [x] friend requests?
+        - should we have "block"/decline
+        - should reject auto block?
+            - probably not
+    - [x] service hosts
+    - [x] projects
+        - project_metadata
+            - maybe add a method for only the public fields?
+        - projects
+            - get the project source from the blob
+        - roles?
+        - [x] add blob support
+
+    - [x] external client support
+        - when/where should I differentiate? I don't think a single network will be able to handle them all
+        - maybe have a "app_networks" which can send messages?
+            - NetsBlox
+
+            - These would have two levels of hierarchy
+            - The saved versions might be different (and might so we probably shouldn't 
+
+        - Let's keep them separate so we can add optimizations to the netsblox one
+
+        - what else might a client state need to include?
+            - group IDs?
+            - [/] probably only needs to take affect on login.
+                - moved to different location
+
+- [x] admin users
+    - [ ] add tests
 
