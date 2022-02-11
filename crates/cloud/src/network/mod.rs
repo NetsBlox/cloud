@@ -91,7 +91,7 @@ async fn connect_client(
     ws::start(handler, &req, stream)
 }
 
-#[get("/id/{projectID}/")]
+#[get("/id/{projectID}")]
 async fn get_room_state(
     app: web::Data<AppData>,
     path: web::Path<(ProjectId,)>,
@@ -176,6 +176,7 @@ pub fn config(cfg: &mut web::ServiceConfig) {
     cfg.service(set_client_state)
         .service(connect_client)
         .service(get_external_clients)
+        .service(get_room_state)
         .service(get_rooms);
 }
 

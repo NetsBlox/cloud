@@ -1,4 +1,4 @@
-use futures_util::{future, stream::SplitSink, stream::SplitStream, Stream, StreamExt};
+use futures_util::stream::SplitStream;
 pub use netsblox_core::{
     ClientConfig, ClientState, ClientStateData, CollaborationInvite, CreateLibraryData,
     ExternalClient, ExternalClientState, Group, InvitationId, InvitationState, LibraryMetadata,
@@ -681,7 +681,7 @@ impl Client {
 
     pub async fn get_room_state(&self, id: &ProjectId) -> RoomState {
         let response = self
-            .request(Method::GET, &format!("/network/{}", id))
+            .request(Method::GET, &format!("/network/id/{}", id))
             .send()
             .await
             .unwrap();
