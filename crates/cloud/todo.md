@@ -1,4 +1,8 @@
 # To Do
+- [ ] switch admin flag to role: ["admin", "moderator"]
+
+- [ ] allow login with linked accounts
+
 - [ ] apiKeys. Should these be managed from the services server?
     - probably
     - how can we have services servers register data for a user/group?
@@ -12,6 +16,8 @@
         - Or the client could send this in the request...
             - context: {project: {name, id}, role: {name, id}, app: ''}
     - add a REST endpoint for this?
+
+- [ ] online friends (admin returns all)
 
 - [ ] occupants
     - [ ] invite occupant
@@ -29,26 +35,6 @@
     - [x] view
     - [ ] link
     - [ ] unlink
-
-- [ ] network
-    - [x] list
-      - should this just list the networks for a given user?
-      - since this will be an admin endpoint to start anyway, it would probably be good to just keep it simple - we can extend it later
-        - it should probably just list the browser networks (or external)
-
-        - what about?
-                
-            network list -> <project IDs>
-            network list --external -> (address, username, app)[]
-
-    - [ ] view <project> -> RoomState
-
-            skip for external
-
-    - [x] connect
-        - mostly works for now. Probably fine
-
-    - [x] invalid response unknown variant mongodb
 
 - general
     - [ ] finalize output formats (machine vs human?)
@@ -113,6 +99,8 @@
             - make sure the broken project is not deleted once another client reconnects
 
 - [ ] don't clean up projects when server goes down?
+    - set all projects to BROKEN
+    - can we differentiate btwn server initiated Away and client?
 
 
 - [ ] validate user accounts on creation
@@ -125,11 +113,8 @@
         - refactor a lot of things to use this...
     - [ ] user-action
         - how should we handle collaboration?
-    - [ ] project-response
+    - [x] project-response
     - [ ] request-actions
-
-- [ ] network routes
-    - [ ] message passing
 
 - [ ] add tests
     - [ ] group routes
@@ -137,6 +122,7 @@
 - [ ] api docs with paperclip?
 
 - [ ] add address caching to the message sending?
+    - [ ] update cache on "send room state"
 
 - [ ] add benchmarks for message passing??
 
@@ -430,4 +416,27 @@
 
 - [x] admin users
     - [ ] add tests
+
+- [x] network
+    - [x] list
+      - should this just list the networks for a given user?
+      - since this will be an admin endpoint to start anyway, it would probably be good to just keep it simple - we can extend it later
+        - it should probably just list the browser networks (or external)
+
+        - what about?
+                
+            network list -> <project IDs>
+            network list --external -> (address, username, app)[]
+
+    - [x] view <project> -> RoomState
+
+            skip for external
+
+    - [x] connect
+        - mostly works for now. Probably fine
+
+    - [x] invalid response unknown variant mongodb
+
+- [x] network routes
+    - [x] message passing
 
