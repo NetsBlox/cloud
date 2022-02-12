@@ -195,9 +195,13 @@ impl WsSession {
                 let dst_id = msg["dstId"].clone();
                 let addresses = match dst_id {
                     Value::Array(values) => values
-                        .iter()
-                        .filter_map(|v| v.as_str().map(|s| s.to_owned()))
+                        .into_iter()
+                        .filter_map(|v| match v {
+                            Value::String(v) => Some(v),
+                            _ => None,
+                        })
                         .collect::<Vec<_>>(),
+                    Value::String(value) => vec![value],
                     _ => vec![],
                 };
                 println!("Sending message to {:?}", addresses);
