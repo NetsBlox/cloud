@@ -12,13 +12,17 @@ use std::path::Path;
 
 #[derive(Subcommand, Debug)]
 enum Users {
+    /// Create a new NetsBlox user
     Create {
         username: String,
         email: String,
+        /// Password for new user. If unset, user will need to manually reset password before logging in
         #[clap(short, long)]
         password: Option<String>,
+        /// Make the new user a member of the given group
         #[clap(short, long)]
         group: Option<String>,
+        /// Perform the operation as this user
         #[clap(short, long)]
         user: Option<String>,
         #[clap(short, long)]
@@ -29,12 +33,16 @@ enum Users {
         #[clap(short, long)]
         no_confirm: bool,
     },
+    /// View the current user
     View {
+        /// Perform the operation as this user
         #[clap(short, long)]
         user: Option<String>,
     },
+    /// Change the current user's password
     SetPassword {
         password: String,
+        /// Perform the operation as this user
         #[clap(short, long)]
         user: Option<String>,
     },
@@ -43,52 +51,63 @@ enum Users {
     Link {
         account: String,
         password: String,
-        #[clap(short, long, default_value = "snap")]
+        #[clap(short, long, default_value = "Snap!")]
         strategy: String,
         #[clap(short, long)]
         user: Option<String>,
     },
     Unlink {
         account: String,
-        #[clap(short, long, default_value = "snap")]
+        #[clap(short, long, default_value = "Snap!")]
         strategy: String,
         #[clap(short, long)]
         user: Option<String>,
     },
 }
 
-//    - projects create-role?
 #[derive(Subcommand, Debug)]
 enum Projects {
+    /// Import a project into NetsBlox
     Import {
-        /// The path to the project to save
+        /// The path to the project to import
         filename: String,
+        /// Project name (default is the filename)
         #[clap(short, long)]
         name: Option<String>,
         #[clap(short, long)]
         user: Option<String>,
     },
+    /// Export a project from NetsBlox
     Export {
+        /// Name of project to export
         project: String,
+        /// Export a single role from the project instead
+        #[clap(short, long)]
+        role: Option<String>,
+        /// Include unsaved changes (from opened projects)
         #[clap(short, long)]
         latest: bool,
         #[clap(short, long)]
-        role: Option<String>,
-        #[clap(short, long)]
         user: Option<String>,
     },
+    /// List the user's projects
     List {
+        /// List the projects shared with the current user
         #[clap(short, long)]
         shared: bool,
         #[clap(short, long)]
         user: Option<String>,
     },
+    /// Publish a project
     Publish {
+        /// Name of project to publish
         project: String,
         #[clap(short, long)]
         user: Option<String>,
     },
+    /// Unpublish a project
     Unpublish {
+        /// Name of project to unpublish
         project: String,
         #[clap(short, long)]
         user: Option<String>,
