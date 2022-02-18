@@ -2,10 +2,14 @@
 - [ ] switch admin flag to role: ["admin", "moderator"]
 
 - [ ] allow login with linked accounts
+    - working on this...
+    - need to be able to retrieve the email address
 
 - [ ] apiKeys. Should these be managed from the services server?
     - probably
     - how can we have services servers register data for a user/group?
+
+    - these can be associated with groups or users...
 
 - [ ] collaborative editing action acceptance
     - maybe we don't need to persist them...
@@ -25,6 +29,10 @@
         - maybe persist in mongo with a short ttl (a few minutes or something)
     - [ ] respond-to-invite
         - this probably doesn't make sense from the CLI
+
+- [ ] test ban account
+    - [ ] email should be banned, too
+    - [ ] no new create
 
 - [ ] users
     - [x] create

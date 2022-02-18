@@ -1690,6 +1690,7 @@ dependencies = [
  "netsblox_core",
  "passwords",
  "regex",
+ "reqwest",
  "rusoto_core",
  "rusoto_s3",
  "rusoto_signature",

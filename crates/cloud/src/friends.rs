@@ -48,6 +48,7 @@ async fn list_online_friends(
     session: Session,
 ) -> Result<HttpResponse, UserError> {
     let (owner,) = path.into_inner();
+    // TODO: if admin, show all users
     ensure_can_edit_user(&app, &session, &owner).await?;
 
     let friend_names = get_friends(&app, &owner).await;
