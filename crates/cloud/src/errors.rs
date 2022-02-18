@@ -27,12 +27,20 @@ pub enum UserError {
     ProjectNotActiveError,
     #[display(fmt = "Incorrect password.")]
     IncorrectPasswordError,
+    #[display(fmt = "Incorrect username or password.")]
+    IncorrectUsernameOrPasswordError,
     #[display(fmt = "User has been banned.")]
     BannedUserError,
     #[display(fmt = "Invalid username.")]
     InvalidUsername,
     #[display(fmt = "Invalid email address.")]
     InvalidEmailAddress,
+    #[display(fmt = "Invalid client ID.")]
+    InvalidClientIdError,
+    #[display(fmt = "Invalid authentication strategy.")]
+    InvalidAuthStrategyError,
+    #[display(fmt = "Unable to connect to Snap! Please try again later.")]
+    SnapConnectionError,
     #[display(fmt = "An internal error occurred. Please try again later.")]
     InternalError,
 }
@@ -46,6 +54,7 @@ impl error::ResponseError for UserError {
     fn status_code(&self) -> StatusCode {
         match *self {
             UserError::PermissionsError
+            | UserError::IncorrectUsernameOrPasswordError
             | UserError::BannedUserError
             | UserError::IncorrectPasswordError => StatusCode::UNAUTHORIZED,
             UserError::ProjectNotFoundError
@@ -53,9 +62,13 @@ impl error::ResponseError for UserError {
             | UserError::InviteNotFoundError
             | UserError::UserNotFoundError
             | UserError::GroupNotFoundError => StatusCode::NOT_FOUND,
-            UserError::InternalError => StatusCode::INTERNAL_SERVER_ERROR,
+            UserError::InternalError | UserError::SnapConnectionError => {
+                StatusCode::INTERNAL_SERVER_ERROR
+            }
             UserError::InvalidUsername
             | UserError::InvalidEmailAddress
+            | UserError::InvalidClientIdError
+            | UserError::InvalidAuthStrategyError
             | UserError::ProjectNotActiveError => StatusCode::BAD_REQUEST,
         }
     }
