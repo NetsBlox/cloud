@@ -35,22 +35,14 @@ impl FromStr for ClientAddress {
 
     fn from_str(addr: &str) -> Result<Self, Self::Err> {
         if let Some(index) = addr.rfind('@') {
-            let address = addr.chars().into_iter().take(index).collect::<String>();
-            let user_id = addr
-                .chars()
-                .into_iter()
-                .skip(index + 1)
+            let address = addr[..index].to_owned();
+            let user_id = addr[index + 1..].chars()
                 .take_while(|c| !c.is_whitespace() && *c != '#')
                 .collect::<String>();
 
-            let mut app_ids: Vec<String> = addr
-                .chars()
-                .into_iter()
-                .skip(index + user_id.len() + 1)
-                .group_by(|c| !c.is_whitespace() && *c != '#')
-                .into_iter()
-                .filter(|(k, _iter)| *k)
-                .map(|(_k, iter)| iter.collect::<String>().to_lowercase())
+            let mut app_ids: Vec<String> = addr[index + 1 + user_id.len()..].chars()
+                .group_by(|c| !c.is_whitespace() && *c != '#').into_iter()
+                .filter_map(|(k, iter)| if k { Some(iter.flat_map(char::to_lowercase).collect()) } else { None })
                 .collect();
 
             if app_ids.is_empty() {
