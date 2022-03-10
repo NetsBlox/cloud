@@ -41,6 +41,10 @@ pub enum UserError {
     InvalidAuthStrategyError,
     #[display(fmt = "Unable to connect to Snap! Please try again later.")]
     SnapConnectionError,
+    #[display(fmt = "Account already linked to NetsBlox user.")]
+    AccountAlreadyLinkedError,
+    #[display(fmt = "Invalid account type.")]
+    InvalidAccountTypeError,
     #[display(fmt = "An internal error occurred. Please try again later.")]
     InternalError,
 }
@@ -69,6 +73,8 @@ impl error::ResponseError for UserError {
             | UserError::InvalidEmailAddress
             | UserError::InvalidClientIdError
             | UserError::InvalidAuthStrategyError
+            | UserError::AccountAlreadyLinkedError
+            | UserError::InvalidAccountTypeError
             | UserError::ProjectNotActiveError => StatusCode::BAD_REQUEST,
         }
     }

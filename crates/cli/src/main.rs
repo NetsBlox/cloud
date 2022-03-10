@@ -5,9 +5,10 @@ use std::fs;
 use clap::{Parser, Subcommand};
 use futures_util::StreamExt;
 use inquire::{Confirm, Password, PasswordDisplayMode};
-use netsblox_api::{
-    Client, Config, Credentials, FriendLinkState, InvitationState, LibraryPublishState, ServiceHost,
+use netsblox_api::core::{
+    FriendLinkState, InvitationState, LibraryPublishState, LinkedAccount, ServiceHost,
 };
+use netsblox_api::{Client, Config, Credentials};
 use std::path::Path;
 
 #[derive(Subcommand, Debug)]
@@ -49,17 +50,22 @@ enum Users {
     List, // TODO: add verbose option?
     //
     Link {
-        account: String,
+        /// Snap! username to link to NetsBlox account
+        username: String,
+        /// Snap! password
         password: String,
-        #[clap(short, long, default_value = "Snap!")]
-        strategy: String,
+        // #[clap(short, long, default_value = "Snap")]
+        // strategy: String,
+        /// Perform the operation as this user
         #[clap(short, long)]
         user: Option<String>,
     },
     Unlink {
-        account: String,
-        #[clap(short, long, default_value = "Snap!")]
-        strategy: String,
+        /// Snap! username to unlink from NetsBlox account
+        username: String,
+        // #[clap(short, long, default_value = "Snap!")]
+        // strategy: String,
+        /// Perform the operation as this user
         #[clap(short, long)]
         user: Option<String>,
     },
@@ -517,25 +523,25 @@ async fn main() -> Result<(), confy::ConfyError> {
                 println!("{:?}", user);
             }
             Users::Link {
-                account,
+                username,
                 password,
-                strategy,
                 user,
             } => {
-                let username = user.clone().unwrap_or(current_user);
-                client
-                    .link_account(&username, account, password, strategy)
-                    .await;
-                todo!();
+                let as_user = user.clone().unwrap_or(current_user);
+                let creds = netsblox_api::core::Credentials::Snap {
+                    username: username.to_owned(),
+                    password: password.to_owned(),
+                };
+                client.link_account(&as_user, &creds).await;
             }
-            Users::Unlink {
-                account,
-                strategy,
-                user,
-            } => {
-                let username = user.clone().unwrap_or(current_user);
-                client.unlink_account(&username, account, strategy).await;
-            } // TODO: list linked accounts?
+            Users::Unlink { username, user } => {
+                let as_user = user.clone().unwrap_or(current_user);
+                let account = LinkedAccount {
+                    username: username.to_owned(),
+                    strategy: "snap".to_owned(), // FIXME: add to linked account impl?
+                };
+                client.unlink_account(&as_user, &account).await;
+            }
         },
         Command::Projects(cmd) => match &cmd.subcmd {
             Projects::Import {

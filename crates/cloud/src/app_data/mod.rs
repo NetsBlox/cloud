@@ -115,6 +115,10 @@ impl AppData {
             )
             .await
             .unwrap();
+
+        // TODO: add id index to projects
+        // let model = IndexModel
+        // self.project_metadata.create_index(model, None).await;
     }
 
     pub fn collection<T>(&self, name: &str) -> Collection<T> {

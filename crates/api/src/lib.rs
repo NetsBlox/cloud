@@ -1,12 +1,14 @@
-use futures_util::stream::SplitStream;
-pub use netsblox_core::{
+pub mod core;
+
+use crate::core::{
     ClientConfig, ClientState, ClientStateData, CollaborationInvite, CreateLibraryData,
     ExternalClient, ExternalClientState, Group, InvitationId, InvitationState, LibraryMetadata,
-    LibraryPublishState, Project, ProjectId, RoleData, RoomState, ServiceHost, UpdateProjectData,
-    UpdateRoleData,
+    LibraryPublishState, LinkedAccount, Project, ProjectId, RoleData, RoomState, ServiceHost,
+    UpdateProjectData, UpdateRoleData,
 };
+use crate::core::{FriendInvite, FriendLinkState, InvitationResponse, ProjectMetadata, User};
+use futures_util::stream::SplitStream;
 use netsblox_core::{CreateGroupData, UpdateGroupData};
-pub use netsblox_core::{FriendInvite, FriendLinkState, InvitationResponse, ProjectMetadata, User};
 use reqwest::{self, Method, RequestBuilder};
 use serde::{Deserialize, Serialize};
 use tokio::net::TcpStream;
@@ -173,23 +175,19 @@ impl Client {
         println!("status {}", response.status());
     }
 
-    pub async fn link_account(
-        &self,
-        username: &str,
-        account: &str,
-        password: &str,
-        strategy: &str,
-    ) {
+    pub async fn link_account(&self, username: &str, credentials: &core::Credentials) {
         let response = self
             .request(Method::POST, &format!("/users/{}/link/", username))
+            .json(&credentials)
             .send()
             .await
             .unwrap();
+
         println!("status: {}", response.status());
-        todo!();
+        println!("text: {}", response.text().await.unwrap());
     }
 
-    pub async fn unlink_account(&self, username: &str, account: &str, strategy: &str) {
+    pub async fn unlink_account(&self, username: &str, account: &LinkedAccount) {
         let response = self
             .request(Method::POST, &format!("/users/{}/unlink/", username))
             .send()
