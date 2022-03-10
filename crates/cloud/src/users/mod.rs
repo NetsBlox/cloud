@@ -12,7 +12,6 @@ use lazy_static::lazy_static;
 use mongodb::bson::{doc, DateTime};
 use netsblox_core::LinkedAccount;
 use regex::Regex;
-use reqwest::Method;
 use rustrict::CensorStr;
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha512};
@@ -59,6 +58,7 @@ pub async fn is_super_user(app: &AppData, session: &Session) -> bool {
         }
     } else {
         println!("no username in the cookie");
+        // TODO: purge the cookie?
         false
     }
 }
@@ -209,10 +209,8 @@ fn is_valid_username(name: &str) -> bool {
 
 #[derive(Serialize, Deserialize, Debug)]
 #[serde(rename_all = "camelCase")]
-struct LoginCredentials {
-    username: String,
-    password: String,
-    strategy: Option<String>,
+struct LoginRequest {
+    credentials: strategies::Credentials,
     client_id: Option<String>, // TODO: add a secret token for the client?
 }
 
@@ -221,15 +219,15 @@ struct LoginCredentials {
 #[post("/login")]
 async fn login(
     app: web::Data<AppData>,
-    credentials: web::Json<LoginCredentials>,
+    request: web::Json<LoginRequest>,
     session: Session,
 ) -> Result<HttpResponse, UserError> {
     // TODO: check if tor IP
     // TODO: record login IPs?
-    println!("credentials: {:?}", &credentials);
-    let credentials = credentials.into_inner();
-    let client_id = credentials.client_id.clone();
-    let user = authenticate(&app, credentials).await?;
+    println!("credentials: {:?}", &request);
+    let request = request.into_inner();
+    let client_id = request.client_id.clone();
+    let user = strategies::login(&app, request.credentials).await?;
 
     let query = doc! {"$or": [
         {"username": &user.username},
@@ -245,119 +243,10 @@ async fn login(
         return Err(UserError::BannedUserError);
     }
 
+    update_ownership(&app, &client_id, &user.username).await?;
     // TODO: should we record more here? like security roles?
     session.insert("username", &user.username).unwrap();
-    update_ownership(&app, &client_id, &user.username).await?;
     Ok(HttpResponse::Ok().body(user.username))
-}
-
-async fn authenticate(app: &AppData, credentials: LoginCredentials) -> Result<User, UserError> {
-    let strategy_name = credentials.strategy.unwrap_or("NetsBlox".to_owned());
-    match strategy_name.as_str() {
-        "Snap!" => {
-            // TODO: if successful, check for an existing account
-            // TODO: if exists, return it; else create it
-            let url = &format!(
-                "https://snap.berkeley.edu/api/v1/users/{}/login",
-                credentials.username,
-            );
-
-            let client = reqwest::Client::new();
-            let pwd_hash = sha512(&credentials.password);
-            let response = client
-                .request(Method::POST, url)
-                .body(pwd_hash)
-                .send()
-                .await
-                .map_err(|_err| UserError::SnapConnectionError)?;
-
-            if response.status().as_u16() > 399 {
-                return Err(UserError::IncorrectUsernameOrPasswordError);
-            }
-
-            let account = LinkedAccount {
-                username: credentials.username.to_owned(),
-                strategy: strategy_name,
-            };
-            let query = doc! {"linkedAccounts": {"$elemMatch": account}};
-            let user = app
-                .users
-                .find_one(query, None)
-                .await
-                .map_err(|_err| InternalError::DatabaseConnectionError)?
-                .map(|user| futures::future::ready(user)) // TODO: wrap in a future
-                .unwrap_or_else(|| create_user_with_account(&app, &credentials));
-            Ok(user)
-        }
-        "NetsBlox" => {
-            let query = doc! {"username": &credentials.username};
-            let user = app
-                .users
-                .find_one(query, None)
-                .await
-                .map_err(|_err| InternalError::DatabaseConnectionError)?
-                .ok_or_else(|| UserError::UserNotFoundError)?;
-
-            let hash = sha512(&(credentials.password + &user.salt));
-            if hash != user.hash {
-                return Err(UserError::IncorrectPasswordError);
-            }
-            Ok(user)
-        }
-        _ => Err(UserError::InvalidAuthStrategyError),
-    }
-}
-
-async fn create_user_with_account(app: &AppData, credentials: &LinkedAccount) -> User {
-    let username = username_from(app, credentials).await;
-    // TODO: create the user
-    let query = doc! {"username": username};
-    let user = User {
-        username,
-        email,
-        hash: "None".to_owned(),
-    };
-    let update = doc!("$setOnInsert": user);
-    //app.users.update(query, update, options);
-    app.users.insert_one().await;
-    user
-    // TODO: create a new user; return the future
-}
-
-async fn username_from(app: &AppData, credentials: &LinkedAccount) -> String {
-    let starts_with_name = mongodb::bson::Regex {
-        pattern: format!("^{}", &username),
-        options: String::new(),
-    };
-    let query = doc! {"username": {"$regex": starts_with_name}};
-    let existing_names = app
-        .users
-        .find(query, None)
-        .await
-        .map_err(|_err| InternalError::DatabaseConnectionError)?
-        .try_filter_map(|user| Some(user.username))
-        .unwrap()
-        .collect::<HashSet<_>>();
-
-    let basename = credentials.username;
-
-    if existing_names.contains(basename) {
-        let strategy = credentials
-            .strategy
-            .to_ascii_lowercase()
-            .chars()
-            .filter(|l| l.is_alphabetic());
-        let mut username = format!("{}_{}", basename, strategy);
-        let mut count = 2;
-
-        while existing_names.contains(username) {
-            username = format!("{}_{}", basename, count);
-            count += 1;
-        }
-        username
-    } else {
-        basename
-    };
 }
 
 async fn update_ownership(
@@ -424,8 +313,12 @@ impl BannedAccount {
 async fn ban_user(
     app: web::Data<AppData>,
     path: web::Path<(String,)>,
+    session: Session,
 ) -> Result<HttpResponse, UserError> {
     let (username,) = path.into_inner();
+    // TODO: disallow self-ban?
+    ensure_can_edit_user(&app, &session, &username).await?;
+
     let query = doc! {"username": username};
     match app.users.find_one(query, None).await.unwrap() {
         Some(user) => {
@@ -436,8 +329,6 @@ async fn ban_user(
         }
         None => Err(UserError::UserNotFoundError),
     }
-
-    // TODO: authenticate!
 }
 
 #[post("/{username}/delete")]
@@ -555,15 +446,35 @@ async fn view_user(
 async fn link_account(
     app: web::Data<AppData>,
     path: web::Path<(String,)>,
-    account: web::Json<LinkedAccount>,
+    creds: web::Json<strategies::Credentials>,
     session: Session,
 ) -> Result<HttpResponse, UserError> {
     let (username,) = path.into_inner();
     ensure_can_edit_user(&app, &session, &username).await?;
-    // TODO: check if already used
-    // TODO: ensure valid account
+    let creds = creds.into_inner();
+
+    match creds {
+        strategies::Credentials::NetsBlox { .. } => return Err(UserError::InvalidAccountTypeError),
+        _ => {}
+    };
+
+    // TODO: should we wrap this error?
+    strategies::authenticate(&creds).await?;
+
+    let account: LinkedAccount = creds.into();
+    let query = doc! {"linkedAccounts": {"$elemMatch": &account}};
+    let existing = app
+        .users
+        .find_one(query, None)
+        .await
+        .map_err(|_err| InternalError::DatabaseConnectionError)?; // TODO: wrap the error?
+                                                                  // .and_then(|_user| UserError::AccountAlreadyLinkedErrorli
+    if existing.is_some() {
+        return Err(UserError::AccountAlreadyLinkedError);
+    }
+
     let query = doc! {"username": &username};
-    let update = doc! {"$push": {"linkedAccounts": &account.into_inner()}};
+    let update = doc! {"$push": {"linkedAccounts": &account}};
     let result = app
         .users
         .update_one(query, update, None)

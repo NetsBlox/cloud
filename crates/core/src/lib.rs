@@ -47,6 +47,28 @@ pub struct LinkedAccount {
     pub strategy: String, // TODO: migrate type -> strategy
 }
 
+#[derive(Deserialize, Serialize, Debug)] // TODO: move to core??
+pub enum Credentials {
+    Snap { username: String, password: String },
+    NetsBlox { username: String, password: String },
+}
+
+impl From<Credentials> for LinkedAccount {
+    fn from(creds: Credentials) -> LinkedAccount {
+        match creds {
+            Credentials::Snap { username, .. } => LinkedAccount {
+                username,
+                strategy: "snap".to_owned(),
+            },
+            Credentials::NetsBlox { username, .. } => LinkedAccount {
+                // TODO: should this panic?
+                username,
+                strategy: "netsblox".to_owned(),
+            },
+        }
+    }
+}
+
 #[derive(Deserialize, Serialize, Clone, Debug)]
 pub enum FriendLinkState {
     PENDING,
