@@ -184,17 +184,16 @@ impl Client {
             .unwrap();
 
         println!("status: {}", response.status());
-        println!("text: {}", response.text().await.unwrap());
     }
 
     pub async fn unlink_account(&self, username: &str, account: &LinkedAccount) {
         let response = self
-            .request(Method::POST, &format!("/users/{}/unlink/", username))
+            .request(Method::POST, &format!("/users/{}/unlink", username))
+            .json(&account)
             .send()
             .await
             .unwrap();
         println!("status: {}", response.status());
-        todo!();
     }
 
     // Project management
