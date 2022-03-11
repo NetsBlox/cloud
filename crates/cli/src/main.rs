@@ -48,7 +48,12 @@ enum Users {
         user: Option<String>,
     },
     List, // TODO: add verbose option?
-    //
+    // TODO: add ban
+    /// Ban a given user. Email address will also be blacklisted
+    Ban {
+        /// NetsBlox user to ban
+        username: String,
+    },
     Link {
         /// Snap! username to link to NetsBlox account
         username: String,
@@ -541,6 +546,9 @@ async fn main() -> Result<(), confy::ConfyError> {
                     strategy: "snap".to_owned(), // FIXME: add to linked account impl?
                 };
                 client.unlink_account(&as_user, &account).await;
+            }
+            Users::Ban { username } => {
+                client.ban_user(&username).await;
             }
         },
         Command::Projects(cmd) => match &cmd.subcmd {
