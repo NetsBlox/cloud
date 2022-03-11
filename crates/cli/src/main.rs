@@ -6,9 +6,9 @@ use clap::{Parser, Subcommand};
 use futures_util::StreamExt;
 use inquire::{Confirm, Password, PasswordDisplayMode};
 use netsblox_api::core::{
-    FriendLinkState, InvitationState, LibraryPublishState, LinkedAccount, ServiceHost,
+    Credentials, FriendLinkState, InvitationState, LibraryPublishState, LinkedAccount, ServiceHost,
 };
-use netsblox_api::{Client, Config, Credentials};
+use netsblox_api::{Client, Config};
 use std::path::Path;
 
 #[derive(Subcommand, Debug)]
@@ -414,8 +414,8 @@ struct Cli {
     cmd: Command,
 }
 
-fn prompt_credentials() -> Credentials {
-    // FIXME: can't delete w/ backspace???
+fn prompt_credentials() -> (String, String) {
+    // FIXME: can't delete w/ backspae???
     let username = inquire::Text::new("Username:")
         .prompt()
         .expect("Unable to prompt username");
@@ -426,7 +426,7 @@ fn prompt_credentials() -> Credentials {
         .prompt()
         .expect("Unable to prompt password");
 
-    Credentials { username, password }
+    (username, password)
 }
 
 #[tokio::main]
@@ -448,12 +448,19 @@ async fn main() -> Result<(), confy::ConfyError> {
     };
 
     if login_required {
-        let credentials = prompt_credentials();
-        let token = netsblox_api::login(&cfg, &credentials)
+        let (username, password) = prompt_credentials();
+        let request = netsblox_api::core::LoginRequest {
+            client_id: None,
+            credentials: netsblox_api::core::Credentials::NetsBlox {
+                username: username.clone(),
+                password,
+            },
+        };
+        let token = netsblox_api::login(&cfg, &request)
             .await
             .expect("Login failed");
         cfg.token = Some(token);
-        cfg.username = Some(credentials.username.to_owned());
+        cfg.username = Some(username.to_owned());
         confy::store(&APP_NAME, &cfg)?;
     }
     let current_user = cfg.username.as_ref().unwrap().clone();

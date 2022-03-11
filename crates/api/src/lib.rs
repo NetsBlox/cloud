@@ -33,14 +33,8 @@ impl Default for Config {
     }
 }
 
-#[derive(Serialize, Debug)]
-pub struct Credentials {
-    pub username: String,
-    pub password: String,
-}
-
 pub type Token = String;
-pub async fn login(cfg: &Config, credentials: &Credentials) -> Result<Token, reqwest::Error> {
+pub async fn login(cfg: &Config, credentials: &LoginRequest) -> Result<Token, reqwest::Error> {
     let client = reqwest::Client::new();
     let response = client
         .post(format!("{}/users/login", cfg.url))
