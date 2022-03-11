@@ -3,7 +3,7 @@
 
 - [ ] allow login with linked accounts
     - working on this...
-    - need to be able to retrieve the email address
+    - [x] need to be able to retrieve the email address
 
 - [ ] apiKeys. Should these be managed from the services server?
     - probably
@@ -33,16 +33,6 @@
 - [ ] test ban account
     - [ ] email should be banned, too
     - [ ] no new create
-
-- [ ] users
-    - [x] create
-    - [x] list
-    - [x] set-password
-    - [x] list
-    - [x] delete
-    - [x] view
-    - [ ] link
-    - [ ] unlink
 
 - general
     - [ ] finalize output formats (machine vs human?)
@@ -179,7 +169,7 @@
 - [ ] gallery
 
 ## CLI
-- add CLI
+- [x] add CLI
 - write integration tests?
     - import the server and test against it?
 
@@ -449,4 +439,14 @@
 
 - [x] network routes
     - [x] message passing
+
+- [x] users
+    - [x] create
+    - [x] list
+    - [x] set-password
+    - [x] list
+    - [x] delete
+    - [x] view
+    - [x] link
+    - [x] unlink
 

@@ -3,8 +3,8 @@ pub mod core;
 use crate::core::{
     ClientConfig, ClientState, ClientStateData, CollaborationInvite, CreateLibraryData,
     ExternalClient, ExternalClientState, Group, InvitationId, InvitationState, LibraryMetadata,
-    LibraryPublishState, LinkedAccount, Project, ProjectId, RoleData, RoomState, ServiceHost,
-    UpdateProjectData, UpdateRoleData,
+    LibraryPublishState, LinkedAccount, LoginRequest, Project, ProjectId, RoleData, RoomState,
+    ServiceHost, UpdateProjectData, UpdateRoleData,
 };
 use crate::core::{FriendInvite, FriendLinkState, InvitationResponse, ProjectMetadata, User};
 use futures_util::stream::SplitStream;
@@ -50,13 +50,15 @@ pub async fn login(cfg: &Config, credentials: &Credentials) -> Result<Token, req
 
     println!("{:?} status {}", &credentials, response.status());
     println!("headers: {:?}", &response.headers());
-    let cookie = response
-        .cookies()
-        .find(|cookie| cookie.name() == "netsblox")
-        .ok_or("No cookie received.")
-        .unwrap();
+    println!("text: {:?}", &response.text().await.unwrap());
+    todo!();
+    // let cookie = response
+    //     .cookies()
+    //     .find(|cookie| cookie.name() == "netsblox")
+    //     .ok_or("No cookie received.")
+    //     .unwrap();
 
-    Ok(cookie.value().to_owned())
+    // Ok(cookie.value().to_owned())
 }
 
 #[derive(Serialize)]
@@ -87,7 +89,7 @@ impl Client {
             .header("Cookie", format!("netsblox={}", token))
     }
 
-    pub async fn login(&self, credentials: &Credentials) -> Result<Token, reqwest::Error> {
+    pub async fn login(&self, credentials: &LoginRequest) -> Result<Token, reqwest::Error> {
         let response = self
             .request(Method::POST, "/users/login")
             .json(&credentials)
@@ -190,6 +192,15 @@ impl Client {
         let response = self
             .request(Method::POST, &format!("/users/{}/unlink", username))
             .json(&account)
+            .send()
+            .await
+            .unwrap();
+        println!("status: {}", response.status());
+    }
+
+    pub async fn ban_user(&self, username: &str) {
+        let response = self
+            .request(Method::POST, &format!("/users/{}/ban", username))
             .send()
             .await
             .unwrap();

@@ -214,8 +214,6 @@ struct LoginRequest {
     client_id: Option<String>, // TODO: add a secret token for the client?
 }
 
-// TODO: should we change the endpoints to /users/{id}
-// (post -> create; get -> view; patch -> update, delete -> delete)
 #[post("/login")]
 async fn login(
     app: web::Data<AppData>,
@@ -513,6 +511,7 @@ pub fn config(cfg: &mut web::ServiceConfig) {
         .service(login)
         .service(logout)
         .service(delete_user)
+        .service(ban_user)
         .service(reset_password)
         .service(change_password)
         .service(view_user)

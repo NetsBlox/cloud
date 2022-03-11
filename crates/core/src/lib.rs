@@ -47,7 +47,14 @@ pub struct LinkedAccount {
     pub strategy: String, // TODO: migrate type -> strategy
 }
 
-#[derive(Deserialize, Serialize, Debug)] // TODO: move to core??
+#[derive(Serialize, Deserialize, Debug)]
+#[serde(rename_all = "camelCase")]
+pub struct LoginRequest {
+    pub credentials: Credentials,
+    pub client_id: Option<String>, // TODO: add a secret token for the client?
+}
+
+#[derive(Deserialize, Serialize, Debug)]
 pub enum Credentials {
     Snap { username: String, password: String },
     NetsBlox { username: String, password: String },
