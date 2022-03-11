@@ -147,9 +147,7 @@ async fn create_user(
 ) -> Result<HttpResponse, UserError> {
     ensure_valid_username(&user_data.username)?;
     ensure_valid_email(&user_data.email)?;
-    println!("{:?}", user_data.password);
 
-    // TODO: ban the email address, too
     if user_data.admin.unwrap_or(false) {
         ensure_is_super_user(&app, &session).await?;
     } else if let Some(group_id) = &user_data.group_id {
@@ -167,7 +165,6 @@ async fn create_user(
         return Err(UserError::InvalidEmailAddress);
     }
 
-    println!("create user: {}, {}", &user.username, &user.hash);
     let query = doc! {"username": &user.username};
     let update = doc! {"$setOnInsert": &user};
     let options = mongodb::options::UpdateOptions::builder()
