@@ -30,10 +30,6 @@
     - [ ] respond-to-invite
         - this probably doesn't make sense from the CLI
 
-- [ ] test ban account
-    - [ ] email should be banned, too
-    - [ ] no new create
-
 - general
     - [ ] finalize output formats (machine vs human?)
     - [ ] finish updating the browser
@@ -449,4 +445,8 @@
     - [x] view
     - [x] link
     - [x] unlink
+
+- [x] test ban account
+    - [x] email should be banned, too
+    - [x] no new create
 

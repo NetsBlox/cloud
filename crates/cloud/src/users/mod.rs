@@ -157,6 +157,15 @@ async fn create_user(
     }
 
     let user = User::from(user_data.into_inner());
+    let query = doc! {"email": &user.email};
+    let banned_accounts = app.collection::<BannedAccount>("bannedAccounts");
+    if let Some(_account) = banned_accounts
+        .find_one(query, None)
+        .await
+        .map_err(|_err| InternalError::DatabaseConnectionError)?
+    {
+        return Err(UserError::InvalidEmailAddress);
+    }
 
     println!("create user: {}, {}", &user.username, &user.hash);
     let query = doc! {"username": &user.username};
