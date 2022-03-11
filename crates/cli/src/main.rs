@@ -414,8 +414,13 @@ struct Cli {
     cmd: Command,
 }
 
-fn prompt_credentials() -> (String, String) {
-    // FIXME: can't delete w/ backspae???
+fn prompt_credentials() -> (String, String, bool) {
+    // FIXME: can't delete w/ backspace???
+    let use_snap = inquire::Confirm::new("Would you like to login using Snap?")
+        .with_default(false)
+        .prompt()
+        .expect("Unable to prompt for credentials");
+
     let username = inquire::Text::new("Username:")
         .prompt()
         .expect("Unable to prompt username");
@@ -426,7 +431,7 @@ fn prompt_credentials() -> (String, String) {
         .prompt()
         .expect("Unable to prompt password");
 
-    (username, password)
+    (username, password, use_snap)
 }
 
 #[tokio::main]
@@ -448,27 +453,29 @@ async fn main() -> Result<(), confy::ConfyError> {
     };
 
     if login_required {
-        let (username, password) = prompt_credentials();
-        let request = netsblox_api::core::LoginRequest {
-            client_id: None,
-            credentials: netsblox_api::core::Credentials::NetsBlox {
-                username: username.clone(),
-                password,
-            },
+        let (username, password, use_snap) = prompt_credentials();
+        let credentials = if use_snap {
+            Credentials::Snap { username, password }
+        } else {
+            Credentials::NetsBlox { username, password }
         };
-        let token = netsblox_api::login(&cfg, &request)
+        let request = netsblox_api::core::LoginRequest {
+            credentials,
+            client_id: None,
+        };
+        netsblox_api::login(&mut cfg, &request)
             .await
             .expect("Login failed");
-        cfg.token = Some(token);
-        cfg.username = Some(username.to_owned());
+
         confy::store(&APP_NAME, &cfg)?;
     }
     let current_user = cfg.username.as_ref().unwrap().clone();
     let client = Client::new(cfg.clone());
 
     // TODO: login if cookie is invalid. Or just throw an error for user to re-login
+    // TODO: Or just keep track of when it is no longer valid...
     match &args.cmd {
-        Command::Login => {}
+        Command::Login { .. } => {}
         Command::Logout => {
             cfg.token = None;
             cfg.username = None;

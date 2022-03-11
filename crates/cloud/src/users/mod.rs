@@ -10,7 +10,7 @@ use actix_web::{web, HttpResponse};
 use futures::TryStreamExt;
 use lazy_static::lazy_static;
 use mongodb::bson::{doc, DateTime};
-use netsblox_core::LinkedAccount;
+use netsblox_core::{LinkedAccount, LoginRequest};
 use regex::Regex;
 use rustrict::CensorStr;
 use serde::{Deserialize, Serialize};
@@ -205,13 +205,6 @@ fn is_valid_username(name: &str) -> bool {
         static ref USERNAME_REGEX: Regex = Regex::new(r"^[a-zA-Z][a-zA-Z0-9_\-]+$").unwrap();
     }
     USERNAME_REGEX.is_match(name) && !name.is_inappropriate()
-}
-
-#[derive(Serialize, Deserialize, Debug)]
-#[serde(rename_all = "camelCase")]
-struct LoginRequest {
-    credentials: strategies::Credentials,
-    client_id: Option<String>, // TODO: add a secret token for the client?
 }
 
 #[post("/login")]

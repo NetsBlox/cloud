@@ -34,7 +34,7 @@ impl Default for Config {
 }
 
 pub type Token = String;
-pub async fn login(cfg: &Config, credentials: &LoginRequest) -> Result<Token, reqwest::Error> {
+pub async fn login(cfg: &mut Config, credentials: &LoginRequest) -> Result<(), reqwest::Error> {
     let client = reqwest::Client::new();
     let response = client
         .post(format!("{}/users/login", cfg.url))
@@ -44,15 +44,18 @@ pub async fn login(cfg: &Config, credentials: &LoginRequest) -> Result<Token, re
 
     println!("{:?} status {}", &credentials, response.status());
     println!("headers: {:?}", &response.headers());
-    println!("text: {:?}", &response.text().await.unwrap());
-    todo!();
-    // let cookie = response
-    //     .cookies()
-    //     .find(|cookie| cookie.name() == "netsblox")
-    //     .ok_or("No cookie received.")
-    //     .unwrap();
 
-    // Ok(cookie.value().to_owned())
+    let cookie = response
+        .cookies()
+        .find(|cookie| cookie.name() == "netsblox")
+        .ok_or("No cookie received.")
+        .unwrap();
+
+    let token = cookie.value().to_owned();
+
+    cfg.username = Some(response.text().await.unwrap());
+    cfg.token = Some(token);
+    Ok(())
 }
 
 #[derive(Serialize)]
