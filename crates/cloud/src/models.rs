@@ -1,4 +1,5 @@
 use mongodb::bson::{doc, Bson, DateTime};
+use netsblox_core::OccupantInviteReq;
 pub use netsblox_core::{
     CreateGroupData, FriendInvite, FriendLinkState, Group, GroupId, InvitationState, LinkedAccount,
     ProjectId, RoleData, RoleMetadata, SaveState, ServiceHost,
@@ -235,6 +236,26 @@ impl From<Project> for netsblox_core::Project {
             collaborators: project.collaborators,
             save_state: project.save_state,
             roles: project.roles,
+        }
+    }
+}
+
+#[derive(Deserialize, Serialize, Debug)]
+#[serde(rename_all = "camelCase")]
+pub struct OccupantInvite {
+    username: String,
+    project_id: ProjectId,
+    role_id: String,
+}
+
+impl OccupantInvite {
+    pub fn new(project_id: ProjectId, req: OccupantInviteReq) -> Self {
+        OccupantInvite {
+            project_id,
+            username: req.username,
+            role_id: req.role_id,
+            // TODO: add creation time
+            // TODO: delete after a fixed amount of time
         }
     }
 }

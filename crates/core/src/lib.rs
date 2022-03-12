@@ -372,3 +372,10 @@ pub struct OccupantState {
     pub id: ClientID,
     pub name: String,
 }
+
+#[derive(Deserialize, Serialize, Debug)]
+#[serde(rename_all = "camelCase")]
+pub struct OccupantInviteReq {
+    pub username: String,
+    pub role_id: String,
+}

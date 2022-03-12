@@ -1,10 +1,11 @@
 use futures::future::join_all;
 use futures::join;
 use mongodb::bson::doc;
-use mongodb::options::{FindOneAndUpdateOptions, ReturnDocument};
+use mongodb::options::{FindOneAndUpdateOptions, IndexOptions, ReturnDocument};
 use rusoto_core::credential::StaticProvider;
 use rusoto_core::Region;
 use std::collections::{HashMap, HashSet};
+use std::time::Duration;
 use uuid::Uuid;
 
 use crate::config::Settings;
@@ -12,11 +13,11 @@ use crate::errors::{InternalError, UserError};
 use crate::models::{
     CollaborationInvite, FriendLink, Group, Project, ProjectMetadata, SaveState, User,
 };
-use crate::models::{RoleData, RoleMetadata};
+use crate::models::{OccupantInvite, RoleData, RoleMetadata};
 use crate::network::topology::{self, SetStorage, TopologyActor};
 use actix::{Actor, Addr};
 use futures::TryStreamExt;
-use mongodb::{Client, Collection, Database};
+use mongodb::{Client, Collection, Database, IndexModel};
 use rusoto_s3::{
     CreateBucketRequest, DeleteObjectOutput, DeleteObjectRequest, GetObjectRequest,
     PutObjectOutput, PutObjectRequest, S3Client, S3,
@@ -35,6 +36,7 @@ pub struct AppData {
     pub friends: Collection<FriendLink>,
     pub project_metadata: Collection<ProjectMetadata>,
     pub collab_invites: Collection<CollaborationInvite>,
+    pub occupant_invites: Collection<OccupantInvite>,
 }
 
 impl AppData {
@@ -68,6 +70,8 @@ impl AppData {
 
         let collab_invites =
             db.collection::<CollaborationInvite>(&(prefix.to_owned() + "collaborationInvitations"));
+        let occupant_invites =
+            db.collection::<OccupantInvite>(&(prefix.to_owned() + "occupantInvites"));
         let friends = db.collection::<FriendLink>(&(prefix.to_owned() + "friends"));
         let network = network.unwrap_or_else(|| TopologyActor {}.start());
         network.do_send(SetStorage {
@@ -86,6 +90,7 @@ impl AppData {
             project_metadata,
 
             collab_invites,
+            occupant_invites,
             friends,
         }
     }
@@ -116,9 +121,32 @@ impl AppData {
             .await
             .unwrap();
 
-        // TODO: add id index to projects
-        // let model = IndexModel
-        // self.project_metadata.create_index(model, None).await;
+        let index_opts = IndexOptions::builder()
+            .expire_after(Duration::from_secs(60 * 60))
+            .build();
+        let invite_index = IndexModel::builder()
+            .keys(doc! {"createdAt": 1})
+            .options(index_opts)
+            .build();
+        self.occupant_invites
+            .create_index(invite_index, None)
+            .await
+            .unwrap();
+
+        self.occupant_invites
+            .create_index(
+                IndexModel::builder()
+                    .keys(doc! {"project_id": 1, "role_id": 1})
+                    .build(),
+                None,
+            )
+            .await
+            .unwrap();
+
+        self.project_metadata
+            .create_index(IndexModel::builder().keys(doc! {"id": 1}).build(), None)
+            .await
+            .unwrap();
     }
 
     pub fn collection<T>(&self, name: &str) -> Collection<T> {

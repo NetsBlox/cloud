@@ -2,6 +2,7 @@ pub mod topology;
 
 use crate::app_data::AppData;
 use crate::errors::{InternalError, UserError};
+use crate::models::OccupantInvite;
 use crate::network::topology::{ClientState, ExternalClientState};
 use crate::projects::ensure_can_edit_project;
 use crate::users::ensure_is_super_user;
@@ -11,19 +12,20 @@ use actix_web::{delete, get, post};
 use actix_web::{web, Error, HttpRequest, HttpResponse};
 use actix_web_actors::ws::{self, CloseCode};
 use mongodb::bson::doc;
-use netsblox_core::{ClientStateData, ProjectId};
+use netsblox_core::{ClientID, ClientStateData, OccupantInviteReq, ProjectId};
 use serde::Deserialize;
 use serde_json::Value;
 
 pub type AppID = String;
 
-#[post("/{client}/state")] // TODO: add token here, too
+#[post("/{client}/state")] // TODO: add token here, too?
 async fn set_client_state(
     app: web::Data<AppData>,
     path: web::Path<(String,)>,
     body: web::Json<ClientStateData>,
     session: Session,
 ) -> HttpResponse {
+    // TODO: should we allow users to set the client state for some other user?
     let username = session.get::<String>("username").unwrap();
     let (client_id,) = path.into_inner();
     if !client_id.starts_with('_') {
@@ -150,25 +152,50 @@ async fn get_external_clients(
     Ok(HttpResponse::Ok().json(clients))
 }
 
-#[delete("/id/{projectID}/occupants/{clientID}")]
-async fn remove_occupant() -> Result<HttpResponse, std::io::Error> {
-    todo!();
-}
-
-#[derive(Deserialize)]
-#[serde(rename_all = "camelCase")]
-struct OccupantInvite {
-    username: String,
-    role_id: String,
-    token: String, // TODO
-}
-
-#[post("/id/{projectID}/occupants/invite")] // TODO: add role ID
+#[post("/id/{projectID}/occupants/invite")]
 async fn invite_occupant(
-    invite: web::Json<OccupantInvite>,
-) -> Result<HttpResponse, std::io::Error> {
-    // TODO: generate a token for the user?
-    // TODO: these are probably fine to be transient
+    app: web::Data<AppData>,
+    body: web::Json<OccupantInviteReq>,
+    path: web::Path<(ProjectId,)>,
+    session: Session,
+) -> Result<HttpResponse, UserError> {
+    let (project_id,) = path.into_inner();
+    let query = doc! {"id": &project_id};
+    let metadata = app
+        .project_metadata
+        .find_one(query, None)
+        .await
+        .map_err(|_err| InternalError::DatabaseConnectionError)?
+        .ok_or_else(|| UserError::ProjectNotFoundError)?;
+
+    ensure_can_edit_project(&app, &session, None, &metadata).await?;
+
+    let invite = OccupantInvite::new(project_id, body.into_inner());
+    app.occupant_invites
+        .insert_one(invite, None)
+        .await
+        .map_err(|_err| InternalError::DatabaseConnectionError)?;
+
+    Ok(HttpResponse::Ok().body("Invitation sent!"))
+}
+
+#[delete("/id/{projectID}/occupants/{clientID}")]
+async fn evict_occupant(
+    app: web::Data<AppData>,
+    session: Session,
+    path: web::Path<(ProjectId, ClientID)>,
+) -> Result<HttpResponse, UserError> {
+    let (project_id, client_id) = path.into_inner();
+    let query = doc! {"id": project_id};
+    let metadata = app
+        .project_metadata
+        .find_one(query, None)
+        .await
+        .map_err(|_err| InternalError::DatabaseConnectionError)?
+        .ok_or_else(|| UserError::ProjectNotFoundError)?;
+
+    ensure_can_edit_project(&app, &session, None, &metadata).await?;
+    // TODO
     todo!();
 }
 
@@ -177,7 +204,9 @@ pub fn config(cfg: &mut web::ServiceConfig) {
         .service(connect_client)
         .service(get_external_clients)
         .service(get_room_state)
-        .service(get_rooms);
+        .service(get_rooms)
+        .service(invite_occupant)
+        .service(evict_occupant);
 }
 
 struct WsSession {

@@ -9,7 +9,7 @@ use actix::{Actor, AsyncContext, Context, Handler, MessageResult};
 use lazy_static::lazy_static;
 use mongodb::bson::doc;
 use mongodb::Collection;
-use netsblox_core::{ExternalClient, ProjectId, RoomState};
+use netsblox_core::{ClientID, ExternalClient, ProjectId, RoomState};
 use serde_json::Value;
 use std::sync::{Arc, RwLock};
 use uuid::Uuid;
