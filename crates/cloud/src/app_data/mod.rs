@@ -103,6 +103,8 @@ impl AppData {
             ..Default::default()
         };
         self.s3.create_bucket(request).await;
+
+        // TODO: create the indices
         self.db
             .run_command(
                 doc! {

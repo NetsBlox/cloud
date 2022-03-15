@@ -465,6 +465,24 @@ impl Topology {
             .get(&metadata.id)
             .map(|room| room.get_state(metadata, &self.usernames))
     }
+
+    pub async fn evict_client(&mut self, id: ClientID) {
+        let username = self.usernames.remove(&id);
+        self.reset_client_state(&id).await;
+        if let Some(username) = username {
+            if self.usernames.get(&id).is_none() {
+                self.usernames.insert(id, username);
+            }
+        }
+    }
+
+    pub fn get_client_state(&self, id: &ClientID) -> Option<&ClientState> {
+        self.states.get(id)
+    }
+
+    pub fn get_client_username(&self, id: &ClientID) -> Option<&String> {
+        self.usernames.get(id)
+    }
 }
 
 #[cfg(test)]

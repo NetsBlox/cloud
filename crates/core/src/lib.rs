@@ -203,7 +203,7 @@ pub struct ClientStateData {
     // pub token: Option<String>, // TODO: token for accessing the project; secret for controlling client
 }
 
-#[derive(Debug, Deserialize, Serialize)]
+#[derive(Debug, Deserialize, Serialize, Clone)]
 #[serde(rename_all = "camelCase")]
 pub enum ClientState {
     Browser(BrowserClientState),
@@ -217,7 +217,7 @@ pub struct BrowserClientState {
     pub project_id: String,
 }
 
-#[derive(Debug, Deserialize, Serialize)]
+#[derive(Debug, Deserialize, Serialize, Clone)]
 #[serde(rename_all = "camelCase")]
 pub struct ExternalClientState {
     pub address: String,

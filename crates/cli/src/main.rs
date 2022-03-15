@@ -277,6 +277,8 @@ enum Network {
         #[clap(short, long, default_value = "project")]
         address: String,
     },
+    /// Evict a client from their current role
+    Evict { client_id: String },
 }
 
 #[derive(Subcommand, Debug)]
@@ -765,6 +767,9 @@ async fn main() -> Result<(), confy::ConfyError> {
                         println!("{}", &message);
                     })
                     .await;
+            }
+            Network::Evict { client_id } => {
+                client.evict_occupant(client_id).await;
             }
         },
         Command::Friends(cmd) => match &cmd.subcmd {

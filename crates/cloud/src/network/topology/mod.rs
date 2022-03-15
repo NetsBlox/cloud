@@ -78,16 +78,6 @@ pub struct SendMessage {
     pub content: Value,
 }
 
-// impl ClientState {
-//     pub fn new(project_id: String, role_id: String, username: Option<String>) -> ClientState {
-//         ClientState {
-//             project_id,
-//             role_id,
-//             username,
-//         }
-//     }
-// }
-
 impl Handler<AddClient> for TopologyActor {
     type Result = ();
 
@@ -266,5 +256,77 @@ impl Handler<GetRoomState> for TopologyActor {
     fn handle(&mut self, msg: GetRoomState, _: &mut Context<Self>) -> Self::Result {
         let topology = TOPOLOGY.read().unwrap();
         MessageResult(GetRoomStateResult(topology.get_room_state(msg.metadata)))
+    }
+}
+
+#[derive(Message)]
+#[rtype(result = "EvictOccupantResult")]
+pub struct EvictOccupant {
+    pub client_id: ClientID,
+}
+
+#[derive(Message)]
+#[rtype(result = "()")]
+pub struct EvictOccupantResult(pub bool);
+
+impl Handler<EvictOccupant> for TopologyActor {
+    type Result = MessageResult<EvictOccupant>;
+
+    fn handle(&mut self, msg: EvictOccupant, ctx: &mut Context<Self>) -> Self::Result {
+        // MessageResult(EvictOccupantResult(topology.evict_client(msg.client_id)))
+
+        let fut = async {
+            let mut topology = TOPOLOGY.write().unwrap();
+            topology.evict_client(msg.client_id).await;
+        };
+        let fut = actix::fut::wrap_future(fut);
+        ctx.spawn(fut);
+        todo!();
+    }
+}
+
+#[derive(Message)]
+#[rtype(result = "GetClientStateResult")]
+pub struct GetClientState {
+    pub client_id: ClientID,
+}
+
+#[derive(Message)]
+#[rtype(result = "()")]
+pub struct GetClientStateResult(pub Option<ClientState>);
+
+impl Handler<GetClientState> for TopologyActor {
+    type Result = MessageResult<GetClientState>;
+
+    fn handle(&mut self, msg: GetClientState, _: &mut Context<Self>) -> Self::Result {
+        let topology = TOPOLOGY.read().unwrap();
+        MessageResult(GetClientStateResult(
+            topology
+                .get_client_state(&msg.client_id)
+                .map(|state| state.clone()),
+        ))
+    }
+}
+
+#[derive(Message)]
+#[rtype(result = "GetClientUsernameResult")]
+pub struct GetClientUsername {
+    pub client_id: ClientID,
+}
+
+#[derive(Message)]
+#[rtype(result = "()")]
+pub struct GetClientUsernameResult(pub Option<String>);
+
+impl Handler<GetClientUsername> for TopologyActor {
+    type Result = MessageResult<GetClientUsername>;
+
+    fn handle(&mut self, msg: GetClientUsername, _: &mut Context<Self>) -> Self::Result {
+        let topology = TOPOLOGY.read().unwrap();
+        MessageResult(GetClientUsernameResult(
+            topology
+                .get_client_username(&msg.client_id)
+                .map(|state| state.to_owned()),
+        ))
     }
 }

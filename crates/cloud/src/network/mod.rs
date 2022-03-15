@@ -4,32 +4,32 @@ use crate::app_data::AppData;
 use crate::errors::{InternalError, UserError};
 use crate::models::OccupantInvite;
 use crate::network::topology::{ClientState, ExternalClientState};
-use crate::projects::ensure_can_edit_project;
-use crate::users::ensure_is_super_user;
+use crate::projects::{ensure_can_edit_project, ensure_can_edit_project_id};
+use crate::users::{ensure_can_edit_user, ensure_is_super_user};
 use actix::{Actor, Addr, AsyncContext, Handler, StreamHandler};
 use actix_session::Session;
-use actix_web::{delete, get, post};
+use actix_web::{get, post};
 use actix_web::{web, Error, HttpRequest, HttpResponse};
 use actix_web_actors::ws::{self, CloseCode};
 use mongodb::bson::doc;
-use netsblox_core::{ClientID, ClientStateData, OccupantInviteReq, ProjectId};
+use netsblox_core::{BrowserClientState, ClientID, ClientStateData, OccupantInviteReq, ProjectId};
 use serde::Deserialize;
 use serde_json::Value;
 
 pub type AppID = String;
 
-#[post("/{client}/state")] // TODO: add token here, too?
+#[post("/{client}/state")] // TODO: add token here (in a header), too?
 async fn set_client_state(
     app: web::Data<AppData>,
     path: web::Path<(String,)>,
     body: web::Json<ClientStateData>,
     session: Session,
-) -> HttpResponse {
+) -> Result<HttpResponse, UserError> {
     // TODO: should we allow users to set the client state for some other user?
     let username = session.get::<String>("username").unwrap();
     let (client_id,) = path.into_inner();
     if !client_id.starts_with('_') {
-        return HttpResponse::BadRequest().body("Invalid client ID.");
+        return Err(UserError::InvalidClientIdError);
     }
 
     // TODO: Check that the user can set the state to the given value
@@ -39,28 +39,43 @@ async fn set_client_state(
     //   - the user can join the project. May need a token if invited as occupant
 
     let mut response = None;
-    let mut state = body.into_inner().state;
-    if let ClientState::External(client_state) = state {
-        let user_id = username.as_ref().unwrap_or_else(|| &client_id).to_owned();
-        let address = format!("{}@{}", client_state.address, user_id);
-        let app_id = client_state.app_id;
-        if app_id.to_lowercase() == topology::DEFAULT_APP_ID {
-            // TODO: make AppID a type
-            return HttpResponse::BadRequest().body("Invalid App ID.");
-        }
 
-        response = Some(address.clone());
-        state = ClientState::External(ExternalClientState { address, app_id });
+    let state = match body.into_inner().state {
+        ClientState::External(client_state) => {
+            // append the user ID to the address
+
+            let user_id = username.as_ref().unwrap_or_else(|| &client_id).to_owned();
+            let address = format!("{}@{}", client_state.address, user_id);
+            let app_id = client_state.app_id;
+            if app_id.to_lowercase() == topology::DEFAULT_APP_ID {
+                // TODO: make AppID a type
+                return Err(UserError::InvalidAppIdError);
+            }
+
+            response = Some(address.clone());
+            ClientState::External(ExternalClientState { address, app_id })
+        }
+        ClientState::Browser(client_state) => {
+            let query = doc! {"id": &client_state.project_id};
+            let metadata = app
+                .project_metadata
+                .find_one(query, None)
+                .await
+                .map_err(|_err| InternalError::DatabaseConnectionError)?
+                .ok_or_else(|| UserError::ProjectNotFoundError)?;
+
+            ensure_can_edit_project(&app, &session, Some(client_id.clone()), &metadata).await?;
+            ClientState::Browser(client_state)
+        }
     };
 
-    println!("setting state {:?} {:?}", &state, &username);
     app.network.do_send(topology::SetClientState {
         id: client_id,
         state,
         username,
     });
 
-    HttpResponse::Ok().body(response.unwrap_or_else(String::new))
+    Ok(HttpResponse::Ok().body(response.unwrap_or_else(String::new)))
 }
 
 #[derive(Deserialize)]
@@ -160,15 +175,8 @@ async fn invite_occupant(
     session: Session,
 ) -> Result<HttpResponse, UserError> {
     let (project_id,) = path.into_inner();
-    let query = doc! {"id": &project_id};
-    let metadata = app
-        .project_metadata
-        .find_one(query, None)
-        .await
-        .map_err(|_err| InternalError::DatabaseConnectionError)?
-        .ok_or_else(|| UserError::ProjectNotFoundError)?;
 
-    ensure_can_edit_project(&app, &session, None, &metadata).await?;
+    ensure_can_edit_project_id(&app, &session, None, &project_id).await?;
 
     let invite = OccupantInvite::new(project_id, body.into_inner());
     app.occupant_invites
@@ -179,24 +187,57 @@ async fn invite_occupant(
     Ok(HttpResponse::Ok().body("Invitation sent!"))
 }
 
-#[delete("/id/{projectID}/occupants/{clientID}")]
+#[post("/clients/{clientID}/evict")]
 async fn evict_occupant(
     app: web::Data<AppData>,
     session: Session,
-    path: web::Path<(ProjectId, ClientID)>,
+    path: web::Path<(ClientID,)>,
 ) -> Result<HttpResponse, UserError> {
-    let (project_id, client_id) = path.into_inner();
-    let query = doc! {"id": project_id};
-    let metadata = app
-        .project_metadata
-        .find_one(query, None)
-        .await
-        .map_err(|_err| InternalError::DatabaseConnectionError)?
-        .ok_or_else(|| UserError::ProjectNotFoundError)?;
+    let (client_id,) = path.into_inner();
 
-    ensure_can_edit_project(&app, &session, None, &metadata).await?;
-    // TODO
-    todo!();
+    ensure_can_evict_client(&app, &session, &client_id).await?;
+
+    app.network.do_send(topology::EvictOccupant { client_id });
+
+    Ok(HttpResponse::Ok().body("Evicted!"))
+}
+
+async fn ensure_can_evict_client(
+    app: &AppData,
+    session: &Session,
+    client_id: &str,
+) -> Result<(), UserError> {
+    let client_state = app
+        .network
+        .send(topology::GetClientState {
+            client_id: client_id.to_owned(),
+        })
+        .await
+        .map_err(|_err| UserError::InternalError)?
+        .0;
+
+    // Client can be evicted by project owners, collaborators
+    if let Some(ClientState::Browser(BrowserClientState { project_id, .. })) = client_state {
+        let can_edit = ensure_can_edit_project_id(app, session, None, &project_id).await;
+        if can_edit.is_ok() {
+            return Ok(());
+        }
+    }
+
+    // or by anyone who can edit the corresponding user
+    let client_username = app
+        .network
+        .send(topology::GetClientUsername {
+            client_id: client_id.to_owned(),
+        })
+        .await
+        .map_err(|_err| UserError::InternalError)?
+        .0;
+
+    match client_username {
+        Some(username) => ensure_can_edit_user(app, session, &username).await,
+        None => Err(UserError::PermissionsError), // TODO: allow guest to evict self?
+    }
 }
 
 pub fn config(cfg: &mut web::ServiceConfig) {

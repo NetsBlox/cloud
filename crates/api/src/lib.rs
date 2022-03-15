@@ -1,7 +1,7 @@
 pub mod core;
 
 use crate::core::{
-    ClientConfig, ClientState, ClientStateData, CollaborationInvite, CreateLibraryData,
+    ClientConfig, ClientID, ClientState, ClientStateData, CollaborationInvite, CreateLibraryData,
     ExternalClient, ExternalClientState, Group, InvitationId, InvitationState, LibraryMetadata,
     LibraryPublishState, LinkedAccount, LoginRequest, Project, ProjectId, RoleData, RoomState,
     ServiceHost, UpdateProjectData, UpdateRoleData,
@@ -692,6 +692,20 @@ impl Client {
             .unwrap();
 
         response.json::<RoomState>().await.unwrap()
+    }
+
+    pub async fn evict_occupant(&self, client_id: &ClientID) {
+        let response = self
+            .request(
+                Method::POST,
+                &format!("/network/clients/{}/evict", client_id),
+            )
+            .send()
+            .await
+            .unwrap();
+
+        println!("status {}", response.status());
+        println!("text {}", response.text().await.unwrap());
     }
 
     pub async fn connect(&self, address: &str) -> MessageChannel {

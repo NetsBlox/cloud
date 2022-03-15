@@ -179,11 +179,63 @@ async fn ensure_can_view_project(
     }
 }
 
+fn flatten<T>(nested: Option<Option<T>>) -> Option<T> {
+    match nested {
+        Some(x) => x,
+        None => None,
+    }
+}
+
 async fn can_view_project(app: &AppData, session: &Session, project: &ProjectMetadata) -> bool {
     if project.public {
         return true;
     }
+
+    if let Some(username) = session.get::<String>("username").unwrap_or(None) {
+        let query = doc! {"username": username};
+        let invite = flatten(app.occupant_invites.find_one(query, None).await.ok());
+        if invite.is_some() {
+            return true;
+        }
+    }
+
     can_edit_project(app, session, None, project).await
+}
+
+pub async fn ensure_can_edit_project_id(
+    app: &AppData,
+    session: &Session,
+    client_id: Option<String>,
+    project_id: &str,
+) -> Result<(), UserError> {
+    let query = doc! {"id": project_id};
+    let metadata = app
+        .project_metadata
+        .find_one(query, None)
+        .await
+        .map_err(|_err| InternalError::DatabaseConnectionError)?
+        .ok_or_else(|| UserError::ProjectNotFoundError)?;
+
+    ensure_can_edit_project(app, session, client_id, &metadata).await?;
+    Ok(())
+}
+
+pub async fn can_edit_project_id(
+    app: &AppData,
+    session: &Session,
+    client_id: Option<String>,
+    project_id: &str,
+) -> Result<(), UserError> {
+    let query = doc! {"id": project_id};
+    let metadata = app
+        .project_metadata
+        .find_one(query, None)
+        .await
+        .map_err(|_err| InternalError::DatabaseConnectionError)?
+        .ok_or_else(|| UserError::ProjectNotFoundError)?;
+
+    can_edit_project(app, session, client_id, &metadata).await;
+    Ok(())
 }
 
 pub async fn ensure_can_edit_project(
@@ -234,7 +286,7 @@ async fn get_project(
         .project_metadata
         .find_one(query, None)
         .await
-        .map_err(|_err| UserError::InternalError)? // TODO: wrap the error?
+        .map_err(|_err| InternalError::DatabaseConnectionError)? // TODO: wrap the error?
         .ok_or_else(|| UserError::ProjectNotFoundError)?;
 
     ensure_can_view_project(&app, &session, &metadata).await?;
