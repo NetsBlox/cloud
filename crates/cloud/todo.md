@@ -1,15 +1,50 @@
 # To Do
 - [ ] switch admin flag to role: ["admin", "moderator"]
+    - moderators can approve libraries, etc
 
-- [ ] allow login with linked accounts
-    - working on this...
-    - [x] need to be able to retrieve the email address
+- [ ] logout on ban? Or just ensure not banned
+
+- [ ] add evict
+    - [-] should it require the project ID?
+        - it's probably fine
+    - we should probably have a method to get the client's current state
+        - (awk to pass project ID to CLI)
+    - should we be able to evict clients from other apps, too?
+        - probably
+        - these ones may not have a project associated...
+
+    - we should probably be able to evict ourselves (regardless of permissions)
+        - in other words, a client can be evicted:
+            - by project owner
+            - by project collaborators
+            - by anyone who can edit the given user
+
+    - we may want to change the endpoint...
+        - maybe /network/clients/{clientID}/evict
+
+    - the rough flow would be:
+        - get the state for the client
+        - check permissions
+            - if browser client, project owner, collaborator, or user editor can evict
+            - if external client, user editor can evict
+        - evict
+            - how to handle this since it is async?
+
+    - [ ] test evict
 
 - [ ] apiKeys. Should these be managed from the services server?
     - probably
     - how can we have services servers register data for a user/group?
 
     - these can be associated with groups or users...
+        - how can we delete these when the user/group is deleted?
+    - what if I just had a "serviceSettings" dictionary?
+        - for the main one:
+
+- [ ] record messages
+    - this can follow the same method as before
+        - add a TTL of something like 1 day to messages?
+    - this is currently a perf bottleneck in the nodejs version
 
 - [ ] collaborative editing action acceptance
     - maybe we don't need to persist them...
@@ -19,7 +54,22 @@
         - (public role ID resolution)
         - Or the client could send this in the request...
             - context: {project: {name, id}, role: {name, id}, app: ''}
+        - we will need to be able to lookup the username and the context...
     - add a REST endpoint for this?
+        - network/messages/send
+            - recipient address
+            - message type
+            - message content
+            - optional sender address
+        - how to authorize?
+            - app-level or user-level?
+
+            - if sender address is provided, we could check the requestor can edit the user
+            - else, we could use an app-level approach... Maybe something simple like a secret token for now?
+                - technically, this is all we need for now
+
+            - what if we connected the services server like a 3rd party app?
+                - it would need to authenticate as a single user though
 
 - [ ] online friends (admin returns all)
 
@@ -27,14 +77,30 @@
     - [ ] invite occupant
         - these can probably be transient invitations
         - maybe persist in mongo with a short ttl (a few minutes or something)
-    - [ ] respond-to-invite
+        - [ ] should it send the invite via ws?
+            - probably wouldn't be bad...
+    - [-] respond-to-invite
         - this probably doesn't make sense from the CLI
+
+    - can we think of these as access grants instead?
+        - server can provide minimal CRUD features
+        - client can send invite over ws itself with project, role, etc
+
+        - remaining questions:
+            - revoking access grant should boot existing users
+                - or should it be a separate call? The problem is that a grant is for a username while an eviction is for a client ID...
+            - let's make evict a separate call
+            - maybe we should return to the idea of invitations...
+    - invite occupant from CLI?
+    - [ ] test this from the browser
+        - [ ] can send invite
+        - [ ] accepting invite removes invite from database
+        - [ ] close additional invites when one is accepted
+        - [ ] allow user to open project using invite
 
 - general
     - [ ] finalize output formats (machine vs human?)
     - [ ] finish updating the browser
-
-- [ ] add index to projects collection for "id"
 
 - [ ] add unvisited saveState (w/ a ttl)
     - CREATED -> TRANSIENT -> BROKEN/SAVED
@@ -96,10 +162,11 @@
     - set all projects to BROKEN
     - can we differentiate btwn server initiated Away and client?
 
-
 - [ ] validate user accounts on creation
     - [-] maybe we will need to whitelist email domains later
     - we can block tor exit nodes. Should we record the IP address?
+
+- [ ] block tor exit nodes
 
 - [ ] ws support
     - [x] sending (netsblox) messages
@@ -112,8 +179,6 @@
 
 - [ ] add tests
     - [ ] group routes
-
-- [ ] api docs with paperclip?
 
 - [ ] add address caching to the message sending?
     - [ ] update cache on "send room state"
@@ -163,6 +228,8 @@
 - [ ] email Tom about the big update?
 
 - [ ] gallery
+
+- [ ] api docs with paperclip?
 
 ## CLI
 - [x] add CLI
@@ -449,4 +516,10 @@
 - [x] test ban account
     - [x] email should be banned, too
     - [x] no new create
+
+- [x] allow login with linked accounts
+    - working on this...
+    - [x] need to be able to retrieve the email address
+
+- [x] add index to projects collection for "id"
 
