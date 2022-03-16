@@ -260,28 +260,21 @@ impl Handler<GetRoomState> for TopologyActor {
 }
 
 #[derive(Message)]
-#[rtype(result = "EvictOccupantResult")]
+#[rtype(result = "()")]
 pub struct EvictOccupant {
     pub client_id: ClientID,
 }
 
-#[derive(Message)]
-#[rtype(result = "()")]
-pub struct EvictOccupantResult(pub bool);
-
 impl Handler<EvictOccupant> for TopologyActor {
-    type Result = MessageResult<EvictOccupant>;
+    type Result = ();
 
     fn handle(&mut self, msg: EvictOccupant, ctx: &mut Context<Self>) -> Self::Result {
-        // MessageResult(EvictOccupantResult(topology.evict_client(msg.client_id)))
-
         let fut = async {
             let mut topology = TOPOLOGY.write().unwrap();
             topology.evict_client(msg.client_id).await;
         };
         let fut = actix::fut::wrap_future(fut);
         ctx.spawn(fut);
-        todo!();
     }
 }
 
