@@ -7,6 +7,7 @@ use futures_util::StreamExt;
 use inquire::{Confirm, Password, PasswordDisplayMode};
 use netsblox_api::core::{
     Credentials, FriendLinkState, InvitationState, LibraryPublishState, LinkedAccount, ServiceHost,
+    UserRole,
 };
 use netsblox_api::{Client, Config};
 use std::path::Path;
@@ -27,7 +28,7 @@ enum Users {
         #[clap(short, long)]
         user: Option<String>,
         #[clap(short, long)]
-        admin: bool,
+        role: UserRole,
     },
     Delete {
         username: String,
@@ -488,7 +489,7 @@ async fn main() -> Result<(), confy::ConfyError> {
                 username,
                 email,
                 password,
-                admin,
+                role,
                 group,
                 user,
             } => {
@@ -509,7 +510,7 @@ async fn main() -> Result<(), confy::ConfyError> {
                         email,
                         password.as_deref(),
                         group_id.as_deref(),
-                        admin,
+                        role,
                     )
                     .await;
             }

@@ -1,12 +1,6 @@
 pub mod core;
 
-use crate::core::{
-    ClientConfig, ClientID, ClientState, ClientStateData, CollaborationInvite, CreateLibraryData,
-    ExternalClient, ExternalClientState, Group, InvitationId, InvitationState, LibraryMetadata,
-    LibraryPublishState, LinkedAccount, LoginRequest, Project, ProjectId, RoleData, RoomState,
-    ServiceHost, UpdateProjectData, UpdateRoleData,
-};
-use crate::core::{FriendInvite, FriendLinkState, InvitationResponse, ProjectMetadata, User};
+use crate::core::*;
 use futures_util::stream::SplitStream;
 use netsblox_core::{CreateGroupData, UpdateGroupData};
 use reqwest::{self, Method, RequestBuilder};
@@ -62,7 +56,7 @@ pub async fn login(cfg: &mut Config, credentials: &LoginRequest) -> Result<(), r
 struct UserData<'a> {
     username: &'a str,
     email: &'a str,
-    admin: &'a bool,
+    role: &'a UserRole,
     group_id: Option<&'a str>,
     password: Option<&'a str>,
 }

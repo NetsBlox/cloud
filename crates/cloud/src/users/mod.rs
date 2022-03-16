@@ -10,7 +10,7 @@ use actix_web::{web, HttpResponse};
 use futures::TryStreamExt;
 use lazy_static::lazy_static;
 use mongodb::bson::{doc, DateTime};
-use netsblox_core::{LinkedAccount, LoginRequest};
+use netsblox_core::{LinkedAccount, LoginRequest, UserRole};
 use regex::Regex;
 use rustrict::CensorStr;
 use serde::{Deserialize, Serialize};
@@ -42,24 +42,48 @@ impl From<NewUser> for User {
             group_id: user_data.group_id,
             created_at: DateTime::from_system_time(SystemTime::now()),
             linked_accounts: std::vec::Vec::new(),
-            admin: user_data.admin,
+            role: user_data.role.unwrap_or(UserRole::User),
             services_hosts: None,
         }
     }
 }
 
 pub async fn is_super_user(app: &AppData, session: &Session) -> bool {
+    match get_session_role(app, session).await {
+        UserRole::Admin => true,
+        _ => false,
+    }
+}
+
+async fn get_session_role(app: &AppData, session: &Session) -> UserRole {
     if let Some(username) = session.get::<String>("username").unwrap_or(None) {
         println!("checking if {} is a super user.", &username);
         let query = doc! {"username": username};
-        match app.users.find_one(query, None).await.unwrap() {
-            Some(user) => user.admin.unwrap_or(false),
-            None => false,
-        }
+        app.users
+            .find_one(query, None)
+            .await
+            .unwrap()
+            .map(|user| user.role)
+            .unwrap_or(UserRole::User)
     } else {
         println!("no username in the cookie");
         // TODO: purge the cookie?
-        false
+        UserRole::User
+    }
+}
+
+pub async fn is_moderator(app: &AppData, session: &Session) -> bool {
+    match get_session_role(app, session).await {
+        UserRole::Admin | UserRole::Moderator => true,
+        _ => false,
+    }
+}
+
+pub async fn ensure_is_moderator(app: &AppData, session: &Session) -> Result<(), UserError> {
+    if !is_moderator(app, session).await {
+        Err(UserError::PermissionsError)
+    } else {
+        Ok(())
     }
 }
 
@@ -121,7 +145,7 @@ struct NewUser {
     email: String, // TODO: validate the email address
     password: Option<String>,
     group_id: Option<String>,
-    admin: Option<bool>,
+    role: Option<UserRole>,
 }
 
 #[get("/")]
@@ -148,11 +172,15 @@ async fn create_user(
     ensure_valid_username(&user_data.username)?;
     ensure_valid_email(&user_data.email)?;
 
-    if user_data.admin.unwrap_or(false) {
-        ensure_is_super_user(&app, &session).await?;
-    } else if let Some(group_id) = &user_data.group_id {
-        ensure_can_edit_group(&app, &session, group_id).await?;
-    }
+    let role = user_data.role.as_ref().unwrap_or(&UserRole::User);
+    match role {
+        UserRole::User => {
+            if let Some(group_id) = &user_data.group_id {
+                ensure_can_edit_group(&app, &session, group_id).await?
+            }
+        }
+        _ => ensure_is_super_user(&app, &session).await?,
+    };
 
     let user = User::from(user_data.into_inner());
     let query = doc! {"email": &user.email};

@@ -6,7 +6,7 @@ use mongodb::{
     options::UpdateOptions,
 };
 pub use netsblox_core::Credentials;
-use netsblox_core::LinkedAccount;
+use netsblox_core::{LinkedAccount, UserRole};
 use reqwest::{Method, Response};
 use serde::{Deserialize, Serialize};
 
@@ -144,7 +144,7 @@ async fn create_account(
         group_id: None,
         created_at: DateTime::from_system_time(SystemTime::now()),
         linked_accounts: Vec::new(),
-        admin: Some(false),
+        role: UserRole::User,
         services_hosts: None,
     };
 

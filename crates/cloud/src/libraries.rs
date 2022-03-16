@@ -1,6 +1,6 @@
 use crate::app_data::AppData;
 use crate::errors::{InternalError, UserError};
-use crate::users::{can_edit_user, ensure_is_super_user, is_super_user};
+use crate::users::{can_edit_user, ensure_is_moderator, is_moderator};
 use actix_session::Session;
 use actix_web::{delete, get, post};
 use actix_web::{web, HttpResponse};
@@ -201,7 +201,7 @@ async fn publish_user_library(
         .expect("Library publish operation failed")
     {
         Some(library) => {
-            if !is_approval_required(&library.blocks) || is_super_user(&app, &session).await {
+            if !is_approval_required(&library.blocks) || is_moderator(&app, &session).await {
                 let update = doc! {"$set": {"state": LibraryPublishState::Public}};
                 collection.update_one(query, update, None).await.unwrap();
                 Ok(HttpResponse::Ok().body("Library published!"))
@@ -269,7 +269,7 @@ async fn list_pending_libraries(
     app: web::Data<AppData>,
     session: Session,
 ) -> Result<HttpResponse, UserError> {
-    ensure_is_super_user(&app, &session).await?;
+    ensure_is_moderator(&app, &session).await?;
 
     let collection = app.collection::<LibraryMetadata>("libraries");
     let cursor = collection
@@ -289,7 +289,7 @@ async fn set_library_state(
     state: web::Json<LibraryPublishState>,
     session: Session,
 ) -> Result<HttpResponse, UserError> {
-    ensure_is_super_user(&app, &session).await?;
+    ensure_is_moderator(&app, &session).await?;
 
     let collection = app.collection::<LibraryMetadata>("libraries");
     let (owner, name) = path.into_inner();

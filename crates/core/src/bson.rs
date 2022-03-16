@@ -1,6 +1,6 @@
 use crate::{
     FriendInvite, FriendLinkState, Group, InvitationState, LibraryPublishState, LinkedAccount,
-    RoleMetadata, SaveState, ServiceHost,
+    RoleMetadata, SaveState, ServiceHost, UserRole,
 };
 use bson::{doc, Bson, DateTime};
 
@@ -30,6 +30,16 @@ impl From<FriendLinkState> for Bson {
             FriendLinkState::REJECTED => Bson::String("REJECTED".into()),
             FriendLinkState::DELETED => Bson::String("DELETED".into()),
             FriendLinkState::BLOCKED => Bson::String("BLOCKED".into()),
+        }
+    }
+}
+
+impl From<UserRole> for Bson {
+    fn from(role: UserRole) -> Bson {
+        match role {
+            UserRole::Admin => Bson::String("admin".into()),
+            UserRole::Moderator => Bson::String("moderator".into()),
+            UserRole::User => Bson::String("user".into()),
         }
     }
 }

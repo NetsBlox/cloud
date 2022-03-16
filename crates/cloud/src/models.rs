@@ -1,9 +1,9 @@
 use mongodb::bson::{doc, Bson, DateTime};
-use netsblox_core::OccupantInviteReq;
 pub use netsblox_core::{
     CreateGroupData, FriendInvite, FriendLinkState, Group, GroupId, InvitationState, LinkedAccount,
     ProjectId, RoleData, RoleMetadata, SaveState, ServiceHost,
 };
+use netsblox_core::{OccupantInviteReq, UserRole};
 use serde::{Deserialize, Serialize};
 use std::{collections::HashMap, time::SystemTime};
 use uuid::Uuid;
@@ -16,7 +16,7 @@ pub struct User {
     pub hash: String,
     pub salt: String,
     pub group_id: Option<GroupId>,
-    pub admin: Option<bool>, // TODO: use roles instead? What other roles would we even have?
+    pub role: UserRole,
     pub created_at: DateTime,
     pub linked_accounts: Vec<LinkedAccount>,
     pub services_hosts: Option<Vec<ServiceHost>>,
@@ -30,7 +30,7 @@ impl From<User> for Bson {
             "hash": user.hash,
             "salt": user.salt,
             "groupId": user.group_id,
-            "admin": user.admin,
+            "role": user.role,
             "createdAt": user.created_at,
             "linkedAccounts": user.linked_accounts,
             "servicesHosts": user.services_hosts,
@@ -44,7 +44,7 @@ impl From<User> for netsblox_core::User {
             username: user.username,
             email: user.email,
             group_id: user.group_id,
-            admin: user.admin,
+            role: user.role,
             created_at: user.created_at.to_system_time(),
             linked_accounts: user.linked_accounts,
             services_hosts: user.services_hosts,

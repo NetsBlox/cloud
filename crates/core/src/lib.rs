@@ -28,10 +28,18 @@ pub struct User {
     pub username: String,
     pub email: String,
     pub group_id: Option<GroupId>,
-    pub admin: Option<bool>, // TODO: use roles instead? What other roles would we even have?
+    pub role: UserRole,
     pub created_at: SystemTime,
     pub linked_accounts: Vec<LinkedAccount>,
     pub services_hosts: Option<Vec<ServiceHost>>,
+}
+
+#[derive(Serialize, Deserialize, Clone, Debug)]
+#[serde(rename_all = "camelCase")]
+pub enum UserRole {
+    User,
+    Moderator,
+    Admin,
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug)]
