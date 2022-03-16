@@ -1,53 +1,12 @@
 # To Do
-- [ ] switch admin flag to role: ["admin", "moderator"]
-    - moderators can approve libraries, etc
-
-- [ ] logout on ban? Or just ensure not banned
-
-- [ ] add evict
-    - [-] should it require the project ID?
-        - it's probably fine
-    - we should probably have a method to get the client's current state
-        - (awk to pass project ID to CLI)
-    - should we be able to evict clients from other apps, too?
-        - probably
-        - these ones may not have a project associated...
-
-    - we should probably be able to evict ourselves (regardless of permissions)
-        - in other words, a client can be evicted:
-            - by project owner
-            - by project collaborators
-            - by anyone who can edit the given user
-
-    - we may want to change the endpoint...
-        - maybe /network/clients/{clientID}/evict
-
-    - the rough flow would be:
-        - get the state for the client
-        - check permissions
-            - if browser client, project owner, collaborator, or user editor can evict
-            - if external client, user editor can evict
-        - evict
-            - how to handle this since it is async?
-
-    - [ ] test evict
-
-- [ ] apiKeys. Should these be managed from the services server?
-    - probably
-    - how can we have services servers register data for a user/group?
-
-    - these can be associated with groups or users...
-        - how can we delete these when the user/group is deleted?
-    - what if I just had a "serviceSettings" dictionary?
-        - for the main one:
-
 - [ ] record messages
     - this can follow the same method as before
         - add a TTL of something like 1 day to messages?
-    - this is currently a perf bottleneck in the nodejs version
 
 - [ ] collaborative editing action acceptance
     - maybe we don't need to persist them...
+    - accept actions when collaborating
+        - this is currently a perf bottleneck in the nodejs version
 
 - [ ] update the services server connection (zmq)
     - add resolve endpoint?
@@ -76,7 +35,7 @@
 - [ ] occupants
     - [ ] invite occupant
         - these can probably be transient invitations
-        - maybe persist in mongo with a short ttl (a few minutes or something)
+        - [x] maybe persist in mongo with a short ttl (a few minutes or something)
         - [ ] should it send the invite via ws?
             - probably wouldn't be bad...
     - [-] respond-to-invite
@@ -98,12 +57,23 @@
         - [ ] close additional invites when one is accepted
         - [ ] allow user to open project using invite
 
+- [ ] logout on ban? Or just ensure not banned
+
 - general
     - [ ] finalize output formats (machine vs human?)
     - [ ] finish updating the browser
 
 - [ ] add unvisited saveState (w/ a ttl)
     - CREATED -> TRANSIENT -> BROKEN/SAVED
+
+- [ ] apiKeys. Should these be managed from the services server?
+    - probably
+    - how can we have services servers register data for a user/group?
+
+    - these can be associated with groups or users...
+        - how can we delete these when the user/group is deleted?
+    - what if I just had a "serviceSettings" dictionary?
+        - for the main one:
 
 - [ ] public URL is set when opening role
 - [ ] connect the client code and start testing things!
@@ -161,12 +131,6 @@
 - [ ] don't clean up projects when server goes down?
     - set all projects to BROKEN
     - can we differentiate btwn server initiated Away and client?
-
-- [ ] validate user accounts on creation
-    - [-] maybe we will need to whitelist email domains later
-    - we can block tor exit nodes. Should we record the IP address?
-
-- [ ] block tor exit nodes
 
 - [ ] ws support
     - [x] sending (netsblox) messages
@@ -522,4 +486,44 @@
     - [x] need to be able to retrieve the email address
 
 - [x] add index to projects collection for "id"
+
+- [x] switch admin flag to role: ["admin", "moderator"]
+    - moderators can approve libraries, etc
+    - should this be called "type" instead?
+
+- [x] add evict
+    - [-] should it require the project ID?
+        - it's probably fine
+    - we should probably have a method to get the client's current state
+        - (awk to pass project ID to CLI)
+    - should we be able to evict clients from other apps, too?
+        - probably
+        - these ones may not have a project associated...
+
+    - we should probably be able to evict ourselves (regardless of permissions)
+        - in other words, a client can be evicted:
+            - by project owner
+            - by project collaborators
+            - by anyone who can edit the given user
+
+    - we may want to change the endpoint...
+        - maybe /network/clients/{clientID}/evict
+
+    - the rough flow would be:
+        - get the state for the client
+        - check permissions
+            - if browser client, project owner, collaborator, or user editor can evict
+            - if external client, user editor can evict
+        - evict
+            - how to handle this since it is async?
+
+    - [x] test evict
+
+- [x] block tor exit nodes
+
+- [-] validate user accounts on creation
+    - [-] maybe we will need to whitelist email domains later
+    - we can block tor exit nodes. Should we record the IP address?
+
+- [x] add message on evict
 
