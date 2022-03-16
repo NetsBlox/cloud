@@ -2,6 +2,7 @@ use futures::future::join_all;
 use mongodb::bson::{doc, DateTime};
 pub use netsblox_core::{BrowserClientState, ClientState, ExternalClientState};
 use netsblox_core::{ExternalClient, OccupantState, RoleState, RoomState};
+use serde_json::json;
 use std::collections::{HashMap, HashSet};
 use std::str::FromStr;
 use std::time::{Duration, SystemTime};
@@ -39,6 +40,14 @@ impl From<RoomState> for ClientMessage {
         let msg = value.as_object_mut().unwrap();
         msg.insert("type".into(), serde_json::to_value("room-roles").unwrap());
         ClientMessage(value)
+    }
+}
+
+struct EvictionNotice;
+
+impl From<EvictionNotice> for ClientMessage {
+    fn from(msg: EvictionNotice) -> ClientMessage {
+        ClientMessage(json!({"type": "eviction-notice"}))
     }
 }
 
@@ -469,6 +478,10 @@ impl Topology {
     pub async fn evict_client(&mut self, id: ClientID) {
         let username = self.usernames.remove(&id);
         self.reset_client_state(&id).await;
+        self.clients
+            .get(&id)
+            .map(|client| client.addr.do_send(EvictionNotice.into()));
+
         if let Some(username) = username {
             if self.usernames.get(&id).is_none() {
                 self.usernames.insert(id, username);
