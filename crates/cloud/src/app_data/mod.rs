@@ -1,9 +1,12 @@
+use actix_web::rt::time;
+use actix_web::HttpRequest;
 use futures::future::join_all;
 use futures::join;
-use mongodb::bson::doc;
+use mongodb::bson::{doc, Document};
 use mongodb::options::{FindOneAndUpdateOptions, IndexOptions, ReturnDocument};
 use rusoto_core::credential::StaticProvider;
 use rusoto_core::Region;
+use serde::{Deserialize, Serialize};
 use std::collections::{HashMap, HashSet};
 use std::time::Duration;
 use uuid::Uuid;
@@ -27,6 +30,7 @@ use rusoto_s3::{
 pub struct AppData {
     prefix: &'static str,
     bucket: String,
+    tor_exit_nodes: Collection<TorNode>,
     s3: S3Client,
     pub settings: Settings,
     db: Database,
@@ -74,6 +78,7 @@ impl AppData {
             db.collection::<OccupantInvite>(&(prefix.to_owned() + "occupantInvites"));
         let friends = db.collection::<FriendLink>(&(prefix.to_owned() + "friends"));
         let network = network.unwrap_or_else(|| TopologyActor {}.start());
+        let tor_exit_nodes = db.collection::<TorNode>(&(prefix.to_owned() + "torExitNodes"));
         network.do_send(SetStorage {
             project_metadata: project_metadata.clone(),
         });
@@ -92,6 +97,7 @@ impl AppData {
             collab_invites,
             occupant_invites,
             friends,
+            tor_exit_nodes,
         }
     }
 
@@ -149,6 +155,25 @@ impl AppData {
             .create_index(IndexModel::builder().keys(doc! {"id": 1}).build(), None)
             .await
             .unwrap();
+
+        self.tor_exit_nodes
+            .create_index(IndexModel::builder().keys(doc! {"addr": 1}).build(), None)
+            .await
+            .unwrap();
+
+        self.start_update_interval();
+    }
+
+    fn start_update_interval(&self) {
+        let tor_exit_nodes = self.tor_exit_nodes.clone();
+        actix_web::rt::spawn(async move {
+            let one_day = Duration::from_secs(60 * 60 * 24);
+            let mut interval = time::interval(one_day);
+            loop {
+                update_tor_nodes(&tor_exit_nodes).await; // TODO: add logging
+                interval.tick().await;
+            }
+        });
     }
 
     pub fn collection<T>(&self, name: &str) -> Collection<T> {
@@ -404,7 +429,61 @@ impl AppData {
         Ok(updated_metadata)
     }
 
-    // pub async fn create_role(
+    pub async fn ensure_not_tor_ip(&self, req: HttpRequest) -> Result<(), UserError> {
+        match req.peer_addr().map(|addr| addr.ip()) {
+            Some(addr) => {
+                let addr = addr.to_string();
+                println!("checking if {} is exit node", addr);
+                let query = doc! {"addr": addr};
+                let node = self
+                    .tor_exit_nodes
+                    .find_one(query, None)
+                    .await
+                    .map_err(|_err| InternalError::DatabaseConnectionError)?;
+
+                if node.is_some() {
+                    return Err(UserError::TorAddressError);
+                } else {
+                    Ok(())
+                }
+            }
+            None => Ok(()),
+        }
+    }
+}
+
+async fn update_tor_nodes(tor_exit_nodes: &Collection<TorNode>) -> Result<(), UserError> {
+    let url = "https://check.torproject.org/torbulkexitlist";
+    let response = reqwest::get(url)
+        .await
+        .map_err(|_err| InternalError::TorNodeListFetchError)?;
+
+    let node_list: Vec<TorNode> = response
+        .text()
+        .await
+        .map_err(|_err| UserError::InternalError)?
+        .split_ascii_whitespace()
+        .map(|addr| TorNode {
+            addr: addr.to_string(),
+        })
+        .collect();
+
+    tor_exit_nodes
+        .delete_many(doc! {}, None)
+        .await
+        .map_err(|_err| InternalError::DatabaseConnectionError)?;
+
+    tor_exit_nodes
+        .insert_many(node_list, None)
+        .await
+        .map_err(|_err| InternalError::DatabaseConnectionError)?;
+
+    Ok(())
+}
+
+#[derive(Deserialize, Serialize)]
+struct TorNode {
+    addr: String,
 }
 
 fn get_unique_name(existing: Vec<String>, name: &str) -> String {

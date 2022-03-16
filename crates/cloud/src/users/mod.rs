@@ -5,7 +5,7 @@ use crate::errors::{InternalError, UserError};
 use crate::groups::ensure_can_edit_group;
 use crate::models::User;
 use actix_session::Session;
-use actix_web::{get, patch, post};
+use actix_web::{get, patch, post, HttpRequest};
 use actix_web::{web, HttpResponse};
 use futures::TryStreamExt;
 use lazy_static::lazy_static;
@@ -243,13 +243,14 @@ fn is_valid_username(name: &str) -> bool {
 
 #[post("/login")]
 async fn login(
+    req: HttpRequest,
     app: web::Data<AppData>,
     request: web::Json<LoginRequest>,
     session: Session,
 ) -> Result<HttpResponse, UserError> {
-    // TODO: check if tor IP
     // TODO: record login IPs?
-    println!("credentials: {:?}", &request);
+    app.ensure_not_tor_ip(req).await?;
+
     let request = request.into_inner();
     let client_id = request.client_id.clone();
     let user = strategies::login(&app, request.credentials).await?;

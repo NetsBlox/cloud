@@ -7,6 +7,7 @@ pub enum InternalError {
     TimeoutError,
     S3Error,
     S3ContentError,
+    TorNodeListFetchError,
 }
 
 #[derive(Debug, Display, Error)]
@@ -47,6 +48,8 @@ pub enum UserError {
     AccountAlreadyLinkedError,
     #[display(fmt = "Invalid account type.")]
     InvalidAccountTypeError,
+    #[display(fmt = "Login from Tor not allowed.")]
+    TorAddressError,
     #[display(fmt = "An internal error occurred. Please try again later.")]
     InternalError,
 }
@@ -78,6 +81,7 @@ impl error::ResponseError for UserError {
             | UserError::InvalidAuthStrategyError
             | UserError::AccountAlreadyLinkedError
             | UserError::InvalidAccountTypeError
+            | UserError::TorAddressError
             | UserError::ProjectNotActiveError => StatusCode::BAD_REQUEST,
         }
     }
