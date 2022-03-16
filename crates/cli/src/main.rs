@@ -27,7 +27,7 @@ enum Users {
         /// Perform the operation as this user
         #[clap(short, long)]
         user: Option<String>,
-        #[clap(short, long)]
+        #[clap(short, long, default_value = "user")]
         role: UserRole,
     },
     Delete {

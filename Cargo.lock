@@ -1706,6 +1706,7 @@ name = "netsblox_core"
 version = "0.1.0"
 dependencies = [
  "bson",
+ "derive_more",
  "serde 1.0.136",
  "uuid 1.0.0-alpha.1",
 ]

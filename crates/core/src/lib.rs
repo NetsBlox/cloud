@@ -2,6 +2,7 @@
 mod bson;
 
 use core::fmt;
+use derive_more::{Display, Error};
 use serde::{Deserialize, Serialize};
 use std::{collections::HashMap, str::FromStr, time::SystemTime};
 use uuid::Uuid;
@@ -40,6 +41,22 @@ pub enum UserRole {
     User,
     Moderator,
     Admin,
+}
+
+#[derive(Debug, Display, Error)]
+#[display(fmt = "Unable to parse user role. Expected admin, moderator, or user.")]
+pub struct UserRoleError;
+
+impl FromStr for UserRole {
+    type Err = UserRoleError;
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        match s {
+            "admin" => Ok(UserRole::Admin),
+            "moderator" => Ok(UserRole::Moderator),
+            "user" => Ok(UserRole::User),
+            _ => Err(UserRoleError),
+        }
+    }
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug)]

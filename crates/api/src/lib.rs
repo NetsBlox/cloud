@@ -106,12 +106,12 @@ impl Client {
         email: &str,
         password: Option<&str>, // TODO: Make these CreateUserOptions
         group_id: Option<&str>,
-        admin: &bool,
+        role: &UserRole,
     ) -> Result<(), reqwest::Error> {
         let user_data = UserData {
             username: name,
             email,
-            admin,
+            role,
             group_id,
             password,
         };
