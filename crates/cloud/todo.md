@@ -30,8 +30,6 @@
             - what if we connected the services server like a 3rd party app?
                 - it would need to authenticate as a single user though
 
-- [ ] online friends (admin returns all)
-
 - [ ] occupants
     - [ ] invite occupant
         - these can probably be transient invitations
@@ -526,4 +524,6 @@
     - we can block tor exit nodes. Should we record the IP address?
 
 - [x] add message on evict
+
+- [x] online friends (admin returns all)
 

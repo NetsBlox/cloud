@@ -471,14 +471,20 @@ impl Topology {
             .collect::<Vec<_>>()
     }
 
-    pub fn get_online_users(&self, usernames: Vec<String>) -> Vec<String> {
+    // Get a list of online users from a list of usernames. If no usernames are provided,
+    // all online users will be returned
+    pub fn get_online_users(&self, from_names: Option<Vec<String>>) -> Vec<String> {
         let online = self.usernames.values().collect::<HashSet<_>>();
-        println!("Online users: {:?}", online);
-
-        return usernames
-            .into_iter()
-            .filter(|username| online.contains(&username))
-            .collect();
+        match from_names {
+            Some(usernames) => usernames
+                .into_iter()
+                .filter(|username| online.contains(&username))
+                .collect(),
+            None => online
+                .into_iter()
+                .map(|username| username.to_owned())
+                .collect(),
+        }
     }
 
     pub fn get_room_state(&self, metadata: ProjectMetadata) -> Option<RoomState> {

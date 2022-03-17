@@ -211,7 +211,7 @@ impl Handler<GetActiveRooms> for TopologyActor {
 #[derive(Message)]
 #[rtype(result = "Vec<String>")]
 pub struct GetOnlineUsers {
-    pub usernames: Vec<String>,
+    pub usernames: Option<Vec<String>>,
 }
 
 impl Handler<GetOnlineUsers> for TopologyActor {

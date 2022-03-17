@@ -1,8 +1,8 @@
 use crate::app_data::AppData;
 use crate::errors::{InternalError, UserError};
-use crate::models::FriendLink;
+use crate::models::{FriendLink, User};
 use crate::network::topology;
-use crate::users::ensure_can_edit_user;
+use crate::users::{ensure_can_edit_user, is_super_user};
 use actix_session::Session;
 use actix_web::{get, post};
 use actix_web::{web, HttpResponse};
@@ -18,9 +18,23 @@ async fn list_friends(
     session: Session,
 ) -> Result<HttpResponse, UserError> {
     let (owner,) = path.into_inner();
-    ensure_can_edit_user(&app, &session, &owner).await?;
-    let friend_names = get_friends(&app, &owner).await;
-    println!("friends {:?}", friend_names);
+    // Admins are considered a friend to everyone (at least one-way)
+    let friend_names = if is_super_user(&app, &session).await {
+        app.users
+            .find(doc! {}, None)
+            .await
+            .map_err(|_err| InternalError::DatabaseConnectionError)?
+            .try_collect::<Vec<User>>()
+            .await
+            .map_err(|_err| InternalError::DatabaseConnectionError)?
+            .into_iter()
+            .map(|user| user.username)
+            .collect()
+    } else {
+        ensure_can_edit_user(&app, &session, &owner).await?;
+        get_friends(&app, &owner).await
+    };
+
     Ok(HttpResponse::Ok().json(friend_names))
 }
 
@@ -48,14 +62,18 @@ async fn list_online_friends(
     session: Session,
 ) -> Result<HttpResponse, UserError> {
     let (owner,) = path.into_inner();
-    // TODO: if admin, show all users
-    ensure_can_edit_user(&app, &session, &owner).await?;
+    let filter_usernames = if is_super_user(&app, &session).await {
+        None
+    } else {
+        ensure_can_edit_user(&app, &session, &owner).await?;
 
-    let friend_names = get_friends(&app, &owner).await;
+        Some(get_friends(&app, &owner).await)
+    };
+
     let online_friends = app
         .network
         .send(topology::GetOnlineUsers {
-            usernames: friend_names,
+            usernames: filter_usernames,
         })
         .await
         .map_err(|_err| UserError::InternalError)?;
