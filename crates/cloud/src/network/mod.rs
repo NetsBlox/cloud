@@ -176,13 +176,23 @@ async fn invite_occupant(
 ) -> Result<HttpResponse, UserError> {
     let (project_id,) = path.into_inner();
 
-    ensure_can_edit_project_id(&app, &session, None, &project_id).await?;
-
+    let project = ensure_can_edit_project_id(&app, &session, None, &project_id).await?;
     let invite = OccupantInvite::new(project_id, body.into_inner());
     app.occupant_invites
-        .insert_one(invite, None)
+        .insert_one(&invite, None)
         .await
         .map_err(|_err| InternalError::DatabaseConnectionError)?;
+
+    let inviter = session
+        .get::<String>("username")
+        .map_err(|_err| UserError::PermissionsError)?
+        .ok_or_else(|| UserError::PermissionsError)?;
+
+    app.network.do_send(topology::SendOccupantInvite {
+        inviter,
+        invite,
+        project,
+    });
 
     Ok(HttpResponse::Ok().body("Invitation sent!"))
 }

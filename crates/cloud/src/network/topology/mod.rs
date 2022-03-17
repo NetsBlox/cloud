@@ -3,7 +3,7 @@ mod client;
 mod external;
 mod network;
 
-use crate::models::{ProjectMetadata, RoleData};
+use crate::models::{OccupantInvite, ProjectMetadata, RoleData};
 use actix::prelude::*;
 use actix::{Actor, AsyncContext, Context, Handler, MessageResult};
 use lazy_static::lazy_static;
@@ -321,5 +321,41 @@ impl Handler<GetClientUsername> for TopologyActor {
                 .get_client_username(&msg.client_id)
                 .map(|state| state.to_owned()),
         ))
+    }
+}
+
+#[derive(Message)]
+#[rtype(result = "CheckClientExistsResult")]
+pub struct CheckClientExists {
+    pub client_id: ClientID,
+}
+
+#[derive(Message)]
+#[rtype(result = "()")]
+pub struct CheckClientExistsResult(pub bool);
+
+impl Handler<CheckClientExists> for TopologyActor {
+    type Result = MessageResult<CheckClientExists>;
+
+    fn handle(&mut self, msg: CheckClientExists, _: &mut Context<Self>) -> Self::Result {
+        let topology = TOPOLOGY.read().unwrap();
+        MessageResult(CheckClientExistsResult(topology.has_client(&msg.client_id)))
+    }
+}
+
+#[derive(Message, Clone)]
+#[rtype(result = "()")]
+pub struct SendOccupantInvite {
+    pub inviter: String,
+    pub invite: OccupantInvite,
+    pub project: ProjectMetadata,
+}
+
+impl Handler<SendOccupantInvite> for TopologyActor {
+    type Result = ();
+
+    fn handle(&mut self, msg: SendOccupantInvite, _: &mut Context<Self>) -> Self::Result {
+        let topology = TOPOLOGY.read().unwrap();
+        topology.send_occupant_invite(msg);
     }
 }

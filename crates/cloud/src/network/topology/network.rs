@@ -16,8 +16,8 @@ use crate::network::AppID;
 pub use super::address::DEFAULT_APP_ID;
 use super::client::{Client, ClientID, RoleRequest};
 use super::{
-    AddClient, BrokenClient, ClientMessage, RemoveClient, SendMessage, SendRoomState,
-    SetClientState,
+    AddClient, BrokenClient, ClientMessage, RemoveClient, SendMessage, SendOccupantInvite,
+    SendRoomState, SetClientState,
 };
 
 struct BrowserAddress {
@@ -40,6 +40,18 @@ impl From<RoomState> for ClientMessage {
         let msg = value.as_object_mut().unwrap();
         msg.insert("type".into(), serde_json::to_value("room-roles").unwrap());
         ClientMessage(value)
+    }
+}
+
+impl From<SendOccupantInvite> for ClientMessage {
+    fn from(msg: SendOccupantInvite) -> ClientMessage {
+        ClientMessage(json!({
+            "type": "room-invitation",
+            "projectId": msg.invite.project_id,
+            "roleId": msg.invite.role_id,
+            "projectName": msg.project.name,
+            "inviter": msg.inviter,
+        }))
     }
 }
 
@@ -240,7 +252,7 @@ impl Topology {
         });
     }
 
-    fn has_client(&self, id: &str) -> bool {
+    pub fn has_client(&self, id: &str) -> bool {
         self.clients.contains_key(id)
     }
 
@@ -495,6 +507,20 @@ impl Topology {
 
     pub fn get_client_username(&self, id: &ClientID) -> Option<&String> {
         self.usernames.get(id)
+    }
+
+    pub fn send_occupant_invite(&self, msg: SendOccupantInvite) {
+        let clients = self.usernames.iter().filter_map(|(client_id, username)| {
+            if username == &msg.invite.username {
+                self.clients.get(client_id)
+            } else {
+                None
+            }
+        });
+
+        clients.for_each(|client| {
+            client.addr.do_send(msg.clone().into());
+        });
     }
 }
 

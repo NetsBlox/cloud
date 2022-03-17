@@ -207,7 +207,7 @@ pub async fn ensure_can_edit_project_id(
     session: &Session,
     client_id: Option<String>,
     project_id: &str,
-) -> Result<(), UserError> {
+) -> Result<ProjectMetadata, UserError> {
     let query = doc! {"id": project_id};
     let metadata = app
         .project_metadata
@@ -217,7 +217,7 @@ pub async fn ensure_can_edit_project_id(
         .ok_or_else(|| UserError::ProjectNotFoundError)?;
 
     ensure_can_edit_project(app, session, client_id, &metadata).await?;
-    Ok(())
+    Ok(metadata)
 }
 
 pub async fn can_edit_project_id(

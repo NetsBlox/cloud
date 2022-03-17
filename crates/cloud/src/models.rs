@@ -240,12 +240,12 @@ impl From<Project> for netsblox_core::Project {
     }
 }
 
-#[derive(Deserialize, Serialize, Debug)]
+#[derive(Deserialize, Serialize, Debug, Clone)]
 #[serde(rename_all = "camelCase")]
 pub struct OccupantInvite {
-    username: String,
-    project_id: ProjectId,
-    role_id: String,
+    pub username: String,
+    pub project_id: ProjectId,
+    pub role_id: String,
 }
 
 impl OccupantInvite {
