@@ -9,7 +9,7 @@ use crate::users::{ensure_can_edit_user, ensure_is_super_user};
 use actix::{Actor, Addr, AsyncContext, Handler, StreamHandler};
 use actix_session::Session;
 use actix_web::{get, post};
-use actix_web::{web, Error, HttpRequest, HttpResponse};
+use actix_web::{web, HttpRequest, HttpResponse};
 use actix_web_actors::ws::{self, CloseCode};
 use mongodb::bson::doc;
 use netsblox_core::{BrowserClientState, ClientID, ClientStateData, OccupantInviteReq, ProjectId};
@@ -84,28 +84,34 @@ enum ChannelType {
     Edits,
 }
 
-#[derive(Deserialize)]
-struct ConnectClientBody {
-    id: String,
-    secret: String,
-}
-
 #[get("/{client}/connect")]
 async fn connect_client(
-    data: web::Data<AppData>,
+    app: web::Data<AppData>,
     req: HttpRequest,
     stream: web::Payload,
     path: web::Path<(String,)>,
-    //body: web::Json<ConnectClientBody>,
-) -> Result<HttpResponse, Error> {
+) -> Result<HttpResponse, UserError> {
     // TODO: validate client secret?
-    // TODO: ensure ID is unique?
     let (client_id,) = path.into_inner();
+    let exists = app
+        .network
+        .send(topology::CheckClientExists {
+            client_id: client_id.clone(),
+        })
+        .await
+        .map_err(|_err| UserError::InternalError)?
+        .0;
+
+    if !client_id.starts_with('_') || exists {
+        return Err(UserError::InvalidClientIdError);
+    }
+
     let handler = WsSession {
         client_id,
-        topology_addr: data.network.clone(),
+        topology_addr: app.network.clone(),
     };
-    ws::start(handler, &req, stream)
+
+    ws::start(handler, &req, stream).map_err(|_err| UserError::InternalError)
 }
 
 #[get("/id/{projectID}")]
