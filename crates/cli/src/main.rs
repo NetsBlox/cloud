@@ -441,12 +441,15 @@ fn prompt_credentials() -> (String, String, bool) {
 async fn main() {
     let mut cfg: Config = confy::load(&APP_NAME).expect("Unable to load configuration.");
     cfg.app_id = Some("NetsBloxCLI".to_owned());
-    println!("Using config: {:?}", &cfg);
 
     let args = Cli::parse();
     if let Err(err) = do_command(cfg, args).await {
-        println!("{}", err); // TODO: stderr
-                             // TODO: non-zero exit code
+        let code = match err {
+            netsblox_api::error::Error::RequestError(..) => exitcode::NOHOST,
+            _ => exitcode::USAGE,
+        };
+        eprintln!("{}", err);
+        std::process::exit(code);
     }
 }
 
