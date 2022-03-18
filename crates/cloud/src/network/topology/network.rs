@@ -58,7 +58,7 @@ impl From<SendOccupantInvite> for ClientMessage {
 struct EvictionNotice;
 
 impl From<EvictionNotice> for ClientMessage {
-    fn from(msg: EvictionNotice) -> ClientMessage {
+    fn from(_msg: EvictionNotice) -> ClientMessage {
         ClientMessage(json!({"type": "eviction-notice"}))
     }
 }
@@ -392,6 +392,7 @@ impl Topology {
                 .await
                 .unwrap()
                 .map(|md| match md.save_state {
+                    SaveState::CREATED => unreachable!(),
                     SaveState::TRANSIENT => ProjectCleanup::IMMEDIATELY,
                     SaveState::BROKEN => ProjectCleanup::DELAYED,
                     SaveState::SAVED => ProjectCleanup::NONE,

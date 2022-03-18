@@ -12,6 +12,8 @@ pub enum InternalError {
 
 #[derive(Debug, Display, Error)]
 pub enum UserError {
+    #[display(fmt = "Login required.")]
+    LoginRequiredError,
     #[display(fmt = "Not allowed.")]
     PermissionsError,
     #[display(fmt = "Project not found.")]
@@ -62,10 +64,13 @@ impl error::ResponseError for UserError {
 
     fn status_code(&self) -> StatusCode {
         match *self {
+            UserError::LoginRequiredError => StatusCode::UNAUTHORIZED,
+            // TODO: use Forbidden if logged in
             UserError::PermissionsError
             | UserError::IncorrectUsernameOrPasswordError
             | UserError::BannedUserError
-            | UserError::IncorrectPasswordError => StatusCode::UNAUTHORIZED,
+            | UserError::IncorrectPasswordError => StatusCode::FORBIDDEN,
+
             UserError::ProjectNotFoundError
             | UserError::RoleNotFoundError
             | UserError::InviteNotFoundError

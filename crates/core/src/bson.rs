@@ -58,6 +58,7 @@ impl From<FriendInvite> for Bson {
 impl From<SaveState> for Bson {
     fn from(state: SaveState) -> Bson {
         match state {
+            SaveState::CREATED => Bson::String("CREATED".to_string()),
             SaveState::TRANSIENT => Bson::String("TRANSIENT".to_string()),
             SaveState::BROKEN => Bson::String("BROKEN".to_string()),
             SaveState::SAVED => Bson::String("SAVED".to_string()),

@@ -110,7 +110,6 @@ impl AppData {
         };
         self.s3.create_bucket(request).await;
 
-        // TODO: create the indices
         self.db
             .run_command(
                 doc! {
@@ -120,7 +119,7 @@ impl AppData {
                             "key": {"deleteAt": 1},
                             "name": "broken_project_ttl",
                             "sparse": true,
-                            "expireAfterSeconds": 15*60,
+                            "expireAfterSeconds": 10,
                         }
                     ],
                 },
@@ -191,6 +190,7 @@ impl AppData {
         // FIXME: Update the type if we use the projection
         //let projection = doc! {"name": true};
         //let options = FindOptions::builder().projection(projection).build();
+        // TODO: validate the project name (no profanity)
         let cursor = self.project_metadata.find(query, None).await.unwrap(); // FIXME: This can throw an error
         let project_names = cursor
             .try_collect::<Vec<_>>()

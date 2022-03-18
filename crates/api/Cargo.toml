@@ -13,3 +13,4 @@ netsblox_core = { path = "../core", version = "0.1.0" }
 tokio-tungstenite = "0.16.1"
 tungstenite = "0.16.0"
 tokio = "1.0.0"
+derive_more = "0.99.17"

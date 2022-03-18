@@ -1647,6 +1647,7 @@ dependencies = [
 name = "netsblox-api"
 version = "0.1.0"
 dependencies = [
+ "derive_more",
  "futures-util",
  "netsblox_core",
  "reqwest",

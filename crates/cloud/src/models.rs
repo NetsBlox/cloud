@@ -3,10 +3,15 @@ pub use netsblox_core::{
     CreateGroupData, FriendInvite, FriendLinkState, Group, GroupId, InvitationState, LinkedAccount,
     ProjectId, RoleData, RoleMetadata, SaveState, ServiceHost,
 };
-use netsblox_core::{OccupantInviteReq, UserRole};
+use netsblox_core::{NewUser, OccupantInviteReq, UserRole};
 use serde::{Deserialize, Serialize};
-use std::{collections::HashMap, time::SystemTime};
+use std::{
+    collections::HashMap,
+    time::{Duration, SystemTime},
+};
 use uuid::Uuid;
+
+use crate::users::sha512;
 
 #[derive(Serialize, Deserialize, Clone)]
 #[serde(rename_all = "camelCase")]
@@ -48,6 +53,36 @@ impl From<User> for netsblox_core::User {
             created_at: user.created_at.to_system_time(),
             linked_accounts: user.linked_accounts,
             services_hosts: user.services_hosts,
+        }
+    }
+}
+
+impl From<NewUser> for User {
+    fn from(user_data: NewUser) -> Self {
+        let salt = passwords::PasswordGenerator::new()
+            .length(8)
+            .exclude_similar_characters(true)
+            .numbers(true)
+            .spaces(false)
+            .generate_one()
+            .unwrap_or("salt".to_owned());
+
+        let hash: String = if let Some(pwd) = user_data.password {
+            sha512(&(pwd + &salt))
+        } else {
+            "None".to_owned()
+        };
+
+        User {
+            username: user_data.username,
+            hash,
+            salt,
+            email: user_data.email,
+            group_id: user_data.group_id,
+            created_at: DateTime::from_system_time(SystemTime::now()),
+            linked_accounts: std::vec::Vec::new(),
+            role: user_data.role.unwrap_or(UserRole::User),
+            services_hosts: None,
         }
     }
 }
@@ -165,6 +200,7 @@ pub struct ProjectMetadata {
     pub collaborators: std::vec::Vec<String>,
     pub origin_time: DateTime,
     pub save_state: SaveState,
+    pub delete_at: Option<DateTime>,
     pub roles: HashMap<String, RoleMetadata>,
 }
 
@@ -176,6 +212,10 @@ impl ProjectMetadata {
             .map(|role| (Uuid::new_v4().to_string(), role))
             .collect::<HashMap<_, _>>();
 
+        let ten_minutes = Duration::new(10 * 60, 0);
+        let delete_at =
+            DateTime::from_system_time(SystemTime::now().checked_add(ten_minutes).unwrap());
+
         ProjectMetadata {
             id: Uuid::new_v4().to_string(),
             owner: owner.to_owned(),
@@ -185,7 +225,8 @@ impl ProjectMetadata {
             thumbnail: "".to_owned(),
             public: false,
             collaborators: vec![],
-            save_state: SaveState::TRANSIENT,
+            save_state: SaveState::CREATED,
+            delete_at: Some(delete_at),
             roles,
         }
     }

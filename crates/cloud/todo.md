@@ -3,6 +3,8 @@
     - this can follow the same method as before
         - add a TTL of something like 1 day to messages?
 
+- [ ] fix login required errors (to unauthorized)
+
 - [ ] collaborative editing action acceptance
     - maybe we don't need to persist them...
     - accept actions when collaborating
@@ -30,6 +32,9 @@
             - what if we connected the services server like a 3rd party app?
                 - it would need to authenticate as a single user though
 
+    - how is the API used by the services server?
+        - authenticate users
+
 - [ ] occupants
     - [ ] invite occupant
         - these can probably be transient invitations
@@ -50,19 +55,29 @@
             - maybe we should return to the idea of invitations...
     - invite occupant from CLI?
     - [ ] test this from the browser
-        - [ ] can send invite
+        - [x] can send invite
         - [ ] accepting invite removes invite from database
         - [ ] close additional invites when one is accepted
+              - this is a little annoying. Will I actually need to ID invites?
         - [ ] allow user to open project using invite
 
 - [ ] logout on ban? Or just ensure not banned
 
 - general
     - [ ] finalize output formats (machine vs human?)
+        - what kind of errors should we have?
+            - base it off the status codes (+reqwest errors)?
+        - BadRequestError
+        - UnauthorizedError
+        - NotFoundError
+        - InternalServerError
+        - RequestError
+
     - [ ] finish updating the browser
 
 - [ ] add unvisited saveState (w/ a ttl)
     - CREATED -> TRANSIENT -> BROKEN/SAVED
+    - [ ] test this
 
 - [ ] apiKeys. Should these be managed from the services server?
     - probably
@@ -149,18 +164,6 @@
 
 - [ ] session doesn't ensure logged in...
      - new extractor that ensures authenticated?
-
-- [ ] projects routes
-    - [x] add blob support for main project data
-        - rusoto?
-    - [x] don't use hashing to store the data
-        - [ ] probably need a migration since this will change assumptions on delete/rename
-    - [ ] get project by name (open default role?)
-    - [ ] get project by name (entire project)
-    - [ ] list projects
-        - projects/id/{ID}
-        - projects/user/{owner}
-        - projects/shared/{collaborator}
 
 - [ ] auth integration with services endpoint
     - maybe the services endpoint should hit this one?
@@ -526,4 +529,16 @@
 - [x] add message on evict
 
 - [x] online friends (admin returns all)
+
+- [x] projects routes
+    - [x] add blob support for main project data
+        - rusoto?
+    - [x] don't use hashing to store the data
+        - [ ] probably need a migration since this will change assumptions on delete/rename
+    - [ ] get project by name (open default role?)
+    - [ ] get project by name (entire project)
+    - [ ] list projects
+        - projects/id/{ID}
+        - projects/user/{owner}
+        - projects/shared/{collaborator}
 

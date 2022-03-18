@@ -35,6 +35,15 @@ pub struct User {
     pub services_hosts: Option<Vec<ServiceHost>>,
 }
 
+#[derive(Serialize, Deserialize)]
+pub struct NewUser {
+    pub username: String,
+    pub email: String,
+    pub password: Option<String>,
+    pub group_id: Option<String>,
+    pub role: Option<UserRole>,
+}
+
 #[derive(Serialize, Deserialize, Clone, Debug)]
 #[serde(rename_all = "camelCase")]
 pub enum UserRole {
@@ -161,6 +170,7 @@ pub struct ProjectMetadata {
 
 #[derive(Deserialize, Serialize, Clone, Debug)]
 pub enum SaveState {
+    CREATED,
     TRANSIENT,
     BROKEN,
     SAVED,

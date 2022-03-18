@@ -438,12 +438,19 @@ fn prompt_credentials() -> (String, String, bool) {
 }
 
 #[tokio::main]
-async fn main() -> Result<(), confy::ConfyError> {
-    let mut cfg: Config = confy::load(&APP_NAME)?;
+async fn main() {
+    let mut cfg: Config = confy::load(&APP_NAME).expect("Unable to load configuration.");
     cfg.app_id = Some("NetsBloxCLI".to_owned());
     println!("Using config: {:?}", &cfg);
 
     let args = Cli::parse();
+    if let Err(err) = do_command(cfg, args).await {
+        println!("{}", err); // TODO: stderr
+                             // TODO: non-zero exit code
+    }
+}
+
+async fn do_command(mut cfg: Config, args: Cli) -> Result<(), netsblox_api::error::Error> {
     let is_logged_in = !(cfg.token.is_none() || cfg.username.is_none());
     let login_required = match &args.cmd {
         Command::Login => true,
@@ -470,19 +477,17 @@ async fn main() -> Result<(), confy::ConfyError> {
             .await
             .expect("Login failed");
 
-        confy::store(&APP_NAME, &cfg)?;
+        confy::store(&APP_NAME, &cfg).expect("Unable to save configuration file.");
     }
     let current_user = cfg.username.as_ref().unwrap().clone();
     let client = Client::new(cfg.clone());
 
-    // TODO: login if cookie is invalid. Or just throw an error for user to re-login
-    // TODO: Or just keep track of when it is no longer valid...
     match &args.cmd {
         Command::Login { .. } => {}
         Command::Logout => {
             cfg.token = None;
             cfg.username = None;
-            confy::store(&APP_NAME, &cfg)?;
+            confy::store(&APP_NAME, &cfg).expect("Unable to save configuration file.");
         }
         Command::Users(cmd) => match &cmd.subcmd {
             Users::Create {
@@ -495,7 +500,7 @@ async fn main() -> Result<(), confy::ConfyError> {
             } => {
                 let group_id = if let Some(group_name) = group {
                     let username = user.clone().unwrap_or(current_user);
-                    let groups = client.list_groups(&username).await;
+                    let groups = client.list_groups(&username).await?;
                     groups
                         .into_iter()
                         .find(|g| g.name == *group_name)
@@ -510,16 +515,16 @@ async fn main() -> Result<(), confy::ConfyError> {
                         email,
                         password.as_deref(),
                         group_id.as_deref(),
-                        role,
+                        role.to_owned(),
                     )
-                    .await;
+                    .await?;
             }
             Users::SetPassword { password, user } => {
                 let username = user.clone().unwrap_or(current_user);
-                client.set_password(&username, &password).await;
+                client.set_password(&username, &password).await?;
             }
             Users::List => {
-                for user in client.list_users().await {
+                for user in client.list_users().await? {
                     println!("{}", user);
                 }
             }
@@ -535,13 +540,13 @@ async fn main() -> Result<(), confy::ConfyError> {
                         .unwrap_or(false)
                 };
                 if confirmed {
-                    client.delete_user(&username).await;
+                    client.delete_user(&username).await?;
                     println!("deleted {}", username);
                 }
             }
             Users::View { user } => {
                 let username = user.clone().unwrap_or(current_user);
-                let user = client.view_user(&username).await;
+                let user = client.view_user(&username).await?;
                 println!("{:?}", user);
             }
             Users::Link {
@@ -554,7 +559,7 @@ async fn main() -> Result<(), confy::ConfyError> {
                     username: username.to_owned(),
                     password: password.to_owned(),
                 };
-                client.link_account(&as_user, &creds).await;
+                client.link_account(&as_user, &creds).await?;
             }
             Users::Unlink { username, user } => {
                 let as_user = user.clone().unwrap_or(current_user);
@@ -562,10 +567,10 @@ async fn main() -> Result<(), confy::ConfyError> {
                     username: username.to_owned(),
                     strategy: "snap".to_owned(), // FIXME: add to linked account impl?
                 };
-                client.unlink_account(&as_user, &account).await;
+                client.unlink_account(&as_user, &account).await?;
             }
             Users::Ban { username } => {
-                client.ban_user(&username).await;
+                client.ban_user(&username).await?;
             }
         },
         Command::Projects(cmd) => match &cmd.subcmd {
@@ -583,7 +588,7 @@ async fn main() -> Result<(), confy::ConfyError> {
                 user,
             } => {
                 let username = user.clone().unwrap_or(current_user);
-                let metadata = client.get_project_metadata(&username, &project).await;
+                let metadata = client.get_project_metadata(&username, &project).await?;
                 let project_id = metadata.id;
                 let xml = if let Some(role) = role {
                     let role_id = metadata
@@ -595,19 +600,19 @@ async fn main() -> Result<(), confy::ConfyError> {
 
                     client
                         .get_role(&project_id, &role_id, latest)
-                        .await
+                        .await?
                         .to_xml()
                 } else {
-                    client.get_project(&project_id, latest).await.to_xml()
+                    client.get_project(&project_id, latest).await?.to_xml()
                 };
                 println!("{}", xml);
             }
             Projects::List { user, shared } => {
                 let username = user.clone().unwrap_or(current_user);
                 let projects = if *shared {
-                    client.list_shared_projects(&username).await
+                    client.list_shared_projects(&username).await?
                 } else {
-                    client.list_projects(&username).await
+                    client.list_projects(&username).await?
                 };
 
                 for project in projects {
@@ -616,18 +621,18 @@ async fn main() -> Result<(), confy::ConfyError> {
             }
             Projects::Publish { project, user } => {
                 let username = user.clone().unwrap_or(current_user);
-                let metadata = client.get_project_metadata(&username, &project).await;
+                let metadata = client.get_project_metadata(&username, &project).await?;
                 let project_id = metadata.id;
 
-                client.publish_project(&project_id).await;
+                client.publish_project(&project_id).await?;
                 // TODO: add moderation here, too?
             }
             Projects::Unpublish { project, user } => {
                 let username = user.clone().unwrap_or(current_user);
-                let metadata = client.get_project_metadata(&username, &project).await;
+                let metadata = client.get_project_metadata(&username, &project).await?;
                 let project_id = metadata.id;
 
-                client.unpublish_project(&project_id).await;
+                client.unpublish_project(&project_id).await?;
             }
             Projects::InviteCollaborator {
                 project,
@@ -635,13 +640,13 @@ async fn main() -> Result<(), confy::ConfyError> {
                 user,
             } => {
                 let owner = user.clone().unwrap_or(current_user);
-                let metadata = client.get_project_metadata(&owner, &project).await;
+                let metadata = client.get_project_metadata(&owner, &project).await?;
                 let project_id = metadata.id;
-                client.invite_collaborator(&project_id, &username).await;
+                client.invite_collaborator(&project_id, &username).await?;
             }
             Projects::ListInvites { user } => {
                 let username = user.clone().unwrap_or(current_user);
-                let invites = client.list_collaboration_invites(&username).await;
+                let invites = client.list_collaboration_invites(&username).await?;
                 for invite in invites {
                     println!("{:?}", invite);
                 }
@@ -653,8 +658,8 @@ async fn main() -> Result<(), confy::ConfyError> {
                 user,
             } => {
                 let receiver = user.clone().unwrap_or(current_user);
-                let invites = client.list_collaboration_invites(&receiver).await;
-                let project_id = client.get_project_metadata(&username, &project).await.id;
+                let invites = client.list_collaboration_invites(&receiver).await?;
+                let project_id = client.get_project_metadata(&username, &project).await?.id;
                 let invite = invites
                     .iter()
                     .find(|inv| inv.sender == *username && inv.project_id == project_id)
@@ -667,11 +672,11 @@ async fn main() -> Result<(), confy::ConfyError> {
                 };
                 client
                     .respond_to_collaboration_invite(&invite.id, &state)
-                    .await;
+                    .await?;
             }
             Projects::ListCollaborators { project, user } => {
                 let owner = user.clone().unwrap_or(current_user);
-                let metadata = client.get_project_metadata(&owner, &project).await;
+                let metadata = client.get_project_metadata(&owner, &project).await?;
                 for user in metadata.collaborators {
                     println!("{}", user);
                 }
@@ -682,8 +687,8 @@ async fn main() -> Result<(), confy::ConfyError> {
                 user,
             } => {
                 let owner = user.clone().unwrap_or(current_user);
-                let metadata = client.get_project_metadata(&owner, &project).await;
-                client.remove_collaborator(&metadata.id, &username).await;
+                let metadata = client.get_project_metadata(&owner, &project).await?;
+                client.remove_collaborator(&metadata.id, &username).await?;
             }
             Projects::Delete {
                 project,
@@ -691,7 +696,7 @@ async fn main() -> Result<(), confy::ConfyError> {
                 user,
             } => {
                 let owner = user.clone().unwrap_or(current_user);
-                let metadata = client.get_project_metadata(&owner, &project).await;
+                let metadata = client.get_project_metadata(&owner, &project).await?;
                 if let Some(role_name) = role {
                     let role_id = metadata
                         .roles
@@ -700,9 +705,9 @@ async fn main() -> Result<(), confy::ConfyError> {
                         .map(|(id, _role)| id)
                         .expect("Role not found.");
 
-                    client.delete_role(&metadata.id, &role_id).await;
+                    client.delete_role(&metadata.id, &role_id).await?;
                 } else {
-                    client.delete_project(&metadata.id).await;
+                    client.delete_project(&metadata.id).await?;
                 }
             }
             Projects::Rename {
@@ -712,7 +717,7 @@ async fn main() -> Result<(), confy::ConfyError> {
                 user,
             } => {
                 let owner = user.clone().unwrap_or(current_user);
-                let metadata = client.get_project_metadata(&owner, &project).await;
+                let metadata = client.get_project_metadata(&owner, &project).await?;
                 if let Some(role_name) = role {
                     let role_id = metadata
                         .roles
@@ -721,20 +726,20 @@ async fn main() -> Result<(), confy::ConfyError> {
                         .map(|(id, _role)| id)
                         .expect("Role not found.");
 
-                    client.rename_role(&metadata.id, &role_id, new_name).await;
+                    client.rename_role(&metadata.id, &role_id, new_name).await?;
                 } else {
-                    client.rename_project(&metadata.id, new_name).await;
+                    client.rename_project(&metadata.id, new_name).await?;
                 }
             }
         },
         Command::Network(cmd) => match &cmd.subcmd {
             Network::List { external } => {
                 if *external {
-                    for client in client.list_external_clients().await {
+                    for client in client.list_external_clients().await? {
                         println!("{:?}", client);
                     }
                 } else {
-                    for project_id in client.list_networks().await {
+                    for project_id in client.list_networks().await? {
                         println!("{}", project_id);
                     }
                 }
@@ -748,13 +753,13 @@ async fn main() -> Result<(), confy::ConfyError> {
                     project.to_owned()
                 } else {
                     let owner = user.clone().unwrap_or(current_user);
-                    client.get_project_metadata(&owner, &project).await.id
+                    client.get_project_metadata(&owner, &project).await?.id
                 };
-                let state = client.get_room_state(&project_id).await;
+                let state = client.get_room_state(&project_id).await?;
                 println!("{:?}", state);
             }
             Network::Connect { address } => {
-                let channel = client.connect(address).await;
+                let channel = client.connect(address).await?;
                 println!(
                     "Listening for messages at {}@{}#NetsBloxCLI",
                     address,
@@ -770,16 +775,16 @@ async fn main() -> Result<(), confy::ConfyError> {
                     .await;
             }
             Network::Evict { client_id } => {
-                client.evict_occupant(client_id).await;
+                client.evict_occupant(client_id).await?;
             }
         },
         Command::Friends(cmd) => match &cmd.subcmd {
             Friends::List { online, user } => {
                 let username = user.clone().unwrap_or(current_user);
                 let friends = if *online {
-                    client.list_online_friends(&username).await
+                    client.list_online_friends(&username).await?
                 } else {
-                    client.list_friends(&username).await
+                    client.list_friends(&username).await?
                 };
 
                 for friend in friends {
@@ -789,25 +794,25 @@ async fn main() -> Result<(), confy::ConfyError> {
 
             Friends::ListInvites { user } => {
                 let username = user.clone().unwrap_or(current_user);
-                for invite in client.list_friend_invites(&username).await {
+                for invite in client.list_friend_invites(&username).await? {
                     println!("{:?}", invite);
                 }
             }
             Friends::Block { username, user } => {
                 let requestor = user.clone().unwrap_or(current_user);
-                client.block_user(&requestor, username).await;
+                client.block_user(&requestor, username).await?;
             }
             Friends::Unblock { username, user } => {
                 let requestor = user.clone().unwrap_or(current_user);
-                client.unblock_user(&requestor, username).await;
+                client.unblock_user(&requestor, username).await?;
             }
             Friends::Remove { username, user } => {
                 let owner = user.clone().unwrap_or(current_user);
-                client.unfriend(&owner, username).await;
+                client.unfriend(&owner, username).await?;
             }
             Friends::SendInvite { username, user } => {
                 let sender = user.clone().unwrap_or(current_user);
-                client.send_friend_invite(&sender, &username).await;
+                client.send_friend_invite(&sender, &username).await?;
             }
             Friends::AcceptInvite {
                 sender,
@@ -822,7 +827,7 @@ async fn main() -> Result<(), confy::ConfyError> {
                 };
                 client
                     .respond_to_friend_invite(&recipient, sender, state)
-                    .await;
+                    .await?;
             }
         },
         Command::ServiceHosts(cmd) => match &cmd.subcmd {
@@ -833,17 +838,17 @@ async fn main() -> Result<(), confy::ConfyError> {
             } => {
                 let username = user.clone().unwrap_or(current_user);
                 let service_hosts = if *user_only {
-                    client.list_user_hosts(&username).await
+                    client.list_user_hosts(&username).await?
                 } else if let Some(group_name) = group {
-                    let groups = client.list_groups(&username).await;
+                    let groups = client.list_groups(&username).await?;
                     let group_id = groups
                         .into_iter()
                         .find(|g| g.name == *group_name)
                         .map(|group| group.id)
                         .unwrap();
-                    client.list_group_hosts(&group_id).await
+                    client.list_group_hosts(&group_id).await?
                 } else {
-                    client.list_hosts(&username).await
+                    client.list_hosts(&username).await?
                 };
 
                 for host in service_hosts {
@@ -858,7 +863,7 @@ async fn main() -> Result<(), confy::ConfyError> {
             } => {
                 let username = user.clone().unwrap_or(current_user);
                 let group_id = if let Some(group_name) = group {
-                    let groups = client.list_groups(&username).await;
+                    let groups = client.list_groups(&username).await?;
                     groups
                         .into_iter()
                         .find(|g| g.name == *group_name)
@@ -867,9 +872,9 @@ async fn main() -> Result<(), confy::ConfyError> {
                     None
                 };
                 let mut service_hosts = if let Some(group_id) = group_id.clone() {
-                    client.list_group_hosts(&group_id).await
+                    client.list_group_hosts(&group_id).await?
                 } else {
-                    client.list_user_hosts(&username).await
+                    client.list_user_hosts(&username).await?
                 };
 
                 service_hosts.push(ServiceHost {
@@ -878,15 +883,15 @@ async fn main() -> Result<(), confy::ConfyError> {
                 });
 
                 if let Some(group_id) = group_id {
-                    client.set_group_hosts(&group_id, service_hosts).await;
+                    client.set_group_hosts(&group_id, service_hosts).await?;
                 } else {
-                    client.set_user_hosts(&username, service_hosts).await;
+                    client.set_user_hosts(&username, service_hosts).await?;
                 }
             }
             ServiceHosts::Remove { url, group, user } => {
                 let username = user.clone().unwrap_or(current_user);
                 let group_id = if let Some(group_name) = group {
-                    let groups = client.list_groups(&username).await;
+                    let groups = client.list_groups(&username).await?;
                     groups
                         .into_iter()
                         .find(|g| g.name == *group_name)
@@ -895,9 +900,9 @@ async fn main() -> Result<(), confy::ConfyError> {
                     None
                 };
                 let mut service_hosts = if let Some(group_id) = group_id.clone() {
-                    client.list_group_hosts(&group_id).await
+                    client.list_group_hosts(&group_id).await?
                 } else {
-                    client.list_user_hosts(&username).await
+                    client.list_user_hosts(&username).await?
                 };
 
                 let index = service_hosts
@@ -908,9 +913,9 @@ async fn main() -> Result<(), confy::ConfyError> {
                 service_hosts.swap_remove(index);
 
                 if let Some(group_id) = group_id {
-                    client.set_group_hosts(&group_id, service_hosts).await;
+                    client.set_group_hosts(&group_id, service_hosts).await?;
                 } else {
-                    client.set_user_hosts(&username, service_hosts).await;
+                    client.set_user_hosts(&username, service_hosts).await?;
                 }
             }
         },
@@ -922,11 +927,11 @@ async fn main() -> Result<(), confy::ConfyError> {
             } => {
                 let username = user.clone().unwrap_or(current_user);
                 let libraries = if *community {
-                    client.get_public_libraries().await
+                    client.get_public_libraries().await?
                 } else if *approval_needed {
-                    client.get_submitted_libraries().await
+                    client.get_submitted_libraries().await?
                 } else {
-                    client.get_libraries(&username).await
+                    client.get_libraries(&username).await?
                 };
 
                 for library in libraries {
@@ -949,24 +954,26 @@ async fn main() -> Result<(), confy::ConfyError> {
                         .unwrap()
                         .to_owned()
                 });
-                client.save_library(&username, &name, &blocks, notes).await;
+                client
+                    .save_library(&username, &name, &blocks, notes)
+                    .await?;
             }
             Libraries::Export { library, user } => {
                 let username = user.clone().unwrap_or(current_user);
-                let xml = client.get_library(&username, &library).await;
+                let xml = client.get_library(&username, &library).await?;
                 println!("{}", xml);
             }
             Libraries::Delete { library, user } => {
                 let username = user.clone().unwrap_or(current_user);
-                client.delete_library(&username, &library).await;
+                client.delete_library(&username, &library).await?;
             }
             Libraries::Publish { library, user } => {
                 let username = user.clone().unwrap_or(current_user);
-                client.publish_library(&username, &library).await;
+                client.publish_library(&username, &library).await?;
             }
             Libraries::Unpublish { library, user } => {
                 let username = user.clone().unwrap_or(current_user);
-                client.unpublish_library(&username, &library).await;
+                client.unpublish_library(&username, &library).await?;
             }
             Libraries::Approve {
                 library,
@@ -979,42 +986,42 @@ async fn main() -> Result<(), confy::ConfyError> {
                 } else {
                     LibraryPublishState::Public
                 };
-                client.approve_library(&username, &library, &state).await;
+                client.approve_library(&username, &library, &state).await?;
             }
         },
         Command::Groups(cmd) => match &cmd.subcmd {
             Groups::List { user } => {
                 let username = user.clone().unwrap_or(current_user);
-                let groups = client.list_groups(&username).await;
+                let groups = client.list_groups(&username).await?;
                 for group in groups {
                     println!("{}", group.name);
                 }
             }
             Groups::Create { name, user } => {
                 let username = user.clone().unwrap_or(current_user);
-                client.create_group(&username, &name).await;
+                client.create_group(&username, &name).await?;
             }
             Groups::Delete { group, user } => {
                 let username = user.clone().unwrap_or(current_user);
-                let groups = client.list_groups(&username).await;
+                let groups = client.list_groups(&username).await?;
                 let group_id = groups
                     .into_iter()
                     .find(|g| g.name == *group)
                     .map(|group| group.id)
                     .unwrap();
 
-                client.delete_group(&group_id).await;
+                client.delete_group(&group_id).await?;
             }
             Groups::Members { group, user } => {
                 let username = user.clone().unwrap_or(current_user);
-                let groups = client.list_groups(&username).await;
+                let groups = client.list_groups(&username).await?;
                 let group_id = groups
                     .into_iter()
                     .find(|g| g.name == *group)
                     .map(|group| group.id)
                     .unwrap(); // FIXME
 
-                for member in client.list_members(&group_id).await {
+                for member in client.list_members(&group_id).await? {
                     println!("{:?}", member);
                 }
             }
@@ -1024,25 +1031,25 @@ async fn main() -> Result<(), confy::ConfyError> {
                 user,
             } => {
                 let username = user.clone().unwrap_or(current_user);
-                let groups = client.list_groups(&username).await;
+                let groups = client.list_groups(&username).await?;
                 let group_id = groups
                     .into_iter()
                     .find(|g| g.name == *group)
                     .map(|group| group.id)
                     .unwrap();
 
-                client.rename_group(&group_id, &new_name).await;
+                client.rename_group(&group_id, &new_name).await?;
             }
             Groups::View { group, user } => {
                 let username = user.clone().unwrap_or(current_user);
-                let groups = client.list_groups(&username).await;
+                let groups = client.list_groups(&username).await?;
                 let group_id = groups
                     .into_iter()
                     .find(|g| g.name == *group)
                     .map(|group| group.id)
                     .unwrap();
 
-                let group = client.view_group(&group_id).await;
+                let group = client.view_group(&group_id).await?;
                 println!("{:?}", group);
             }
         },

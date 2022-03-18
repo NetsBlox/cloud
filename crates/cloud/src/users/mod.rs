@@ -10,43 +10,12 @@ use actix_web::{web, HttpResponse};
 use futures::TryStreamExt;
 use lazy_static::lazy_static;
 use mongodb::bson::{doc, DateTime};
-use netsblox_core::{LinkedAccount, LoginRequest, UserRole};
+use netsblox_core::{LinkedAccount, LoginRequest, NewUser, UserRole};
 use regex::Regex;
 use rustrict::CensorStr;
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha512};
 use std::collections::HashSet;
-use std::time::SystemTime;
-
-impl From<NewUser> for User {
-    fn from(user_data: NewUser) -> Self {
-        let salt = passwords::PasswordGenerator::new()
-            .length(8)
-            .exclude_similar_characters(true)
-            .numbers(true)
-            .spaces(false)
-            .generate_one()
-            .unwrap_or("salt".to_owned());
-
-        let hash: String = if let Some(pwd) = user_data.password {
-            sha512(&(pwd + &salt))
-        } else {
-            "None".to_owned()
-        };
-
-        User {
-            username: user_data.username,
-            hash,
-            salt,
-            email: user_data.email,
-            group_id: user_data.group_id,
-            created_at: DateTime::from_system_time(SystemTime::now()),
-            linked_accounts: std::vec::Vec::new(),
-            role: user_data.role.unwrap_or(UserRole::User),
-            services_hosts: None,
-        }
-    }
-}
 
 pub async fn is_super_user(app: &AppData, session: &Session) -> bool {
     match get_session_role(app, session).await {
@@ -139,15 +108,6 @@ async fn has_group_containing(app: &AppData, owner: &str, member: &str) -> bool 
     }
 }
 
-#[derive(Serialize, Deserialize)]
-struct NewUser {
-    username: String,
-    email: String, // TODO: validate the email address
-    password: Option<String>,
-    group_id: Option<String>,
-    role: Option<UserRole>,
-}
-
 #[get("/")]
 async fn list_users(app: web::Data<AppData>, session: Session) -> Result<HttpResponse, UserError> {
     ensure_is_super_user(&app, &session).await?;
@@ -171,6 +131,7 @@ async fn create_user(
 ) -> Result<HttpResponse, UserError> {
     ensure_valid_username(&user_data.username)?;
     ensure_valid_email(&user_data.email)?;
+    // TODO: record IP?
 
     let role = user_data.role.as_ref().unwrap_or(&UserRole::User);
     match role {
@@ -270,7 +231,7 @@ async fn login(
     }
 
     update_ownership(&app, &client_id, &user.username).await?;
-    // TODO: should we record more here? like security roles?
+    // TODO: should we record more here? like user roles?
     session.insert("username", &user.username).unwrap();
     Ok(HttpResponse::Ok().body(user.username))
 }
@@ -439,7 +400,7 @@ async fn set_password(app: &AppData, username: &str, password: String) -> Result
     }
 }
 
-fn sha512(text: &str) -> String {
+pub fn sha512(text: &str) -> String {
     let mut hasher = Sha512::new();
     hasher.update(text);
     let hash = hasher.finalize();

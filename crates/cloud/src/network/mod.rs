@@ -12,7 +12,9 @@ use actix_web::{get, post};
 use actix_web::{web, HttpRequest, HttpResponse};
 use actix_web_actors::ws::{self, CloseCode};
 use mongodb::bson::doc;
-use netsblox_core::{BrowserClientState, ClientID, ClientStateData, OccupantInviteReq, ProjectId};
+use netsblox_core::{
+    BrowserClientState, ClientID, ClientStateData, OccupantInviteReq, ProjectId, SaveState,
+};
 use serde::Deserialize;
 use serde_json::Value;
 
@@ -65,6 +67,24 @@ async fn set_client_state(
                 .ok_or_else(|| UserError::ProjectNotFoundError)?;
 
             ensure_can_edit_project(&app, &session, Some(client_id.clone()), &metadata).await?;
+
+            let query = doc! {
+                "project_id": &metadata.id,
+                "saveState": SaveState::CREATED
+            };
+            let update = doc! {
+                "$set": {
+                    "saveState": SaveState::TRANSIENT
+                },
+                "$unset": {
+                    "deleteAt": 1
+                }
+            };
+            app.project_metadata
+                .update_one(query, update, None)
+                .await
+                .map_err(|_err| InternalError::DatabaseConnectionError)?;
+
             ClientState::Browser(client_state)
         }
     };
