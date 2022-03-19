@@ -63,17 +63,7 @@
 
 - [ ] logout on ban? Or just ensure not banned
 
-- general
-    - [ ] finalize output formats (machine vs human?)
-        - what kind of errors should we have?
-            - base it off the status codes (+reqwest errors)?
-        - BadRequestError
-        - UnauthorizedError
-        - NotFoundError
-        - InternalServerError
-        - RequestError
-
-    - [ ] finish updating the browser
+- [ ] finish updating the browser
 
 - [ ] add unvisited saveState (w/ a ttl)
     - CREATED -> TRANSIENT -> BROKEN/SAVED
@@ -541,4 +531,14 @@
         - projects/id/{ID}
         - projects/user/{owner}
         - projects/shared/{collaborator}
+
+- general
+    - [x] finalize output formats (machine vs human?)
+        - what kind of errors should we have?
+            - base it off the status codes (+reqwest errors)?
+        - BadRequestError
+        - UnauthorizedError
+        - NotFoundError
+        - InternalServerError
+        - RequestError
 
