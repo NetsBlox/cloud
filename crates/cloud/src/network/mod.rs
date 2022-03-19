@@ -69,7 +69,7 @@ async fn set_client_state(
             ensure_can_edit_project(&app, &session, Some(client_id.clone()), &metadata).await?;
 
             let query = doc! {
-                "project_id": &metadata.id,
+                "id": &metadata.id,
                 "saveState": SaveState::CREATED
             };
             let update = doc! {
