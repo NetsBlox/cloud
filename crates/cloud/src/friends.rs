@@ -19,7 +19,7 @@ async fn list_friends(
 ) -> Result<HttpResponse, UserError> {
     let (owner,) = path.into_inner();
     // Admins are considered a friend to everyone (at least one-way)
-    let friend_names = if is_super_user(&app, &session).await {
+    let friend_names = if is_super_user(&app, &session).await.unwrap_or(false) {
         app.users
             .find(doc! {}, None)
             .await
@@ -62,7 +62,7 @@ async fn list_online_friends(
     session: Session,
 ) -> Result<HttpResponse, UserError> {
     let (owner,) = path.into_inner();
-    let filter_usernames = if is_super_user(&app, &session).await {
+    let filter_usernames = if is_super_user(&app, &session).await.unwrap_or(false) {
         None
     } else {
         ensure_can_edit_user(&app, &session, &owner).await?;

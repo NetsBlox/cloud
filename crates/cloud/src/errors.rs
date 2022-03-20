@@ -18,6 +18,8 @@ pub enum UserError {
     PermissionsError,
     #[display(fmt = "Project not found.")]
     ProjectNotFoundError,
+    #[display(fmt = "Library not found.")]
+    LibraryNotFoundError,
     #[display(fmt = "Role not found.")]
     RoleNotFoundError,
     #[display(fmt = "Group not found.")]
@@ -72,6 +74,7 @@ impl error::ResponseError for UserError {
             | UserError::IncorrectPasswordError => StatusCode::FORBIDDEN,
 
             UserError::ProjectNotFoundError
+            | UserError::LibraryNotFoundError
             | UserError::RoleNotFoundError
             | UserError::InviteNotFoundError
             | UserError::UserNotFoundError

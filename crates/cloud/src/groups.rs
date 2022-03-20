@@ -37,7 +37,7 @@ async fn view_group(
         .unwrap_or(None)
         .ok_or_else(|| UserError::PermissionsError)?;
 
-    let query = if is_super_user(&app, &session).await {
+    let query = if is_super_user(&app, &session).await.unwrap_or(false) {
         doc! {"id": id}
     } else {
         doc! {"id": id, "owner": username}
@@ -136,7 +136,7 @@ async fn update_group(
         .unwrap()
         .ok_or_else(|| UserError::PermissionsError)?;
 
-    let query = if is_super_user(&app, &session).await {
+    let query = if is_super_user(&app, &session).await.unwrap_or(false) {
         doc! {"id": id}
     } else {
         doc! {"id": id, "owner": username}
@@ -168,7 +168,7 @@ async fn delete_group(
         .unwrap()
         .ok_or_else(|| UserError::PermissionsError)?;
 
-    let query = if is_super_user(&app, &session).await {
+    let query = if is_super_user(&app, &session).await.unwrap_or(false) {
         doc! {"id": id}
     } else {
         doc! {"id": id, "owner": username}

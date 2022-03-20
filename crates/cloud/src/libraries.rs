@@ -36,7 +36,7 @@ struct Library {
 
 // TODO: add an endpoint for the official ones?
 #[get("/community")]
-async fn list_community_libraries(db: web::Data<AppData>) -> Result<HttpResponse, std::io::Error> {
+async fn list_community_libraries(db: web::Data<AppData>) -> Result<HttpResponse, UserError> {
     let collection = db.collection::<LibraryMetadata>("libraries");
 
     let options = FindOptions::builder().sort(doc! {"name": 1}).build();
@@ -44,9 +44,12 @@ async fn list_community_libraries(db: web::Data<AppData>) -> Result<HttpResponse
     let cursor = collection
         .find(public_filter, options)
         .await
-        .expect("Library list query failed");
+        .map_err(|_err| InternalError::DatabaseConnectionError)?;
 
-    let libraries = cursor.try_collect::<Vec<_>>().await.unwrap();
+    let libraries = cursor
+        .try_collect::<Vec<_>>()
+        .await
+        .map_err(|_err| InternalError::DatabaseConnectionError)?;
     Ok(HttpResponse::Ok().json(libraries))
 }
 
@@ -55,7 +58,7 @@ async fn list_user_libraries(
     app: web::Data<AppData>,
     path: web::Path<(String,)>,
     session: Session,
-) -> Result<HttpResponse, std::io::Error> {
+) -> Result<HttpResponse, UserError> {
     let (username,) = path.into_inner();
     let query = doc! {"owner": username};
     let collection = app.collection::<LibraryMetadata>("libraries");
@@ -63,11 +66,14 @@ async fn list_user_libraries(
     let mut cursor = collection
         .find(query, options)
         .await
-        .expect("Library list query failed");
+        .map_err(|_err| InternalError::DatabaseConnectionError)?;
 
     let mut libraries = Vec::new();
     while let Some(library) = cursor.try_next().await.expect("Could not fetch library") {
-        if can_view_library(&app, &session, &library).await {
+        if can_view_library(&app, &session, &library)
+            .await
+            .unwrap_or(false)
+        {
             // TODO: do this in the outer loop
             libraries.push(library);
         }
@@ -81,24 +87,19 @@ async fn get_user_library(
     app: web::Data<AppData>,
     path: web::Path<(String, String)>,
     session: Session,
-) -> Result<HttpResponse, std::io::Error> {
+) -> Result<HttpResponse, UserError> {
     let (owner, name) = path.into_inner();
     let collection = app.collection::<Library>("libraries");
     let query = doc! {"owner": owner, "name": name};
-    if let Some(library) = collection
+    let library = collection
         .find_one(query, None)
         .await
-        .expect("Unable to retrieve from database")
-    {
-        let blocks = library.blocks.to_owned();
-        if can_view_library(&app, &session, &library.into()).await {
-            Ok(HttpResponse::Ok().body(blocks))
-        } else {
-            Ok(HttpResponse::Unauthorized().body("Not allowed."))
-        }
-    } else {
-        Ok(HttpResponse::NotFound().finish())
-    }
+        .map_err(|_err| InternalError::DatabaseConnectionError)?
+        .ok_or_else(|| UserError::LibraryNotFoundError)?;
+
+    let blocks = library.blocks.to_owned();
+    ensure_can_view_library(&app, &session, &library.into()).await?;
+    Ok(HttpResponse::Ok().body(blocks))
 }
 
 #[post("/user/{owner}/")]
@@ -174,9 +175,10 @@ async fn delete_user_library(
     let result = collection
         .delete_one(query, None)
         .await
-        .expect("Unable to delete from database");
+        .map_err(|_err| InternalError::DatabaseConnectionError)?;
+
     if result.deleted_count == 0 {
-        Ok(HttpResponse::NotFound().finish())
+        Err(UserError::LibraryNotFoundError)
     } else {
         Ok(HttpResponse::Ok().finish())
     }
@@ -195,21 +197,18 @@ async fn publish_user_library(
     let query = doc! {"owner": owner, "name": name};
     let update = doc! {"$set": {"state": LibraryPublishState::PendingApproval}};
 
-    match collection
+    let library = collection
         .find_one_and_update(query.clone(), update, None)
         .await
-        .expect("Library publish operation failed")
-    {
-        Some(library) => {
-            if !is_approval_required(&library.blocks) || is_moderator(&app, &session).await {
-                let update = doc! {"$set": {"state": LibraryPublishState::Public}};
-                collection.update_one(query, update, None).await.unwrap();
-                Ok(HttpResponse::Ok().body("Library published!"))
-            } else {
-                Ok(HttpResponse::Ok().body("Library marked to publish (approval required)."))
-            }
-        }
-        None => Ok(HttpResponse::NotFound().finish()),
+        .map_err(|_err| InternalError::DatabaseConnectionError)?
+        .ok_or_else(|| UserError::LibraryNotFoundError)?;
+
+    if !is_approval_required(&library.blocks) || is_moderator(&app, &session).await? {
+        let update = doc! {"$set": {"state": LibraryPublishState::Public}};
+        collection.update_one(query, update, None).await.unwrap();
+        Ok(HttpResponse::Ok().body("Library published!"))
+    } else {
+        Ok(HttpResponse::Ok().body("Library marked to publish (approval required)."))
     }
 }
 
@@ -229,10 +228,10 @@ async fn unpublish_user_library(
     let result = collection
         .update_one(query, update, None)
         .await
-        .expect("Library unpublish operation failed");
+        .map_err(|_err| InternalError::DatabaseConnectionError)?;
 
     if result.matched_count == 0 {
-        Ok(HttpResponse::NotFound().finish())
+        Err(UserError::LibraryNotFoundError)
     } else {
         Ok(HttpResponse::Ok().finish())
     }
@@ -243,23 +242,43 @@ async fn ensure_can_edit_library(
     session: &Session,
     owner: &str,
 ) -> Result<(), UserError> {
-    if !can_edit_library(app, session, owner).await {
+    if !can_edit_library(app, session, owner).await? {
         Err(UserError::PermissionsError)
     } else {
         Ok(())
     }
 }
 
-async fn can_edit_library(app: &AppData, session: &Session, owner: &str) -> bool {
+async fn can_edit_library(
+    app: &AppData,
+    session: &Session,
+    owner: &str,
+) -> Result<bool, UserError> {
     match session.get::<String>("username").unwrap_or(None) {
         Some(_username) => can_edit_user(app, session, owner).await,
-        None => false,
+        None => Ok(false),
     }
 }
 
-async fn can_view_library(app: &AppData, session: &Session, library: &LibraryMetadata) -> bool {
+async fn ensure_can_view_library(
+    app: &AppData,
+    session: &Session,
+    library: &LibraryMetadata,
+) -> Result<(), UserError> {
+    if !can_view_library(app, session, library).await? {
+        Err(UserError::PermissionsError)
+    } else {
+        Ok(())
+    }
+}
+
+async fn can_view_library(
+    app: &AppData,
+    session: &Session,
+    library: &LibraryMetadata,
+) -> Result<bool, UserError> {
     match library.state {
-        LibraryPublishState::Public => true,
+        LibraryPublishState::Public => Ok(true),
         _ => can_edit_library(app, session, &library.owner).await,
     }
 }
@@ -275,9 +294,12 @@ async fn list_pending_libraries(
     let cursor = collection
         .find(doc! {"state": LibraryPublishState::PendingApproval}, None)
         .await
-        .expect("Could not retrieve libraries");
+        .map_err(|_err| InternalError::DatabaseConnectionError)?;
 
-    let libraries = cursor.try_collect::<Vec<_>>().await.unwrap();
+    let libraries = cursor
+        .try_collect::<Vec<_>>()
+        .await
+        .map_err(|_err| InternalError::DatabaseConnectionError)?;
 
     Ok(HttpResponse::Ok().json(libraries))
 }
@@ -324,7 +346,7 @@ mod tests {
     async fn init_database(
         name: &str,
         libraries: std::vec::Vec<LibraryMetadata>,
-    ) -> Result<Database, std::io::Error> {
+    ) -> Result<Database, UserError> {
         let library_count = libraries.len();
         let client = Client::with_uri_str("mongodb://127.0.0.1:27017/")
             .await

@@ -90,7 +90,7 @@ async fn get_visible_projects(
     owner: &str,
     cursor: Cursor<ProjectMetadata>,
 ) -> Vec<netsblox_core::ProjectMetadata> {
-    let projects = if can_edit_user(app, session, owner).await {
+    let projects = if can_edit_user(app, session, owner).await.unwrap_or(false) {
         cursor.try_collect::<Vec<_>>().await.unwrap()
     } else {
         cursor
@@ -172,7 +172,7 @@ async fn ensure_can_view_project(
     session: &Session,
     project: &ProjectMetadata,
 ) -> Result<(), UserError> {
-    if !can_view_project(app, session, project).await {
+    if !can_view_project(app, session, project).await? {
         Err(UserError::PermissionsError)
     } else {
         Ok(())
@@ -186,16 +186,20 @@ fn flatten<T>(nested: Option<Option<T>>) -> Option<T> {
     }
 }
 
-async fn can_view_project(app: &AppData, session: &Session, project: &ProjectMetadata) -> bool {
+async fn can_view_project(
+    app: &AppData,
+    session: &Session,
+    project: &ProjectMetadata,
+) -> Result<bool, UserError> {
     if project.public {
-        return true;
+        return Ok(true);
     }
 
     if let Some(username) = session.get::<String>("username").unwrap_or(None) {
         let query = doc! {"username": username};
         let invite = flatten(app.occupant_invites.find_one(query, None).await.ok());
         if invite.is_some() {
-            return true;
+            return Ok(true);
         }
     }
 
@@ -225,7 +229,7 @@ pub async fn can_edit_project_id(
     session: &Session,
     client_id: Option<String>,
     project_id: &str,
-) -> Result<(), UserError> {
+) -> Result<bool, UserError> {
     let query = doc! {"id": project_id};
     let metadata = app
         .project_metadata
@@ -234,8 +238,7 @@ pub async fn can_edit_project_id(
         .map_err(|_err| InternalError::DatabaseConnectionError)?
         .ok_or_else(|| UserError::ProjectNotFoundError)?;
 
-    can_edit_project(app, session, client_id, &metadata).await;
-    Ok(())
+    can_edit_project(app, session, client_id, &metadata).await
 }
 
 pub async fn ensure_can_edit_project(
@@ -244,7 +247,7 @@ pub async fn ensure_can_edit_project(
     client_id: Option<String>,
     project: &ProjectMetadata,
 ) -> Result<(), UserError> {
-    if !can_edit_project(app, session, client_id, project).await {
+    if !can_edit_project(app, session, client_id, project).await? {
         Err(UserError::PermissionsError)
     } else {
         Ok(())
@@ -256,7 +259,7 @@ async fn can_edit_project(
     session: &Session,
     client_id: Option<String>,
     project: &ProjectMetadata,
-) -> bool {
+) -> Result<bool, UserError> {
     println!(
         "Can {} edit the project? ({})",
         client_id.as_deref().unwrap_or("None"),
@@ -264,14 +267,20 @@ async fn can_edit_project(
     );
     let is_owner = client_id.map(|id| id == project.owner).unwrap_or(false);
 
-    is_owner
-        || match session.get::<String>("username").unwrap_or(None) {
+    if is_owner {
+        Ok(true)
+    } else {
+        match session.get::<String>("username").unwrap_or(None) {
             Some(username) => {
-                project.collaborators.contains(&username)
-                    || can_edit_user(app, session, &project.owner).await
+                if project.collaborators.contains(&username) {
+                    Ok(true)
+                } else {
+                    can_edit_user(app, session, &project.owner).await
+                }
             }
-            None => false,
+            None => Err(UserError::LoginRequiredError),
         }
+    }
 }
 
 #[get("/id/{projectID}")]

@@ -20,7 +20,7 @@ async fn list_group_hosts(
         .unwrap()
         .ok_or_else(|| UserError::PermissionsError)?;
 
-    let query = if is_super_user(&app, &session).await {
+    let query = if is_super_user(&app, &session).await? {
         doc! {"id": id}
     } else {
         doc! {"id": id, "owner": username}
@@ -50,7 +50,7 @@ async fn set_group_hosts(
         .unwrap()
         .ok_or_else(|| UserError::PermissionsError)?;
 
-    let query = if is_super_user(&app, &session).await {
+    let query = if is_super_user(&app, &session).await? {
         doc! {"id": id}
     } else {
         doc! {"id": id, "owner": username}

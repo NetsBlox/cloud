@@ -17,39 +17,39 @@ use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha512};
 use std::collections::HashSet;
 
-pub async fn is_super_user(app: &AppData, session: &Session) -> bool {
-    match get_session_role(app, session).await {
-        UserRole::Admin => true,
-        _ => false,
+pub async fn is_super_user(app: &AppData, session: &Session) -> Result<bool, UserError> {
+    match get_session_role(app, session).await? {
+        UserRole::Admin => Ok(true),
+        _ => Ok(false),
     }
 }
 
-async fn get_session_role(app: &AppData, session: &Session) -> UserRole {
+async fn get_session_role(app: &AppData, session: &Session) -> Result<UserRole, UserError> {
     if let Some(username) = session.get::<String>("username").unwrap_or(None) {
         println!("checking if {} is a super user.", &username);
         let query = doc! {"username": username};
-        app.users
+        Ok(app
+            .users
             .find_one(query, None)
             .await
             .unwrap()
             .map(|user| user.role)
-            .unwrap_or(UserRole::User)
+            .unwrap_or(UserRole::User))
     } else {
-        println!("no username in the cookie");
-        // TODO: purge the cookie?
-        UserRole::User
+        session.purge();
+        Err(UserError::LoginRequiredError)
     }
 }
 
-pub async fn is_moderator(app: &AppData, session: &Session) -> bool {
-    match get_session_role(app, session).await {
-        UserRole::Admin | UserRole::Moderator => true,
-        _ => false,
+pub async fn is_moderator(app: &AppData, session: &Session) -> Result<bool, UserError> {
+    match get_session_role(app, session).await? {
+        UserRole::Admin | UserRole::Moderator => Ok(true),
+        _ => Ok(false),
     }
 }
 
 pub async fn ensure_is_moderator(app: &AppData, session: &Session) -> Result<(), UserError> {
-    if !is_moderator(app, session).await {
+    if !is_moderator(app, session).await? {
         Err(UserError::PermissionsError)
     } else {
         Ok(())
@@ -57,7 +57,7 @@ pub async fn ensure_is_moderator(app: &AppData, session: &Session) -> Result<(),
 }
 
 pub async fn ensure_is_super_user(app: &AppData, session: &Session) -> Result<(), UserError> {
-    if !is_super_user(app, session).await {
+    if !is_super_user(app, session).await? {
         Err(UserError::PermissionsError)
     } else {
         Ok(())
@@ -69,22 +69,27 @@ pub async fn ensure_can_edit_user(
     session: &Session,
     username: &str,
 ) -> Result<(), UserError> {
-    if !can_edit_user(app, session, username).await {
+    if !can_edit_user(app, session, username).await? {
         Err(UserError::PermissionsError)
     } else {
         Ok(())
     }
 }
 
-pub async fn can_edit_user(app: &AppData, session: &Session, username: &str) -> bool {
+pub async fn can_edit_user(
+    app: &AppData,
+    session: &Session,
+    username: &str,
+) -> Result<bool, UserError> {
     if let Some(requestor) = session.get::<String>("username").unwrap_or(None) {
         println!("Can {} edit {}?", requestor, username);
-        requestor == username
-            || is_super_user(app, session).await
-            || has_group_containing(app, &requestor, username).await
+        let can_edit = requestor == username
+            || is_super_user(app, session).await?
+            || has_group_containing(app, &requestor, username).await;
+        Ok(can_edit)
     } else {
         println!("Could not get username from cookie!");
-        false
+        Err(UserError::LoginRequiredError)
     }
 }
 
