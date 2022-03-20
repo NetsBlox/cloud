@@ -3,8 +3,6 @@
     - this can follow the same method as before
         - add a TTL of something like 1 day to messages?
 
-- [ ] fix login required errors (to unauthorized)
-
 - [ ] collaborative editing action acceptance
     - maybe we don't need to persist them...
     - accept actions when collaborating
@@ -34,6 +32,10 @@
 
     - how is the API used by the services server?
         - authenticate users
+            - (whoami endpoint)
+        - send messages
+        - CRD api keys (settings?)
+        - how should this work with
 
 - [ ] occupants
     - [ ] invite occupant
@@ -152,9 +154,6 @@
 
 - [ ] add benchmarks for message passing??
 
-- [ ] session doesn't ensure logged in...
-     - new extractor that ensures authenticated?
-
 - [ ] auth integration with services endpoint
     - maybe the services endpoint should hit this one?
 
@@ -172,6 +171,7 @@
 - [ ] unban?
 
 - [ ] project \_id -> id
+    - migrate the data
 
 - [ ] update the compiler for resolving addresses
     - should be pretty easy to just copy the logic over
@@ -541,4 +541,9 @@
         - NotFoundError
         - InternalServerError
         - RequestError
+
+- [x] fix login required errors (to unauthorized)
+
+- [-] session doesn't ensure logged in...
+     - new extractor that ensures authenticated?
 
