@@ -78,7 +78,7 @@ pub struct ServiceHost {
 #[derive(Serialize, Deserialize, Clone, Debug)]
 pub struct LinkedAccount {
     pub username: String,
-    pub strategy: String, // TODO: migrate type -> strategy
+    pub strategy: String,
 }
 
 #[derive(Serialize, Deserialize, Debug)]

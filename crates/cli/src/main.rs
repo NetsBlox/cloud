@@ -49,7 +49,6 @@ enum Users {
         user: Option<String>,
     },
     List, // TODO: add verbose option?
-    // TODO: add ban
     /// Ban a given user. Email address will also be blacklisted
     Ban {
         /// NetsBlox user to ban
