@@ -287,6 +287,7 @@ pub struct OccupantInvite {
     pub username: String,
     pub project_id: ProjectId,
     pub role_id: String,
+    created_at: DateTime,
 }
 
 impl OccupantInvite {
@@ -295,8 +296,7 @@ impl OccupantInvite {
             project_id,
             username: req.username,
             role_id: req.role_id,
-            // TODO: add creation time
-            // TODO: delete after a fixed amount of time
+            created_at: DateTime::from_system_time(SystemTime::now()),
         }
     }
 }
