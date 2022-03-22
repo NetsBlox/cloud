@@ -417,11 +417,7 @@ async fn update_project(
         .map_err(|_err| InternalError::DatabaseConnectionError)? // TODO: wrap the error?
         .ok_or_else(|| UserError::ProjectNotFoundError)?;
 
-    println!("New project name is {:?}", updated_metadata.name);
-    app.network.do_send(topology::SendRoomState {
-        project: updated_metadata,
-    });
-
+    app.on_project_update(updated_metadata);
     Ok(HttpResponse::Ok().body("Project updated."))
 }
 
@@ -581,10 +577,8 @@ async fn delete_role(
         .await
         .map_err(|_err| InternalError::DatabaseConnectionError)?; // TODO: wrap the error?
 
-    if updated_metadata.is_some() {
-        app.network.do_send(topology::SendRoomState {
-            project: updated_metadata.unwrap(),
-        });
+    if let Some(updated_metadata) = updated_metadata {
+        app.on_project_update(updated_metadata);
     }
 
     Ok(HttpResponse::Ok().body("Deleted!"))
@@ -607,7 +601,8 @@ async fn save_role(
         .ok_or_else(|| UserError::ProjectNotFoundError)?;
 
     ensure_can_edit_project(&app, &session, None, &metadata).await?;
-    app.save_role(&metadata, &role_id, body.into_inner()).await;
+    app.save_role(&metadata, &role_id, body.into_inner())
+        .await?;
 
     Ok(HttpResponse::Ok().body("Saved!"))
 }
@@ -645,9 +640,7 @@ async fn rename_role(
             .map_err(|_err| InternalError::DatabaseConnectionError)? // TODO: wrap the error?
             .ok_or_else(|| UserError::ProjectNotFoundError)?;
 
-        app.network.do_send(topology::SendRoomState {
-            project: updated_metadata,
-        });
+        app.on_project_update(updated_metadata);
         Ok(HttpResponse::Ok().body("Role updated"))
     } else {
         Err(UserError::RoleNotFoundError)

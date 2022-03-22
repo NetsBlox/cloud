@@ -358,6 +358,13 @@ impl AppData {
         })
     }
 
+    pub fn on_project_update(&self, updated_project: ProjectMetadata) {
+        self.network.do_send(topology::SendRoomState {
+            project: updated_project,
+        });
+        // TODO: Invalidate the cache (when there is one)
+    }
+
     pub async fn save_role(
         &self,
         metadata: &ProjectMetadata,
@@ -381,9 +388,7 @@ impl AppData {
             .map_err(|_err| InternalError::DatabaseConnectionError)?
             .ok_or_else(|| UserError::ProjectNotFoundError)?;
 
-        self.network.do_send(topology::SendRoomState {
-            project: updated_metadata.clone(),
-        });
+        self.on_project_update(updated_metadata.clone());
 
         Ok(updated_metadata
             .roles
@@ -423,9 +428,7 @@ impl AppData {
             .unwrap()
             .expect("Project not found.");
 
-        self.network.do_send(topology::SendRoomState {
-            project: updated_metadata.clone(),
-        });
+        self.on_project_update(updated_metadata.clone());
         Ok(updated_metadata)
     }
 

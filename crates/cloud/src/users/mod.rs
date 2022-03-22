@@ -148,7 +148,7 @@ async fn create_user(
         _ => ensure_is_super_user(&app, &session).await?,
     };
 
-    let user = User::from(user_data.into_inner());
+    let user: User = user_data.into_inner().into();
     let query = doc! {"email": &user.email};
     let banned_accounts = app.collection::<BannedAccount>("bannedAccounts");
     if let Some(_account) = banned_accounts
@@ -164,20 +164,16 @@ async fn create_user(
     let options = mongodb::options::UpdateOptions::builder()
         .upsert(true)
         .build();
-    let result = app.users.update_one(query, update, options).await;
+    let result = app
+        .users
+        .update_one(query, update, options)
+        .await
+        .map_err(|_err| InternalError::DatabaseConnectionError)?;
 
-    match result {
-        Ok(update_result) => {
-            if update_result.matched_count == 0 {
-                Ok(HttpResponse::Ok().body("User created"))
-            } else {
-                Ok(HttpResponse::BadRequest().body("User already exists"))
-            }
-        }
-        Err(_err) => {
-            // TODO: log the error
-            Ok(HttpResponse::InternalServerError().body("User creation failed"))
-        }
+    if result.matched_count == 0 {
+        Ok(HttpResponse::Ok().body("User created"))
+    } else {
+        Ok(HttpResponse::BadRequest().body("User already exists"))
     }
 }
 
