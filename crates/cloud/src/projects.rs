@@ -487,7 +487,7 @@ async fn get_project_thumbnail(
 #[derive(Deserialize)]
 struct CreateRoleData {
     name: String,
-    source_code: Option<String>,
+    code: Option<String>,
     media: Option<String>,
 }
 
@@ -495,7 +495,7 @@ impl From<CreateRoleData> for RoleData {
     fn from(data: CreateRoleData) -> RoleData {
         RoleData {
             name: data.name,
-            code: data.source_code.unwrap_or_else(String::new),
+            code: data.code.unwrap_or_else(String::new),
             media: data.media.unwrap_or_else(String::new),
         }
     }
