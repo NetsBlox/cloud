@@ -224,10 +224,8 @@ pub struct RoleData {
 
 impl RoleData {
     pub fn to_xml(self) -> String {
-        format!(
-            "<role name=\"{}\">{}{}</role>",
-            self.name, self.code, self.media
-        ) // TODO: escape the names?
+        let name = self.name.replace("\"", "\\\"");
+        format!("<role name=\"{}\">{}{}</role>", name, self.code, self.media)
     }
 }
 
