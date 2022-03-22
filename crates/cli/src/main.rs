@@ -528,7 +528,7 @@ async fn do_command(mut cfg: Config, args: Cli) -> Result<(), netsblox_api::erro
             }
             Users::List => {
                 for user in client.list_users().await? {
-                    println!("{}", user);
+                    println!("{}", user.username);
                 }
             }
             Users::Delete {

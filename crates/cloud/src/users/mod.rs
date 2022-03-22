@@ -118,14 +118,14 @@ async fn list_users(app: web::Data<AppData>, session: Session) -> Result<HttpRes
     ensure_is_super_user(&app, &session).await?;
     let query = doc! {};
     let cursor = app.users.find(query, None).await.unwrap();
-    let usernames: Vec<String> = cursor
+    let users: Vec<netsblox_core::User> = cursor
         .try_collect::<Vec<_>>()
         .await
         .unwrap()
         .into_iter()
-        .map(|user| user.username)
+        .map(|user| user.into())
         .collect();
-    Ok(HttpResponse::Ok().json(usernames))
+    Ok(HttpResponse::Ok().json(users))
 }
 
 #[post("/create")]

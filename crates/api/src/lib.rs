@@ -131,10 +131,9 @@ impl Client {
             response.text().await.unwrap()
         );
         Ok(())
-        // TODO: return the user data?
     }
 
-    pub async fn list_users(&self) -> Result<Vec<String>, error::Error> {
+    pub async fn list_users(&self) -> Result<Vec<User>, error::Error> {
         let response = self
             .request(Method::GET, "/users/")
             .send()
@@ -142,7 +141,7 @@ impl Client {
             .map_err(|err| error::Error::RequestError(err))?;
 
         let response = check_response(response).await?;
-        Ok(response.json::<Vec<String>>().await.unwrap())
+        Ok(response.json::<Vec<User>>().await.unwrap())
     }
 
     pub async fn delete_user(&self, username: &str) -> Result<(), error::Error> {
