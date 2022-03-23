@@ -74,7 +74,7 @@ impl From<NewUser> for User {
         };
 
         User {
-            username: user_data.username,
+            username: user_data.username.to_lowercase(),
             hash,
             salt,
             email: user_data.email,

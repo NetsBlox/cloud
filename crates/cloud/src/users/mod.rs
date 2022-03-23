@@ -134,7 +134,6 @@ async fn create_user(
     user_data: web::Json<NewUser>,
     session: Session,
 ) -> Result<HttpResponse, UserError> {
-    ensure_valid_username(&user_data.username)?;
     ensure_valid_email(&user_data.email)?;
     // TODO: record IP?
 
@@ -149,6 +148,8 @@ async fn create_user(
     };
 
     let user: User = user_data.into_inner().into();
+    ensure_valid_username(&user.username)?;
+
     let query = doc! {"email": &user.email};
     let banned_accounts = app.collection::<BannedAccount>("bannedAccounts");
     if let Some(_account) = banned_accounts
@@ -198,7 +199,7 @@ fn ensure_valid_username(name: &str) -> Result<(), UserError> {
 
 fn is_valid_username(name: &str) -> bool {
     lazy_static! {
-        static ref USERNAME_REGEX: Regex = Regex::new(r"^[a-zA-Z][a-zA-Z0-9_\-]+$").unwrap();
+        static ref USERNAME_REGEX: Regex = Regex::new(r"^[a-z][a-z0-9_\-]+$").unwrap();
     }
     USERNAME_REGEX.is_match(name) && !name.is_inappropriate()
 }

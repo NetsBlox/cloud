@@ -54,16 +54,13 @@ pub async fn authenticate(credentials: &Credentials) -> Result<Option<Response>,
 
 pub async fn login(app: &AppData, credentials: Credentials) -> Result<User, UserError> {
     match credentials {
-        Credentials::Snap {
-            ref username,
-            ref password,
-        } => {
+        Credentials::Snap { ref username, .. } => {
             let response = authenticate(&credentials)
                 .await?
                 .ok_or_else(|| UserError::SnapConnectionError)?;
 
             let account = LinkedAccount {
-                username: username.to_owned(),
+                username: username.to_lowercase(),
                 strategy: "snap".to_owned(),
             };
 
@@ -102,7 +99,7 @@ pub async fn login(app: &AppData, credentials: Credentials) -> Result<User, User
             Ok(user)
         }
         Credentials::NetsBlox { username, password } => {
-            let query = doc! {"username": &username};
+            let query = doc! {"username": &username.to_lowercase()};
             let user = app
                 .users
                 .find_one(query, None)
