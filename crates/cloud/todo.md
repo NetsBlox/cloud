@@ -1,83 +1,9 @@
 # To Do
-- [ ] allow disabled tor IPs
-    - add to config
+- [ ] add address caching to the message sending?
+    - [ ] update cache on "send room state"
 
-- [ ] record messages
-    - this can follow the same method as before
-        - add a TTL of something like 1 day to messages?
-    - recordings can be their own collection. The ttl means we won't need to keep it in sync with the projects
-        - security considerations
-            - we can still check that the user can view the project
-        - if the project is recording messages can be stored with the project itself
-                - this avoids any issues
-        - recorded messages can have a ttl
-
-        - start
-            - (post) network/id/{id}/trace/
-            - return trace ID
-        - get
-            - (get) network/id/{id}/trace/{traceId}
-            - return messages
-        - stop
-            - (delete) network/trace/id/:id
-                - or (post) network/trace/id/:id/stop
-        - delete?
-                
-        - check if recording network traces w/ a cache
-            - where should it be cached? In app data?
-
-    - [ ] record messages on send, if recording
-    - [ ] should we take a decentralized approach and have the clients report?
-        - then the clients would need to share with each other that a trace is being collected
-            - what if the client joins during a trace?
-                - then the new client needs to be updated by one of the recording node
-        - if someone is recording the network and a message is sent or received, it would need to be added to the active traces
-
-        - MessageTrace struct with send/received enum
-        - This could make the animation look better...
-        - routes could be:
-            - (broadcast client message to room start)
-            - save a message event
-                - (post) network/id/{project_id}/trace
-            - retrieve messages
-                - (get) network/id/{project_id}/trace?startTime=1234&endTime=1345
-            - messages will delete on their own (expire in a few hours or something)...
-            - get current time endpoint
-                - /time
-
-        - advantages of clients recording the messages:
-            - no need to query the database on each message and determine if it needs to be recorded
-            - easier transition to decentralized messagig like webrtc
-
-    - game plan:
-        - [ ] implement a (slow but functional) version w/o caching
-            - [ ] test it!
-        - [ ] add project metadata caching
-            - can be used for collaborators and other metadata, too
-            - should I change project_metadata?
-                - project_metadata.collection
-                - project_metadata.get(id)
-                - project_metadata.get_many(ids)
-            - or should I do something like:
-                - app.get_project_metadata(id)
-                - app.get_project_metadata(id)  // with a batch option
-            - cache will need to be made Arc
-                - the whole app will need to be passed to the network topology then :/
-                    - I guess this is ok...
-
-            - [x] let's make the cache lazy static?
-        - [x] invalidate the cache when...
-            - [x] role is renamed
-            - [x] project is renamed
-            - [x] collaborator is added
-            - [x] collaborator is removed
-            - [x] network trace is started
-            - [x] network trace is stopped
-
-  
-
-- [ ] change ensure_can_edit_project to ID?
-
+- [ ] test recording messages
+ 
 - [ ] add email support
     - [ ] new account creation
     - [ ] password reset
@@ -243,9 +169,6 @@
     - [x] project-response
     - [ ] request-actions
 
-- [ ] add address caching to the message sending?
-    - [ ] update cache on "send room state"
-
 - [ ] add benchmarks for message passing??
 
 - [ ] auth integration with services endpoint
@@ -268,6 +191,9 @@
 
 - [ ] better pwd reset process (send link instead)
     - IP-based rate limiting...
+
+- [ ] allow disabled tor IPs
+    - add to config
 
 ## Related project updates/migrations
 - [ ] unban?
@@ -660,4 +586,78 @@
     - [ ] group routes
 
 - [x] username length
+
+- [/] record messages
+    - this can follow the same method as before
+        - add a TTL of something like 1 day to messages?
+    - recordings can be their own collection. The ttl means we won't need to keep it in sync with the projects
+        - security considerations
+            - we can still check that the user can view the project
+        - if the project is recording messages can be stored with the project itself
+                - this avoids any issues
+        - recorded messages can have a ttl
+
+        - start
+            - (post) network/id/{id}/trace/
+            - return trace ID
+        - get
+            - (get) network/id/{id}/trace/{traceId}
+            - return messages
+        - stop
+            - (delete) network/trace/id/:id
+                - or (post) network/trace/id/:id/stop
+        - delete?
+                
+        - check if recording network traces w/ a cache
+            - where should it be cached? In app data?
+
+    - [ ] record messages on send, if recording
+    - [ ] should we take a decentralized approach and have the clients report?
+        - then the clients would need to share with each other that a trace is being collected
+            - what if the client joins during a trace?
+                - then the new client needs to be updated by one of the recording node
+        - if someone is recording the network and a message is sent or received, it would need to be added to the active traces
+
+        - MessageTrace struct with send/received enum
+        - This could make the animation look better...
+        - routes could be:
+            - (broadcast client message to room start)
+            - save a message event
+                - (post) network/id/{project_id}/trace
+            - retrieve messages
+                - (get) network/id/{project_id}/trace?startTime=1234&endTime=1345
+            - messages will delete on their own (expire in a few hours or something)...
+            - get current time endpoint
+                - /time
+
+        - advantages of clients recording the messages:
+            - no need to query the database on each message and determine if it needs to be recorded
+            - easier transition to decentralized messagig like webrtc
+
+    - game plan:
+        - [ ] implement a (slow but functional) version w/o caching
+            - [ ] test it!
+        - [ ] add project metadata caching
+            - can be used for collaborators and other metadata, too
+            - should I change project_metadata?
+                - project_metadata.collection
+                - project_metadata.get(id)
+                - project_metadata.get_many(ids)
+            - or should I do something like:
+                - app.get_project_metadata(id)
+                - app.get_project_metadata(id)  // with a batch option
+            - cache will need to be made Arc
+                - the whole app will need to be passed to the network topology then :/
+                    - I guess this is ok...
+
+            - [x] let's make the cache lazy static?
+        - [x] invalidate the cache when...
+            - [x] role is renamed
+            - [x] project is renamed
+            - [x] collaborator is added
+            - [x] collaborator is removed
+            - [x] network trace is started
+            - [x] network trace is stopped
+
+- [x] change ensure_can_edit_project to ID?
 
