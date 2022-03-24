@@ -342,6 +342,24 @@ pub struct SentMessage {
     pub content: serde_json::Value,
 }
 
+impl SentMessage {
+    pub fn new(
+        project_id: ProjectId,
+        source: ClientState,
+        dst_ids: Vec<String>,
+        content: serde_json::Value,
+    ) -> Self {
+        let time = DateTime::from_system_time(SystemTime::now());
+        SentMessage {
+            project_id,
+            dst_ids,
+            time,
+            source,
+            content,
+        }
+    }
+}
+
 #[derive(Deserialize, Serialize, Debug, Clone)]
 #[serde(rename_all = "camelCase")]
 pub struct SetPasswordToken {

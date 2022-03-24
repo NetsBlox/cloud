@@ -6,7 +6,7 @@ use crate::app_data::AppData;
 use crate::errors::{InternalError, UserError};
 use crate::models::{NetworkTraceMetadata, OccupantInvite, SentMessage};
 use crate::network::topology::{ClientState, ExternalClientState};
-use crate::projects::{ensure_can_edit_project, ensure_can_edit_project_id};
+use crate::projects::ensure_can_edit_project;
 use crate::users::{ensure_can_edit_user, ensure_is_super_user};
 use actix::{Actor, Addr, AsyncContext, Handler, StreamHandler};
 use actix_session::Session;
@@ -57,14 +57,13 @@ async fn set_client_state(
         }
         ClientState::Browser(client_state) => {
             let query = doc! {"id": &client_state.project_id};
-            let metadata = app
-                .project_metadata
-                .find_one(query, None)
-                .await
-                .map_err(|_err| InternalError::DatabaseConnectionError)?
-                .ok_or_else(|| UserError::ProjectNotFoundError)?;
-
-            ensure_can_edit_project(&app, &session, Some(client_id.clone()), &metadata).await?;
+            let metadata = ensure_can_edit_project(
+                &app,
+                &session,
+                Some(client_id.clone()),
+                &client_state.project_id,
+            )
+            .await?;
 
             let query = doc! {
                 "id": &metadata.id,
@@ -139,15 +138,7 @@ async fn get_room_state(
     session: Session,
 ) -> Result<HttpResponse, UserError> {
     let (project_id,) = path.into_inner();
-    let query = doc! {"id": project_id};
-    let metadata = app
-        .project_metadata
-        .find_one(query, None)
-        .await
-        .map_err(|_err| InternalError::DatabaseConnectionError)?
-        .ok_or_else(|| UserError::ProjectNotFoundError)?;
-
-    ensure_can_edit_project(&app, &session, None, &metadata).await?;
+    let metadata = ensure_can_edit_project(&app, &session, None, &project_id).await?;
 
     let state = app
         .network
@@ -200,7 +191,7 @@ async fn invite_occupant(
 ) -> Result<HttpResponse, UserError> {
     let (project_id,) = path.into_inner();
 
-    let project = ensure_can_edit_project_id(&app, &session, None, &project_id).await?;
+    let project = ensure_can_edit_project(&app, &session, None, &project_id).await?;
     let invite = OccupantInvite::new(project_id, body.into_inner());
     app.occupant_invites
         .insert_one(&invite, None)
@@ -252,7 +243,7 @@ async fn ensure_can_evict_client(
 
     // Client can be evicted by project owners, collaborators
     if let Some(ClientState::Browser(BrowserClientState { project_id, .. })) = client_state {
-        let can_edit = ensure_can_edit_project_id(app, session, None, &project_id).await;
+        let can_edit = ensure_can_edit_project(app, session, None, &project_id).await;
         if can_edit.is_ok() {
             return Ok(());
         }
@@ -281,17 +272,21 @@ async fn start_network_trace(
     path: web::Path<(ProjectId,)>,
 ) -> Result<HttpResponse, UserError> {
     let (project_id,) = path.into_inner();
-    ensure_can_edit_project_id(&app, &session, None, &project_id).await?;
+    ensure_can_edit_project(&app, &session, None, &project_id).await?;
     let query = doc! {"id": project_id};
     let new_trace = NetworkTraceMetadata::new();
     let update = doc! {"$push": {"networkTraces": &new_trace}};
-    let result = app
+    let options = FindOneAndUpdateOptions::builder()
+        .return_document(ReturnDocument::After)
+        .build();
+    let metadata = app
         .project_metadata
-        .update_one(query, update, None)
+        .find_one_and_update(query, update, options)
         .await
-        .map_err(|_err| InternalError::DatabaseConnectionError)?;
+        .map_err(|_err| InternalError::DatabaseConnectionError)?
+        .ok_or_else(|| UserError::ProjectNotFoundError)?;
 
-    // TODO: update cache, if relevant
+    app.update_project_cache(metadata);
     Ok(HttpResponse::Ok().body(new_trace.id))
 }
 
@@ -302,7 +297,7 @@ async fn stop_network_trace(
     path: web::Path<(ProjectId, String)>,
 ) -> Result<HttpResponse, UserError> {
     let (project_id, trace_id) = path.into_inner();
-    let metadata = ensure_can_edit_project_id(&app, &session, None, &project_id).await?;
+    let metadata = ensure_can_edit_project(&app, &session, None, &project_id).await?;
     let trace = metadata
         .network_traces
         .iter()
@@ -313,14 +308,15 @@ async fn stop_network_trace(
     let options = FindOneAndUpdateOptions::builder()
         .return_document(ReturnDocument::After)
         .build();
+
     let metadata = app
         .project_metadata
         .find_one_and_update(query, update, options)
         .await
         .map_err(|_err| InternalError::DatabaseConnectionError)?
-        .ok_or_else(|| UserError::ProjectNotFoundError);
+        .ok_or_else(|| UserError::ProjectNotFoundError)?;
 
-    //app.update_project_cache(metadata);
+    app.update_project_cache(metadata);
     Ok(HttpResponse::Ok().body("Stopped"))
 }
 
@@ -331,7 +327,7 @@ async fn get_network_trace(
     path: web::Path<(ProjectId, String)>,
 ) -> Result<HttpResponse, UserError> {
     let (project_id, trace_id) = path.into_inner();
-    let metadata = ensure_can_edit_project_id(&app, &session, None, &project_id).await?;
+    let metadata = ensure_can_edit_project(&app, &session, None, &project_id).await?;
     let trace = metadata
         .network_traces
         .iter()
@@ -368,7 +364,7 @@ async fn delete_network_trace(
     path: web::Path<(ProjectId, String)>,
 ) -> Result<HttpResponse, UserError> {
     let (project_id, trace_id) = path.into_inner();
-    let metadata = ensure_can_edit_project_id(&app, &session, None, &project_id).await?;
+    let metadata = ensure_can_edit_project(&app, &session, None, &project_id).await?;
     let trace = metadata
         .network_traces
         .iter()
@@ -405,6 +401,7 @@ async fn delete_network_trace(
         .await
         .map_err(|_err| InternalError::DatabaseConnectionError)?;
 
+    app.update_project_cache(metadata);
     Ok(HttpResponse::Ok().body("Network trace deleted"))
 }
 

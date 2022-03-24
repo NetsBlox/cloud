@@ -2,6 +2,7 @@ use actix_web::rt::time;
 use actix_web::HttpRequest;
 use futures::future::join_all;
 use futures::join;
+use lazy_static::lazy_static;
 use lru::LruCache;
 use mongodb::bson::{doc, Document};
 use mongodb::options::{FindOneAndUpdateOptions, IndexOptions, ReturnDocument};
@@ -30,6 +31,11 @@ use rusoto_s3::{
     PutObjectOutput, PutObjectRequest, S3Client, S3,
 };
 
+lazy_static! {
+    static ref PROJECT_CACHE: Arc<RwLock<LruCache<ProjectId, ProjectMetadata>>> =
+        Arc::new(RwLock::new(LruCache::new(500)));
+}
+
 #[derive(Clone)]
 pub struct AppData {
     prefix: &'static str,
@@ -43,7 +49,6 @@ pub struct AppData {
     pub users: Collection<User>,
     pub friends: Collection<FriendLink>,
     pub project_metadata: Collection<ProjectMetadata>,
-    project_cache: Arc<RwLock<LruCache<ProjectId, ProjectMetadata>>>,
 
     pub password_tokens: Collection<SetPasswordToken>,
     pub recorded_messages: Collection<SentMessage>,
@@ -81,7 +86,6 @@ impl AppData {
             db.collection::<SetPasswordToken>(&(prefix.to_owned() + "passwordTokens"));
         let users = db.collection::<User>(&(prefix.to_owned() + "users"));
         let project_metadata = db.collection::<ProjectMetadata>(&(prefix.to_owned() + "projects"));
-        let project_cache = Arc::new(RwLock::new(LruCache::new(500))); // TODO: Configure the cache size?
 
         let collab_invites =
             db.collection::<CollaborationInvite>(&(prefix.to_owned() + "collaborationInvitations"));
@@ -104,7 +108,6 @@ impl AppData {
             users,
             prefix,
             project_metadata,
-            project_cache,
 
             collab_invites,
             occupant_invites,
@@ -217,7 +220,7 @@ impl AppData {
     }
 
     pub async fn get_project_metadatum(
-        &mut self,
+        &self,
         id: &ProjectId,
     ) -> Result<ProjectMetadata, UserError> {
         match self.get_cached_project(id) {
@@ -226,13 +229,18 @@ impl AppData {
         }
     }
 
+    pub fn update_project_cache(&self, metadata: ProjectMetadata) {
+        let mut cache = PROJECT_CACHE.write().unwrap();
+        cache.put(metadata.id.clone(), metadata);
+    }
+
     pub async fn get_project_metadata(
-        &mut self,
+        &self,
         ids: &Vec<ProjectId>,
     ) -> Result<Vec<ProjectMetadata>, UserError> {
         let mut results = Vec::new();
         let mut missing_projects = Vec::new();
-        let mut cache = self.project_cache.write().unwrap();
+        let mut cache = PROJECT_CACHE.write().unwrap();
         for id in ids {
             match cache.get(id) {
                 Some(project_metadata) => results.push(project_metadata.clone()),
@@ -254,8 +262,8 @@ impl AppData {
                 .await
                 .map_err(|_err| InternalError::DatabaseConnectionError)?;
 
-            // TODO: cache all the projects
-            let mut cache = self.project_cache.write().unwrap();
+            // TODO: make this lazy static?
+            let mut cache = PROJECT_CACHE.write().unwrap();
             projects.iter().for_each(|project| {
                 cache.put(project.id.clone(), project.clone());
             });
@@ -266,12 +274,12 @@ impl AppData {
     }
 
     fn get_cached_projects(&self, id: &ProjectId) -> Option<ProjectMetadata> {
-        let mut cache = self.project_cache.write().unwrap();
+        let mut cache = PROJECT_CACHE.write().unwrap();
         cache.get(id).map(|md| md.to_owned())
     }
 
     fn get_cached_project(&self, id: &ProjectId) -> Option<ProjectMetadata> {
-        let mut cache = self.project_cache.write().unwrap();
+        let mut cache = PROJECT_CACHE.write().unwrap();
         cache.get(id).map(|md| md.to_owned())
     }
 
@@ -283,7 +291,7 @@ impl AppData {
             .map_err(|_err| InternalError::DatabaseConnectionError)?
             .ok_or_else(|| UserError::ProjectNotFoundError)?;
 
-        let mut cache = self.project_cache.write().unwrap();
+        let mut cache = PROJECT_CACHE.write().unwrap();
         cache.put(id.clone(), metadata);
         Ok(cache.get(id).unwrap().clone())
     }
@@ -466,13 +474,13 @@ impl AppData {
         })
     }
 
-    pub fn on_project_update(&self, updated_project: ProjectMetadata) {
+    /// Send updated room state and update project cache when room structure is changed or renamed
+    pub fn on_room_changed(&self, updated_project: ProjectMetadata) {
         self.network.do_send(topology::SendRoomState {
-            project: updated_project,
+            project: updated_project.clone(),
         });
 
-        //self.update_project_cache
-        // TODO: Invalidate the cache (when there is one)
+        self.update_project_cache(updated_project);
     }
 
     pub async fn save_role(
@@ -498,7 +506,7 @@ impl AppData {
             .map_err(|_err| InternalError::DatabaseConnectionError)?
             .ok_or_else(|| UserError::ProjectNotFoundError)?;
 
-        self.on_project_update(updated_metadata.clone());
+        self.on_room_changed(updated_metadata.clone());
 
         Ok(updated_metadata
             .roles
@@ -538,7 +546,7 @@ impl AppData {
             .unwrap()
             .expect("Project not found.");
 
-        self.on_project_update(updated_metadata.clone());
+        self.on_room_changed(updated_metadata.clone());
         Ok(updated_metadata)
     }
 

@@ -1,4 +1,7 @@
 # To Do
+- [ ] allow disabled tor IPs
+    - add to config
+
 - [ ] record messages
     - this can follow the same method as before
         - add a TTL of something like 1 day to messages?
@@ -61,7 +64,19 @@
             - cache will need to be made Arc
                 - the whole app will need to be passed to the network topology then :/
                     - I guess this is ok...
+
+            - [x] let's make the cache lazy static?
+        - [x] invalidate the cache when...
+            - [x] role is renamed
+            - [x] project is renamed
+            - [x] collaborator is added
+            - [x] collaborator is removed
+            - [x] network trace is started
+            - [x] network trace is stopped
+
   
+
+- [ ] change ensure_can_edit_project to ID?
 
 - [ ] add email support
     - [ ] new account creation

@@ -275,54 +275,54 @@ impl Topology {
         });
 
         // maybe record the message
-        //     if let Some(app) = &self.app_data.as_mut() {
-        //         let current_time = DateTime::from_system_time(SystemTime::now());
-        //         let project_ids: Vec<_> = recipients
-        //             .clone()
-        //             .map(|client| &client.id)
-        //             .chain(std::iter::once(&msg.sender))
-        //             .filter_map(|client_id| match self.get_client_state(client_id) {
-        //                 Some(ClientState::Browser(BrowserClientState { project_id, .. })) => {
-        //                     Some(project_id.to_owned())
-        //                 }
-        //                 _ => None,
-        //             })
-        //             .collect();
+        if let Some(app) = &self.app_data {
+            let project_ids: Vec<_> = recipients
+                .clone()
+                .map(|client| &client.id)
+                .chain(std::iter::once(&msg.sender))
+                .filter_map(|client_id| match self.get_client_state(client_id) {
+                    Some(ClientState::Browser(BrowserClientState { project_id, .. })) => {
+                        Some(project_id.to_owned())
+                    }
+                    _ => None,
+                })
+                .collect();
 
-        //         let projects = app.get_project_metadata(&project_ids).await.unwrap();
-        //         let recording_ids = projects
-        //             .iter()
-        //             .filter(|metadata| {
-        //                 metadata
-        //                     .network_traces
-        //                     .iter()
-        //                     .find(|trace| trace.end_time == None)
-        //                     .is_some()
-        //             })
-        //             .map(|metadata| metadata.id.to_owned());
+            let projects = app.get_project_metadata(&project_ids).await.unwrap();
+            let recording_ids = projects
+                .iter()
+                .filter(|metadata| {
+                    metadata
+                        .network_traces
+                        .iter()
+                        .find(|trace| trace.end_time == None)
+                        .is_some()
+                })
+                .map(|metadata| metadata.id.to_owned());
 
-        //         let source = self.get_client_state(&msg.sender).unwrap();
-        //         let mut dst_ids = Vec::new();
-        //         for recipient_state in recipients.filter_map(|client| self.get_client_state(&client.id))
-        //         {
-        //             if let Some(address) = self.get_address_string(recipient_state).await {
-        //                 dst_ids.push(address);
-        //             }
-        //         }
+            let source = self.get_client_state(&msg.sender).unwrap();
+            let mut dst_ids = Vec::new();
+            for recipient_state in recipients.filter_map(|client| self.get_client_state(&client.id))
+            {
+                if let Some(address) = self.get_address_string(recipient_state).await {
+                    dst_ids.push(address);
+                }
+            }
 
-        //         let messages = recording_ids.into_iter().map(|project_id| SentMessage {
-        //             project_id: project_id.to_string(),
-        //             source: source.to_owned(),
-        //             dst_ids: dst_ids.clone(),
-        //             time: current_time,
-        //             content: message.0.clone(),
-        //         });
+            let messages = recording_ids.into_iter().map(|project_id| {
+                SentMessage::new(
+                    project_id.to_string(),
+                    source.to_owned(),
+                    dst_ids.clone(),
+                    message.0.clone(),
+                )
+            });
 
-        //         app.recorded_messages
-        //             .insert_many(messages, None)
-        //             .await
-        //             .unwrap();
-        //     }
+            app.recorded_messages
+                .insert_many(messages, None)
+                .await
+                .unwrap();
+        }
     }
 
     pub fn has_client(&self, id: &str) -> bool {

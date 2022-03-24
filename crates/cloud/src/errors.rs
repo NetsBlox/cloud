@@ -34,6 +34,8 @@ pub enum UserError {
     InviteNotFoundError,
     #[display(fmt = "Project not active.")]
     ProjectNotActiveError,
+    #[display(fmt = "Cannot delete last role.")]
+    CannotDeleteLastRoleError,
     #[display(fmt = "Incorrect password.")]
     IncorrectPasswordError,
     #[display(fmt = "Incorrect username or password.")]
@@ -96,6 +98,7 @@ impl error::ResponseError for UserError {
             | UserError::PasswordResetLinkSentError
             | UserError::InvalidAccountTypeError
             | UserError::TorAddressError
+            | UserError::CannotDeleteLastRoleError
             | UserError::ProjectNotActiveError => StatusCode::BAD_REQUEST,
         }
     }

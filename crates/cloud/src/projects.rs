@@ -206,51 +206,18 @@ async fn can_view_project(
     can_edit_project(app, session, None, project).await
 }
 
-pub async fn ensure_can_edit_project_id(
-    app: &AppData,
-    session: &Session,
-    client_id: Option<String>,
-    project_id: &str,
-) -> Result<ProjectMetadata, UserError> {
-    let query = doc! {"id": project_id};
-    let metadata = app
-        .project_metadata
-        .find_one(query, None)
-        .await
-        .map_err(|_err| InternalError::DatabaseConnectionError)?
-        .ok_or_else(|| UserError::ProjectNotFoundError)?;
-
-    ensure_can_edit_project(app, session, client_id, &metadata).await?;
-    Ok(metadata)
-}
-
-pub async fn can_edit_project_id(
-    app: &AppData,
-    session: &Session,
-    client_id: Option<String>,
-    project_id: &str,
-) -> Result<bool, UserError> {
-    let query = doc! {"id": project_id};
-    let metadata = app
-        .project_metadata
-        .find_one(query, None)
-        .await
-        .map_err(|_err| InternalError::DatabaseConnectionError)?
-        .ok_or_else(|| UserError::ProjectNotFoundError)?;
-
-    can_edit_project(app, session, client_id, &metadata).await
-}
-
 pub async fn ensure_can_edit_project(
     app: &AppData,
     session: &Session,
     client_id: Option<String>,
-    project: &ProjectMetadata,
-) -> Result<(), UserError> {
-    if !can_edit_project(app, session, client_id, project).await? {
-        Err(UserError::PermissionsError)
+    project_id: &ProjectId,
+) -> Result<ProjectMetadata, UserError> {
+    let metadata = app.get_project_metadatum(project_id).await?;
+
+    if can_edit_project(app, session, client_id, &metadata).await? {
+        Ok(metadata)
     } else {
-        Ok(())
+        Err(UserError::PermissionsError)
     }
 }
 
@@ -304,22 +271,15 @@ async fn get_project(
     Ok(HttpResponse::Ok().json(project)) // TODO: Update this to a responder?
 }
 
-#[post("/id/{projectID}/publish")] // TODO: Will this collide with role?
+#[post("/id/{projectID}/publish")]
 async fn publish_project(
     app: web::Data<AppData>,
     path: web::Path<(ProjectId,)>,
     session: Session,
 ) -> Result<HttpResponse, UserError> {
     let (project_id,) = path.into_inner();
-    let query = doc! {"id": project_id};
-    let metadata = app
-        .project_metadata
-        .find_one(query.clone(), None)
-        .await
-        .map_err(|_err| InternalError::DatabaseConnectionError)? // TODO: wrap the error?
-        .ok_or_else(|| UserError::ProjectNotFoundError)?;
-
-    ensure_can_edit_project(&app, &session, None, &metadata).await?;
+    let query = doc! {"id": &project_id};
+    ensure_can_edit_project(&app, &session, None, &project_id).await?;
 
     // TODO: add moderation?
     let update = doc! {"$set": {"public": true}};
@@ -338,15 +298,8 @@ async fn unpublish_project(
     session: Session,
 ) -> Result<HttpResponse, UserError> {
     let (project_id,) = path.into_inner();
-    let query = doc! {"id": project_id};
-    let metadata = app
-        .project_metadata
-        .find_one(query.clone(), None)
-        .await
-        .map_err(|_err| InternalError::DatabaseConnectionError)? // TODO: wrap the error?
-        .ok_or_else(|| UserError::ProjectNotFoundError)?;
-
-    ensure_can_edit_project(&app, &session, None, &metadata).await?;
+    let query = doc! {"id": &project_id};
+    ensure_can_edit_project(&app, &session, None, &project_id).await?;
 
     let update = doc! {"$set": {"public": false}};
     let result = app
@@ -393,16 +346,9 @@ async fn update_project(
     let (project_id,) = path.into_inner();
 
     // TODO: validate the name. Or make it a type?
-    let query = doc! {"id": project_id};
-    let metadata = app
-        .project_metadata
-        .find_one(query.clone(), None)
-        .await
-        .map_err(|_err| InternalError::DatabaseConnectionError)? // TODO: wrap the error?
-        .ok_or_else(|| UserError::ProjectNotFoundError)?;
-
+    let query = doc! {"id": &project_id};
     let body = body.into_inner();
-    ensure_can_edit_project(&app, &session, body.client_id, &metadata).await?;
+    let metadata = ensure_can_edit_project(&app, &session, body.client_id, &project_id).await?;
 
     println!("Changing name from {} to {}", &metadata.name, &body.name);
     let update = doc! {"$set": {"name": &body.name}};
@@ -417,7 +363,7 @@ async fn update_project(
         .map_err(|_err| InternalError::DatabaseConnectionError)? // TODO: wrap the error?
         .ok_or_else(|| UserError::ProjectNotFoundError)?;
 
-    app.on_project_update(updated_metadata);
+    app.on_room_changed(updated_metadata);
     Ok(HttpResponse::Ok().body("Project updated."))
 }
 
@@ -509,17 +455,11 @@ async fn create_role(
     session: Session,
 ) -> Result<HttpResponse, UserError> {
     let (project_id,) = path.into_inner();
-    let query = doc! {"id": project_id};
-    let metadata = app
-        .project_metadata
-        .find_one(query, None)
-        .await
-        .map_err(|_err| InternalError::DatabaseConnectionError)? // TODO: wrap the error?
-        .ok_or_else(|| UserError::ProjectNotFoundError)?;
+    let query = doc! {"id": &project_id};
+    let metadata = ensure_can_edit_project(&app, &session, None, &project_id).await?;
 
-    ensure_can_edit_project(&app, &session, None, &metadata).await?;
-
-    app.create_role(metadata, body.into_inner().into()).await?;
+    let updated_metadata = app.create_role(metadata, body.into_inner().into()).await?;
+    app.on_room_changed(updated_metadata);
     Ok(HttpResponse::Ok().body("Role created"))
 }
 
@@ -555,17 +495,13 @@ async fn delete_role(
     session: Session,
 ) -> Result<HttpResponse, UserError> {
     let (project_id, role_id) = path.into_inner();
-    let query = doc! {"id": project_id};
-    let metadata = app
-        .project_metadata
-        .find_one(query.clone(), None)
-        .await
-        .map_err(|_err| InternalError::DatabaseConnectionError)? // TODO: wrap the error?
-        .ok_or_else(|| UserError::ProjectNotFoundError)?;
+    let query = doc! {"id": &project_id};
 
-    // TODO: Move this to AppData
-    // TODO: what if it is the last role??
-    ensure_can_edit_project(&app, &session, None, &metadata).await?;
+    let metadata = ensure_can_edit_project(&app, &session, None, &project_id).await?;
+    if metadata.roles.keys().count() == 1 {
+        return Err(UserError::CannotDeleteLastRoleError);
+    }
+
     let update = doc! {"$unset": {format!("roles.{}", role_id): &""}};
     let options = FindOneAndUpdateOptions::builder()
         .return_document(ReturnDocument::After)
@@ -575,12 +511,10 @@ async fn delete_role(
         .project_metadata
         .find_one_and_update(query, update, options)
         .await
-        .map_err(|_err| InternalError::DatabaseConnectionError)?; // TODO: wrap the error?
+        .map_err(|_err| InternalError::DatabaseConnectionError)?
+        .ok_or_else(|| UserError::ProjectNotFoundError)?;
 
-    if let Some(updated_metadata) = updated_metadata {
-        app.on_project_update(updated_metadata);
-    }
-
+    app.on_room_changed(updated_metadata);
     Ok(HttpResponse::Ok().body("Deleted!"))
 }
 
@@ -592,15 +526,7 @@ async fn save_role(
     session: Session,
 ) -> Result<HttpResponse, UserError> {
     let (project_id, role_id) = path.into_inner();
-    let query = doc! {"id": project_id};
-    let metadata = app
-        .project_metadata
-        .find_one(query, None)
-        .await
-        .map_err(|_err| InternalError::DatabaseConnectionError)? // TODO: wrap the error?
-        .ok_or_else(|| UserError::ProjectNotFoundError)?;
-
-    ensure_can_edit_project(&app, &session, None, &metadata).await?;
+    let metadata = ensure_can_edit_project(&app, &session, None, &project_id).await?;
     app.save_role(&metadata, &role_id, body.into_inner())
         .await?;
 
@@ -616,16 +542,9 @@ async fn rename_role(
 ) -> Result<HttpResponse, UserError> {
     let (project_id, role_id) = path.into_inner();
 
-    let query = doc! {"id": project_id};
+    let query = doc! {"id": &project_id};
     let body = body.into_inner();
-    let metadata = app
-        .project_metadata
-        .find_one(query.clone(), None)
-        .await
-        .map_err(|_err| InternalError::DatabaseConnectionError)? // TODO: wrap the error?
-        .ok_or_else(|| UserError::ProjectNotFoundError)?;
-
-    ensure_can_edit_project(&app, &session, body.client_id, &metadata).await?;
+    let metadata = ensure_can_edit_project(&app, &session, body.client_id, &project_id).await?;
 
     if metadata.roles.contains_key(&role_id) {
         let update = doc! {"$set": {format!("roles.{}.name", role_id): &body.name}};
@@ -640,7 +559,7 @@ async fn rename_role(
             .map_err(|_err| InternalError::DatabaseConnectionError)? // TODO: wrap the error?
             .ok_or_else(|| UserError::ProjectNotFoundError)?;
 
-        app.on_project_update(updated_metadata);
+        app.on_room_changed(updated_metadata);
         Ok(HttpResponse::Ok().body("Role updated"))
     } else {
         Err(UserError::RoleNotFoundError)
@@ -719,20 +638,13 @@ async fn report_latest_role(
     session: Session,
 ) -> Result<HttpResponse, UserError> {
     let (project_id, role_id) = path.into_inner();
-    let query = doc! {"id": project_id};
+    let query = doc! {"id": &project_id};
     let id = Uuid::parse_str(&body.id).map_err(|_err| UserError::ProjectNotFoundError)?;
-    let metadata = app
-        .project_metadata
-        .find_one(query, None)
-        .await
-        .map_err(|_err| InternalError::DatabaseConnectionError)? // TODO: wrap the error?
-        .ok_or_else(|| UserError::ProjectNotFoundError)?;
+    let metadata = ensure_can_edit_project(&app, &session, None, &project_id).await?;
 
     if !metadata.roles.contains_key(&role_id) {
         return Err(UserError::RoleNotFoundError);
     }
-
-    ensure_can_edit_project(&app, &session, None, &metadata).await?;
 
     app.network.do_send(topology::RoleDataResponse {
         id,
@@ -748,16 +660,8 @@ async fn list_collaborators(
     session: Session,
 ) -> Result<HttpResponse, UserError> {
     let (project_id,) = path.into_inner();
-    let query = doc! {"id": project_id};
+    let metadata = ensure_can_edit_project(&app, &session, None, &project_id).await?;
 
-    let metadata = app
-        .project_metadata
-        .find_one(query, None)
-        .await
-        .map_err(|_err| InternalError::DatabaseConnectionError)? // TODO: wrap the error?
-        .ok_or_else(|| UserError::ProjectNotFoundError)?;
-
-    ensure_can_edit_project(&app, &session, None, &metadata).await?;
     Ok(HttpResponse::Ok().json(metadata.collaborators))
 }
 
@@ -768,28 +672,23 @@ async fn remove_collaborator(
     session: Session,
 ) -> Result<HttpResponse, UserError> {
     let (project_id, username) = path.into_inner();
-    let query = doc! {"id": project_id};
+    let query = doc! {"id": &project_id};
+    ensure_can_edit_project(&app, &session, None, &project_id).await?;
+
+    let update = doc! {"$pull": {"collaborators": &username}};
+    let options = FindOneAndUpdateOptions::builder()
+        .return_document(ReturnDocument::After)
+        .build();
+
     let metadata = app
         .project_metadata
-        .find_one(query.clone(), None)
+        .find_one_and_update(query, update, None)
         .await
         .map_err(|_err| InternalError::DatabaseConnectionError)? // TODO: wrap the error?
         .ok_or_else(|| UserError::ProjectNotFoundError)?;
 
-    ensure_can_edit_project(&app, &session, None, &metadata).await?;
-
-    let update = doc! {"$pull": {"collaborators": &username}};
-    let result = app
-        .project_metadata
-        .update_one(query, update, None)
-        .await
-        .map_err(|_err| InternalError::DatabaseConnectionError)?; // TODO: wrap the error?
-
-    if result.matched_count == 1 {
-        Ok(HttpResponse::Ok().body("Collaborator added"))
-    } else {
-        Err(UserError::ProjectNotFoundError)
-    }
+    app.on_room_changed(metadata);
+    Ok(HttpResponse::Ok().body("Collaborator removed"))
 }
 
 pub fn config(cfg: &mut web::ServiceConfig) {
