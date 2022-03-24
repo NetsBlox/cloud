@@ -2,21 +2,25 @@ use actix_web::rt::time;
 use actix_web::HttpRequest;
 use futures::future::join_all;
 use futures::join;
+use lru::LruCache;
 use mongodb::bson::{doc, Document};
 use mongodb::options::{FindOneAndUpdateOptions, IndexOptions, ReturnDocument};
+use netsblox_core::ProjectId;
 use rusoto_core::credential::StaticProvider;
 use rusoto_core::Region;
 use serde::{Deserialize, Serialize};
 use std::collections::{HashMap, HashSet};
+use std::sync::{Arc, RwLock};
 use std::time::Duration;
 use uuid::Uuid;
 
 use crate::config::Settings;
 use crate::errors::{InternalError, UserError};
 use crate::models::{
-    CollaborationInvite, FriendLink, Group, Project, ProjectMetadata, SaveState, User,
+    CollaborationInvite, FriendLink, Group, Project, ProjectMetadata, SaveState, SetPasswordToken,
+    User,
 };
-use crate::models::{OccupantInvite, RoleData, RoleMetadata};
+use crate::models::{OccupantInvite, RoleData, RoleMetadata, SentMessage};
 use crate::network::topology::{self, SetStorage, TopologyActor};
 use actix::{Actor, Addr};
 use futures::TryStreamExt;
@@ -39,6 +43,10 @@ pub struct AppData {
     pub users: Collection<User>,
     pub friends: Collection<FriendLink>,
     pub project_metadata: Collection<ProjectMetadata>,
+    project_cache: Arc<RwLock<LruCache<ProjectId, ProjectMetadata>>>,
+
+    pub password_tokens: Collection<SetPasswordToken>,
+    pub recorded_messages: Collection<SentMessage>,
     pub collab_invites: Collection<CollaborationInvite>,
     pub occupant_invites: Collection<OccupantInvite>,
 }
@@ -69,20 +77,23 @@ impl AppData {
 
         let prefix = prefix.unwrap_or("");
         let groups = db.collection::<Group>(&(prefix.to_owned() + "groups"));
+        let password_tokens =
+            db.collection::<SetPasswordToken>(&(prefix.to_owned() + "passwordTokens"));
         let users = db.collection::<User>(&(prefix.to_owned() + "users"));
         let project_metadata = db.collection::<ProjectMetadata>(&(prefix.to_owned() + "projects"));
+        let project_cache = Arc::new(RwLock::new(LruCache::new(500))); // TODO: Configure the cache size?
 
         let collab_invites =
             db.collection::<CollaborationInvite>(&(prefix.to_owned() + "collaborationInvitations"));
         let occupant_invites =
             db.collection::<OccupantInvite>(&(prefix.to_owned() + "occupantInvites"));
         let friends = db.collection::<FriendLink>(&(prefix.to_owned() + "friends"));
+        let recorded_messages =
+            db.collection::<SentMessage>(&(prefix.to_owned() + "recordedMessages"));
         let network = network.unwrap_or_else(|| TopologyActor {}.start());
         let tor_exit_nodes = db.collection::<TorNode>(&(prefix.to_owned() + "torExitNodes"));
-        network.do_send(SetStorage {
-            project_metadata: project_metadata.clone(),
-        });
         let bucket = settings.s3.bucket.clone();
+
         AppData {
             settings,
             db,
@@ -93,22 +104,29 @@ impl AppData {
             users,
             prefix,
             project_metadata,
+            project_cache,
 
             collab_invites,
             occupant_invites,
+            password_tokens,
             friends,
+
             tor_exit_nodes,
+            recorded_messages,
         }
     }
 
-    pub async fn initialize(&self) {
+    pub async fn initialize(&self) -> Result<(), InternalError> {
         // Create the s3 bucket
         let bucket = &self.settings.s3.bucket;
         let request = CreateBucketRequest {
             bucket: bucket.clone(),
             ..Default::default()
         };
-        self.s3.create_bucket(request).await;
+        self.s3
+            .create_bucket(request)
+            .await
+            .map_err(|_err| InternalError::S3Error)?;
 
         self.db
             .run_command(
@@ -126,7 +144,7 @@ impl AppData {
                 None,
             )
             .await
-            .unwrap();
+            .map_err(|_err| InternalError::DatabaseConnectionError)?;
 
         let index_opts = IndexOptions::builder()
             .expire_after(Duration::from_secs(60 * 60))
@@ -138,7 +156,7 @@ impl AppData {
         self.occupant_invites
             .create_index(invite_index, None)
             .await
-            .unwrap();
+            .map_err(|_err| InternalError::DatabaseConnectionError)?;
 
         self.occupant_invites
             .create_index(
@@ -148,19 +166,36 @@ impl AppData {
                 None,
             )
             .await
-            .unwrap();
+            .map_err(|_err| InternalError::DatabaseConnectionError)?;
+
+        let index_opts = IndexOptions::builder()
+            .expire_after(Duration::from_secs(60 * 60))
+            .build();
+        let token_index = IndexModel::builder()
+            .keys(doc! {"createdAt": 1})
+            .options(index_opts)
+            .build();
+        self.password_tokens
+            .create_index(token_index, None)
+            .await
+            .map_err(|_err| InternalError::DatabaseConnectionError)?;
 
         self.project_metadata
             .create_index(IndexModel::builder().keys(doc! {"id": 1}).build(), None)
             .await
-            .unwrap();
+            .map_err(|_err| InternalError::DatabaseConnectionError)?;
 
         self.tor_exit_nodes
             .create_index(IndexModel::builder().keys(doc! {"addr": 1}).build(), None)
             .await
-            .unwrap();
+            .map_err(|_err| InternalError::DatabaseConnectionError)?;
 
         self.start_update_interval();
+
+        self.network.do_send(SetStorage {
+            app_data: self.clone(),
+        });
+        Ok(())
     }
 
     fn start_update_interval(&self) {
@@ -176,8 +211,81 @@ impl AppData {
     }
 
     pub fn collection<T>(&self, name: &str) -> Collection<T> {
+        // TODO: make this private
         let name = &(self.prefix.to_owned() + name);
         self.db.collection::<T>(name)
+    }
+
+    pub async fn get_project_metadatum(
+        &mut self,
+        id: &ProjectId,
+    ) -> Result<ProjectMetadata, UserError> {
+        match self.get_cached_project(id) {
+            Some(project) => Ok(project),
+            None => self.get_project_and_cache(id).await,
+        }
+    }
+
+    pub async fn get_project_metadata(
+        &mut self,
+        ids: &Vec<ProjectId>,
+    ) -> Result<Vec<ProjectMetadata>, UserError> {
+        let mut results = Vec::new();
+        let mut missing_projects = Vec::new();
+        let mut cache = self.project_cache.write().unwrap();
+        for id in ids {
+            match cache.get(id) {
+                Some(project_metadata) => results.push(project_metadata.clone()),
+                None => missing_projects.push(id),
+            }
+        }
+
+        if missing_projects.len() > 0 {
+            let docs: Vec<Document> = missing_projects.iter().map(|id| doc! {"id": id}).collect();
+            let query = doc! {"$or": docs};
+            let cursor = self
+                .project_metadata
+                .find(query, None)
+                .await
+                .map_err(|_err| InternalError::DatabaseConnectionError)?;
+
+            let projects: Vec<_> = cursor
+                .try_collect::<Vec<_>>()
+                .await
+                .map_err(|_err| InternalError::DatabaseConnectionError)?;
+
+            // TODO: cache all the projects
+            let mut cache = self.project_cache.write().unwrap();
+            projects.iter().for_each(|project| {
+                cache.put(project.id.clone(), project.clone());
+            });
+            results.extend(projects);
+        }
+
+        Ok(results)
+    }
+
+    fn get_cached_projects(&self, id: &ProjectId) -> Option<ProjectMetadata> {
+        let mut cache = self.project_cache.write().unwrap();
+        cache.get(id).map(|md| md.to_owned())
+    }
+
+    fn get_cached_project(&self, id: &ProjectId) -> Option<ProjectMetadata> {
+        let mut cache = self.project_cache.write().unwrap();
+        cache.get(id).map(|md| md.to_owned())
+    }
+
+    async fn get_project_and_cache(&self, id: &ProjectId) -> Result<ProjectMetadata, UserError> {
+        let metadata = self
+            .project_metadata
+            .find_one(doc! {"id": id}, None)
+            .await
+            .map_err(|_err| InternalError::DatabaseConnectionError)?
+            .ok_or_else(|| UserError::ProjectNotFoundError)?;
+
+        let mut cache = self.project_cache.write().unwrap();
+        cache.put(id.clone(), metadata);
+        Ok(cache.get(id).unwrap().clone())
     }
 
     pub async fn import_project(
@@ -362,6 +470,8 @@ impl AppData {
         self.network.do_send(topology::SendRoomState {
             project: updated_project,
         });
+
+        //self.update_project_cache
         // TODO: Invalidate the cache (when there is one)
     }
 
@@ -452,6 +562,17 @@ impl AppData {
             }
             None => Ok(()),
         }
+    }
+
+    pub async fn send_email(
+        &self,
+        to_email: &str,
+        subject: &str,
+        body: String,
+    ) -> Result<(), UserError> {
+        println!("Sending email to {}: {}", to_email, body);
+        Ok(())
+        //todo!("Send the email! (using lettre)");
     }
 }
 

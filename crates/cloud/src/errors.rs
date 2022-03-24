@@ -3,7 +3,7 @@ use derive_more::{Display, Error};
 
 #[derive(Debug, Display, Error)]
 pub enum InternalError {
-    DatabaseConnectionError, // TODO: wrap the mongodb error
+    DatabaseConnectionError, // TODO: wrap the error
     TimeoutError,
     S3Error,
     S3ContentError,
@@ -18,6 +18,10 @@ pub enum UserError {
     PermissionsError,
     #[display(fmt = "Project not found.")]
     ProjectNotFoundError,
+    #[display(fmt = "Password reset link already sent. Only 1 can be sent per hour.")]
+    PasswordResetLinkSentError,
+    #[display(fmt = "Network trace not found.")]
+    NetworkTraceNotFoundError,
     #[display(fmt = "Library not found.")]
     LibraryNotFoundError,
     #[display(fmt = "Role not found.")]
@@ -74,6 +78,7 @@ impl error::ResponseError for UserError {
             | UserError::IncorrectPasswordError => StatusCode::FORBIDDEN,
 
             UserError::ProjectNotFoundError
+            | UserError::NetworkTraceNotFoundError
             | UserError::LibraryNotFoundError
             | UserError::RoleNotFoundError
             | UserError::InviteNotFoundError
@@ -88,6 +93,7 @@ impl error::ResponseError for UserError {
             | UserError::InvalidAppIdError
             | UserError::InvalidAuthStrategyError
             | UserError::AccountAlreadyLinkedError
+            | UserError::PasswordResetLinkSentError
             | UserError::InvalidAccountTypeError
             | UserError::TorAddressError
             | UserError::ProjectNotActiveError => StatusCode::BAD_REQUEST,

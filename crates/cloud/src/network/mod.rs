@@ -1,19 +1,23 @@
 pub mod topology;
 
+use std::time::SystemTime;
+
 use crate::app_data::AppData;
 use crate::errors::{InternalError, UserError};
-use crate::models::OccupantInvite;
+use crate::models::{NetworkTraceMetadata, OccupantInvite, SentMessage};
 use crate::network::topology::{ClientState, ExternalClientState};
 use crate::projects::{ensure_can_edit_project, ensure_can_edit_project_id};
 use crate::users::{ensure_can_edit_user, ensure_is_super_user};
 use actix::{Actor, Addr, AsyncContext, Handler, StreamHandler};
 use actix_session::Session;
-use actix_web::{get, post};
+use actix_web::{delete, get, post};
 use actix_web::{web, HttpRequest, HttpResponse};
 use actix_web_actors::ws::{self, CloseCode};
-use mongodb::bson::doc;
+use futures::TryStreamExt;
+use mongodb::bson::{doc, DateTime};
+use mongodb::options::{FindOneAndUpdateOptions, ReturnDocument};
 use netsblox_core::{
-    BrowserClientState, ClientID, ClientStateData, OccupantInviteReq, ProjectId, SaveState,
+    BrowserClientState, ClientID, ClientStateData, OccupantInviteData, ProjectId, SaveState,
 };
 use serde::Deserialize;
 use serde_json::Value;
@@ -33,12 +37,6 @@ async fn set_client_state(
     if !client_id.starts_with('_') {
         return Err(UserError::InvalidClientIdError);
     }
-
-    // TODO: Check that the user can set the state to the given value
-    // User needs to either be able to edit the project or use a token
-    // In other words, there are 2 things that need to be verified:
-    //   - the request can edit the client (ie, secret/signed token or something)
-    //   - the user can join the project. May need a token if invited as occupant
 
     let mut response = None;
 
@@ -196,7 +194,7 @@ async fn get_external_clients(
 #[post("/id/{projectID}/occupants/invite")]
 async fn invite_occupant(
     app: web::Data<AppData>,
-    body: web::Json<OccupantInviteReq>,
+    body: web::Json<OccupantInviteData>,
     path: web::Path<(ProjectId,)>,
     session: Session,
 ) -> Result<HttpResponse, UserError> {
@@ -276,6 +274,140 @@ async fn ensure_can_evict_client(
     }
 }
 
+#[post("/id/{project_id}/trace/")]
+async fn start_network_trace(
+    app: web::Data<AppData>,
+    session: Session,
+    path: web::Path<(ProjectId,)>,
+) -> Result<HttpResponse, UserError> {
+    let (project_id,) = path.into_inner();
+    ensure_can_edit_project_id(&app, &session, None, &project_id).await?;
+    let query = doc! {"id": project_id};
+    let new_trace = NetworkTraceMetadata::new();
+    let update = doc! {"$push": {"networkTraces": &new_trace}};
+    let result = app
+        .project_metadata
+        .update_one(query, update, None)
+        .await
+        .map_err(|_err| InternalError::DatabaseConnectionError)?;
+
+    // TODO: update cache, if relevant
+    Ok(HttpResponse::Ok().body(new_trace.id))
+}
+
+#[post("/id/{project_id}/trace/{trace_id}/stop")]
+async fn stop_network_trace(
+    app: web::Data<AppData>,
+    session: Session,
+    path: web::Path<(ProjectId, String)>,
+) -> Result<HttpResponse, UserError> {
+    let (project_id, trace_id) = path.into_inner();
+    let metadata = ensure_can_edit_project_id(&app, &session, None, &project_id).await?;
+    let trace = metadata
+        .network_traces
+        .iter()
+        .find(|trace| trace.id == trace_id)
+        .ok_or_else(|| UserError::NetworkTraceNotFoundError)?;
+    let query = doc! {"id": project_id};
+    let update = doc! {"$pull": {"networkTraces": &trace}};
+    let options = FindOneAndUpdateOptions::builder()
+        .return_document(ReturnDocument::After)
+        .build();
+    let metadata = app
+        .project_metadata
+        .find_one_and_update(query, update, options)
+        .await
+        .map_err(|_err| InternalError::DatabaseConnectionError)?
+        .ok_or_else(|| UserError::ProjectNotFoundError);
+
+    //app.update_project_cache(metadata);
+    Ok(HttpResponse::Ok().body("Stopped"))
+}
+
+#[get("/id/{project_id}/trace/{trace_id}")]
+async fn get_network_trace(
+    app: web::Data<AppData>,
+    session: Session,
+    path: web::Path<(ProjectId, String)>,
+) -> Result<HttpResponse, UserError> {
+    let (project_id, trace_id) = path.into_inner();
+    let metadata = ensure_can_edit_project_id(&app, &session, None, &project_id).await?;
+    let trace = metadata
+        .network_traces
+        .iter()
+        .find(|trace| trace.id == trace_id)
+        .ok_or_else(|| UserError::NetworkTraceNotFoundError)?;
+
+    let start_time = trace.start_time;
+    let end_time = trace
+        .end_time
+        .unwrap_or(DateTime::from_system_time(SystemTime::now()));
+
+    let query = doc! {
+        "projectId": project_id,
+        "time": {"$gt": start_time, "$lt": end_time}
+    };
+    let cursor = app
+        .recorded_messages
+        .find(query, None)
+        .await
+        .map_err(|_err| InternalError::DatabaseConnectionError)?;
+
+    let messages: Vec<SentMessage> = cursor
+        .try_collect::<Vec<_>>()
+        .await
+        .map_err(|_err| InternalError::DatabaseConnectionError)?;
+
+    Ok(HttpResponse::Ok().json(messages))
+}
+
+#[delete("/id/{project_id}/trace/{trace_id}")]
+async fn delete_network_trace(
+    app: web::Data<AppData>,
+    session: Session,
+    path: web::Path<(ProjectId, String)>,
+) -> Result<HttpResponse, UserError> {
+    let (project_id, trace_id) = path.into_inner();
+    let metadata = ensure_can_edit_project_id(&app, &session, None, &project_id).await?;
+    let trace = metadata
+        .network_traces
+        .iter()
+        .find(|trace| trace.id == trace_id)
+        .ok_or_else(|| UserError::NetworkTraceNotFoundError)?;
+
+    let query = doc! {"id": &project_id};
+    let update = doc! {"$pull": {"networkTraces": &trace}};
+    let options = FindOneAndUpdateOptions::builder()
+        .return_document(ReturnDocument::After)
+        .build();
+    let metadata = app
+        .project_metadata
+        .find_one_and_update(query, update, options)
+        .await
+        .map_err(|_err| InternalError::DatabaseConnectionError)?
+        .ok_or_else(|| UserError::ProjectNotFoundError)?;
+
+    // remove all the messages
+    let earliest_start_time = metadata
+        .network_traces
+        .iter()
+        .map(|trace| trace.start_time)
+        .min()
+        .unwrap_or(DateTime::MAX);
+
+    let query = doc! {
+        "projectId": project_id,
+        "time": {"$lt": earliest_start_time}
+    };
+
+    app.recorded_messages
+        .delete_many(query, None)
+        .await
+        .map_err(|_err| InternalError::DatabaseConnectionError)?;
+
+    Ok(HttpResponse::Ok().body("Network trace deleted"))
+}
+
 pub fn config(cfg: &mut web::ServiceConfig) {
     cfg.service(set_client_state)
         .service(connect_client)
@@ -283,7 +415,11 @@ pub fn config(cfg: &mut web::ServiceConfig) {
         .service(get_room_state)
         .service(get_rooms)
         .service(invite_occupant)
-        .service(evict_occupant);
+        .service(evict_occupant)
+        .service(start_network_trace)
+        .service(stop_network_trace)
+        .service(get_network_trace)
+        .service(delete_network_trace);
 }
 
 struct WsSession {
@@ -312,11 +448,13 @@ impl WsSession {
                 };
                 println!("Sending message to {:?}", addresses);
                 self.topology_addr.do_send(topology::SendMessage {
+                    sender: self.client_id.to_owned(),
                     addresses,
                     content: msg,
                 });
             }
-            "client-message" => { // combine this with the above type?
+            "client-message" => {
+                todo!("add support for sending messages btwn clients");
             }
             "user-action" => {
                 // TODO: Record: Can we get rid of these?

@@ -3,12 +3,12 @@ mod client;
 mod external;
 mod network;
 
+use crate::app_data::AppData;
 use crate::models::{OccupantInvite, ProjectMetadata, RoleData};
 use actix::prelude::*;
 use actix::{Actor, AsyncContext, Context, Handler, MessageResult};
 use lazy_static::lazy_static;
 use mongodb::bson::doc;
-use mongodb::Collection;
 use netsblox_core::{ClientID, ExternalClient, ProjectId, RoomState};
 use serde_json::Value;
 use std::sync::{Arc, RwLock};
@@ -42,7 +42,7 @@ pub struct AddClient {
 #[derive(Message)]
 #[rtype(result = "()")]
 pub struct SetStorage {
-    pub project_metadata: Collection<ProjectMetadata>,
+    pub app_data: AppData,
 }
 
 #[derive(Message)]
@@ -74,6 +74,7 @@ pub struct SetClientState {
 #[derive(Message)]
 #[rtype(result = "()")]
 pub struct SendMessage {
+    pub sender: String,
     pub addresses: Vec<String>,
     pub content: Value,
 }
@@ -130,6 +131,8 @@ impl Handler<SendMessage> for TopologyActor {
     type Result = ();
 
     fn handle(&mut self, msg: SendMessage, ctx: &mut Context<Self>) -> Self::Result {
+        // TODO: check if the message should be recorded
+        // TODO: should we first check what clients are going to receive it?
         let fut = async {
             let topology = TOPOLOGY.read().unwrap();
             topology.send_msg(msg).await;
@@ -143,7 +146,7 @@ impl Handler<SetStorage> for TopologyActor {
 
     fn handle(&mut self, msg: SetStorage, _: &mut Context<Self>) -> Self::Result {
         let mut topology = TOPOLOGY.write().unwrap();
-        topology.set_project_metadata(msg.project_metadata);
+        topology.set_app_data(msg.app_data);
     }
 }
 

@@ -2,6 +2,74 @@
 - [ ] record messages
     - this can follow the same method as before
         - add a TTL of something like 1 day to messages?
+    - recordings can be their own collection. The ttl means we won't need to keep it in sync with the projects
+        - security considerations
+            - we can still check that the user can view the project
+        - if the project is recording messages can be stored with the project itself
+                - this avoids any issues
+        - recorded messages can have a ttl
+
+        - start
+            - (post) network/id/{id}/trace/
+            - return trace ID
+        - get
+            - (get) network/id/{id}/trace/{traceId}
+            - return messages
+        - stop
+            - (delete) network/trace/id/:id
+                - or (post) network/trace/id/:id/stop
+        - delete?
+                
+        - check if recording network traces w/ a cache
+            - where should it be cached? In app data?
+
+    - [ ] record messages on send, if recording
+    - [ ] should we take a decentralized approach and have the clients report?
+        - then the clients would need to share with each other that a trace is being collected
+            - what if the client joins during a trace?
+                - then the new client needs to be updated by one of the recording node
+        - if someone is recording the network and a message is sent or received, it would need to be added to the active traces
+
+        - MessageTrace struct with send/received enum
+        - This could make the animation look better...
+        - routes could be:
+            - (broadcast client message to room start)
+            - save a message event
+                - (post) network/id/{project_id}/trace
+            - retrieve messages
+                - (get) network/id/{project_id}/trace?startTime=1234&endTime=1345
+            - messages will delete on their own (expire in a few hours or something)...
+            - get current time endpoint
+                - /time
+
+        - advantages of clients recording the messages:
+            - no need to query the database on each message and determine if it needs to be recorded
+            - easier transition to decentralized messagig like webrtc
+
+    - game plan:
+        - [ ] implement a (slow but functional) version w/o caching
+            - [ ] test it!
+        - [ ] add project metadata caching
+            - can be used for collaborators and other metadata, too
+            - should I change project_metadata?
+                - project_metadata.collection
+                - project_metadata.get(id)
+                - project_metadata.get_many(ids)
+            - or should I do something like:
+                - app.get_project_metadata(id)
+                - app.get_project_metadata(id)  // with a batch option
+            - cache will need to be made Arc
+                - the whole app will need to be passed to the network topology then :/
+                    - I guess this is ok...
+  
+
+- [ ] add email support
+    - [ ] new account creation
+    - [ ] password reset
+
+    - [ ] lettre crate?
+        - smtp or ses?
+        - mock the method now?
 
 - [ ] collaborative editing action acceptance
     - maybe we don't need to persist them...
@@ -29,6 +97,16 @@
 
             - what if we connected the services server like a 3rd party app?
                 - it would need to authenticate as a single user though
+                    - NetsBloxServices?
+                    - address could be 
+                        - TicTacToe@NetsBlox #NetsBloxServices
+                        - ProjectID@TicTacToe@NetsBlox #NetsBloxServices
+
+                        - Services@NetsBlox #NetsBloxServices  // no response allowed
+                    - this could actually make it possible to add responding to messages to the spec, too!
+                        - the server would need to still be occupying those states though :/
+                            - maybe we could route the message using the sender ID?
+                                - wouldn't work since a project can use multiple services simultaneously
 
     - how is the API used by the services server?
         - authenticate users
@@ -78,7 +156,11 @@
     - these can be associated with groups or users...
         - how can we delete these when the user/group is deleted?
     - what if I just had a "serviceSettings" dictionary?
-        - for the main one:
+        - the dict would look like:
+            {
+                "https://editor.netsblox.org/services": {apiKeys}
+                "https://myOtherServices.com/": {apiKeys}
+            }
 
 - [ ] public URL is set when opening role
 - [ ] connect the client code and start testing things!
@@ -146,9 +228,6 @@
     - [x] project-response
     - [ ] request-actions
 
-- [ ] add tests
-    - [ ] group routes
-
 - [ ] add address caching to the message sending?
     - [ ] update cache on "send room state"
 
@@ -157,8 +236,6 @@
 - [ ] auth integration with services endpoint
     - maybe the services endpoint should hit this one?
 
-- [ ] require login to send messages?
-
 - [ ] store additional info in the cookie:
     - groups (for networking things)?
     - admin?
@@ -166,6 +243,16 @@
 - [ ] add the group IDs (+ GLOBAL) to the clients in the network topology?
     - these would be the user's group + any owned groups
     - the sender and receiver must share at least one
+
+- [ ] make sure email works
+
+## Future stuff
+- [ ] allow moderators to bypass profanity checker?
+
+- [ ] require login to send messages?
+
+- [ ] better pwd reset process (send link instead)
+    - IP-based rate limiting...
 
 ## Related project updates/migrations
 - [ ] unban?
@@ -185,6 +272,9 @@
 - [ ] gallery
 
 - [ ] api docs with paperclip?
+
+- [ ] make usernames case-insensitive for routes?
+    - it's probably fine the way it currently is
 
 ## CLI
 - [x] add CLI
@@ -546,4 +636,13 @@
 
 - [-] session doesn't ensure logged in...
      - new extractor that ensures authenticated?
+
+- [x] make usernames case-insensitive
+    - for all the routes, too?
+    - this can be taken care of elsewhere or later
+
+- [-] add tests
+    - [ ] group routes
+
+- [x] username length
 

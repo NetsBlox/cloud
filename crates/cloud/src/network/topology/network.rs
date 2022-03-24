@@ -7,9 +7,8 @@ use std::collections::{HashMap, HashSet};
 use std::str::FromStr;
 use std::time::{Duration, SystemTime};
 
-use mongodb::Collection;
-
-use crate::models::{ProjectId, ProjectMetadata, SaveState};
+use crate::app_data::AppData;
+use crate::models::{ProjectId, ProjectMetadata, SaveState, SentMessage};
 use crate::network::topology::address::ClientAddress;
 use crate::network::AppID;
 
@@ -121,7 +120,7 @@ impl ProjectNetwork {
 }
 
 pub struct Topology {
-    project_metadata: Option<Collection<ProjectMetadata>>,
+    app_data: Option<AppData>,
 
     clients: HashMap<ClientID, Client>,
     states: HashMap<ClientID, ClientState>,
@@ -129,6 +128,7 @@ pub struct Topology {
 
     rooms: HashMap<String, ProjectNetwork>,
     // address_cache: HashMap<String, (String, String)>,
+    // TODO: Use LruCache
     external: HashMap<AppID, HashMap<String, ClientID>>,
 }
 
@@ -143,7 +143,7 @@ impl Topology {
     pub fn new() -> Topology {
         Topology {
             clients: HashMap::new(),
-            project_metadata: None,
+            app_data: None,
             rooms: HashMap::new(),
             states: HashMap::new(),
             usernames: HashMap::new(),
@@ -151,8 +151,8 @@ impl Topology {
         }
     }
 
-    pub fn set_project_metadata(&mut self, project_metadata: Collection<ProjectMetadata>) {
-        self.project_metadata = Some(project_metadata);
+    pub fn set_app_data(&mut self, app: AppData) {
+        self.app_data = Some(app);
     }
 
     async fn get_clients_at(&self, addr: ClientAddress) -> Vec<&Client> {
@@ -186,12 +186,40 @@ impl Topology {
             .collect()
     }
 
-    async fn resolve_address(&self, addr: &ClientAddress) -> Vec<BrowserAddress> {
-        if self.project_metadata.is_none() {
-            return Vec::new();
-        }
+    async fn get_address_string(&self, state: &ClientState) -> Option<String> {
+        match state {
+            ClientState::Browser(BrowserClientState {
+                role_id,
+                project_id,
+            }) => {
+                if let Some(app) = &self.app_data {
+                    let query = doc! {"id": project_id};
+                    let project = app
+                        .project_metadata
+                        .find_one(query, None)
+                        .await
+                        .unwrap()
+                        .unwrap(); // TODO: use cache
 
-        let project_metadata = self.project_metadata.as_ref().unwrap();
+                    project
+                        .roles
+                        .get(role_id)
+                        .map(|role| format!("{}@{}@{}", role.name, project.name, project.owner))
+                } else {
+                    None
+                }
+            }
+            ClientState::External(ExternalClientState { address, app_id }) => {
+                Some(format!("{} #{}", address, app_id))
+            }
+        }
+    }
+
+    async fn resolve_address(&self, addr: &ClientAddress) -> Vec<BrowserAddress> {
+        let project_metadata = match &self.app_data {
+            Some(app) => &app.project_metadata,
+            None => return Vec::new(),
+        };
 
         let mut chunks = addr.address.split('@').rev();
         let project = chunks.next().unwrap();
@@ -232,24 +260,69 @@ impl Topology {
 
     pub async fn send_msg(&self, msg: SendMessage) {
         let message = ClientMessage(msg.content);
-        println!("received message to send to {:?}", msg.addresses);
         let recipients = join_all(
             msg.addresses
                 .iter()
                 .filter_map(|addr_str| ClientAddress::from_str(addr_str).ok())
-                .map(|address| self.get_clients_at(address)),
+                .map(|address| self.get_clients_at(address)), // TODO: Get the project for these clients?
         )
         .await
         .into_iter()
         .flatten();
-        println!("external: {:?}", self.external);
-        println!("rooms: {:?}", self.rooms);
-        println!("clients: {:?}", self.clients);
 
-        recipients.for_each(|client| {
-            println!("Sending msg to client: {}", client.id);
+        recipients.clone().for_each(|client| {
             client.addr.do_send(message.clone()).unwrap();
         });
+
+        // maybe record the message
+        //     if let Some(app) = &self.app_data.as_mut() {
+        //         let current_time = DateTime::from_system_time(SystemTime::now());
+        //         let project_ids: Vec<_> = recipients
+        //             .clone()
+        //             .map(|client| &client.id)
+        //             .chain(std::iter::once(&msg.sender))
+        //             .filter_map(|client_id| match self.get_client_state(client_id) {
+        //                 Some(ClientState::Browser(BrowserClientState { project_id, .. })) => {
+        //                     Some(project_id.to_owned())
+        //                 }
+        //                 _ => None,
+        //             })
+        //             .collect();
+
+        //         let projects = app.get_project_metadata(&project_ids).await.unwrap();
+        //         let recording_ids = projects
+        //             .iter()
+        //             .filter(|metadata| {
+        //                 metadata
+        //                     .network_traces
+        //                     .iter()
+        //                     .find(|trace| trace.end_time == None)
+        //                     .is_some()
+        //             })
+        //             .map(|metadata| metadata.id.to_owned());
+
+        //         let source = self.get_client_state(&msg.sender).unwrap();
+        //         let mut dst_ids = Vec::new();
+        //         for recipient_state in recipients.filter_map(|client| self.get_client_state(&client.id))
+        //         {
+        //             if let Some(address) = self.get_address_string(recipient_state).await {
+        //                 dst_ids.push(address);
+        //             }
+        //         }
+
+        //         let messages = recording_ids.into_iter().map(|project_id| SentMessage {
+        //             project_id: project_id.to_string(),
+        //             source: source.to_owned(),
+        //             dst_ids: dst_ids.clone(),
+        //             time: current_time,
+        //             content: message.0.clone(),
+        //         });
+
+        //         app.recorded_messages
+        //             .insert_many(messages, None)
+        //             .await
+        //             .unwrap();
+        //     }
     }
 
     pub fn has_client(&self, id: &str) -> bool {
@@ -306,14 +379,15 @@ impl Topology {
 
     pub async fn set_broken_client(&mut self, msg: BrokenClient) {
         println!("detected broken client!");
-        if let Some(project_metadata) = &self.project_metadata {
+        if let Some(app) = &self.app_data {
             if let Some(ClientState::Browser(state)) = self.states.get(&msg.id) {
                 let query = doc! {
                     "id": &state.project_id,
                     "saveState": SaveState::TRANSIENT
                 };
                 let update = doc! {"$set": {"saveState": SaveState::BROKEN}};
-                let result = project_metadata
+                let result = app
+                    .project_metadata
                     .update_one(query, update, None)
                     .await
                     .unwrap();
@@ -384,10 +458,11 @@ impl Topology {
         //   - if multiple roles and there is a broken connection:
         //     - delete after an amount of time with no activity - maybe 10 minutes?
         self.rooms.remove(project_id);
-        if let Some(project_metadata) = &self.project_metadata {
+        if let Some(app) = &self.app_data {
             // If it has no broken connections, delete it!
             let query = doc! {"id": project_id};
-            let cleanup = project_metadata
+            let cleanup = app
+                .project_metadata
                 .find_one(query.clone(), None)
                 .await
                 .unwrap()
@@ -402,7 +477,7 @@ impl Topology {
             println!("Project cleanup policy is {:?}", cleanup);
             match cleanup {
                 ProjectCleanup::IMMEDIATELY => {
-                    project_metadata.delete_one(query, None).await;
+                    app.project_metadata.delete_one(query, None).await;
                 }
                 ProjectCleanup::DELAYED => {
                     let ten_minutes = Duration::new(10 * 60, 0);
@@ -410,7 +485,7 @@ impl Topology {
                         SystemTime::now().checked_add(ten_minutes).unwrap(),
                     );
                     let update = doc! {"$set": {"deleteAt": delete_at}};
-                    project_metadata.update_one(query, update, None).await;
+                    app.project_metadata.update_one(query, update, None).await;
                 }
                 _ => {}
             }
@@ -421,9 +496,9 @@ impl Topology {
     // We should be able to cache the addresses since any change should result in a new
     // call to send_room_state
     async fn send_room_state_for(&self, project_id: &ProjectId) {
-        if let Some(project_metadata) = &self.project_metadata {
+        if let Some(app) = &self.app_data {
             let query = doc! {"id": project_id};
-            if let Some(project) = project_metadata.find_one(query, None).await.unwrap() {
+            if let Some(project) = app.project_metadata.find_one(query, None).await.unwrap() {
                 self.send_room_state(SendRoomState { project });
             }
         }

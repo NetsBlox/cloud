@@ -1,9 +1,9 @@
 use mongodb::bson::{doc, Bson, DateTime};
+use netsblox_core::{ClientState, NewUser, OccupantInviteData, UserRole};
 pub use netsblox_core::{
     CreateGroupData, FriendInvite, FriendLinkState, Group, GroupId, InvitationState, LinkedAccount,
     ProjectId, RoleData, RoleMetadata, SaveState, ServiceHost,
 };
-use netsblox_core::{NewUser, OccupantInviteReq, UserRole};
 use serde::{Deserialize, Serialize};
 use std::{
     collections::HashMap,
@@ -190,6 +190,34 @@ impl From<FriendLink> for Bson {
 
 #[derive(Deserialize, Serialize, Clone)]
 #[serde(rename_all = "camelCase")]
+pub struct NetworkTraceMetadata {
+    pub id: String,
+    pub start_time: DateTime,
+    pub end_time: Option<DateTime>,
+}
+
+impl NetworkTraceMetadata {
+    pub fn new() -> Self {
+        Self {
+            id: Uuid::new_v4().to_string(),
+            start_time: DateTime::from_system_time(SystemTime::now()),
+            end_time: None,
+        }
+    }
+}
+
+impl From<NetworkTraceMetadata> for Bson {
+    fn from(link: NetworkTraceMetadata) -> Bson {
+        Bson::Document(doc! {
+            "id": link.id,
+            "startTime": link.start_time,
+            "endTime": link.end_time,
+        })
+    }
+}
+
+#[derive(Deserialize, Serialize, Clone)]
+#[serde(rename_all = "camelCase")]
 pub struct ProjectMetadata {
     pub id: ProjectId,
     pub owner: String,
@@ -201,6 +229,7 @@ pub struct ProjectMetadata {
     pub origin_time: DateTime,
     pub save_state: SaveState,
     pub delete_at: Option<DateTime>,
+    pub network_traces: Vec<NetworkTraceMetadata>,
     pub roles: HashMap<String, RoleMetadata>,
 }
 
@@ -227,6 +256,7 @@ impl ProjectMetadata {
             collaborators: vec![],
             save_state: SaveState::CREATED,
             delete_at: Some(delete_at),
+            network_traces: Vec::new(),
             roles,
         }
     }
@@ -291,7 +321,7 @@ pub struct OccupantInvite {
 }
 
 impl OccupantInvite {
-    pub fn new(project_id: ProjectId, req: OccupantInviteReq) -> Self {
+    pub fn new(project_id: ProjectId, req: OccupantInviteData) -> Self {
         OccupantInvite {
             project_id,
             username: req.username,
@@ -301,6 +331,47 @@ impl OccupantInvite {
     }
 }
 
+#[derive(Deserialize, Serialize, Debug, Clone)]
+#[serde(rename_all = "camelCase")]
+pub struct SentMessage {
+    pub project_id: ProjectId,
+    pub dst_ids: Vec<String>,
+    pub time: DateTime,
+    pub source: ClientState,
+
+    pub content: serde_json::Value,
+}
+
+#[derive(Deserialize, Serialize, Debug, Clone)]
+#[serde(rename_all = "camelCase")]
+pub struct SetPasswordToken {
+    pub username: String,
+    pub secret: String,
+    pub created_at: DateTime,
+}
+
+impl SetPasswordToken {
+    pub fn new(username: String) -> Self {
+        let secret = Uuid::new_v4().to_string();
+        let created_at = DateTime::from_system_time(SystemTime::now());
+
+        SetPasswordToken {
+            username,
+            secret,
+            created_at,
+        }
+    }
+}
+
+impl From<SetPasswordToken> for Bson {
+    fn from(token: SetPasswordToken) -> Bson {
+        Bson::Document(doc! {
+            "username": token.username,
+            "secret": token.secret,
+            "createdAt": token.created_at,
+        })
+    }
+}
 #[cfg(test)]
 mod tests {
 

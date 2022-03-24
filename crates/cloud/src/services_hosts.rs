@@ -1,6 +1,6 @@
 use crate::app_data::AppData;
 use crate::errors::{InternalError, UserError};
-use crate::users::{can_edit_user, ensure_can_edit_user, is_super_user};
+use crate::users::{ensure_can_edit_user, is_super_user};
 use actix_session::Session;
 use actix_web::{get, post};
 use actix_web::{web, HttpResponse};

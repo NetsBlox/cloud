@@ -3,7 +3,7 @@ mod strategies;
 use crate::app_data::AppData;
 use crate::errors::{InternalError, UserError};
 use crate::groups::ensure_can_edit_group;
-use crate::models::User;
+use crate::models::{SetPasswordToken, User};
 use actix_session::Session;
 use actix_web::{get, patch, post, HttpRequest};
 use actix_web::{web, HttpResponse};
@@ -26,7 +26,6 @@ pub async fn is_super_user(app: &AppData, session: &Session) -> Result<bool, Use
 
 async fn get_session_role(app: &AppData, session: &Session) -> Result<UserRole, UserError> {
     if let Some(username) = session.get::<String>("username").unwrap_or(None) {
-        println!("checking if {} is a super user.", &username);
         let query = doc! {"username": username};
         Ok(app
             .users
@@ -190,6 +189,7 @@ fn ensure_valid_email(email: &str) -> Result<(), UserError> {
 }
 
 fn ensure_valid_username(name: &str) -> Result<(), UserError> {
+    // TODO:
     if !is_valid_username(name) {
         Err(UserError::InvalidUsername)
     } else {
@@ -198,10 +198,17 @@ fn ensure_valid_username(name: &str) -> Result<(), UserError> {
 }
 
 fn is_valid_username(name: &str) -> bool {
+    let max_len = 25;
+    let min_len = 3;
+    let char_count = name.chars().count();
     lazy_static! {
         static ref USERNAME_REGEX: Regex = Regex::new(r"^[a-z][a-z0-9_\-]+$").unwrap();
     }
-    USERNAME_REGEX.is_match(name) && !name.is_inappropriate()
+
+    char_count > min_len
+        && char_count < max_len
+        && USERNAME_REGEX.is_match(name)
+        && !name.is_inappropriate()
 }
 
 #[post("/login")]
@@ -342,22 +349,47 @@ async fn delete_user(
 async fn reset_password(
     app: web::Data<AppData>,
     path: web::Path<(String,)>,
-    session: Session,
 ) -> Result<HttpResponse, UserError> {
     let (username,) = path.into_inner();
-    ensure_can_edit_user(&app, &session, &username).await?;
+    let user = app
+        .users
+        .find_one(doc! {"username": &username}, None)
+        .await
+        .map_err(|_err| InternalError::DatabaseConnectionError)?
+        .ok_or_else(|| UserError::UserNotFoundError)?;
 
-    let pg = passwords::PasswordGenerator::new()
-        .length(8)
-        .exclude_similar_characters(true)
-        .numbers(true)
-        .spaces(false);
-    let new_password = pg.generate_one().unwrap();
+    let token = SetPasswordToken::new(username.clone());
+    let url = String::from("TODO"); // TODO: set the url;
 
-    // TODO: This will need to send an email...
+    let update = doc! {"$setOnInsert": token};
+    let query = doc! {"username": &username};
+    let options = mongodb::options::UpdateOptions::builder()
+        .upsert(true)
+        .build();
 
-    set_password(&app, &username, new_password).await?;
+    let result = app
+        .password_tokens
+        .update_one(query, update, options)
+        .await
+        .map_err(|_err| InternalError::DatabaseConnectionError)?;
+
+    if result.upserted_id.is_none() {
+        return Err(UserError::PasswordResetLinkSentError);
+    }
+
+    let subject = "Password Reset Request";
+    //let message = format!("<h1>Password Reset Request<h1>Click the link below to reset the password for {}");
+    let message = String::from("TODO:");
+    app.send_email(&user.email, subject, message).await?;
+    // TODO: This will need to send an email with the token link...
+    //user.email
+
     Ok(HttpResponse::Ok().finish())
+}
+
+#[derive(Deserialize)]
+struct SetPasswordQueryParams {
+    pub token: Option<String>,
 }
 
 #[patch("/{username}/password")]
@@ -365,11 +397,26 @@ async fn change_password(
     app: web::Data<AppData>,
     path: web::Path<(String,)>,
     data: web::Json<String>,
+    params: web::Query<SetPasswordQueryParams>,
     session: Session,
 ) -> Result<HttpResponse, UserError> {
     let (username,) = path.into_inner();
+    match params.into_inner().token {
+        Some(token) => {
+            let query = doc! {"secret": token};
+            let token = app
+                .password_tokens
+                .find_one_and_delete(query, None) // If the username is incorrect, the token is compromised (so delete either way)
+                .await
+                .map_err(|_err| InternalError::DatabaseConnectionError)?
+                .ok_or_else(|| UserError::PermissionsError)?;
 
-    ensure_can_edit_user(&app, &session, &username).await?;
+            if token.username != username {
+                return Err(UserError::PermissionsError);
+            }
+        }
+        None => ensure_can_edit_user(&app, &session, &username).await?,
+    }
 
     set_password(&app, &username, data.into_inner()).await?;
     Ok(HttpResponse::Ok().finish())

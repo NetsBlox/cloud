@@ -408,7 +408,7 @@ pub struct OccupantState {
 
 #[derive(Deserialize, Serialize, Debug)]
 #[serde(rename_all = "camelCase")]
-pub struct OccupantInviteReq {
+pub struct OccupantInviteData {
     pub username: String,
     pub role_id: String,
 }

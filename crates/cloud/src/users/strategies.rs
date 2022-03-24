@@ -8,7 +8,7 @@ use mongodb::{
 pub use netsblox_core::Credentials;
 use netsblox_core::{LinkedAccount, UserRole};
 use reqwest::{Method, Response};
-use serde::{Deserialize, Serialize};
+use serde::Deserialize;
 
 use crate::{
     app_data::AppData,
@@ -32,7 +32,6 @@ struct SnapUser {
 pub async fn authenticate(credentials: &Credentials) -> Result<Option<Response>, UserError> {
     match credentials {
         Credentials::Snap { username, password } => {
-            // TODO: refactor this so it can be used elsewhere
             let url = &format!("https://snap.berkeley.edu/api/v1/users/{}/login", username,);
             let client = reqwest::Client::new();
             let pwd_hash = sha512(&password);
