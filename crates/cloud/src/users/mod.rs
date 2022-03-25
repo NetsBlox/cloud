@@ -182,9 +182,9 @@ async fn create_user(
 
     if let Some(existing_user) = existing_user {
         if existing_user.username == user.username {
-            Ok(HttpResponse::BadRequest().body("User already exists"))
+            Err(UserError::UserExistsError)
         } else {
-            Ok(HttpResponse::BadRequest().body("Email already exists"))
+            Err(UserError::EmailExistsError)
         }
     } else {
         Ok(HttpResponse::Ok().body("User created"))

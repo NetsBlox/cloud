@@ -42,6 +42,10 @@ pub enum UserError {
     IncorrectUsernameOrPasswordError,
     #[display(fmt = "User has been banned.")]
     BannedUserError,
+    #[display(fmt = "User already exists.")]
+    UserExistsError,
+    #[display(fmt = "Email already exists.")]
+    EmailExistsError,
     #[display(fmt = "Invalid username.")]
     InvalidUsername,
     #[display(fmt = "Invalid email address.")]
@@ -98,6 +102,8 @@ impl error::ResponseError for UserError {
             | UserError::PasswordResetLinkSentError
             | UserError::InvalidAccountTypeError
             | UserError::TorAddressError
+            | UserError::UserExistsError
+            | UserError::EmailExistsError
             | UserError::CannotDeleteLastRoleError
             | UserError::ProjectNotActiveError => StatusCode::BAD_REQUEST,
         }
