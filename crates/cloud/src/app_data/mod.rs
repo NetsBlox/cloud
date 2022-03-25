@@ -503,7 +503,7 @@ impl AppData {
             .project_metadata
             .find_one_and_update(query, update, options)
             .await
-            .map_err(|_err| InternalError::DatabaseConnectionError(err))?
+            .map_err(|err| InternalError::DatabaseConnectionError(err))?
             .ok_or_else(|| UserError::ProjectNotFoundError)?;
 
         self.on_room_changed(updated_metadata.clone());
@@ -560,7 +560,7 @@ impl AppData {
                     .tor_exit_nodes
                     .find_one(query, None)
                     .await
-                    .map_err(|_err| InternalError::DatabaseConnectionError(err))?;
+                    .map_err(|err| InternalError::DatabaseConnectionError(err))?;
 
                 if node.is_some() {
                     return Err(UserError::TorAddressError);
@@ -603,12 +603,12 @@ async fn update_tor_nodes(tor_exit_nodes: &Collection<TorNode>) -> Result<(), Us
     tor_exit_nodes
         .delete_many(doc! {}, None)
         .await
-        .map_err(|_err| InternalError::DatabaseConnectionError(err))?;
+        .map_err(|err| InternalError::DatabaseConnectionError(err))?;
 
     tor_exit_nodes
         .insert_many(node_list, None)
         .await
-        .map_err(|_err| InternalError::DatabaseConnectionError(err))?;
+        .map_err(|err| InternalError::DatabaseConnectionError(err))?;
 
     Ok(())
 }

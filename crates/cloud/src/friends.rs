@@ -100,7 +100,7 @@ async fn unfriend(
         .friends
         .delete_one(query, None)
         .await
-        .map_err(|err| InternalError::DatabaseConnectionError)(err)?;
+        .map_err(|err| InternalError::DatabaseConnectionError(err))?;
 
     if result.deleted_count > 0 {
         Ok(HttpResponse::Ok().body("User has been unfriended!"))

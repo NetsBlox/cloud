@@ -30,7 +30,7 @@ async fn list_group_hosts(
         .groups
         .find_one(query, None)
         .await
-        .map_err(|_err| InternalError::DatabaseConnectionError)?
+        .map_err(|err| InternalError::DatabaseConnectionError(err))?
         .ok_or_else(|| UserError::GroupNotFoundError)?;
 
     Ok(HttpResponse::Ok().json(group.services_hosts.unwrap_or_else(Vec::new)))
@@ -80,7 +80,7 @@ async fn list_user_hosts(
         .users
         .find_one(query, None)
         .await
-        .map_err(|_err| InternalError::DatabaseConnectionError)?
+        .map_err(|err| InternalError::DatabaseConnectionError(err))?
         .ok_or_else(|| UserError::UserNotFoundError)?;
 
     Ok(HttpResponse::Ok().json(user.services_hosts.unwrap_or_else(Vec::new)))
@@ -103,7 +103,7 @@ async fn set_user_hosts(
         .users
         .update_one(filter, update, None)
         .await
-        .map_err(|_err| InternalError::DatabaseConnectionError)?;
+        .map_err(|err| InternalError::DatabaseConnectionError(err))?;
 
     if result.modified_count == 1 {
         Ok(HttpResponse::Ok().finish())
@@ -126,7 +126,7 @@ async fn list_all_hosts(
         .users
         .find_one(query, None)
         .await
-        .map_err(|_err| InternalError::DatabaseConnectionError)?
+        .map_err(|err| InternalError::DatabaseConnectionError(err))?
         .ok_or_else(|| UserError::UserNotFoundError)?;
 
     let mut groups = app
@@ -143,7 +143,7 @@ async fn list_all_hosts(
             .groups
             .find_one(doc! {"id": group_id}, None)
             .await
-            .map_err(|_err| InternalError::DatabaseConnectionError)?
+            .map_err(|err| InternalError::DatabaseConnectionError(err))?
         {
             groups.push(in_group);
         }

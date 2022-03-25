@@ -77,7 +77,7 @@ async fn list_user_projects(
         .project_metadata
         .find(query, None)
         .await
-        .map_err(|_err| InternalError::DatabaseConnectionError)?;
+        .map_err(|err| InternalError::DatabaseConnectionError(err))?;
 
     let projects = get_visible_projects(&app, &session, &username, cursor).await;
     println!("Found {} projects for {}", projects.len(), username);
@@ -136,7 +136,7 @@ async fn get_project_named(
         .project_metadata
         .find_one(query, None)
         .await
-        .map_err(|_err| InternalError::DatabaseConnectionError)? // TODO: wrap the error?
+        .map_err(|err| InternalError::DatabaseConnectionError(err))?
         .ok_or_else(|| UserError::ProjectNotFoundError)?;
 
     // TODO: Do I need to have edit permissions?
@@ -158,7 +158,7 @@ async fn get_project_metadata(
         .project_metadata
         .find_one(query, None)
         .await
-        .map_err(|_err| InternalError::DatabaseConnectionError)? // TODO: wrap the error?
+        .map_err(|err| InternalError::DatabaseConnectionError(err))?
         .ok_or_else(|| UserError::ProjectNotFoundError)?;
 
     ensure_can_view_project(&app, &session, &metadata).await?;
@@ -262,7 +262,7 @@ async fn get_project(
         .project_metadata
         .find_one(query, None)
         .await
-        .map_err(|_err| InternalError::DatabaseConnectionError)? // TODO: wrap the error?
+        .map_err(|err| InternalError::DatabaseConnectionError(err))?
         .ok_or_else(|| UserError::ProjectNotFoundError)?;
 
     ensure_can_view_project(&app, &session, &metadata).await?;
@@ -286,7 +286,7 @@ async fn publish_project(
     app.project_metadata
         .update_one(query, update, None)
         .await
-        .map_err(|_err| InternalError::DatabaseConnectionError)?;
+        .map_err(|err| InternalError::DatabaseConnectionError(err))?;
 
     Ok(HttpResponse::Ok().body("Project published!"))
 }
@@ -306,7 +306,7 @@ async fn unpublish_project(
         .project_metadata
         .update_one(query, update, None)
         .await
-        .map_err(|_err| UserError::InternalError)?; // TODO: wrap the error?
+        .map_err(|_err| UserError::InternalError)?;
 
     if result.matched_count > 0 {
         Ok(HttpResponse::Ok().body("Project published!"))
@@ -327,7 +327,7 @@ async fn delete_project(
         .project_metadata
         .find_one(query, None)
         .await
-        .map_err(|_err| InternalError::DatabaseConnectionError)? // TODO: wrap the error?
+        .map_err(|err| InternalError::DatabaseConnectionError(err))?
         .ok_or_else(|| UserError::ProjectNotFoundError)?;
 
     // collaborators cannot delete -> only user/admin/etc
@@ -360,7 +360,7 @@ async fn update_project(
         .project_metadata
         .find_one_and_update(query, update, options)
         .await
-        .map_err(|_err| InternalError::DatabaseConnectionError)? // TODO: wrap the error?
+        .map_err(|err| InternalError::DatabaseConnectionError(err))?
         .ok_or_else(|| UserError::ProjectNotFoundError)?;
 
     app.on_room_changed(updated_metadata);
@@ -380,7 +380,7 @@ async fn get_latest_project(
         .project_metadata
         .find_one(query, None)
         .await
-        .map_err(|_err| InternalError::DatabaseConnectionError)? // TODO: wrap the error?
+        .map_err(|err| InternalError::DatabaseConnectionError(err))?
         .ok_or_else(|| UserError::ProjectNotFoundError)?;
 
     ensure_can_view_project(&app, &session, &metadata).await?;
@@ -422,7 +422,7 @@ async fn get_project_thumbnail(
         .project_metadata
         .find_one(query, None)
         .await
-        .map_err(|_err| InternalError::DatabaseConnectionError)? // TODO: wrap the error?
+        .map_err(|err| InternalError::DatabaseConnectionError(err))?
         .ok_or_else(|| UserError::ProjectNotFoundError)?;
 
     ensure_can_view_project(&app, &session, &metadata).await?;
@@ -475,7 +475,7 @@ async fn get_role(
         .project_metadata
         .find_one(query, None)
         .await
-        .map_err(|_err| InternalError::DatabaseConnectionError)? // TODO: wrap the error?
+        .map_err(|err| InternalError::DatabaseConnectionError(err))?
         .ok_or_else(|| UserError::ProjectNotFoundError)?;
 
     ensure_can_view_project(&app, &session, &metadata).await?;
@@ -511,7 +511,7 @@ async fn delete_role(
         .project_metadata
         .find_one_and_update(query, update, options)
         .await
-        .map_err(|_err| InternalError::DatabaseConnectionError)?
+        .map_err(|err| InternalError::DatabaseConnectionError(err))?
         .ok_or_else(|| UserError::ProjectNotFoundError)?;
 
     app.on_room_changed(updated_metadata);
@@ -556,7 +556,7 @@ async fn rename_role(
             .project_metadata
             .find_one_and_update(query, update, options)
             .await
-            .map_err(|_err| InternalError::DatabaseConnectionError)? // TODO: wrap the error?
+            .map_err(|err| InternalError::DatabaseConnectionError(err))?
             .ok_or_else(|| UserError::ProjectNotFoundError)?;
 
         app.on_room_changed(updated_metadata);
@@ -578,7 +578,7 @@ async fn get_latest_role(
         .project_metadata
         .find_one(query, None)
         .await
-        .map_err(|_err| InternalError::DatabaseConnectionError)? // TODO: wrap the error?
+        .map_err(|err| InternalError::DatabaseConnectionError(err))?
         .ok_or_else(|| UserError::ProjectNotFoundError)?;
 
     ensure_can_view_project(&app, &session, &metadata).await?;
@@ -684,7 +684,7 @@ async fn remove_collaborator(
         .project_metadata
         .find_one_and_update(query, update, None)
         .await
-        .map_err(|_err| InternalError::DatabaseConnectionError)? // TODO: wrap the error?
+        .map_err(|err| InternalError::DatabaseConnectionError(err))?
         .ok_or_else(|| UserError::ProjectNotFoundError)?;
 
     app.on_room_changed(metadata);
