@@ -147,7 +147,7 @@ impl AppData {
                 None,
             )
             .await
-            .map_err(|_err| InternalError::DatabaseConnectionError)?;
+            .map_err(|err| InternalError::DatabaseConnectionError(err))?;
 
         let index_opts = IndexOptions::builder()
             .expire_after(Duration::from_secs(60 * 60))
@@ -159,7 +159,7 @@ impl AppData {
         self.occupant_invites
             .create_index(invite_index, None)
             .await
-            .map_err(|_err| InternalError::DatabaseConnectionError)?;
+            .map_err(|err| InternalError::DatabaseConnectionError(err))?;
 
         self.occupant_invites
             .create_index(
@@ -169,7 +169,7 @@ impl AppData {
                 None,
             )
             .await
-            .map_err(|_err| InternalError::DatabaseConnectionError)?;
+            .map_err(|err| InternalError::DatabaseConnectionError(err))?;
 
         let index_opts = IndexOptions::builder()
             .expire_after(Duration::from_secs(60 * 60))
@@ -181,17 +181,17 @@ impl AppData {
         self.password_tokens
             .create_index(token_index, None)
             .await
-            .map_err(|_err| InternalError::DatabaseConnectionError)?;
+            .map_err(|err| InternalError::DatabaseConnectionError(err))?;
 
         self.project_metadata
             .create_index(IndexModel::builder().keys(doc! {"id": 1}).build(), None)
             .await
-            .map_err(|_err| InternalError::DatabaseConnectionError)?;
+            .map_err(|err| InternalError::DatabaseConnectionError(err))?;
 
         self.tor_exit_nodes
             .create_index(IndexModel::builder().keys(doc! {"addr": 1}).build(), None)
             .await
-            .map_err(|_err| InternalError::DatabaseConnectionError)?;
+            .map_err(|err| InternalError::DatabaseConnectionError(err))?;
 
         self.start_update_interval();
 
@@ -255,12 +255,12 @@ impl AppData {
                 .project_metadata
                 .find(query, None)
                 .await
-                .map_err(|_err| InternalError::DatabaseConnectionError)?;
+                .map_err(|err| InternalError::DatabaseConnectionError(err))?;
 
             let projects: Vec<_> = cursor
                 .try_collect::<Vec<_>>()
                 .await
-                .map_err(|_err| InternalError::DatabaseConnectionError)?;
+                .map_err(|err| InternalError::DatabaseConnectionError(err))?;
 
             // TODO: make this lazy static?
             let mut cache = PROJECT_CACHE.write().unwrap();
@@ -288,7 +288,7 @@ impl AppData {
             .project_metadata
             .find_one(doc! {"id": id}, None)
             .await
-            .map_err(|_err| InternalError::DatabaseConnectionError)?
+            .map_err(|err| InternalError::DatabaseConnectionError(err))?
             .ok_or_else(|| UserError::ProjectNotFoundError)?;
 
         let mut cache = PROJECT_CACHE.write().unwrap();
@@ -311,7 +311,7 @@ impl AppData {
         let project_names = cursor
             .try_collect::<Vec<_>>()
             .await
-            .map_err(|_err| InternalError::DatabaseConnectionError)?
+            .map_err(|err| InternalError::DatabaseConnectionError(err))?
             .iter()
             .map(|md| md.name.to_owned())
             .collect();
@@ -339,7 +339,7 @@ impl AppData {
         self.project_metadata
             .insert_one(metadata.clone(), None)
             .await
-            .map_err(|_err| InternalError::DatabaseConnectionError)?;
+            .map_err(|err| InternalError::DatabaseConnectionError(err))?;
 
         Ok(metadata)
     }
@@ -503,7 +503,7 @@ impl AppData {
             .project_metadata
             .find_one_and_update(query, update, options)
             .await
-            .map_err(|_err| InternalError::DatabaseConnectionError)?
+            .map_err(|_err| InternalError::DatabaseConnectionError(err))?
             .ok_or_else(|| UserError::ProjectNotFoundError)?;
 
         self.on_room_changed(updated_metadata.clone());
@@ -560,7 +560,7 @@ impl AppData {
                     .tor_exit_nodes
                     .find_one(query, None)
                     .await
-                    .map_err(|_err| InternalError::DatabaseConnectionError)?;
+                    .map_err(|_err| InternalError::DatabaseConnectionError(err))?;
 
                 if node.is_some() {
                     return Err(UserError::TorAddressError);
@@ -603,12 +603,12 @@ async fn update_tor_nodes(tor_exit_nodes: &Collection<TorNode>) -> Result<(), Us
     tor_exit_nodes
         .delete_many(doc! {}, None)
         .await
-        .map_err(|_err| InternalError::DatabaseConnectionError)?;
+        .map_err(|_err| InternalError::DatabaseConnectionError(err))?;
 
     tor_exit_nodes
         .insert_many(node_list, None)
         .await
-        .map_err(|_err| InternalError::DatabaseConnectionError)?;
+        .map_err(|_err| InternalError::DatabaseConnectionError(err))?;
 
     Ok(())
 }

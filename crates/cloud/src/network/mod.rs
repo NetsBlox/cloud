@@ -80,7 +80,7 @@ async fn set_client_state(
             app.project_metadata
                 .update_one(query, update, None)
                 .await
-                .map_err(|_err| InternalError::DatabaseConnectionError)?;
+                .map_err(|err| InternalError::DatabaseConnectionError(err))?;
 
             ClientState::Browser(client_state)
         }
@@ -196,7 +196,7 @@ async fn invite_occupant(
     app.occupant_invites
         .insert_one(&invite, None)
         .await
-        .map_err(|_err| InternalError::DatabaseConnectionError)?;
+        .map_err(|err| InternalError::DatabaseConnectionError(err))?;
 
     let inviter = session
         .get::<String>("username")
@@ -283,7 +283,7 @@ async fn start_network_trace(
         .project_metadata
         .find_one_and_update(query, update, options)
         .await
-        .map_err(|_err| InternalError::DatabaseConnectionError)?
+        .map_err(|err| InternalError::DatabaseConnectionError(err))?
         .ok_or_else(|| UserError::ProjectNotFoundError)?;
 
     app.update_project_cache(metadata);
@@ -313,7 +313,7 @@ async fn stop_network_trace(
         .project_metadata
         .find_one_and_update(query, update, options)
         .await
-        .map_err(|_err| InternalError::DatabaseConnectionError)?
+        .map_err(|err| InternalError::DatabaseConnectionError(err))?
         .ok_or_else(|| UserError::ProjectNotFoundError)?;
 
     app.update_project_cache(metadata);
@@ -347,12 +347,12 @@ async fn get_network_trace(
         .recorded_messages
         .find(query, None)
         .await
-        .map_err(|_err| InternalError::DatabaseConnectionError)?;
+        .map_err(|err| InternalError::DatabaseConnectionError(err))?;
 
     let messages: Vec<SentMessage> = cursor
         .try_collect::<Vec<_>>()
         .await
-        .map_err(|_err| InternalError::DatabaseConnectionError)?;
+        .map_err(|err| InternalError::DatabaseConnectionError(err))?;
 
     Ok(HttpResponse::Ok().json(messages))
 }
@@ -380,7 +380,7 @@ async fn delete_network_trace(
         .project_metadata
         .find_one_and_update(query, update, options)
         .await
-        .map_err(|_err| InternalError::DatabaseConnectionError)?
+        .map_err(|err| InternalError::DatabaseConnectionError(err))?
         .ok_or_else(|| UserError::ProjectNotFoundError)?;
 
     // remove all the messages
@@ -399,7 +399,7 @@ async fn delete_network_trace(
     app.recorded_messages
         .delete_many(query, None)
         .await
-        .map_err(|_err| InternalError::DatabaseConnectionError)?;
+        .map_err(|err| InternalError::DatabaseConnectionError(err))?;
 
     app.update_project_cache(metadata);
     Ok(HttpResponse::Ok().body("Network trace deleted"))

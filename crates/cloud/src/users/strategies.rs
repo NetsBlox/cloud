@@ -68,7 +68,7 @@ pub async fn login(app: &AppData, credentials: Credentials) -> Result<User, User
                 .users
                 .find_one(query, None)
                 .await
-                .map_err(|_err| InternalError::DatabaseConnectionError)?;
+                .map_err(|err| InternalError::DatabaseConnectionError(err))?;
 
             let user = if let Some(user) = user_opt {
                 user
@@ -103,7 +103,7 @@ pub async fn login(app: &AppData, credentials: Credentials) -> Result<User, User
                 .users
                 .find_one(query, None)
                 .await
-                .map_err(|_err| InternalError::DatabaseConnectionError)?
+                .map_err(|err| InternalError::DatabaseConnectionError(err))?
                 .ok_or_else(|| UserError::UserNotFoundError)?;
 
             let hash = sha512(&(password + &user.salt));
@@ -149,7 +149,7 @@ async fn create_account(
     app.users
         .update_one(query, update, options)
         .await
-        .map_err(|_err| InternalError::DatabaseConnectionError)?;
+        .map_err(|err| InternalError::DatabaseConnectionError(err))?;
 
     Ok(user)
 }
@@ -166,10 +166,10 @@ async fn username_from(app: &AppData, credentials: &LinkedAccount) -> Result<Str
         .users
         .find(query, None)
         .await
-        .map_err(|_err| InternalError::DatabaseConnectionError)?
+        .map_err(|err| InternalError::DatabaseConnectionError(err))?
         .try_collect::<Vec<_>>()
         .await
-        .map_err(|_err| InternalError::DatabaseConnectionError)?
+        .map_err(|err| InternalError::DatabaseConnectionError(err))?
         .into_iter()
         .map(|user| user.username)
         .collect::<HashSet<String>>();

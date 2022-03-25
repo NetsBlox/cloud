@@ -47,7 +47,7 @@ async fn view_group(
         .groups
         .find_one(query, None)
         .await
-        .map_err(|_err| InternalError::DatabaseConnectionError)?
+        .map_err(|err| InternalError::DatabaseConnectionError(err))?
         .ok_or_else(|| UserError::GroupNotFoundError)?;
 
     Ok(HttpResponse::Ok().json(group))
@@ -113,7 +113,7 @@ async fn create_group(
         .groups
         .update_one(query, update, options)
         .await
-        .map_err(|_err| InternalError::DatabaseConnectionError)?;
+        .map_err(|err| InternalError::DatabaseConnectionError(err))?;
 
     if result.matched_count == 1 {
         Ok(HttpResponse::Conflict().body("Group with name already exists."))
@@ -146,7 +146,7 @@ async fn update_group(
         .groups
         .update_one(query, update, None)
         .await
-        .map_err(|_err| InternalError::DatabaseConnectionError)?;
+        .map_err(|err| InternalError::DatabaseConnectionError(err))?;
 
     if result.matched_count > 0 {
         Ok(HttpResponse::Ok().body("Group deleted."))
@@ -178,7 +178,7 @@ async fn delete_group(
         .groups
         .delete_one(query, None)
         .await
-        .map_err(|_err| InternalError::DatabaseConnectionError)?;
+        .map_err(|err| InternalError::DatabaseConnectionError(err))?;
 
     if result.deleted_count > 0 {
         Ok(HttpResponse::Ok().body("Group deleted."))

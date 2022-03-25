@@ -44,7 +44,7 @@ async fn send_invite(
         .project_metadata
         .find_one(query, None)
         .await
-        .map_err(|_err| InternalError::DatabaseConnectionError)? // TODO: wrap the error?
+        .map_err(|err| InternalError::DatabaseConnectionError(err))?
         .ok_or_else(|| UserError::ProjectNotFoundError)?;
 
     ensure_can_edit_user(&app, &session, &metadata.owner).await?;
@@ -94,7 +94,7 @@ async fn respond_to_invite(
         .collab_invites
         .find_one(query.clone(), None)
         .await
-        .map_err(|_err| InternalError::DatabaseConnectionError)?
+        .map_err(|err| InternalError::DatabaseConnectionError(err))?
         .ok_or_else(|| UserError::InviteNotFoundError)?;
 
     ensure_can_edit_user(&app, &session, &invite.sender).await?;
@@ -102,7 +102,7 @@ async fn respond_to_invite(
     app.collab_invites
         .delete_one(query, None)
         .await
-        .map_err(|_err| InternalError::DatabaseConnectionError)?;
+        .map_err(|err| InternalError::DatabaseConnectionError(err))?;
 
     println!("state: {:?}", state);
     match state.into_inner() {
@@ -112,7 +112,7 @@ async fn respond_to_invite(
                 .project_metadata
                 .update_one(doc! {"id": &invite.project_id}, update, None)
                 .await
-                .map_err(|_err| InternalError::DatabaseConnectionError)?;
+                .map_err(|err| InternalError::DatabaseConnectionError(err))?;
 
             if result.matched_count == 1 {
                 Ok(HttpResponse::Ok().body("Invitation accepted."))
