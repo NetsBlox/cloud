@@ -682,7 +682,7 @@ async fn remove_collaborator(
 
     let metadata = app
         .project_metadata
-        .find_one_and_update(query, update, None)
+        .find_one_and_update(query, update, options)
         .await
         .map_err(|err| InternalError::DatabaseConnectionError(err))?
         .ok_or_else(|| UserError::ProjectNotFoundError)?;
