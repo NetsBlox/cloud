@@ -10,6 +10,7 @@ use actix_web::{web, HttpResponse};
 use futures::TryStreamExt;
 use lazy_static::lazy_static;
 use mongodb::bson::{doc, DateTime};
+use mongodb::options::ReturnDocument;
 use netsblox_core::{LinkedAccount, LoginRequest, NewUser, UserRole};
 use regex::Regex;
 use rustrict::CensorStr;
@@ -134,7 +135,8 @@ async fn create_user(
     session: Session,
 ) -> Result<HttpResponse, UserError> {
     ensure_valid_email(&user_data.email)?;
-    // TODO: record IP?
+    // TODO: record IP? Definitely
+    // TODO: add more security features. Maybe activate accounts?
 
     let role = user_data.role.as_ref().unwrap_or(&UserRole::User);
     match role {
@@ -159,21 +161,33 @@ async fn create_user(
         return Err(UserError::InvalidEmailAddress);
     }
 
-    let query = doc! {"username": &user.username};
+    let case_insensitive_email = mongodb::bson::Regex {
+        pattern: format!("^{}$", &user.email),
+        options: String::from("i"),
+    };
+    let query = doc! {"$or": [
+        {"username": &user.username},
+        {"email": {"$regex": case_insensitive_email}}
+    ]};
     let update = doc! {"$setOnInsert": &user};
-    let options = mongodb::options::UpdateOptions::builder()
+    let options = mongodb::options::FindOneAndUpdateOptions::builder()
+        .return_document(ReturnDocument::Before)
         .upsert(true)
         .build();
-    let result = app
+    let existing_user = app
         .users
-        .update_one(query, update, options)
+        .find_one_and_update(query, update, options)
         .await
         .map_err(|err| InternalError::DatabaseConnectionError(err))?;
 
-    if result.matched_count == 0 {
-        Ok(HttpResponse::Ok().body("User created"))
+    if let Some(existing_user) = existing_user {
+        if existing_user.username == user.username {
+            Ok(HttpResponse::BadRequest().body("User already exists"))
+        } else {
+            Ok(HttpResponse::BadRequest().body("Email already exists"))
+        }
     } else {
-        Ok(HttpResponse::BadRequest().body("User already exists"))
+        Ok(HttpResponse::Ok().body("User created"))
     }
 }
 
