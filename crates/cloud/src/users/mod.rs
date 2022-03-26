@@ -203,7 +203,6 @@ fn ensure_valid_email(email: &str) -> Result<(), UserError> {
 }
 
 fn ensure_valid_username(name: &str) -> Result<(), UserError> {
-    // TODO:
     if !is_valid_username(name) {
         Err(UserError::InvalidUsername)
     } else {

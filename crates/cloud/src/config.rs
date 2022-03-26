@@ -31,6 +31,19 @@ pub struct CookieSettings {
 }
 
 #[derive(Clone, Deserialize)]
+pub struct EmailSettings {
+    pub sender: String,
+    pub smtp: SMTPSettings,
+}
+
+#[derive(Clone, Deserialize)]
+pub struct SMTPSettings {
+    pub host: String,
+    pub username: String,
+    pub password: String,
+}
+
+#[derive(Clone, Deserialize)]
 pub struct Settings {
     pub address: String,
     pub public_url: String,
@@ -38,6 +51,7 @@ pub struct Settings {
     pub s3: S3,
     pub services_hosts: Vec<ServiceHost>,
     pub cookie: CookieSettings,
+    pub email: EmailSettings,
 }
 
 impl Settings {

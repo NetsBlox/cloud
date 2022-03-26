@@ -3,6 +3,9 @@ use actix_web::HttpRequest;
 use futures::future::join_all;
 use futures::join;
 use lazy_static::lazy_static;
+use lettre::message::Mailbox;
+use lettre::transport::smtp::authentication::Credentials;
+use lettre::{Address, Message, SmtpTransport, Transport};
 use lru::LruCache;
 use mongodb::bson::{doc, Document};
 use mongodb::options::{FindOneAndUpdateOptions, IndexOptions, ReturnDocument};
@@ -54,6 +57,9 @@ pub struct AppData {
     pub recorded_messages: Collection<SentMessage>,
     pub collab_invites: Collection<CollaborationInvite>,
     pub occupant_invites: Collection<OccupantInvite>,
+
+    mailer: SmtpTransport,
+    sender: Mailbox,
 }
 
 impl AppData {
@@ -63,7 +69,7 @@ impl AppData {
         network: Option<Addr<TopologyActor>>,
         prefix: Option<&'static str>,
     ) -> AppData {
-        let db = client.database(&settings.database.name);
+        // Blob storage
         let region = Region::Custom {
             name: settings.s3.region_name.clone(),
             endpoint: settings.s3.endpoint.clone(),
@@ -80,6 +86,23 @@ impl AppData {
             region,
         );
 
+        // Email
+        let credentials = Credentials::new(
+            settings.email.smtp.username.clone(),
+            settings.email.smtp.password.clone(),
+        );
+        let mailer = SmtpTransport::relay(&settings.email.smtp.host)
+            .unwrap()
+            .credentials(credentials)
+            .build();
+        let sender = settings
+            .email
+            .sender
+            .parse()
+            .expect("Invalid sender email address.");
+
+        // Database collections
+        let db = client.database(&settings.database.name);
         let prefix = prefix.unwrap_or("");
         let groups = db.collection::<Group>(&(prefix.to_owned() + "groups"));
         let password_tokens =
@@ -113,6 +136,9 @@ impl AppData {
             occupant_invites,
             password_tokens,
             friends,
+
+            mailer,
+            sender,
 
             tor_exit_nodes,
             recorded_messages,
@@ -193,11 +219,12 @@ impl AppData {
             .await
             .map_err(|err| InternalError::DatabaseConnectionError(err))?;
 
-        self.start_update_interval();
-
         self.network.do_send(SetStorage {
             app_data: self.clone(),
         });
+
+        self.start_update_interval();
+
         Ok(())
     }
 
@@ -574,13 +601,21 @@ impl AppData {
 
     pub async fn send_email(
         &self,
-        to_email: &str,
+        to_email: &String,
         subject: &str,
         body: String,
     ) -> Result<(), UserError> {
         println!("Sending email to {}: {}", to_email, body);
+        let email = Message::builder()
+            .from(self.sender.clone())
+            .to(Mailbox::new(None, to_email.parse::<Address>().unwrap())) // TODO: use this to validate emails on creation?
+            .subject(subject.to_string())
+            .date_now()
+            .body(body)
+            .unwrap();
+
+        self.mailer.send(&email);
         Ok(())
-        //todo!("Send the email! (using lettre)");
     }
 }
 
@@ -588,7 +623,7 @@ async fn update_tor_nodes(tor_exit_nodes: &Collection<TorNode>) -> Result<(), Us
     let url = "https://check.torproject.org/torbulkexitlist";
     let response = reqwest::get(url)
         .await
-        .map_err(|_err| InternalError::TorNodeListFetchError)?;
+        .map_err(|err| InternalError::TorNodeListFetchError(err))?;
 
     let node_list: Vec<TorNode> = response
         .text()

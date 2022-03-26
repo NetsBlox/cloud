@@ -7,7 +7,7 @@ pub enum InternalError {
     TimeoutError,
     S3Error,
     S3ContentError,
-    TorNodeListFetchError,
+    TorNodeListFetchError(reqwest::Error),
 }
 
 #[derive(Debug, Display, Error)]

@@ -1,8 +1,7 @@
 # To Do
-- [ ] add address caching to the message sending?
-    - [ ] update cache on "send room state"
-
-- [ ] test recording messages
+- [ ] test...
+    - [ ] recording messages
+    - [ ] message caching
  
 - [ ] add email support
     - [ ] new account creation
@@ -16,6 +15,10 @@
     - maybe we don't need to persist them...
     - accept actions when collaborating
         - this is currently a perf bottleneck in the nodejs version
+    - [ ] add a TTL for the lastest action ID
+    - [ ] need 2 collections:
+        - project action IDs (w/ TTL)
+        - project actions
 
 - [ ] update the services server connection (zmq)
     - add resolve endpoint?
@@ -49,6 +52,11 @@
                             - maybe we could route the message using the sender ID?
                                 - wouldn't work since a project can use multiple services simultaneously
 
+    - what would app-level look like?
+        - admins adding a client 
+        - client adds Access ID & Secret Token to send message requests
+        - save these in the database
+
     - how is the API used by the services server?
         - authenticate users
             - (whoami endpoint)
@@ -81,8 +89,6 @@
         - [ ] close additional invites when one is accepted
               - this is a little annoying. Will I actually need to ID invites?
         - [ ] allow user to open project using invite
-
-- [ ] logout on ban? Or just ensure not banned
 
 - [ ] finish updating the browser
 
@@ -185,6 +191,8 @@
 - [ ] make sure email works
 
 ## Future stuff
+- [ ] logout on ban? Or just ensure not banned
+
 - [ ] allow moderators to bypass profanity checker?
 
 - [ ] require login to send messages?
@@ -660,4 +668,9 @@
             - [x] network trace is stopped
 
 - [x] change ensure_can_edit_project to ID?
+
+- [x] add address caching to the message sending?
+    - [x] update cache on "send room state"
+
+- [x] only allow one user with the given email address
 

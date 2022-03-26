@@ -21,3 +21,11 @@ categories = []
 [cookie]
 name = "netsblox"
 domain = "localhost:7777"
+
+[email]
+sender = "NetsBlox <no-reply@netsblox.org>"
+
+[email.smtp]
+host = "smtp.gmail.com"
+username = "USERNAME"
+password = "PASSWORD"
