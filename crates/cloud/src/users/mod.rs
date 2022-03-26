@@ -131,9 +131,11 @@ async fn list_users(app: web::Data<AppData>, session: Session) -> Result<HttpRes
 #[post("/create")]
 async fn create_user(
     app: web::Data<AppData>,
+    req: HttpRequest,
     user_data: web::Json<NewUser>,
     session: Session,
 ) -> Result<HttpResponse, UserError> {
+    app.ensure_not_tor_ip(req).await?;
     ensure_valid_email(&user_data.email)?;
     // TODO: record IP? Definitely
     // TODO: add more security features. Maybe activate accounts?
@@ -361,8 +363,10 @@ async fn delete_user(
 #[post("/{username}/password")]
 async fn reset_password(
     app: web::Data<AppData>,
+    req: HttpRequest,
     path: web::Path<(String,)>,
 ) -> Result<HttpResponse, UserError> {
+    app.ensure_not_tor_ip(req).await?;
     let (username,) = path.into_inner();
     let user = app
         .users
