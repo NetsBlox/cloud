@@ -1,10 +1,13 @@
 use futures::future::join_all;
+use lazy_static::lazy_static;
+use lru::LruCache;
 use mongodb::bson::{doc, DateTime};
 pub use netsblox_core::{BrowserClientState, ClientState, ExternalClientState};
 use netsblox_core::{ExternalClient, OccupantState, RoleState, RoomState};
 use serde_json::json;
 use std::collections::{HashMap, HashSet};
 use std::str::FromStr;
+use std::sync::{Arc, RwLock};
 use std::time::{Duration, SystemTime};
 
 use crate::app_data::AppData;
@@ -19,6 +22,7 @@ use super::{
     SendRoomState, SetClientState,
 };
 
+#[derive(Clone, Debug)]
 struct BrowserAddress {
     role_id: String,
     project_id: String,
@@ -119,6 +123,11 @@ impl ProjectNetwork {
     }
 }
 
+lazy_static! {
+    static ref ADDRESS_CACHE: Arc<RwLock<LruCache<ClientAddress, Vec<BrowserAddress>>>> =
+        Arc::new(RwLock::new(LruCache::new(500)));
+}
+
 pub struct Topology {
     app_data: Option<AppData>,
 
@@ -127,8 +136,6 @@ pub struct Topology {
     usernames: HashMap<ClientID, String>,
 
     rooms: HashMap<String, ProjectNetwork>,
-    // address_cache: HashMap<String, (String, String)>,
-    // TODO: Use LruCache
     external: HashMap<AppID, HashMap<String, ClientID>>,
 }
 
@@ -152,6 +159,7 @@ impl Topology {
     }
 
     pub fn set_app_data(&mut self, app: AppData) {
+        println!("--- setting app data");
         self.app_data = Some(app);
     }
 
@@ -161,6 +169,8 @@ impl Topology {
         for app_id in &addr.app_ids {
             if app_id == DEFAULT_APP_ID {
                 let addresses = self.resolve_address(&addr).await;
+                println!("addresses: {:?}", addresses);
+                println!("rooms: {:?}", self.rooms);
                 let ids = addresses.into_iter().flat_map(|addr| {
                     self.rooms
                         .get(&addr.project_id)
@@ -180,6 +190,7 @@ impl Topology {
             }
         }
 
+        println!("client_ids: {:?}", client_ids);
         client_ids
             .into_iter()
             .filter_map(|id| self.clients.get(id))
@@ -193,13 +204,7 @@ impl Topology {
                 project_id,
             }) => {
                 if let Some(app) = &self.app_data {
-                    let query = doc! {"id": project_id};
-                    let project = app
-                        .project_metadata
-                        .find_one(query, None)
-                        .await
-                        .unwrap()
-                        .unwrap(); // TODO: use cache
+                    let project = app.get_project_metadatum(&project_id).await.unwrap();
 
                     project
                         .roles
@@ -215,16 +220,49 @@ impl Topology {
         }
     }
 
+    fn resolve_address_from_cache(&self, addr: &ClientAddress) -> Option<Vec<BrowserAddress>> {
+        ADDRESS_CACHE
+            .write()
+            .unwrap()
+            .get(addr)
+            .map(|addresses| addresses.to_vec())
+    }
+
+    fn cache_address(&self, addr: &ClientAddress, b_addrs: &Vec<BrowserAddress>) {
+        ADDRESS_CACHE
+            .write()
+            .unwrap()
+            .put(addr.clone(), b_addrs.clone());
+        // TODO: clear cache on room close?
+    }
+
     async fn resolve_address(&self, addr: &ClientAddress) -> Vec<BrowserAddress> {
+        if let Some(addresses) = self.resolve_address_from_cache(addr) {
+            println!("Resolved address from cache");
+            return addresses;
+        }
+        let addresses = self.resolve_address_from_db(addr).await;
+
+        if addresses.len() > 0 {
+            self.cache_address(addr, &addresses);
+        }
+
+        addresses
+    }
+
+    async fn resolve_address_from_db(&self, addr: &ClientAddress) -> Vec<BrowserAddress> {
+        println!("getting project_metadata");
         let project_metadata = match &self.app_data {
             Some(app) => &app.project_metadata,
             None => return Vec::new(),
         };
 
+        println!("parsing address");
         let mut chunks = addr.address.split('@').rev();
         let project = chunks.next().unwrap();
         let role = chunks.next();
 
+        println!("about to query the database");
         let query = doc! {"name": project, "owner": &addr.user_id};
         let empty = Vec::new();
         project_metadata
@@ -309,19 +347,24 @@ impl Topology {
                 }
             }
 
-            let messages = recording_ids.into_iter().map(|project_id| {
-                SentMessage::new(
-                    project_id.to_string(),
-                    source.to_owned(),
-                    dst_ids.clone(),
-                    message.0.clone(),
-                )
-            });
+            let messages: Vec<_> = recording_ids
+                .into_iter()
+                .map(|project_id| {
+                    SentMessage::new(
+                        project_id.to_string(),
+                        source.to_owned(),
+                        dst_ids.clone(),
+                        message.0.clone(),
+                    )
+                })
+                .collect();
 
-            app.recorded_messages
-                .insert_many(messages, None)
-                .await
-                .unwrap();
+            if messages.len() > 0 {
+                app.recorded_messages
+                    .insert_many(messages, None)
+                    .await
+                    .unwrap();
+            }
         }
     }
 
@@ -492,10 +535,7 @@ impl Topology {
         }
     }
 
-    // FIXME: it might be nice not to query the database on *every* occupant invite/move/etc
-    // We should be able to cache the addresses since any change should result in a new
-    // call to send_room_state
-    async fn send_room_state_for(&self, project_id: &ProjectId) {
+    async fn send_room_state_for(&mut self, project_id: &ProjectId) {
         if let Some(app) = &self.app_data {
             let query = doc! {"id": project_id};
             if let Some(project) = app.project_metadata.find_one(query, None).await.unwrap() {
@@ -505,6 +545,8 @@ impl Topology {
     }
 
     pub fn send_room_state(&self, msg: SendRoomState) {
+        self.invalidate_cached_addresses(&msg.project);
+
         let id = msg.project.id.to_string();
         if let Some(room) = self.rooms.get(&id) {
             let clients = room
@@ -518,6 +560,23 @@ impl Topology {
                 let _ = client.addr.do_send(room_state.clone().into()); // TODO: handle error?
             });
         }
+    }
+
+    fn invalidate_cached_addresses(&self, project: &ProjectMetadata) {
+        let mut address_cache = ADDRESS_CACHE.write().unwrap();
+        let invalid_addrs: Vec<_> = address_cache
+            .iter()
+            .filter_map(|(client_addr, browser_addrs)| {
+                browser_addrs
+                    .iter()
+                    .find(|addr| addr.project_id == project.id)
+                    .map(|_| client_addr.clone())
+            })
+            .collect();
+
+        invalid_addrs.into_iter().for_each(|addr| {
+            address_cache.pop(&addr);
+        });
     }
 
     pub fn get_role_request(&self, state: BrowserClientState) -> Option<RoleRequest> {

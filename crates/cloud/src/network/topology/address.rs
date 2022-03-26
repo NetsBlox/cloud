@@ -3,7 +3,7 @@ use std::{error, fmt, str::FromStr};
 
 pub static DEFAULT_APP_ID: &str = "netsblox";
 
-#[derive(Clone)]
+#[derive(Clone, Hash, Eq, PartialEq)]
 pub struct ClientAddress {
     pub address: String,
     pub user_id: String,
@@ -36,13 +36,22 @@ impl FromStr for ClientAddress {
     fn from_str(addr: &str) -> Result<Self, Self::Err> {
         if let Some(index) = addr.rfind('@') {
             let address = addr[..index].to_owned();
-            let user_id = addr[index + 1..].chars()
+            let user_id = addr[index + 1..]
+                .chars()
                 .take_while(|c| !c.is_whitespace() && *c != '#')
                 .collect::<String>();
 
-            let mut app_ids: Vec<String> = addr[index + 1 + user_id.len()..].chars()
-                .group_by(|c| !c.is_whitespace() && *c != '#').into_iter()
-                .filter_map(|(k, iter)| if k { Some(iter.flat_map(char::to_lowercase).collect()) } else { None })
+            let mut app_ids: Vec<String> = addr[index + 1 + user_id.len()..]
+                .chars()
+                .group_by(|c| !c.is_whitespace() && *c != '#')
+                .into_iter()
+                .filter_map(|(k, iter)| {
+                    if k {
+                        Some(iter.flat_map(char::to_lowercase).collect())
+                    } else {
+                        None
+                    }
+                })
                 .collect();
 
             if app_ids.is_empty() {
@@ -55,9 +64,7 @@ impl FromStr for ClientAddress {
                 app_ids,
             })
         } else {
-            Err(AddressError {
-                addr: addr.into(),
-            })
+            Err(AddressError { addr: addr.into() })
         }
     }
 }
