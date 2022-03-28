@@ -29,3 +29,6 @@ sender = "NetsBlox <no-reply@netsblox.org>"
 host = "smtp.gmail.com"
 username = "USERNAME"
 password = "PASSWORD"
+
+[security]
+allow_tor_login = false

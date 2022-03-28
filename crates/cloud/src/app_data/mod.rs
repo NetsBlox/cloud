@@ -223,7 +223,9 @@ impl AppData {
             app_data: self.clone(),
         });
 
-        self.start_update_interval();
+        if !self.settings.security.allow_tor_login {
+            self.start_update_interval();
+        }
 
         Ok(())
     }

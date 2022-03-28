@@ -44,6 +44,11 @@ pub struct SMTPSettings {
 }
 
 #[derive(Clone, Deserialize)]
+pub struct SecuritySettings {
+    pub allow_tor_login: bool,
+}
+
+#[derive(Clone, Deserialize)]
 pub struct Settings {
     pub address: String,
     pub public_url: String,
@@ -52,6 +57,7 @@ pub struct Settings {
     pub services_hosts: Vec<ServiceHost>,
     pub cookie: CookieSettings,
     pub email: EmailSettings,
+    pub security: SecuritySettings,
 }
 
 impl Settings {
