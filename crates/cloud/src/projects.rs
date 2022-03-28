@@ -167,6 +167,20 @@ async fn get_project_metadata(
     Ok(HttpResponse::Ok().json(metadata))
 }
 
+#[get("/id/{id}/metadata")]
+async fn get_project_id_metadata(
+    app: web::Data<AppData>,
+    path: web::Path<(ProjectId,)>,
+    session: Session,
+) -> Result<HttpResponse, UserError> {
+    let (project_id,) = path.into_inner();
+    let metadata = app.get_project_metadatum(&project_id).await?;
+    ensure_can_view_project(&app, &session, &metadata).await?;
+
+    let metadata: netsblox_core::ProjectMetadata = metadata.into();
+    Ok(HttpResponse::Ok().json(metadata))
+}
+
 async fn ensure_can_view_project(
     app: &AppData,
     session: &Session,
@@ -700,6 +714,7 @@ pub fn config(cfg: &mut web::ServiceConfig) {
         .service(get_project)
         .service(get_project_named)
         .service(get_project_metadata)
+        .service(get_project_id_metadata)
         .service(publish_project)
         .service(unpublish_project)
         .service(get_latest_project)
