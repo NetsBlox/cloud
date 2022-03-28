@@ -2,12 +2,13 @@
 - [ ] test...
     - [ ] recording messages
     - [ ] message caching
+    - [ ] created (but never occupied) projects - they should be automatically deleted after 15 minutes or so
  
 - [ ] add email support
     - [ ] new account creation
     - [ ] password reset
 
-    - [ ] lettre crate?
+    - [x] lettre crate?
         - smtp or ses?
         - mock the method now?
 
@@ -62,39 +63,9 @@
             - (whoami endpoint)
         - send messages
         - CRD api keys (settings?)
-        - how should this work with
-
-- [ ] occupants
-    - [ ] invite occupant
-        - these can probably be transient invitations
-        - [x] maybe persist in mongo with a short ttl (a few minutes or something)
-        - [ ] should it send the invite via ws?
-            - probably wouldn't be bad...
-    - [-] respond-to-invite
-        - this probably doesn't make sense from the CLI
-
-    - can we think of these as access grants instead?
-        - server can provide minimal CRUD features
-        - client can send invite over ws itself with project, role, etc
-
-        - remaining questions:
-            - revoking access grant should boot existing users
-                - or should it be a separate call? The problem is that a grant is for a username while an eviction is for a client ID...
-            - let's make evict a separate call
-            - maybe we should return to the idea of invitations...
-    - invite occupant from CLI?
-    - [ ] test this from the browser
-        - [x] can send invite
-        - [ ] accepting invite removes invite from database
-        - [ ] close additional invites when one is accepted
-              - this is a little annoying. Will I actually need to ID invites?
-        - [ ] allow user to open project using invite
+            - this would make this part easier...
 
 - [ ] finish updating the browser
-
-- [ ] add unvisited saveState (w/ a ttl)
-    - CREATED -> TRANSIENT -> BROKEN/SAVED
-    - [ ] test this
 
 - [ ] apiKeys. Should these be managed from the services server?
     - probably
@@ -110,57 +81,6 @@
             }
 
 - [ ] public URL is set when opening role
-- [ ] connect the client code and start testing things!
-    - [x] send room messages
-        - [x] detect project rename
-        - [x] role rename
-        - [x] add role
-            - [ ] is this a little slow?
-        - [x] delete role
-        - [x] duplicate role
-            - [x] needs latest role endpoint
-            - [x] getting a 404 error
-            - [x] getting a 404 error for createRole
-
-    - [x] add the "latest" endpoints
-        - project
-        - role
-            - how can I perform req-reply over the ws connection?
-                - add a "mailbox" for the responses
-                - send then async sleep until a response is received
-
-            - How can I get an async result from ctx.spawn(fut)?
-                - Can I get it from the result?
-
-                - Can I just add a method to get a copy of the client(s) at a role?
-                    - then I could handle the async stuff on my end
-                    - we also shouldn't need a hashmap of requests, either
-
-                    - There might be a better abstraction rather than copying the client
-                        - maybe a ClientChannel?
-                            - channel.send().await?
-                        - maybe a RoleDataRequest?
-                            - request.send().await?
-
-                    - [x] we need some shared memory to write the response into...
-                        - make a shared response buffer (maybe a queue?)
-
-                - Should the response be over ws or http?
-                    - http would have access to cookies...
-                    - what is the benefit to using ws?
-                        - maybe slightly more efficient?
-
-    - [ ] delete transient projects after inactivity
-        - if we disable creating roles without saving, this would be good
-        - this isn't great since we wouldn't be able to try public projects...
-
-        - inactivity should probably be determined by network activity?
-            - when a client closes, we should delete all transient projects owned by the client ID (or username) after a set amount of time
-            - same for logging out?
-
-        - [ ] set projects as "broken" on broken ws connections
-        - [ ] test this!
-            - make sure the broken project is not deleted once another client reconnects
 
 - [ ] don't clean up projects when server goes down?
     - set all projects to BROKEN
@@ -174,8 +94,6 @@
         - how should we handle collaboration?
     - [x] project-response
     - [ ] request-actions
-
-- [ ] add benchmarks for message passing??
 
 - [ ] auth integration with services endpoint
     - maybe the services endpoint should hit this one?
@@ -191,6 +109,10 @@
 - [ ] make sure email works
 
 ## Future stuff
+- [ ] connect the client code and start testing things!
+
+- [ ] add benchmarks for message passing??
+
 - [ ] logout on ban? Or just ensure not banned
 
 - [ ] allow moderators to bypass profanity checker?
@@ -199,9 +121,6 @@
 
 - [ ] better pwd reset process (send link instead)
     - IP-based rate limiting...
-
-- [ ] allow disabled tor IPs
-    - add to config
 
 ## Related project updates/migrations
 - [ ] unban?
@@ -674,3 +593,87 @@
 
 - [x] only allow one user with the given email address
 
+- [x] add unvisited saveState (w/ a ttl)
+    - CREATED -> TRANSIENT -> BROKEN/SAVED
+    - [ ] test this
+
+- [x] allow disabled tor IPs
+    - add to config
+
+- [x] occupants
+    - [ ] invite occupant
+        - these can probably be transient invitations
+        - [x] maybe persist in mongo with a short ttl (a few minutes or something)
+        - [ ] should it send the invite via ws?
+            - probably wouldn't be bad...
+    - [-] respond-to-invite
+        - this probably doesn't make sense from the CLI
+
+    - can we think of these as access grants instead?
+        - server can provide minimal CRUD features
+        - client can send invite over ws itself with project, role, etc
+
+        - remaining questions:
+            - revoking access grant should boot existing users
+                - or should it be a separate call? The problem is that a grant is for a username while an eviction is for a client ID...
+            - let's make evict a separate call
+            - maybe we should return to the idea of invitations...
+    - invite occupant from CLI?
+    - [x] test this from the browser
+        - [x] can send invite
+        - [-] accepting invite removes invite from database
+        - [-] close additional invites when one is accepted
+              - this is a little annoying. Will I actually need to ID invites?
+        - [x] allow user to open project using invite
+
+- [-] connect the client code and start testing things!
+    - [x] send room messages
+        - [x] detect project rename
+        - [x] role rename
+        - [x] add role
+            - [ ] is this a little slow?
+        - [x] delete role
+        - [x] duplicate role
+            - [x] needs latest role endpoint
+            - [x] getting a 404 error
+            - [x] getting a 404 error for createRole
+
+    - [x] add the "latest" endpoints
+        - project
+        - role
+            - how can I perform req-reply over the ws connection?
+                - add a "mailbox" for the responses
+                - send then async sleep until a response is received
+
+            - How can I get an async result from ctx.spawn(fut)?
+                - Can I get it from the result?
+
+                - Can I just add a method to get a copy of the client(s) at a role?
+                    - then I could handle the async stuff on my end
+                    - we also shouldn't need a hashmap of requests, either
+
+                    - There might be a better abstraction rather than copying the client
+                        - maybe a ClientChannel?
+                            - channel.send().await?
+                        - maybe a RoleDataRequest?
+                            - request.send().await?
+
+                    - [x] we need some shared memory to write the response into...
+                        - make a shared response buffer (maybe a queue?)
+
+                - Should the response be over ws or http?
+                    - http would have access to cookies...
+                    - what is the benefit to using ws?
+                        - maybe slightly more efficient?
+
+    - [ ] delete transient projects after inactivity
+        - if we disable creating roles without saving, this would be good
+        - this isn't great since we wouldn't be able to try public projects...
+
+        - inactivity should probably be determined by network activity?
+            - when a client closes, we should delete all transient projects owned by the client ID (or username) after a set amount of time
+            - same for logging out?
+
+        - [ ] set projects as "broken" on broken ws connections
+        - [ ] test this!
+            - make sure the broken project is not deleted once another client reconnects
