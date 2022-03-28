@@ -459,7 +459,7 @@ async fn set_password(app: &AppData, username: &str, password: String) -> Result
         .await
         .map_err(|err| InternalError::DatabaseConnectionError(err))?;
 
-    if result.modified_count == 0 {
+    if result.matched_count == 0 {
         Err(UserError::UserNotFoundError)
     } else {
         Ok(())
