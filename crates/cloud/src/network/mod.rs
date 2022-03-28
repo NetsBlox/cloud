@@ -6,7 +6,7 @@ use crate::app_data::AppData;
 use crate::errors::{InternalError, UserError};
 use crate::models::{NetworkTraceMetadata, OccupantInvite, SentMessage};
 use crate::network::topology::{ClientState, ExternalClientState};
-use crate::projects::ensure_can_edit_project;
+use crate::projects::{ensure_can_edit_project, ensure_can_view_project};
 use crate::users::{ensure_can_edit_user, ensure_is_super_user};
 use actix::{Actor, Addr, AsyncContext, Handler, StreamHandler};
 use actix_session::Session;
@@ -43,7 +43,6 @@ async fn set_client_state(
     let state = match body.into_inner().state {
         ClientState::External(client_state) => {
             // append the user ID to the address
-
             let user_id = username.as_ref().unwrap_or_else(|| &client_id).to_owned();
             let address = format!("{}@{}", client_state.address, user_id);
             let app_id = client_state.app_id;
@@ -56,8 +55,7 @@ async fn set_client_state(
             ClientState::External(ExternalClientState { address, app_id })
         }
         ClientState::Browser(client_state) => {
-            let query = doc! {"id": &client_state.project_id};
-            let metadata = ensure_can_edit_project(
+            let metadata = ensure_can_view_project(
                 &app,
                 &session,
                 Some(client_id.clone()),

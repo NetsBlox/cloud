@@ -13,7 +13,7 @@ use mongodb::bson::doc;
 use mongodb::options::{FindOneAndUpdateOptions, ReturnDocument};
 use mongodb::Cursor;
 use netsblox_core::{
-    CreateProjectData, Project, ProjectId, SaveState, UpdateProjectData, UpdateRoleData,
+    ClientID, CreateProjectData, Project, ProjectId, SaveState, UpdateProjectData, UpdateRoleData,
 };
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
@@ -140,7 +140,7 @@ async fn get_project_named(
         .ok_or_else(|| UserError::ProjectNotFoundError)?;
 
     // TODO: Do I need to have edit permissions?
-    ensure_can_view_project(&app, &session, &metadata).await?;
+    ensure_can_view_project_metadata(&app, &session, None, &metadata).await?;
 
     let project = app.fetch_project(&metadata).await?;
     Ok(HttpResponse::Ok().json(project)) // TODO: Update this to a responder?
@@ -161,7 +161,7 @@ async fn get_project_metadata(
         .map_err(|err| InternalError::DatabaseConnectionError(err))?
         .ok_or_else(|| UserError::ProjectNotFoundError)?;
 
-    ensure_can_view_project(&app, &session, &metadata).await?;
+    ensure_can_view_project_metadata(&app, &session, None, &metadata).await?;
 
     let metadata: netsblox_core::ProjectMetadata = metadata.into();
     Ok(HttpResponse::Ok().json(metadata))
@@ -174,19 +174,30 @@ async fn get_project_id_metadata(
     session: Session,
 ) -> Result<HttpResponse, UserError> {
     let (project_id,) = path.into_inner();
-    let metadata = app.get_project_metadatum(&project_id).await?;
-    ensure_can_view_project(&app, &session, &metadata).await?;
+    let metadata = ensure_can_view_project(&app, &session, None, &project_id).await?;
 
     let metadata: netsblox_core::ProjectMetadata = metadata.into();
     Ok(HttpResponse::Ok().json(metadata))
 }
 
-async fn ensure_can_view_project(
+pub async fn ensure_can_view_project(
     app: &AppData,
     session: &Session,
+    client_id: Option<ClientID>,
+    project_id: &ProjectId,
+) -> Result<ProjectMetadata, UserError> {
+    let metadata = app.get_project_metadatum(&project_id).await?;
+    ensure_can_view_project_metadata(&app, &session, client_id, &metadata).await?;
+    Ok(metadata)
+}
+
+async fn ensure_can_view_project_metadata(
+    app: &AppData,
+    session: &Session,
+    client_id: Option<ClientID>,
     project: &ProjectMetadata,
 ) -> Result<(), UserError> {
-    if !can_view_project(app, session, project).await? {
+    if !can_view_project(app, session, client_id, project).await? {
         Err(UserError::PermissionsError)
     } else {
         Ok(())
@@ -203,12 +214,12 @@ fn flatten<T>(nested: Option<Option<T>>) -> Option<T> {
 async fn can_view_project(
     app: &AppData,
     session: &Session,
+    client_id: Option<ClientID>,
     project: &ProjectMetadata,
 ) -> Result<bool, UserError> {
     if project.public {
         return Ok(true);
     }
-
     if let Some(username) = session.get::<String>("username").unwrap_or(None) {
         let query = doc! {"username": username};
         let invite = flatten(app.occupant_invites.find_one(query, None).await.ok());
@@ -217,13 +228,13 @@ async fn can_view_project(
         }
     }
 
-    can_edit_project(app, session, None, project).await
+    can_edit_project(app, session, client_id, project).await
 }
 
 pub async fn ensure_can_edit_project(
     app: &AppData,
     session: &Session,
-    client_id: Option<String>,
+    client_id: Option<ClientID>,
     project_id: &ProjectId,
 ) -> Result<ProjectMetadata, UserError> {
     let metadata = app.get_project_metadatum(project_id).await?;
@@ -271,15 +282,7 @@ async fn get_project(
     session: Session,
 ) -> Result<HttpResponse, UserError> {
     let (project_id,) = path.into_inner();
-    let query = doc! {"id": project_id};
-    let metadata = app
-        .project_metadata
-        .find_one(query, None)
-        .await
-        .map_err(|err| InternalError::DatabaseConnectionError(err))?
-        .ok_or_else(|| UserError::ProjectNotFoundError)?;
-
-    ensure_can_view_project(&app, &session, &metadata).await?;
+    let metadata = ensure_can_view_project(&app, &session, None, &project_id).await?;
 
     let project: netsblox_core::Project = app.fetch_project(&metadata).await?.into();
     Ok(HttpResponse::Ok().json(project)) // TODO: Update this to a responder?
@@ -388,16 +391,7 @@ async fn get_latest_project(
     session: Session,
 ) -> Result<HttpResponse, UserError> {
     let (project_id,) = path.into_inner();
-
-    let query = doc! {"id": &project_id};
-    let metadata = app
-        .project_metadata
-        .find_one(query, None)
-        .await
-        .map_err(|err| InternalError::DatabaseConnectionError(err))?
-        .ok_or_else(|| UserError::ProjectNotFoundError)?;
-
-    ensure_can_view_project(&app, &session, &metadata).await?;
+    let metadata = ensure_can_view_project(&app, &session, None, &project_id).await?;
 
     let roles = metadata
         .roles
@@ -430,16 +424,7 @@ async fn get_project_thumbnail(
     session: Session,
 ) -> Result<HttpResponse, UserError> {
     let (project_id,) = path.into_inner();
-
-    let query = doc! {"id": project_id};
-    let metadata = app
-        .project_metadata
-        .find_one(query, None)
-        .await
-        .map_err(|err| InternalError::DatabaseConnectionError(err))?
-        .ok_or_else(|| UserError::ProjectNotFoundError)?;
-
-    ensure_can_view_project(&app, &session, &metadata).await?;
+    let metadata = ensure_can_view_project(&app, &session, None, &project_id).await?;
 
     Ok(HttpResponse::Ok().body(metadata.thumbnail))
 }
@@ -484,15 +469,8 @@ async fn get_role(
     session: Session,
 ) -> Result<HttpResponse, UserError> {
     let (project_id, role_id) = path.into_inner();
-    let query = doc! {"id": project_id};
-    let metadata = app
-        .project_metadata
-        .find_one(query, None)
-        .await
-        .map_err(|err| InternalError::DatabaseConnectionError(err))?
-        .ok_or_else(|| UserError::ProjectNotFoundError)?;
 
-    ensure_can_view_project(&app, &session, &metadata).await?;
+    let metadata = ensure_can_view_project(&app, &session, None, &project_id).await?;
     let role_md = metadata
         .roles
         .get(&role_id)
@@ -587,15 +565,8 @@ async fn get_latest_role(
     session: Session,
 ) -> Result<HttpResponse, UserError> {
     let (project_id, role_id) = path.into_inner();
-    let query = doc! {"id": &project_id};
-    let metadata = app
-        .project_metadata
-        .find_one(query, None)
-        .await
-        .map_err(|err| InternalError::DatabaseConnectionError(err))?
-        .ok_or_else(|| UserError::ProjectNotFoundError)?;
+    let metadata = ensure_can_view_project(&app, &session, None, &project_id).await?;
 
-    ensure_can_view_project(&app, &session, &metadata).await?;
     let (_, role_data) = fetch_role_data(&app, &metadata, role_id).await?;
     Ok(HttpResponse::Ok().json(role_data))
 }
