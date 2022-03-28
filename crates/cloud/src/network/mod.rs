@@ -192,6 +192,10 @@ async fn invite_occupant(
     let (project_id,) = path.into_inner();
 
     let project = ensure_can_edit_project(&app, &session, None, &project_id).await?;
+    if !project.roles.contains_key(&body.role_id) {
+        return Err(UserError::RoleNotFoundError);
+    }
+
     let invite = OccupantInvite::new(project_id, body.into_inner());
     app.occupant_invites
         .insert_one(&invite, None)
