@@ -152,10 +152,7 @@ impl AppData {
             bucket: bucket.clone(),
             ..Default::default()
         };
-        self.s3
-            .create_bucket(request)
-            .await
-            .map_err(|_err| InternalError::S3Error)?;
+        self.s3.create_bucket(request).await;
 
         self.db
             .run_command(

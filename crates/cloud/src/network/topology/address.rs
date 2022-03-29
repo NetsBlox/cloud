@@ -3,7 +3,7 @@ use std::{error, fmt, str::FromStr};
 
 pub static DEFAULT_APP_ID: &str = "netsblox";
 
-#[derive(Clone, Hash, Eq, PartialEq)]
+#[derive(Clone, Hash, Eq, PartialEq, Debug)]
 pub struct ClientAddress {
     pub address: String,
     pub user_id: String,
