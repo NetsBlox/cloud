@@ -1,7 +1,7 @@
 # To Do
 - [ ] test...
     - [ ] recording messages
-    - [ ] message caching
+    - [x] message caching
     - [ ] created (but never occupied) projects - they should be automatically deleted after 15 minutes or so
  
 - [ ] add email support
@@ -16,18 +16,25 @@
     - maybe we don't need to persist them...
     - accept actions when collaborating
         - this is currently a perf bottleneck in the nodejs version
-    - [ ] add a TTL for the lastest action ID
+    - [ ] add a TTL for the latest action ID
     - [ ] need 2 collections:
         - project action IDs (w/ TTL)
-        - project actions
+        - project actions (w/ TTL)
+
+    - [ ] how should I initialize the action index?
+        - in the nodejs one, we set it when the project is opened
+    - [ ] check edit permissions
+
+    - could I use client-message for this?
+        - 
 
 - [ ] update the services server connection (zmq)
-    - add resolve endpoint?
+    - [-] add public role ID resolution endpoint?
         - (public role ID resolution)
         - Or the client could send this in the request...
             - context: {project: {name, id}, role: {name, id}, app: ''}
         - we will need to be able to lookup the username and the context...
-    - add a REST endpoint for this?
+    - [ ] add a REST endpoint for message sending?
         - network/messages/send
             - recipient address
             - message type
@@ -57,6 +64,16 @@
         - admins adding a client 
         - client adds Access ID & Secret Token to send message requests
         - save these in the database
+        - this wouldn't be in the config anymore
+
+            - netsblox services add
+            - netsblox services list --global
+            - netsblox services list --group
+            - netsblox services list --only-user
+
+        - these are actually different from the current services-hosts:
+            - current ones are client-side configurations about endpoints to ping
+            - new ones provide permissions to the service-host to be able to resolve client IDs and send messages
 
     - how is the API used by the services server?
         - authenticate users
@@ -64,6 +81,11 @@
         - send messages
         - CRD api keys (settings?)
             - this would make this part easier...
+
+    - [ ] add client ID resolution endpoint
+        - authentication is at the app-level so this should be fine
+        - [ ] client ID secret should also be included so it isn't spoofed...
+
 
 - [ ] finish updating the browser
 
