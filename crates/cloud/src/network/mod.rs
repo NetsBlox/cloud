@@ -7,6 +7,7 @@ use crate::errors::{InternalError, UserError};
 use crate::models::{NetworkTraceMetadata, OccupantInvite, SentMessage};
 use crate::network::topology::{ClientState, ExternalClientState};
 use crate::projects::{ensure_can_edit_project, ensure_can_view_project};
+use crate::services_hosts::ensure_is_authorized_host;
 use crate::users::{ensure_can_edit_user, ensure_is_super_user};
 use actix::{Actor, Addr, AsyncContext, Handler, StreamHandler};
 use actix_session::Session;
@@ -405,6 +406,20 @@ async fn delete_network_trace(
 
     app.update_project_cache(metadata);
     Ok(HttpResponse::Ok().body("Network trace deleted"))
+}
+
+#[post("/messages/")]
+async fn send_message(
+    app: web::Data<AppData>,
+    req: HttpRequest,
+) -> Result<HttpResponse, UserError> {
+    ensure_is_authorized_host(&app, &req).await?;
+    todo!("Implement message sending from services server.");
+    // app.network.do_send(topology::SendMessage {
+    //     sender: client_id.to_owned(),
+    //     addresses,
+    //     content: msg,
+    // });
 }
 
 pub fn config(cfg: &mut web::ServiceConfig) {

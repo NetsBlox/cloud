@@ -237,16 +237,28 @@ async fn unauthorize_host(
 }
 
 pub async fn ensure_is_authorized_host(app: &AppData, req: &HttpRequest) -> Result<(), UserError> {
-    // let query = req.headers().get("X-Authorization")
-    //     .ok()
-    //     .and_then(|value| value.to_str())
-    // let query = doc! {"id": id, "secret": secret};
-    // app.authorized_services
-    //     .find_one(query, None)
-    //     .map_err(|err| InternalError::DatabaseConnectionError(err))?
-    //     .ok_or_else(|| UserError::PermissionsError)?;
+    let query = req
+        .headers()
+        .get("X-Authorization")
+        .and_then(|value| value.to_str().ok())
+        .and_then(|value_str| {
+            let mut chunks = value_str.rsplit(":");
+            let id = chunks.next();
+            let secret = chunks.next();
+            id.and_then(|id| secret.map(|s| (id, s)))
+        })
+        .map(|(id, secret)| doc! {"id": id, "secret": secret});
 
-    Ok(())
+    if let Some(query) = query {
+        app.authorized_services
+            .find_one(query, None)
+            .await
+            .map_err(|err| InternalError::DatabaseConnectionError(err))?
+            .ok_or_else(|| UserError::PermissionsError)?;
+        Ok(())
+    } else {
+        Err(UserError::PermissionsError)
+    }
 }
 
 pub fn config(cfg: &mut web::ServiceConfig) {
