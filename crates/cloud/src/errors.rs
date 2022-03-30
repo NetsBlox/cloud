@@ -32,6 +32,8 @@ pub enum UserError {
     UserNotFoundError,
     #[display(fmt = "Invitation not found.")]
     InviteNotFoundError,
+    #[display(fmt = "Service host not found.")]
+    ServiceHostNotFoundError,
     #[display(fmt = "Project not active.")]
     ProjectNotActiveError,
     #[display(fmt = "Cannot delete last role.")]
@@ -66,6 +68,8 @@ pub enum UserError {
     TorAddressError,
     #[display(fmt = "An internal error occurred. Please try again later.")]
     InternalError,
+    #[display(fmt = "Services endpoint already authorized.")]
+    ServiceHostAlreadyAuthorizedError,
 }
 
 impl error::ResponseError for UserError {
@@ -77,7 +81,6 @@ impl error::ResponseError for UserError {
     fn status_code(&self) -> StatusCode {
         match *self {
             UserError::LoginRequiredError => StatusCode::UNAUTHORIZED,
-            // TODO: use Forbidden if logged in
             UserError::PermissionsError
             | UserError::IncorrectUsernameOrPasswordError
             | UserError::BannedUserError
@@ -86,6 +89,7 @@ impl error::ResponseError for UserError {
             UserError::ProjectNotFoundError
             | UserError::NetworkTraceNotFoundError
             | UserError::LibraryNotFoundError
+            | UserError::ServiceHostNotFoundError
             | UserError::RoleNotFoundError
             | UserError::InviteNotFoundError
             | UserError::UserNotFoundError
@@ -105,6 +109,7 @@ impl error::ResponseError for UserError {
             | UserError::UserExistsError
             | UserError::EmailExistsError
             | UserError::CannotDeleteLastRoleError
+            | UserError::ServiceHostAlreadyAuthorizedError
             | UserError::ProjectNotActiveError => StatusCode::BAD_REQUEST,
         }
     }

@@ -21,8 +21,8 @@ use uuid::Uuid;
 use crate::config::Settings;
 use crate::errors::{InternalError, UserError};
 use crate::models::{
-    CollaborationInvite, FriendLink, Group, Project, ProjectMetadata, SaveState, SetPasswordToken,
-    User,
+    AuthorizedServiceHost, CollaborationInvite, FriendLink, Group, Project, ProjectMetadata,
+    SaveState, SetPasswordToken, User,
 };
 use crate::models::{OccupantInvite, RoleData, RoleMetadata, SentMessage};
 use crate::network::topology::{self, SetStorage, TopologyActor};
@@ -52,6 +52,7 @@ pub struct AppData {
     pub users: Collection<User>,
     pub friends: Collection<FriendLink>,
     pub project_metadata: Collection<ProjectMetadata>,
+    pub authorized_services: Collection<AuthorizedServiceHost>,
 
     pub password_tokens: Collection<SetPasswordToken>,
     pub recorded_messages: Collection<SentMessage>,
@@ -109,7 +110,8 @@ impl AppData {
             db.collection::<SetPasswordToken>(&(prefix.to_owned() + "passwordTokens"));
         let users = db.collection::<User>(&(prefix.to_owned() + "users"));
         let project_metadata = db.collection::<ProjectMetadata>(&(prefix.to_owned() + "projects"));
-
+        let authorized_services =
+            db.collection::<AuthorizedServiceHost>(&(prefix.to_owned() + "authorizedServices"));
         let collab_invites =
             db.collection::<CollaborationInvite>(&(prefix.to_owned() + "collaborationInvitations"));
         let occupant_invites =
@@ -131,6 +133,7 @@ impl AppData {
             users,
             prefix,
             project_metadata,
+            authorized_services,
 
             collab_invites,
             occupant_invites,

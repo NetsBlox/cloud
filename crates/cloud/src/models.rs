@@ -390,6 +390,47 @@ impl From<SetPasswordToken> for Bson {
         })
     }
 }
+
+#[derive(Deserialize, Serialize, Debug, Clone)]
+#[serde(rename_all = "camelCase")]
+pub struct AuthorizedServiceHost {
+    pub url: String,
+    pub id: String,
+    pub secret: String,
+}
+
+impl AuthorizedServiceHost {
+    pub fn new(url: String, id: String) -> Self {
+        let secret = Uuid::new_v4().to_string();
+        AuthorizedServiceHost { url, id, secret }
+    }
+}
+
+impl From<AuthorizedServiceHost> for Bson {
+    fn from(token: AuthorizedServiceHost) -> Bson {
+        Bson::Document(doc! {
+            "url": token.url,
+            "id": token.id,
+            "secret": token.secret,
+        })
+    }
+}
+
+impl From<netsblox_core::AuthorizedServiceHost> for AuthorizedServiceHost {
+    fn from(data: netsblox_core::AuthorizedServiceHost) -> AuthorizedServiceHost {
+        AuthorizedServiceHost::new(data.url, data.id)
+    }
+}
+
+impl From<AuthorizedServiceHost> for netsblox_core::AuthorizedServiceHost {
+    fn from(host: AuthorizedServiceHost) -> netsblox_core::AuthorizedServiceHost {
+        netsblox_core::AuthorizedServiceHost {
+            id: host.id,
+            url: host.url,
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
 

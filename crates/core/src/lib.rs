@@ -412,3 +412,10 @@ pub struct OccupantInviteData {
     pub username: String,
     pub role_id: String,
 }
+
+#[derive(Deserialize, Serialize, Debug, Clone)]
+#[serde(rename_all = "camelCase")]
+pub struct AuthorizedServiceHost {
+    pub url: String,
+    pub id: String,
+}

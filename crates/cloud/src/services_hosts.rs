@@ -1,11 +1,13 @@
 use crate::app_data::AppData;
 use crate::errors::{InternalError, UserError};
-use crate::users::{ensure_can_edit_user, is_super_user};
+use crate::models::AuthorizedServiceHost;
+use crate::users::{ensure_can_edit_user, ensure_is_super_user, is_super_user};
 use actix_session::Session;
-use actix_web::{get, post};
+use actix_web::{delete, get, post, HttpRequest};
 use actix_web::{web, HttpResponse};
 use futures::TryStreamExt;
 use mongodb::bson::doc;
+use mongodb::options::UpdateOptions;
 use netsblox_core::{GroupId, ServiceHost};
 
 #[get("/group/{id}")]
@@ -161,12 +163,100 @@ async fn list_all_hosts(
     Ok(HttpResponse::Ok().json(services_hosts.collect::<Vec<_>>()))
 }
 
+#[get("/authorized/")]
+async fn get_authorized_hosts(
+    app: web::Data<AppData>,
+    session: Session,
+) -> Result<HttpResponse, UserError> {
+    ensure_is_super_user(&app, &session).await?;
+
+    let query = doc! {};
+    let cursor = app
+        .authorized_services
+        .find(query, None)
+        .await
+        .map_err(|err| InternalError::DatabaseConnectionError(err))?;
+
+    let hosts: Vec<netsblox_core::AuthorizedServiceHost> = cursor
+        .try_collect::<Vec<_>>()
+        .await
+        .unwrap()
+        .into_iter()
+        .map(|invite| invite.into())
+        .collect();
+
+    Ok(HttpResponse::Ok().json(hosts))
+}
+
+#[post("/authorized/")]
+async fn authorize_host(
+    app: web::Data<AppData>,
+    host_data: web::Json<netsblox_core::AuthorizedServiceHost>,
+    session: Session,
+) -> Result<HttpResponse, UserError> {
+    ensure_is_super_user(&app, &session).await?;
+
+    let query = doc! {"id": &host_data.id};
+    let host: AuthorizedServiceHost = host_data.into_inner().into();
+    let update = doc! {"$setOnInsert": &host};
+    let options = UpdateOptions::builder().upsert(true).build();
+    let result = app
+        .authorized_services
+        .update_one(query, update, options)
+        .await
+        .map_err(|err| InternalError::DatabaseConnectionError(err))?;
+
+    if result.matched_count > 0 {
+        Err(UserError::ServiceHostAlreadyAuthorizedError)
+    } else {
+        Ok(HttpResponse::Ok().json(host.secret))
+    }
+}
+
+#[delete("/authorized/{id}")]
+async fn unauthorize_host(
+    app: web::Data<AppData>,
+    path: web::Path<(String,)>,
+    session: Session,
+) -> Result<HttpResponse, UserError> {
+    ensure_is_super_user(&app, &session).await?;
+
+    let (client_id,) = path.into_inner();
+    let query = doc! {"id": &client_id};
+    let result = app
+        .authorized_services
+        .delete_one(query, None)
+        .await
+        .map_err(|err| InternalError::DatabaseConnectionError(err))?;
+
+    if result.deleted_count == 0 {
+        Err(UserError::ServiceHostNotFoundError)
+    } else {
+        Ok(HttpResponse::Ok().finish())
+    }
+}
+
+pub async fn ensure_is_authorized_host(app: &AppData, req: &HttpRequest) -> Result<(), UserError> {
+    // let query = req.headers().get("X-Authorization")
+    //     .ok()
+    //     .and_then(|value| value.to_str())
+    // let query = doc! {"id": id, "secret": secret};
+    // app.authorized_services
+    //     .find_one(query, None)
+    //     .map_err(|err| InternalError::DatabaseConnectionError(err))?
+    //     .ok_or_else(|| UserError::PermissionsError)?;
+
+    Ok(())
+}
+
 pub fn config(cfg: &mut web::ServiceConfig) {
     cfg.service(list_group_hosts)
         .service(set_group_hosts)
         .service(list_user_hosts)
         .service(set_user_hosts)
-        .service(list_all_hosts);
+        .service(list_all_hosts)
+        .service(authorize_host)
+        .service(unauthorize_host);
 }
 
 mod test {}

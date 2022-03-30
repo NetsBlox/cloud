@@ -878,6 +878,44 @@ impl Client {
         Ok(())
     }
 
+    pub async fn authorize_host(&self, url: &str, id: &str) -> Result<(), error::Error> {
+        let host = AuthorizedServiceHost {
+            url: url.to_owned(),
+            id: id.to_owned(),
+        };
+        let response = self
+            .request(Method::POST, "/service-hosts/authorized/")
+            .json(&host)
+            .send()
+            .await
+            .map_err(|err| error::Error::RequestError(err))?;
+
+        check_response(response).await?;
+        Ok(())
+    }
+
+    pub async fn unauthorize_host(&self, id: &str) -> Result<(), error::Error> {
+        let response = self
+            .request(Method::DELETE, &format!("/service-hosts/authorized/{}", id))
+            .send()
+            .await
+            .map_err(|err| error::Error::RequestError(err))?;
+
+        check_response(response).await?;
+        Ok(())
+    }
+
+    pub async fn list_authorized_hosts(&self) -> Result<Vec<AuthorizedServiceHost>, error::Error> {
+        let response = self
+            .request(Method::GET, "/service-hosts/authorized/")
+            .send()
+            .await
+            .map_err(|err| error::Error::RequestError(err))?;
+
+        let response = check_response(response).await?;
+        Ok(response.json::<Vec<AuthorizedServiceHost>>().await.unwrap())
+    }
+
     // NetsBlox network capabilities
     pub async fn list_external_clients(&self) -> Result<Vec<ExternalClient>, error::Error> {
         let response = self

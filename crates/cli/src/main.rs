@@ -173,15 +173,22 @@ enum Projects {
 
 #[derive(Subcommand, Debug)]
 enum ServiceHosts {
+    /// List service hosts registered for a given user/group or all authorized hosts
     List {
+        /// List all authorized service hosts. Overrides other options.
+        #[clap(long)]
+        authorized: bool,
+        /// List service hosts registered to the user (ignore any hosts registered to groups)
         #[clap(long)]
         user_only: bool,
+        /// List service hosts registered to the given group
         #[clap(short, long)]
         group: Option<String>,
+        /// Perform this action on behalf of another user
         #[clap(short, long)]
         user: Option<String>,
     },
-    Add {
+    Register {
         url: String,
         categories: String, // TODO: Should this be optional?
         #[clap(short, long)]
@@ -189,12 +196,21 @@ enum ServiceHosts {
         #[clap(short, long)]
         user: Option<String>,
     },
-    Remove {
+    Unregister {
         url: String,
         #[clap(short, long)]
         group: Option<String>,
         #[clap(short, long)]
         user: Option<String>,
+    },
+    // Authorize a service host to send messages and query user info from NetsBlox
+    Authorize {
+        url: String,
+        client_id: String,
+    },
+    // Revoke the service host's authorization
+    Unauthorize {
+        url: String,
     },
 }
 
@@ -834,30 +850,37 @@ async fn do_command(mut cfg: Config, args: Cli) -> Result<(), netsblox_api::erro
         },
         Command::ServiceHosts(cmd) => match &cmd.subcmd {
             ServiceHosts::List {
+                authorized,
                 user_only,
                 group,
                 user,
             } => {
-                let username = user.clone().unwrap_or(current_user);
-                let service_hosts = if *user_only {
-                    client.list_user_hosts(&username).await?
-                } else if let Some(group_name) = group {
-                    let groups = client.list_groups(&username).await?;
-                    let group_id = groups
-                        .into_iter()
-                        .find(|g| g.name == *group_name)
-                        .map(|group| group.id)
-                        .unwrap();
-                    client.list_group_hosts(&group_id).await?
+                if *authorized {
+                    for host in client.list_authorized_hosts().await? {
+                        println!("{:?}", host);
+                    }
                 } else {
-                    client.list_hosts(&username).await?
-                };
+                    let username = user.clone().unwrap_or(current_user);
+                    let service_hosts = if *user_only {
+                        client.list_user_hosts(&username).await?
+                    } else if let Some(group_name) = group {
+                        let groups = client.list_groups(&username).await?;
+                        let group_id = groups
+                            .into_iter()
+                            .find(|g| g.name == *group_name)
+                            .map(|group| group.id)
+                            .unwrap();
+                        client.list_group_hosts(&group_id).await?
+                    } else {
+                        client.list_hosts(&username).await?
+                    };
 
-                for host in service_hosts {
-                    println!("{:?}", host);
+                    for host in service_hosts {
+                        println!("{:?}", host);
+                    }
                 }
             }
-            ServiceHosts::Add {
+            ServiceHosts::Register {
                 url,
                 categories,
                 group,
@@ -890,7 +913,7 @@ async fn do_command(mut cfg: Config, args: Cli) -> Result<(), netsblox_api::erro
                     client.set_user_hosts(&username, service_hosts).await?;
                 }
             }
-            ServiceHosts::Remove { url, group, user } => {
+            ServiceHosts::Unregister { url, group, user } => {
                 let username = user.clone().unwrap_or(current_user);
                 let group_id = if let Some(group_name) = group {
                     let groups = client.list_groups(&username).await?;
@@ -919,6 +942,22 @@ async fn do_command(mut cfg: Config, args: Cli) -> Result<(), netsblox_api::erro
                 } else {
                     client.set_user_hosts(&username, service_hosts).await?;
                 }
+            }
+            ServiceHosts::Authorize { url, client_id } => {
+                client.authorize_host(url, client_id).await?;
+            }
+            ServiceHosts::Unauthorize { url } => {
+                let host = client
+                    .list_authorized_hosts()
+                    .await?
+                    .into_iter()
+                    .find(|host| &host.url == url)
+                    .ok_or_else(|| {
+                        netsblox_api::error::Error::NotFoundError(
+                            "Authorized host not found.".to_string(),
+                        )
+                    })?;
+                client.unauthorize_host(&host.id).await?;
             }
         },
         Command::Libraries(cmd) => match &cmd.subcmd {
