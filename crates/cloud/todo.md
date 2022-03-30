@@ -6,7 +6,7 @@
  
 - [ ] add email support
     - [ ] new account creation
-    - [ ] password reset
+    - [x] password reset
 
     - [x] lettre crate?
         - smtp or ses?
@@ -23,6 +23,10 @@
 
     - [ ] how should I initialize the action index?
         - in the nodejs one, we set it when the project is opened
+        - what if we just use the get_latest_project fn if there is no action index?
+            - this might be slow to start but it should be fine, I think
+        - should we add another ws message type?
+
     - [ ] check edit permissions
 
     - could I use client-message for this?
@@ -66,14 +70,21 @@
         - save these in the database
         - this wouldn't be in the config anymore
 
-            - netsblox services add
+            - netsblox services add --authorize <client ID>
             - netsblox services list --global
             - netsblox services list --group
             - netsblox services list --only-user
 
+            - netsblox service-host authorize <URL> <client ID> -> <secret token>
+            - netsblox service-host unauthorize <URL>
+
         - these are actually different from the current services-hosts:
             - current ones are client-side configurations about endpoints to ping
             - new ones provide permissions to the service-host to be able to resolve client IDs and send messages
+
+            - netsblox integrations add <name> ID -> <secret token>
+            - netsblox integrations remove ID
+            - netsblox integrations list
 
     - how is the API used by the services server?
         - authenticate users
