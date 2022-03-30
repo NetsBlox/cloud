@@ -91,8 +91,6 @@ impl ProjectNetwork {
             .into_iter()
             .map(|(id, role)| {
                 let client_ids = self.roles.get(&id).unwrap_or(&empty);
-                println!("Resolving usernames: {:?} {:?}", client_ids, usernames);
-                // TODO: get the names...
                 let occupants = client_ids
                     .iter()
                     .map(|id| OccupantState {
@@ -159,7 +157,6 @@ impl Topology {
     }
 
     pub fn set_app_data(&mut self, app: AppData) {
-        println!("--- setting app data");
         self.app_data = Some(app);
     }
 
@@ -169,8 +166,6 @@ impl Topology {
         for app_id in &addr.app_ids {
             if app_id == DEFAULT_APP_ID {
                 let addresses = self.resolve_address(&addr).await;
-                println!("addresses: {:?}", addresses);
-                println!("rooms: {:?}", self.rooms);
                 let ids = addresses.into_iter().flat_map(|addr| {
                     self.rooms
                         .get(&addr.project_id)
@@ -190,7 +185,6 @@ impl Topology {
             }
         }
 
-        println!("client_ids: {:?}", client_ids);
         client_ids
             .into_iter()
             .filter_map(|id| self.clients.get(id))
@@ -238,7 +232,6 @@ impl Topology {
 
     async fn resolve_address(&self, addr: &ClientAddress) -> Vec<BrowserAddress> {
         if let Some(addresses) = self.resolve_address_from_cache(addr) {
-            println!("Resolved address from cache");
             return addresses;
         }
         let addresses = self.resolve_address_from_db(addr).await;
@@ -251,18 +244,15 @@ impl Topology {
     }
 
     async fn resolve_address_from_db(&self, addr: &ClientAddress) -> Vec<BrowserAddress> {
-        println!("getting project_metadata");
         let project_metadata = match &self.app_data {
             Some(app) => &app.project_metadata,
             None => return Vec::new(),
         };
 
-        println!("parsing address");
         let mut chunks = addr.address.split('@').rev();
         let project = chunks.next().unwrap();
         let role = chunks.next();
 
-        println!("about to query the database");
         let query = doc! {"name": project, "owner": &addr.user_id};
         let empty = Vec::new();
         project_metadata
@@ -377,9 +367,7 @@ impl Topology {
             return;
         }
 
-        println!("Setting client state to {:?}", msg.state);
         self.reset_client_state(&msg.id).await;
-        println!("Setting username? {:?}", msg.username);
         if let Some(username) = msg.username {
             self.usernames.insert(msg.id.clone(), username);
         }
@@ -412,7 +400,6 @@ impl Topology {
             }
         }
         self.states.insert(msg.id, msg.state);
-        println!("{:?}", self.states);
     }
 
     pub fn add_client(&mut self, msg: AddClient) {
@@ -421,7 +408,6 @@ impl Topology {
     }
 
     pub async fn set_broken_client(&mut self, msg: BrokenClient) {
-        println!("detected broken client!");
         if let Some(app) = &self.app_data {
             if let Some(ClientState::Browser(state)) = self.states.get(&msg.id) {
                 let query = doc! {
@@ -434,7 +420,6 @@ impl Topology {
                     .update_one(query, update, None)
                     .await
                     .unwrap();
-                println!("Set {} projects broken", result.matched_count);
             }
         }
         // TODO: Record a list of broken clients for the project?
@@ -517,7 +502,6 @@ impl Topology {
                 })
                 .unwrap_or(ProjectCleanup::NONE);
 
-            println!("Project cleanup policy is {:?}", cleanup);
             match cleanup {
                 ProjectCleanup::IMMEDIATELY => {
                     app.project_metadata.delete_one(query, None).await;

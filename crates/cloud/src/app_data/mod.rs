@@ -580,7 +580,6 @@ impl AppData {
         match req.peer_addr().map(|addr| addr.ip()) {
             Some(addr) => {
                 let addr = addr.to_string();
-                println!("checking if {} is exit node", addr);
                 let query = doc! {"addr": addr};
                 let node = self
                     .tor_exit_nodes
