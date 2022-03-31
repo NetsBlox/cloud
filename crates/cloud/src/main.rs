@@ -16,7 +16,7 @@ use crate::app_data::AppData;
 use crate::config::Settings;
 use actix_cors::Cors;
 use actix_session::{CookieSession, Session};
-use actix_web::{cookie::SameSite, get, middleware, web, App, HttpResponse, HttpServer};
+use actix_web::{cookie::SameSite, get, middleware, web, App, HttpResponse, HttpServer, dev::Service, error::ErrorForbidden, http::Method};
 use mongodb::Client;
 use netsblox_core::ClientConfig;
 use uuid::Uuid;
@@ -74,6 +74,18 @@ async fn main() -> std::io::Result<()> {
                     .secure(true),
             )
             .wrap(middleware::Logger::default())
+            .wrap_fn(|req, srv| {
+                let source = req.headers().get("x-source").map(|v| v.to_str().ok()).flatten().unwrap_or("unknown");
+                let allow = *req.method() == Method::GET || source != "NetsBlox";
+
+                let fut = if allow { Some(srv.call(req)) } else { None };
+                async {
+                    match fut {
+                        Some(x) => x.await,
+                        None => Err(ErrorForbidden("Operation is not allowed"))
+                    }
+                }
+            })
             .app_data(web::Data::new(app_data.clone()))
             .service(web::scope("/libraries").configure(libraries::config))
             .service(web::scope("/service-hosts").configure(services_hosts::config))
