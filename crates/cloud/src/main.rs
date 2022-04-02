@@ -1,7 +1,6 @@
 mod app_data;
 mod collaboration_invites;
 mod config;
-mod database;
 mod errors;
 mod friends;
 mod groups;
