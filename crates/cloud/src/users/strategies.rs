@@ -1,4 +1,7 @@
-use std::{collections::HashSet, time::SystemTime};
+use std::{
+    collections::{HashMap, HashSet},
+    time::SystemTime,
+};
 
 use futures::TryStreamExt;
 use mongodb::{
@@ -142,6 +145,7 @@ async fn create_account(
         linked_accounts: Vec::new(),
         role: UserRole::User,
         services_hosts: None,
+        service_settings: HashMap::new(),
     };
 
     let update = doc!("$setOnInsert": &user);

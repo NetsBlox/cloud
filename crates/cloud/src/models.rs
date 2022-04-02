@@ -1,4 +1,4 @@
-use mongodb::bson::{doc, Bson, DateTime};
+use mongodb::bson::{self, doc, Bson, DateTime};
 use netsblox_core::{ClientState, NewUser, OccupantInviteData, UserRole};
 pub use netsblox_core::{
     CreateGroupData, FriendInvite, FriendLinkState, Group, GroupId, InvitationState, LinkedAccount,
@@ -25,6 +25,7 @@ pub struct User {
     pub created_at: DateTime,
     pub linked_accounts: Vec<LinkedAccount>,
     pub services_hosts: Option<Vec<ServiceHost>>,
+    pub service_settings: HashMap<String, String>,
 }
 
 impl From<User> for Bson {
@@ -39,6 +40,7 @@ impl From<User> for Bson {
             "createdAt": user.created_at,
             "linkedAccounts": user.linked_accounts,
             "servicesHosts": user.services_hosts,
+            "serviceSettings": bson::to_bson(&user.service_settings).unwrap(),
         })
     }
 }
@@ -83,6 +85,7 @@ impl From<NewUser> for User {
             linked_accounts: std::vec::Vec::new(),
             role: user_data.role.unwrap_or(UserRole::User),
             services_hosts: None,
+            service_settings: HashMap::new(),
         }
     }
 }
