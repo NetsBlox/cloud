@@ -21,7 +21,14 @@ async fn list_groups(
 
     let query = doc! {"owner": owner};
     let cursor = app.groups.find(query, None).await.unwrap();
-    let groups = cursor.try_collect::<Vec<_>>().await.unwrap();
+    let groups: Vec<netsblox_core::Group> = cursor
+        .try_collect::<Vec<_>>()
+        .await
+        .unwrap()
+        .into_iter()
+        .map(|g| g.into())
+        .collect();
+
     Ok(HttpResponse::Ok().json(groups))
 }
 
@@ -43,12 +50,13 @@ async fn view_group(
         doc! {"id": id, "owner": username}
     };
 
-    let group = app
+    let group: netsblox_core::Group = app
         .groups
         .find_one(query, None)
         .await
         .map_err(|err| InternalError::DatabaseConnectionError(err))?
-        .ok_or_else(|| UserError::GroupNotFoundError)?;
+        .ok_or_else(|| UserError::GroupNotFoundError)?
+        .into();
 
     Ok(HttpResponse::Ok().json(group))
 }

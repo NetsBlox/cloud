@@ -301,7 +301,6 @@ impl LibraryMetadata {
 pub struct CreateGroupData {
     pub name: String,
     pub services_hosts: Option<Vec<ServiceHost>>,
-    //pub api_keys: Option<Vec<ServiceHost>>,
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug)]
