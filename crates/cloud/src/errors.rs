@@ -46,6 +46,8 @@ pub enum UserError {
     BannedUserError,
     #[display(fmt = "User already exists.")]
     UserExistsError,
+    #[display(fmt = "Group already exists.")]
+    GroupExistsError,
     #[display(fmt = "Email already exists.")]
     EmailExistsError,
     #[display(fmt = "Invalid username.")]
@@ -107,6 +109,7 @@ impl error::ResponseError for UserError {
             | UserError::InvalidAccountTypeError
             | UserError::TorAddressError
             | UserError::UserExistsError
+            | UserError::GroupExistsError
             | UserError::EmailExistsError
             | UserError::CannotDeleteLastRoleError
             | UserError::ServiceHostAlreadyAuthorizedError

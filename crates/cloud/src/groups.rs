@@ -116,7 +116,7 @@ async fn create_group(
         .map_err(|err| InternalError::DatabaseConnectionError(err))?;
 
     if result.matched_count == 1 {
-        Ok(HttpResponse::Conflict().body("Group with name already exists."))
+        Err(UserError::GroupExistsError)
     } else {
         Ok(HttpResponse::Ok().body("Group created."))
     }
