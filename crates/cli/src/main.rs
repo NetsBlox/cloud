@@ -597,7 +597,7 @@ async fn do_command(mut cfg: Config, args: Cli) -> Result<(), netsblox_api::erro
                 name,
                 user,
             } => {
-                todo!();
+                todo!("Parse the file and import it...");
             }
             Projects::Export {
                 project,

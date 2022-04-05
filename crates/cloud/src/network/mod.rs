@@ -422,6 +422,42 @@ async fn send_message(
     // });
 }
 
+#[get("/{client}/state")]
+async fn get_client_state(
+    app: web::Data<AppData>,
+    path: web::Path<(ClientID,)>,
+    session: Session,
+    req: HttpRequest,
+) -> Result<HttpResponse, UserError> {
+    let is_allowed = ensure_is_super_user(&app, &session).await;
+    match is_allowed {
+        Err(UserError::LoginRequiredError) => ensure_is_authorized_host(&app, &req).await?,
+        _ => is_allowed?,
+    };
+
+    let (client_id,) = path.into_inner();
+
+    let username = app
+        .network
+        .send(topology::GetClientUsername {
+            client_id: client_id.clone(),
+        })
+        .await
+        .map_err(|_err| UserError::InternalError)?
+        .0;
+
+    let state = app
+        .network
+        .send(topology::GetClientState { client_id })
+        .await
+        .map_err(|_err| UserError::InternalError)?
+        .0;
+
+    // TODO: get the state and the username
+    todo!("Package up the username and state in a response");
+    //Ok(HttpResponse::Ok().json())
+}
+
 pub fn config(cfg: &mut web::ServiceConfig) {
     cfg.service(set_client_state)
         .service(connect_client)
