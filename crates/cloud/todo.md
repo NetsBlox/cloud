@@ -94,28 +94,16 @@
             - this would make this part easier...
 
     - [ ] add client ID resolution endpoint
-        - authentication is at the app-level so this should be fine
+        - [x] authentication is at the app-level so this should be fine
         - [ ] client ID secret should also be included so it isn't spoofed...
 
+    - [ ] integrate them!
 
 - [ ] finish updating the browser
 
-- [ ] apiKeys. Should these be managed from the services server?
-    - probably
-    - how can we have services servers register data for a user/group?
-
-    - these can be associated with groups or users...
-        - how can we delete these when the user/group is deleted?
-    - what if I just had a "serviceSettings" dictionary?
-        - the dict would look like:
-            {
-                "https://editor.netsblox.org/services": {apiKeys}
-                "https://myOtherServices.com/": {apiKeys}
-            }
-
 - [ ] public URL is set when opening role
 
-- [ ] don't clean up projects when server goes down?
+- [ ] don't clean up projects when server goes down? (The ws close reason seems to be Away when the browser tab closes *and* when the server is terminated)
     - set all projects to BROKEN
     - can we differentiate btwn server initiated Away and client?
 
@@ -131,11 +119,9 @@
 - [ ] auth integration with services endpoint
     - maybe the services endpoint should hit this one?
 
-- [ ] store additional info in the cookie:
-    - groups (for networking things)?
-    - admin?
-
-- [ ] add the group IDs (+ GLOBAL) to the clients in the network topology?
+- [ ] Block messages between users that don't share a group (+admin)
+    - add the group IDs (+ GLOBAL) to the clients in the network topology?
+    - admins should be able to send a message to anyone
     - these would be the user's group + any owned groups
     - the sender and receiver must share at least one
 
@@ -154,6 +140,10 @@
 
 - [ ] better pwd reset process (send link instead)
     - IP-based rate limiting...
+
+- [ ] store additional info in the cookie? (optimize lookups)
+    - groups (for networking things)?
+    - admin?
 
 ## Related project updates/migrations
 - [ ] unban?
@@ -710,3 +700,20 @@
         - [ ] set projects as "broken" on broken ws connections
         - [ ] test this!
             - make sure the broken project is not deleted once another client reconnects
+- [x] apiKeys. Should these be managed from the services server?
+    - probably
+    - how can we have services servers register data for a user/group?
+
+    - these can be associated with groups or users...
+        - how can we delete these when the user/group is deleted?
+    - what if I just had a "serviceSettings" dictionary?
+        - the dict would look like:
+            {
+                "https://editor.netsblox.org/services": {apiKeys}
+                "https://myOtherServices.com/": {apiKeys}
+            }
+
+    - [x] add settings for groups, too
+    - [-] should we make the service settings public?
+    - [ ] add endpoints for it?
+
