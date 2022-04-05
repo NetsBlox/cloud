@@ -429,10 +429,9 @@ async fn get_client_state(
     session: Session,
     req: HttpRequest,
 ) -> Result<HttpResponse, UserError> {
-    let is_allowed = ensure_is_super_user(&app, &session).await;
-    match is_allowed {
-        Err(UserError::LoginRequiredError) => ensure_is_authorized_host(&app, &req).await?,
-        _ => is_allowed?,
+    match ensure_is_authorized_host(&app, &req).await {
+        Err(_) => ensure_is_super_user(&app, &session).await?,
+        _ => {}
     };
 
     let (client_id,) = path.into_inner();
@@ -460,9 +459,11 @@ async fn get_client_state(
 
 pub fn config(cfg: &mut web::ServiceConfig) {
     cfg.service(set_client_state)
+        .service(get_client_state)
         .service(connect_client)
         .service(get_external_clients)
         .service(get_room_state)
+        .service(send_message)
         .service(get_rooms)
         .service(invite_occupant)
         .service(evict_occupant)
