@@ -4,6 +4,7 @@ use crate::app_data::AppData;
 use crate::errors::{InternalError, UserError};
 use crate::groups::ensure_can_edit_group;
 use crate::models::{SetPasswordToken, User};
+use crate::services_hosts::ensure_is_authorized_host;
 use actix_session::Session;
 use actix_web::{get, patch, post, HttpRequest};
 use actix_web::{web, HttpResponse};
@@ -478,10 +479,14 @@ async fn view_user(
     app: web::Data<AppData>,
     path: web::Path<(String,)>,
     session: Session,
+    req: HttpRequest,
 ) -> Result<HttpResponse, UserError> {
     let (username,) = path.into_inner();
 
-    ensure_can_edit_user(&app, &session, &username).await?;
+    match ensure_is_authorized_host(&app, &req).await {
+        Err(_) => ensure_can_edit_user(&app, &session, &username).await?,
+        _ => {}
+    };
 
     let query = doc! {"username": username};
     let user: netsblox_core::User = app
