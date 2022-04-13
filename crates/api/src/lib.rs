@@ -878,7 +878,7 @@ impl Client {
         Ok(())
     }
 
-    pub async fn authorize_host(&self, url: &str, id: &str) -> Result<(), error::Error> {
+    pub async fn authorize_host(&self, url: &str, id: &str) -> Result<String, error::Error> {
         let host = AuthorizedServiceHost {
             url: url.to_owned(),
             id: id.to_owned(),
@@ -890,8 +890,8 @@ impl Client {
             .await
             .map_err(|err| error::Error::RequestError(err))?;
 
-        check_response(response).await?;
-        Ok(())
+        let response = check_response(response).await?;
+        Ok(response.text().await.unwrap())
     }
 
     pub async fn unauthorize_host(&self, id: &str) -> Result<(), error::Error> {
