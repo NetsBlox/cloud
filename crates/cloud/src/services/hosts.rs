@@ -270,7 +270,7 @@ pub fn ensure_valid_service_id(id: &str) -> Result<(), UserError> {
     let min_len = 3;
     let char_count = id.chars().count();
     lazy_static! {
-        static ref SERVICE_ID_REGEX: Regex = Regex::new(r"^[a-z][a-z0-9_\-]+$").unwrap();
+        static ref SERVICE_ID_REGEX: Regex = Regex::new(r"^[A-Za-z][A-Za-z0-9_\-]+$").unwrap();
     }
 
     let is_valid = char_count > min_len && char_count < max_len && SERVICE_ID_REGEX.is_match(id);
