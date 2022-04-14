@@ -160,6 +160,11 @@
                     - {host, settings, owner: {user: <username> | group: <groupID>}}
                     - this would make the queries pretty straight-forward...
 
+                - services/hosts/
+                - services/settings/user/
+
+              - [ ] add operations to CLI?
+
         - [ ] send message endpoints
         
         - [ ] what to do about oauth?
@@ -168,6 +173,7 @@
             - should we just support it in the services server?
               - 
             - skip this for now?
+
         - [ ] update the client index.html?
 
 - [ ] finish updating the browser

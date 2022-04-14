@@ -58,6 +58,8 @@ pub enum UserError {
     InvalidClientIdError,
     #[display(fmt = "Invalid app ID.")]
     InvalidAppIdError,
+    #[display(fmt = "Invalid service host ID.")]
+    InvalidServiceHostIDError,
     #[display(fmt = "Invalid authentication strategy.")]
     InvalidAuthStrategyError,
     #[display(fmt = "Unable to connect to Snap! Please try again later.")]
@@ -103,6 +105,7 @@ impl error::ResponseError for UserError {
             | UserError::InvalidEmailAddress
             | UserError::InvalidClientIdError
             | UserError::InvalidAppIdError
+            | UserError::InvalidServiceHostIDError
             | UserError::InvalidAuthStrategyError
             | UserError::AccountAlreadyLinkedError
             | UserError::PasswordResetLinkSentError
