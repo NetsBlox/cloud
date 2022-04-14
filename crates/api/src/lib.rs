@@ -919,6 +919,164 @@ impl Client {
         Ok(response.json::<Vec<AuthorizedServiceHost>>().await.unwrap())
     }
 
+    // Service settings management
+    pub async fn list_group_settings(&self, group_id: &str) -> Result<Vec<String>, error::Error> {
+        let response = self
+            .request(
+                Method::GET,
+                &format!("/services/settings/group/{}/", group_id),
+            )
+            .send()
+            .await
+            .map_err(|err| error::Error::RequestError(err))?;
+
+        let response = check_response(response).await?;
+        Ok(response.json::<Vec<String>>().await.unwrap())
+    }
+
+    pub async fn list_user_settings(&self, username: &str) -> Result<Vec<String>, error::Error> {
+        let response = self
+            .request(
+                Method::GET,
+                &format!("/services/settings/user/{}/", username),
+            )
+            .send()
+            .await
+            .map_err(|err| error::Error::RequestError(err))?;
+
+        let response = check_response(response).await?;
+        Ok(response.json::<Vec<String>>().await.unwrap())
+    }
+
+    pub async fn get_all_settings(
+        &self,
+        username: &str,
+        service_id: &str,
+    ) -> Result<ServiceSettings, error::Error> {
+        let response = self
+            .request(
+                Method::GET,
+                &format!("/services/settings/user/{}/{}/all", username, service_id),
+            )
+            .send()
+            .await
+            .map_err(|err| error::Error::RequestError(err))?;
+
+        let response = check_response(response).await?;
+        Ok(response.json::<ServiceSettings>().await.unwrap())
+    }
+
+    pub async fn get_group_settings(
+        &self,
+        group_id: &str,
+        service_id: &str,
+    ) -> Result<String, error::Error> {
+        let response = self
+            .request(
+                Method::GET,
+                &format!("/services/settings/group/{}/{}", group_id, service_id),
+            )
+            .send()
+            .await
+            .map_err(|err| error::Error::RequestError(err))?;
+
+        let response = check_response(response).await?;
+        Ok(response.text().await.unwrap())
+    }
+
+    pub async fn get_user_settings(
+        &self,
+        username: &str,
+        service_id: &str,
+    ) -> Result<String, error::Error> {
+        let response = self
+            .request(
+                Method::GET,
+                &format!("/services/settings/user/{}/{}", username, service_id),
+            )
+            .send()
+            .await
+            .map_err(|err| error::Error::RequestError(err))?;
+
+        let response = check_response(response).await?;
+        Ok(response.text().await.unwrap())
+    }
+
+    pub async fn set_user_settings(
+        &self,
+        username: &str,
+        service_id: &str,
+        settings: String,
+    ) -> Result<String, error::Error> {
+        let response = self
+            .request(
+                Method::POST,
+                &format!("/services/settings/user/{}/{}", username, service_id),
+            )
+            .body(settings)
+            .send()
+            .await
+            .map_err(|err| error::Error::RequestError(err))?;
+
+        let response = check_response(response).await?;
+        Ok(response.text().await.unwrap())
+    }
+
+    pub async fn set_group_settings(
+        &self,
+        group_id: &str,
+        service_id: &str,
+        settings: String,
+    ) -> Result<String, error::Error> {
+        let response = self
+            .request(
+                Method::POST,
+                &format!("/services/settings/group/{}/{}", group_id, service_id),
+            )
+            .body(settings)
+            .send()
+            .await
+            .map_err(|err| error::Error::RequestError(err))?;
+
+        let response = check_response(response).await?;
+        Ok(response.text().await.unwrap())
+    }
+
+    pub async fn delete_user_settings(
+        &self,
+        username: &str,
+        service_id: &str,
+    ) -> Result<String, error::Error> {
+        let response = self
+            .request(
+                Method::DELETE,
+                &format!("/services/settings/user/{}/{}", username, service_id),
+            )
+            .send()
+            .await
+            .map_err(|err| error::Error::RequestError(err))?;
+
+        let response = check_response(response).await?;
+        Ok(response.text().await.unwrap())
+    }
+
+    pub async fn delete_group_settings(
+        &self,
+        group_id: &str,
+        service_id: &str,
+    ) -> Result<String, error::Error> {
+        let response = self
+            .request(
+                Method::DELETE,
+                &format!("/services/settings/group/{}/{}", group_id, service_id),
+            )
+            .send()
+            .await
+            .map_err(|err| error::Error::RequestError(err))?;
+
+        let response = check_response(response).await?;
+        Ok(response.text().await.unwrap())
+    }
     // NetsBlox network capabilities
     pub async fn list_external_clients(&self) -> Result<Vec<ExternalClient>, error::Error> {
         let response = self

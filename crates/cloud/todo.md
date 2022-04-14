@@ -174,7 +174,7 @@
               - 
             - skip this for now?
 
-        - [ ] update the client index.html?
+        - [x] update the client index.html?
 
 - [ ] finish updating the browser
 

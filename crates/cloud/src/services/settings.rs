@@ -168,6 +168,27 @@ async fn delete_user_settings(
     }
 }
 
+#[get("/group/{group_id}/")]
+async fn list_group_hosts_with_settings(
+    app: web::Data<AppData>,
+    path: web::Path<(String,)>,
+    session: Session,
+) -> Result<HttpResponse, UserError> {
+    let (group_id,) = path.into_inner();
+    ensure_can_edit_group(&app, &session, &group_id).await?;
+
+    let query = doc! {"id": &group_id};
+    let group = app
+        .groups
+        .find_one(query, None)
+        .await
+        .map_err(|err| InternalError::DatabaseConnectionError(err))?
+        .ok_or_else(|| UserError::UserNotFoundError)?;
+
+    let hosts: Vec<_> = group.service_settings.keys().collect();
+    Ok(HttpResponse::Ok().json(hosts))
+}
+
 #[get("/group/{group_id}/{host}")]
 async fn get_group_settings(
     app: web::Data<AppData>,
@@ -252,5 +273,6 @@ pub fn config(cfg: &mut web::ServiceConfig) {
         .service(delete_user_settings)
         .service(get_group_settings)
         .service(set_group_settings)
+        .service(list_group_hosts_with_settings)
         .service(delete_group_settings);
 }
