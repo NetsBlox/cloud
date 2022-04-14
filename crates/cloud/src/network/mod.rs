@@ -7,7 +7,7 @@ use crate::errors::{InternalError, UserError};
 use crate::models::{NetworkTraceMetadata, OccupantInvite, SentMessage};
 use crate::network::topology::{ClientState, ExternalClientState};
 use crate::projects::{ensure_can_edit_project, ensure_can_view_project};
-use crate::services_hosts::ensure_is_authorized_host;
+use crate::services::ensure_is_authorized_host;
 use crate::users::{ensure_can_edit_user, ensure_is_super_user};
 use actix::{Actor, Addr, AsyncContext, Handler, StreamHandler};
 use actix_session::Session;

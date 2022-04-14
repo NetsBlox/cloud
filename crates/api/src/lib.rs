@@ -812,7 +812,7 @@ impl Client {
     // Service host management
     pub async fn list_user_hosts(&self, username: &str) -> Result<Vec<ServiceHost>, error::Error> {
         let response = self
-            .request(Method::GET, &format!("/service-hosts/user/{}", username))
+            .request(Method::GET, &format!("/services/hosts/user/{}", username))
             .send()
             .await
             .map_err(|err| error::Error::RequestError(err))?;
@@ -824,7 +824,7 @@ impl Client {
 
     pub async fn list_group_hosts(&self, group_id: &str) -> Result<Vec<ServiceHost>, error::Error> {
         let response = self
-            .request(Method::GET, &format!("/service-hosts/group/{}", group_id))
+            .request(Method::GET, &format!("/services/hosts/group/{}", group_id))
             .send()
             .await
             .map_err(|err| error::Error::RequestError(err))?;
@@ -836,7 +836,7 @@ impl Client {
 
     pub async fn list_hosts(&self, username: &str) -> Result<Vec<ServiceHost>, error::Error> {
         let response = self
-            .request(Method::GET, &format!("/service-hosts/all/{}", username))
+            .request(Method::GET, &format!("/services/hosts/all/{}", username))
             .send()
             .await
             .map_err(|err| error::Error::RequestError(err))?;
@@ -852,7 +852,7 @@ impl Client {
         hosts: Vec<ServiceHost>,
     ) -> Result<(), error::Error> {
         let response = self
-            .request(Method::POST, &format!("/service-hosts/user/{}", username))
+            .request(Method::POST, &format!("/services/hosts/user/{}", username))
             .json(&hosts)
             .send()
             .await
@@ -868,7 +868,7 @@ impl Client {
         hosts: Vec<ServiceHost>,
     ) -> Result<(), error::Error> {
         let response = self
-            .request(Method::POST, &format!("/service-hosts/group/{}", group_id))
+            .request(Method::POST, &format!("/services/hosts/group/{}", group_id))
             .json(&hosts)
             .send()
             .await
@@ -884,7 +884,7 @@ impl Client {
             id: id.to_owned(),
         };
         let response = self
-            .request(Method::POST, "/service-hosts/authorized/")
+            .request(Method::POST, "/services/hosts/authorized/")
             .json(&host)
             .send()
             .await
@@ -896,7 +896,10 @@ impl Client {
 
     pub async fn unauthorize_host(&self, id: &str) -> Result<(), error::Error> {
         let response = self
-            .request(Method::DELETE, &format!("/service-hosts/authorized/{}", id))
+            .request(
+                Method::DELETE,
+                &format!("/services/hosts/authorized/{}", id),
+            )
             .send()
             .await
             .map_err(|err| error::Error::RequestError(err))?;
@@ -907,7 +910,7 @@ impl Client {
 
     pub async fn list_authorized_hosts(&self) -> Result<Vec<AuthorizedServiceHost>, error::Error> {
         let response = self
-            .request(Method::GET, "/service-hosts/authorized/")
+            .request(Method::GET, "/services/hosts/authorized/")
             .send()
             .await
             .map_err(|err| error::Error::RequestError(err))?;

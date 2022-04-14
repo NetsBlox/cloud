@@ -8,8 +8,7 @@ mod libraries;
 mod models;
 mod network;
 mod projects;
-mod service_settings;
-mod services_hosts;
+mod services;
 mod users;
 
 use crate::app_data::AppData;
@@ -96,14 +95,13 @@ async fn main() -> std::io::Result<()> {
             })
             .app_data(web::Data::new(app_data.clone()))
             .service(web::scope("/libraries").configure(libraries::config))
-            .service(web::scope("/service-hosts").configure(services_hosts::config))
             .service(web::scope("/users").configure(users::config))
             .service(web::scope("/projects").configure(projects::config))
             .service(web::scope("/groups").configure(groups::config))
             .service(web::scope("/friends").configure(friends::config))
             .service(web::scope("/network").configure(network::config))
             .service(web::scope("/collaboration-invites").configure(collaboration_invites::config))
-            .service(web::scope("/service-settings").configure(service_settings::config))
+            .service(web::scope("/services").configure(services::config))
             .service(get_client_config)
     })
     .bind(&config.address)?

@@ -7,7 +7,7 @@ use crate::{
     app_data::AppData,
     errors::{InternalError, UserError},
     groups::ensure_can_edit_group,
-    services_hosts::ensure_is_authorized_host,
+    services::ensure_is_authorized_host,
     users::ensure_can_edit_user,
 };
 

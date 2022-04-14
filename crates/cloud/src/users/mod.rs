@@ -4,7 +4,7 @@ use crate::app_data::AppData;
 use crate::errors::{InternalError, UserError};
 use crate::groups::ensure_can_edit_group;
 use crate::models::{SetPasswordToken, User};
-use crate::services_hosts::ensure_is_authorized_host;
+use crate::services::ensure_is_authorized_host;
 use actix_session::Session;
 use actix_web::{get, patch, post, HttpRequest};
 use actix_web::{web, HttpResponse};
