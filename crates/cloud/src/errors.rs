@@ -46,6 +46,8 @@ pub enum UserError {
     BannedUserError,
     #[display(fmt = "User already exists.")]
     UserExistsError,
+    #[display(fmt = "Group already exists.")]
+    GroupExistsError,
     #[display(fmt = "Email already exists.")]
     EmailExistsError,
     #[display(fmt = "Invalid username.")]
@@ -56,6 +58,8 @@ pub enum UserError {
     InvalidClientIdError,
     #[display(fmt = "Invalid app ID.")]
     InvalidAppIdError,
+    #[display(fmt = "Invalid service host ID.")]
+    InvalidServiceHostIDError,
     #[display(fmt = "Invalid authentication strategy.")]
     InvalidAuthStrategyError,
     #[display(fmt = "Unable to connect to Snap! Please try again later.")]
@@ -101,12 +105,14 @@ impl error::ResponseError for UserError {
             | UserError::InvalidEmailAddress
             | UserError::InvalidClientIdError
             | UserError::InvalidAppIdError
+            | UserError::InvalidServiceHostIDError
             | UserError::InvalidAuthStrategyError
             | UserError::AccountAlreadyLinkedError
             | UserError::PasswordResetLinkSentError
             | UserError::InvalidAccountTypeError
             | UserError::TorAddressError
             | UserError::UserExistsError
+            | UserError::GroupExistsError
             | UserError::EmailExistsError
             | UserError::CannotDeleteLastRoleError
             | UserError::ServiceHostAlreadyAuthorizedError

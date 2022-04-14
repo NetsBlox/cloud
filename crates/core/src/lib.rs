@@ -300,7 +300,6 @@ impl LibraryMetadata {
 pub struct CreateGroupData {
     pub name: String,
     pub services_hosts: Option<Vec<ServiceHost>>,
-    //pub api_keys: Option<Vec<ServiceHost>>,
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug)]
@@ -424,4 +423,15 @@ pub struct AuthorizedServiceHost {
 pub struct ClientInfo {
     pub username: Option<String>,
     pub state: Option<ClientState>,
+}
+
+/// Service settings for a given user categorized by origin
+#[derive(Deserialize, Serialize, Debug, Clone)]
+pub struct ServiceSettings {
+    /// Service settings owned by the user
+    pub user: Option<String>,
+    /// Service settings owned by a group in which the user is a member
+    pub member: Option<String>,
+    /// Service settings owned by a groups created by the user
+    pub groups: Vec<String>,
 }

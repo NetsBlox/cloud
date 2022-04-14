@@ -8,14 +8,17 @@ mod libraries;
 mod models;
 mod network;
 mod projects;
-mod services_hosts;
+mod services;
 mod users;
 
 use crate::app_data::AppData;
 use crate::config::Settings;
 use actix_cors::Cors;
 use actix_session::{CookieSession, Session};
-use actix_web::{cookie::SameSite, get, middleware, web, App, HttpResponse, HttpServer, dev::Service, error::ErrorForbidden, http::Method};
+use actix_web::{
+    cookie::SameSite, dev::Service, error::ErrorForbidden, get, http::Method, middleware, web, App,
+    HttpResponse, HttpServer,
+};
 use mongodb::Client;
 use netsblox_core::ClientConfig;
 use uuid::Uuid;
@@ -74,26 +77,31 @@ async fn main() -> std::io::Result<()> {
             )
             .wrap(middleware::Logger::default())
             .wrap_fn(|req, srv| {
-                let source = req.headers().get("x-source").map(|v| v.to_str().ok()).flatten().unwrap_or("unknown");
+                let source = req
+                    .headers()
+                    .get("x-source")
+                    .map(|v| v.to_str().ok())
+                    .flatten()
+                    .unwrap_or("unknown");
                 let allow = *req.method() == Method::GET || source != "NetsBlox";
 
                 let fut = if allow { Some(srv.call(req)) } else { None };
                 async {
                     match fut {
                         Some(x) => x.await,
-                        None => Err(ErrorForbidden("Operation is not allowed"))
+                        None => Err(ErrorForbidden("Operation is not allowed")),
                     }
                 }
             })
             .app_data(web::Data::new(app_data.clone()))
             .service(web::scope("/libraries").configure(libraries::config))
-            .service(web::scope("/service-hosts").configure(services_hosts::config))
             .service(web::scope("/users").configure(users::config))
             .service(web::scope("/projects").configure(projects::config))
             .service(web::scope("/groups").configure(groups::config))
             .service(web::scope("/friends").configure(friends::config))
             .service(web::scope("/network").configure(network::config))
             .service(web::scope("/collaboration-invites").configure(collaboration_invites::config))
+            .service(web::scope("/services").configure(services::config))
             .service(get_client_config)
     })
     .bind(&config.address)?

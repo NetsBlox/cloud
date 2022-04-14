@@ -215,6 +215,57 @@ enum ServiceHosts {
 }
 
 #[derive(Subcommand, Debug)]
+enum ServiceSettings {
+    /// List hosts that have custom settings for the given user/group
+    List {
+        /// List hosts that have custom settings for the given group
+        #[clap(short, long)]
+        group: Option<String>,
+        /// Perform this action on behalf of another user
+        #[clap(short, long)]
+        user: Option<String>,
+    },
+    /// View the service settings for a given host
+    View {
+        /// Service host ID
+        host: String,
+        /// View settings for the given group
+        #[clap(short, long)]
+        group: Option<String>,
+        /// List all the available settings (user, member, groups) for the user
+        #[clap(short, long)]
+        all: bool,
+        /// Perform this action on behalf of another user
+        #[clap(short, long)]
+        user: Option<String>,
+    },
+    /// Delete the service settings for a given user/group
+    Delete {
+        /// Service host ID
+        host: String,
+        /// Delete settings for the given group
+        #[clap(short, long)]
+        group: Option<String>,
+        /// Perform this action on behalf of another user
+        #[clap(short, long)]
+        user: Option<String>,
+    },
+    /// Set the service settings for a given user/group. Overwrites existing settings.
+    Set {
+        /// Service host ID
+        host: String,
+        /// New settings for the given user/group
+        settings: String,
+        /// Set settings for the given group
+        #[clap(short, long)]
+        group: Option<String>,
+        /// Perform this action on behalf of another user
+        #[clap(short, long)]
+        user: Option<String>,
+    },
+}
+
+#[derive(Subcommand, Debug)]
 enum Libraries {
     /// List available libraries. Lists own libraries by default.
     List {
@@ -409,10 +460,17 @@ struct ServiceHostCommand {
 }
 
 #[derive(Parser, Debug)]
+struct ServiceSettingsCommand {
+    #[clap(subcommand)]
+    subcmd: ServiceSettings,
+}
+
+#[derive(Parser, Debug)]
 struct LibraryCommand {
     #[clap(subcommand)]
     subcmd: Libraries,
 }
+
 #[derive(Parser, Debug)]
 enum Command {
     Login,
@@ -423,6 +481,7 @@ enum Command {
     Groups(GroupCommand),
     Friends(FriendCommand),
     ServiceHosts(ServiceHostCommand),
+    ServiceSettings(ServiceSettingsCommand),
     Libraries(LibraryCommand),
 }
 
@@ -961,6 +1020,106 @@ async fn do_command(mut cfg: Config, args: Cli) -> Result<(), netsblox_api::erro
                 client.unauthorize_host(&host.id).await?;
             }
         },
+        Command::ServiceSettings(cmd) => match &cmd.subcmd {
+            ServiceSettings::List { group, user } => {
+                let username = user.clone().unwrap_or(current_user);
+                let group_id = if let Some(group_name) = group {
+                    let groups = client.list_groups(&username).await?;
+                    groups
+                        .into_iter()
+                        .find(|g| g.name == *group_name)
+                        .map(|group| group.id)
+                    // TODO: throw error if not found (don't ignore and got to users)
+                } else {
+                    None
+                };
+
+                let service_hosts = if let Some(group_id) = group_id.clone() {
+                    client.list_group_settings(&group_id).await?
+                } else {
+                    client.list_user_settings(&username).await?
+                };
+
+                for host in service_hosts {
+                    println!("{}", host);
+                }
+            }
+            ServiceSettings::View {
+                group,
+                host,
+                all,
+                user,
+            } => {
+                let username = user.clone().unwrap_or(current_user);
+
+                if *all {
+                    let all_settings = client.get_all_settings(&username, &host).await?;
+                    println!("{:?}", all_settings);
+                } else {
+                    let group_id = if let Some(group_name) = group {
+                        let groups = client.list_groups(&username).await?;
+                        groups
+                            .into_iter()
+                            .find(|g| g.name == *group_name)
+                            .map(|group| group.id)
+                    } else {
+                        None
+                    };
+                    let settings = if let Some(group_id) = group_id.clone() {
+                        client.get_group_settings(&group_id, &host).await?
+                    } else {
+                        client.get_user_settings(&username, &host).await?
+                    };
+                    println!("{}", settings);
+                }
+            }
+            ServiceSettings::Set {
+                host,
+                settings,
+                group,
+                user,
+            } => {
+                let username = user.clone().unwrap_or(current_user);
+
+                let group_id = if let Some(group_name) = group {
+                    let groups = client.list_groups(&username).await?;
+                    groups
+                        .into_iter()
+                        .find(|g| g.name == *group_name)
+                        .map(|group| group.id)
+                } else {
+                    None
+                };
+                let settings = if let Some(group_id) = group_id.clone() {
+                    client
+                        .set_group_settings(&group_id, &host, settings.to_owned())
+                        .await?
+                } else {
+                    client
+                        .set_user_settings(&username, &host, settings.to_owned())
+                        .await?
+                };
+                println!("{}", settings);
+            }
+            ServiceSettings::Delete { host, group, user } => {
+                let username = user.clone().unwrap_or(current_user);
+
+                let group_id = if let Some(group_name) = group {
+                    let groups = client.list_groups(&username).await?;
+                    groups
+                        .into_iter()
+                        .find(|g| g.name == *group_name)
+                        .map(|group| group.id)
+                } else {
+                    None
+                };
+                if let Some(group_id) = group_id.clone() {
+                    client.delete_group_settings(&group_id, &host).await?;
+                } else {
+                    client.delete_user_settings(&username, &host).await?;
+                };
+            }
+        },
         Command::Libraries(cmd) => match &cmd.subcmd {
             Libraries::List {
                 community,
@@ -1098,4 +1257,9 @@ async fn do_command(mut cfg: Config, args: Cli) -> Result<(), netsblox_api::erro
     }
 
     Ok(())
+}
+
+/// Resolve a group name to its ID
+async fn resolve_group_name() -> String {
+    todo!();
 }
