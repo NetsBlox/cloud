@@ -61,7 +61,6 @@ async fn create_project(
     // TODO: should we automatically set the client to the role?
     // TODO: how should we determine the role to open?
     // TODO: add allow_rename query string parameter?
-    // TODO: return the project name/id, role name/id
 }
 
 #[get("/user/{owner}")]

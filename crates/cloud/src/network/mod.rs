@@ -135,9 +135,14 @@ async fn get_room_state(
     app: web::Data<AppData>,
     path: web::Path<(ProjectId,)>,
     session: Session,
+    req: HttpRequest,
 ) -> Result<HttpResponse, UserError> {
     let (project_id,) = path.into_inner();
-    let metadata = ensure_can_edit_project(&app, &session, None, &project_id).await?;
+
+    let metadata = match ensure_is_authorized_host(&app, &req).await {
+        Err(_) => ensure_can_edit_project(&app, &session, None, &project_id).await?,
+        _ => app.get_project_metadatum(&project_id).await?,
+    };
 
     let state = app
         .network
@@ -452,9 +457,7 @@ async fn get_client_state(
         .map_err(|_err| UserError::InternalError)?
         .0;
 
-    // TODO: get the state and the username
-    todo!("Package up the username and state in a response");
-    //Ok(HttpResponse::Ok().json())
+    Ok(HttpResponse::Ok().json(netsblox_core::ClientInfo { username, state }))
 }
 
 pub fn config(cfg: &mut web::ServiceConfig) {
