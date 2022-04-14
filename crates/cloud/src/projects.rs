@@ -416,15 +416,23 @@ async fn get_latest_project(
     Ok(HttpResponse::Ok().json(project))
 }
 
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct ThumbnailParams {
+    aspect_ratio: f32,
+}
+
 #[get("/id/{projectID}/thumbnail")]
 async fn get_project_thumbnail(
     app: web::Data<AppData>,
     path: web::Path<(ProjectId,)>,
+    params: web::Query<ThumbnailParams>,
     session: Session,
 ) -> Result<HttpResponse, UserError> {
     let (project_id,) = path.into_inner();
     let metadata = ensure_can_view_project(&app, &session, None, &project_id).await?;
 
+    // TODO: resize the thumbnail
     Ok(HttpResponse::Ok().body(metadata.thumbnail))
 }
 
