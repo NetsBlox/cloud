@@ -61,7 +61,6 @@ async fn create_project(
     // TODO: should we automatically set the client to the role?
     // TODO: how should we determine the role to open?
     // TODO: add allow_rename query string parameter?
-    // TODO: return the project name/id, role name/id
 }
 
 #[get("/user/{owner}")]
@@ -417,15 +416,23 @@ async fn get_latest_project(
     Ok(HttpResponse::Ok().json(project))
 }
 
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct ThumbnailParams {
+    aspect_ratio: f32,
+}
+
 #[get("/id/{projectID}/thumbnail")]
 async fn get_project_thumbnail(
     app: web::Data<AppData>,
     path: web::Path<(ProjectId,)>,
+    params: web::Query<ThumbnailParams>,
     session: Session,
 ) -> Result<HttpResponse, UserError> {
     let (project_id,) = path.into_inner();
     let metadata = ensure_can_view_project(&app, &session, None, &project_id).await?;
 
+    // TODO: resize the thumbnail
     Ok(HttpResponse::Ok().body(metadata.thumbnail))
 }
 

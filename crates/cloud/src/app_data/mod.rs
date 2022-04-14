@@ -593,6 +593,7 @@ impl AppData {
                 if node.is_some() {
                     return Err(UserError::TorAddressError);
                 } else {
+                    // TODO: check if it is an Opera VPN
                     Ok(())
                 }
             }

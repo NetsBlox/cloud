@@ -135,9 +135,14 @@ async fn get_room_state(
     app: web::Data<AppData>,
     path: web::Path<(ProjectId,)>,
     session: Session,
+    req: HttpRequest,
 ) -> Result<HttpResponse, UserError> {
     let (project_id,) = path.into_inner();
-    let metadata = ensure_can_edit_project(&app, &session, None, &project_id).await?;
+
+    let metadata = match ensure_is_authorized_host(&app, &req).await {
+        Err(_) => ensure_can_edit_project(&app, &session, None, &project_id).await?,
+        _ => app.get_project_metadatum(&project_id).await?,
+    };
 
     let state = app
         .network
@@ -422,11 +427,46 @@ async fn send_message(
     // });
 }
 
+#[get("/{client}/state")]
+async fn get_client_state(
+    app: web::Data<AppData>,
+    path: web::Path<(ClientID,)>,
+    session: Session,
+    req: HttpRequest,
+) -> Result<HttpResponse, UserError> {
+    match ensure_is_authorized_host(&app, &req).await {
+        Err(_) => ensure_is_super_user(&app, &session).await?,
+        _ => {}
+    };
+
+    let (client_id,) = path.into_inner();
+
+    let username = app
+        .network
+        .send(topology::GetClientUsername {
+            client_id: client_id.clone(),
+        })
+        .await
+        .map_err(|_err| UserError::InternalError)?
+        .0;
+
+    let state = app
+        .network
+        .send(topology::GetClientState { client_id })
+        .await
+        .map_err(|_err| UserError::InternalError)?
+        .0;
+
+    Ok(HttpResponse::Ok().json(netsblox_core::ClientInfo { username, state }))
+}
+
 pub fn config(cfg: &mut web::ServiceConfig) {
     cfg.service(set_client_state)
+        .service(get_client_state)
         .service(connect_client)
         .service(get_external_clients)
         .service(get_room_state)
+        .service(send_message)
         .service(get_rooms)
         .service(invite_occupant)
         .service(evict_occupant)

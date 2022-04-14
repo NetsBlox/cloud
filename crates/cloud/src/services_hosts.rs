@@ -242,13 +242,14 @@ pub async fn ensure_is_authorized_host(app: &AppData, req: &HttpRequest) -> Resu
         .get("X-Authorization")
         .and_then(|value| value.to_str().ok())
         .and_then(|value_str| {
-            let mut chunks = value_str.rsplit(":");
+            let mut chunks = value_str.split(":");
             let id = chunks.next();
             let secret = chunks.next();
             id.and_then(|id| secret.map(|s| (id, s)))
         })
         .map(|(id, secret)| doc! {"id": id, "secret": secret});
 
+    println!("{:?}", query);
     if let Some(query) = query {
         app.authorized_services
             .find_one(query, None)

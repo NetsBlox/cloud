@@ -233,7 +233,6 @@ impl RoleData {
 #[serde(rename_all = "camelCase")]
 pub struct ClientStateData {
     pub state: ClientState,
-    // pub token: Option<String>, // TODO: token for accessing the project; secret for controlling client
 }
 
 #[derive(Debug, Deserialize, Serialize, Clone)]
@@ -417,4 +416,11 @@ pub struct OccupantInviteData {
 pub struct AuthorizedServiceHost {
     pub url: String,
     pub id: String,
+}
+
+#[derive(Deserialize, Serialize, Debug, Clone)]
+#[serde(rename_all = "camelCase")]
+pub struct ClientInfo {
+    pub username: Option<String>,
+    pub state: Option<ClientState>,
 }

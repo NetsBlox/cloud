@@ -4,6 +4,9 @@
     - [x] message caching
     - [ ] created (but never occupied) projects - they should be automatically deleted after 15 minutes or so
  
+- [ ] add aspect ratio padding support
+    - use image crate
+
 - [ ] add email support
     - [ ] new account creation
     - [x] password reset
@@ -31,6 +34,13 @@
 
     - could I use client-message for this?
         - 
+    - [ ] what would it look like w webrtc?
+        - a communication channel
+        - a library for collab primitives (key, type)
+            - CRDT text
+            - blocks (strong consistancy by scope)
+            - project notes (CRDT or LWW)
+            - LWW registers (rotation) w/ vector clocks
 
 - [ ] update the services server connection (zmq)
     - [-] add public role ID resolution endpoint?
@@ -94,28 +104,77 @@
             - this would make this part easier...
 
     - [ ] add client ID resolution endpoint
-        - authentication is at the app-level so this should be fine
+        - [x] authentication is at the app-level so this should be fine
         - [ ] client ID secret should also be included so it isn't spoofed...
 
+    - [ ] integrate them!
+        - [x] state endpoint
+            - what should the state look like?
+                - currently we already have ExternalClient
+                - add BrowserClientState?
+                    - option 1:
+                        - username (optional)
+                        - role_id
+                        - project_id
+                        - role_name
+                        - project_name
+                    - option 2:
+                        - username (optional)
+                        - state (optional)
+                            - project_id
+                            - role_id
+
+                            - username
+                            - address
+                            - app_id
+
+                - it would be nice to separate username, state
+                - the state should probably be different...
+                    - actually, we could just use the room state endpoint for some of these things and cache the value
+                - should we rename state to location? or address? Maybe location since address
+                - ClientInfo? ClientData
+
+        - [x] room state endpoints
+        - [ ] service settings endpoints
+              - user, member, groups
+              - [ ] should these be under a new route path? like /service-settings?
+                  - or should they be under the users/groups paths?
+                  - probably their own path since it would be nice to have a method for getting combined/all settings
+
+                  - they could be nested under service hosts
+                      - service_hosts/{id}/settings/
+
+                  - [ ] CRUD options for users/groups/etc (based on a host)
+                      - should the ID be simple alphanumeric (+underscores?)
+
+                  - user/{username}/{service_host_ID} (get)
+                  - user/{username}/{service_host_ID} (post)
+                  - user/{username}/{service_host_ID} (delete)
+                  - user/{username}/{service_host_ID}/all (get)
+
+                  - group/{id}/{service_host_ID} (get)
+                  - group/{id}/{service_host_ID} (post)
+                  - group/{id}/{service_host_ID} (delete)
+
+                - should we store these in their own collection?
+                    - {host, settings, owner: {user: <username> | group: <groupID>}}
+                    - this would make the queries pretty straight-forward...
+
+        - [ ] send message endpoints
+        
+        - [ ] what to do about oauth?
+            - should we support it in the rust server? Seems reasonable...
+              - if so, how should we interoperate with the services server?
+            - should we just support it in the services server?
+              - 
+            - skip this for now?
+        - [ ] update the client index.html?
 
 - [ ] finish updating the browser
 
-- [ ] apiKeys. Should these be managed from the services server?
-    - probably
-    - how can we have services servers register data for a user/group?
-
-    - these can be associated with groups or users...
-        - how can we delete these when the user/group is deleted?
-    - what if I just had a "serviceSettings" dictionary?
-        - the dict would look like:
-            {
-                "https://editor.netsblox.org/services": {apiKeys}
-                "https://myOtherServices.com/": {apiKeys}
-            }
-
 - [ ] public URL is set when opening role
 
-- [ ] don't clean up projects when server goes down?
+- [ ] don't clean up projects when server goes down? (The ws close reason seems to be Away when the browser tab closes *and* when the server is terminated)
     - set all projects to BROKEN
     - can we differentiate btwn server initiated Away and client?
 
@@ -128,20 +187,18 @@
     - [x] project-response
     - [ ] request-actions
 
-- [ ] auth integration with services endpoint
-    - maybe the services endpoint should hit this one?
-
-- [ ] store additional info in the cookie:
-    - groups (for networking things)?
-    - admin?
-
-- [ ] add the group IDs (+ GLOBAL) to the clients in the network topology?
+- [ ] Block messages between users that don't share a group (+admin)
+    - add the group IDs (+ GLOBAL) to the clients in the network topology?
+    - admins should be able to send a message to anyone
     - these would be the user's group + any owned groups
     - the sender and receiver must share at least one
 
 - [ ] make sure email works
 
 ## Future stuff
+- [ ] generic library for collaborative editing (different CRDTs, etc)
+    - use the concept of streams/pipes?
+
 - [ ] connect the client code and start testing things!
 
 - [ ] add benchmarks for message passing??
@@ -154,6 +211,10 @@
 
 - [ ] better pwd reset process (send link instead)
     - IP-based rate limiting...
+
+- [ ] store additional info in the cookie? (optimize lookups)
+    - groups (for networking things)?
+    - admin?
 
 ## Related project updates/migrations
 - [ ] unban?
@@ -710,3 +771,23 @@
         - [ ] set projects as "broken" on broken ws connections
         - [ ] test this!
             - make sure the broken project is not deleted once another client reconnects
+- [x] apiKeys. Should these be managed from the services server?
+    - probably
+    - how can we have services servers register data for a user/group?
+
+    - these can be associated with groups or users...
+        - how can we delete these when the user/group is deleted?
+    - what if I just had a "serviceSettings" dictionary?
+        - the dict would look like:
+            {
+                "https://editor.netsblox.org/services": {apiKeys}
+                "https://myOtherServices.com/": {apiKeys}
+            }
+
+    - [x] add settings for groups, too
+    - [-] should we make the service settings public?
+    - [ ] add endpoints for it?
+
+- [x] auth integration with services endpoint
+    - maybe the services endpoint should hit this one?
+

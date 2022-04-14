@@ -597,7 +597,7 @@ async fn do_command(mut cfg: Config, args: Cli) -> Result<(), netsblox_api::erro
                 name,
                 user,
             } => {
-                todo!();
+                todo!("Parse the file and import it...");
             }
             Projects::Export {
                 project,
@@ -944,7 +944,8 @@ async fn do_command(mut cfg: Config, args: Cli) -> Result<(), netsblox_api::erro
                 }
             }
             ServiceHosts::Authorize { url, client_id } => {
-                client.authorize_host(url, client_id).await?;
+                let secret = client.authorize_host(url, client_id).await?;
+                println!("{}", secret);
             }
             ServiceHosts::Unauthorize { url } => {
                 let host = client
