@@ -891,7 +891,7 @@ impl Client {
             .map_err(|err| error::Error::RequestError(err))?;
 
         let response = check_response(response).await?;
-        Ok(response.text().await.unwrap())
+        Ok(response.json::<String>().await.unwrap())
     }
 
     pub async fn unauthorize_host(&self, id: &str) -> Result<(), error::Error> {
