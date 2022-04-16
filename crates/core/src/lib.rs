@@ -4,8 +4,10 @@ mod bson;
 use core::fmt;
 use derive_more::{Display, Error};
 use serde::{Deserialize, Serialize};
+use serde_json::Value;
 use std::{collections::HashMap, str::FromStr, time::SystemTime};
 use uuid::Uuid;
+
 const APP_NAME: &str = "NetsBlox";
 
 #[derive(Deserialize, Serialize)]
@@ -434,4 +436,36 @@ pub struct ServiceSettings {
     pub member: Option<String>,
     /// Service settings owned by a groups created by the user
     pub groups: Vec<String>,
+}
+
+/// Send message request (for authorized services)
+#[derive(Deserialize, Serialize, Debug)]
+#[serde(rename_all = "camelCase")]
+pub struct SendMessage {
+    pub target: SendMessageTarget,
+    // TODO: Should we only allow "message" types or any sort of message?
+    pub content: Value,
+}
+
+#[derive(Deserialize, Serialize, Debug)]
+#[serde(rename_all = "camelCase")]
+pub enum SendMessageTarget {
+    Address {
+        address: String,
+    },
+    #[serde(rename_all = "camelCase")]
+    Room {
+        project_id: String,
+    },
+    #[serde(rename_all = "camelCase")]
+    Role {
+        project_id: String,
+        role_id: String,
+    },
+    #[serde(rename_all = "camelCase")]
+    Client {
+        project_id: String,
+        role_id: String,
+        client_id: ClientID,
+    },
 }

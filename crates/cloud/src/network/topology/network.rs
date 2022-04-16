@@ -590,8 +590,8 @@ impl Topology {
             .collect::<Vec<_>>()
     }
 
-    // Get a list of online users from a list of usernames. If no usernames are provided,
-    // all online users will be returned
+    /// Get a list of online users from a list of usernames. If no usernames are provided,
+    /// all online users will be returned
     pub fn get_online_users(&self, from_names: Option<Vec<String>>) -> Vec<String> {
         let online = self.usernames.values().collect::<HashSet<_>>();
         match from_names {
@@ -645,6 +645,70 @@ impl Topology {
 
         clients.for_each(|client| {
             client.addr.do_send(msg.clone().into());
+        });
+    }
+
+    pub async fn send_msg_from_services(&self, msg: netsblox_core::SendMessage) {
+        let recipients = match msg.target {
+            netsblox_core::SendMessageTarget::Address { address } => {
+                if let Ok(address) = ClientAddress::from_str(&address) {
+                    self.get_clients_at(address).await
+                } else {
+                    Vec::new()
+                }
+            }
+            netsblox_core::SendMessageTarget::Client {
+                project_id,
+                role_id,
+                client_id,
+            } => {
+                let state = self.states.get(&client_id);
+                let has_state = match state {
+                    Some(ClientState::Browser(BrowserClientState {
+                        role_id: role,
+                        project_id: project,
+                    })) => &role_id == role && &project_id == project,
+                    _ => false,
+                };
+
+                let mut clients = Vec::new();
+                if let Some(client) = self.clients.get(&client_id) {
+                    if has_state {
+                        clients.push(client);
+                    }
+                }
+                clients
+            }
+            netsblox_core::SendMessageTarget::Role {
+                project_id,
+                role_id,
+            } => self
+                .rooms
+                .get(&project_id)
+                .and_then(|room| {
+                    room.roles.get(&role_id).map(|ids| {
+                        ids.iter()
+                            .filter_map(|id| self.clients.get(id))
+                            .collect::<Vec<_>>()
+                    })
+                })
+                .unwrap_or_else(|| Vec::new()),
+            netsblox_core::SendMessageTarget::Room { project_id } => self
+                .rooms
+                .get(&project_id)
+                .map(|room| {
+                    let client_ids = room.roles.values().flatten();
+                    client_ids
+                        .filter_map(|id| self.clients.get(id))
+                        .collect::<Vec<_>>()
+                })
+                .unwrap_or_else(|| Vec::new()),
+        };
+
+        println!("Sending to {count} clients", count = recipients.len());
+        let message = ClientMessage(msg.content);
+        recipients.iter().for_each(|client| {
+            client.addr.do_send(message.clone()).unwrap();
         });
     }
 }

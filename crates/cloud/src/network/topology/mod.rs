@@ -32,6 +32,12 @@ impl Actor for TopologyActor {
 #[rtype(result = "()")]
 pub struct ClientMessage(pub Value);
 
+impl From<netsblox_core::SendMessage> for ClientMessage {
+    fn from(msg: netsblox_core::SendMessage) -> ClientMessage {
+        ClientMessage(msg.content)
+    }
+}
+
 #[derive(Message)]
 #[rtype(result = "()")]
 pub struct AddClient {
@@ -360,5 +366,28 @@ impl Handler<SendOccupantInvite> for TopologyActor {
     fn handle(&mut self, msg: SendOccupantInvite, _: &mut Context<Self>) -> Self::Result {
         let topology = TOPOLOGY.read().unwrap();
         topology.send_occupant_invite(msg);
+    }
+}
+
+#[derive(Message)]
+#[rtype(result = "()")]
+pub struct SendMessageFromServices {
+    pub message: netsblox_core::SendMessage,
+}
+
+impl Handler<SendMessageFromServices> for TopologyActor {
+    type Result = ();
+
+    fn handle(
+        &mut self,
+        send_msg_req: SendMessageFromServices,
+        ctx: &mut Context<Self>,
+    ) -> Self::Result {
+        let fut = async {
+            let topology = TOPOLOGY.read().unwrap();
+            topology.send_msg_from_services(send_msg_req.message).await;
+        };
+        let fut = actix::fut::wrap_future(fut);
+        ctx.spawn(fut);
     }
 }

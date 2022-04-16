@@ -1932,6 +1932,7 @@ dependencies = [
  "bson",
  "derive_more",
  "serde 1.0.136",
+ "serde_json",
  "uuid 1.0.0-alpha.1",
 ]
 

@@ -416,15 +416,16 @@ async fn delete_network_trace(
 #[post("/messages/")]
 async fn send_message(
     app: web::Data<AppData>,
+    message: web::Json<netsblox_core::SendMessage>,
     req: HttpRequest,
 ) -> Result<HttpResponse, UserError> {
     ensure_is_authorized_host(&app, &req).await?;
-    todo!("Implement message sending from services server.");
-    // app.network.do_send(topology::SendMessage {
-    //     sender: client_id.to_owned(),
-    //     addresses,
-    //     content: msg,
-    // });
+
+    let message = message.into_inner();
+    app.network
+        .do_send(topology::SendMessageFromServices { message });
+
+    Ok(HttpResponse::Ok().finish())
 }
 
 #[get("/{client}/state")]
