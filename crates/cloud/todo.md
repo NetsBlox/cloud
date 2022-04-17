@@ -42,139 +42,15 @@
             - project notes (CRDT or LWW)
             - LWW registers (rotation) w/ vector clocks
 
-- [ ] update the services server connection (zmq)
-    - [-] add public role ID resolution endpoint?
-        - (public role ID resolution)
-        - Or the client could send this in the request...
-            - context: {project: {name, id}, role: {name, id}, app: ''}
-        - we will need to be able to lookup the username and the context...
-    - [ ] add a REST endpoint for message sending?
-        - network/messages/send
-            - recipient address
-            - message type
-            - message content
-            - optional sender address
-        - how to authorize?
-            - app-level or user-level?
 
-            - if sender address is provided, we could check the requestor can edit the user
-            - else, we could use an app-level approach... Maybe something simple like a secret token for now?
-                - technically, this is all we need for now
+- [ ] what to do about oauth?
+    - should we support it in the rust server? Seems reasonable...
+      - if so, how should we interoperate with the services server?
+    - should we just support it in the services server?
+      - 
+    - skip this for now?
 
-            - what if we connected the services server like a 3rd party app?
-                - it would need to authenticate as a single user though
-                    - NetsBloxServices?
-                    - address could be 
-                        - TicTacToe@NetsBlox #NetsBloxServices
-                        - ProjectID@TicTacToe@NetsBlox #NetsBloxServices
-
-                        - Services@NetsBlox #NetsBloxServices  // no response allowed
-                    - this could actually make it possible to add responding to messages to the spec, too!
-                        - the server would need to still be occupying those states though :/
-                            - maybe we could route the message using the sender ID?
-                                - wouldn't work since a project can use multiple services simultaneously
-
-    - what would app-level look like?
-        - admins adding a client 
-        - client adds Access ID & Secret Token to send message requests
-        - save these in the database
-        - this wouldn't be in the config anymore
-
-            - netsblox services add --authorize <client ID>
-            - netsblox services list --global
-            - netsblox services list --group
-            - netsblox services list --only-user
-
-            - netsblox service-host authorize <URL> <client ID> -> <secret token>
-            - netsblox service-host unauthorize <URL>
-
-        - these are actually different from the current services-hosts:
-            - current ones are client-side configurations about endpoints to ping
-            - new ones provide permissions to the service-host to be able to resolve client IDs and send messages
-
-            - netsblox integrations add <name> ID -> <secret token>
-            - netsblox integrations remove ID
-            - netsblox integrations list
-
-    - how is the API used by the services server?
-        - authenticate users
-            - (whoami endpoint)
-        - send messages
-        - CRD api keys (settings?)
-            - this would make this part easier...
-
-    - [ ] add client ID resolution endpoint
-        - [x] authentication is at the app-level so this should be fine
-        - [ ] client ID secret should also be included so it isn't spoofed...
-
-    - [ ] integrate them!
-        - [x] state endpoint
-            - what should the state look like?
-                - currently we already have ExternalClient
-                - add BrowserClientState?
-                    - option 1:
-                        - username (optional)
-                        - role_id
-                        - project_id
-                        - role_name
-                        - project_name
-                    - option 2:
-                        - username (optional)
-                        - state (optional)
-                            - project_id
-                            - role_id
-
-                            - username
-                            - address
-                            - app_id
-
-                - it would be nice to separate username, state
-                - the state should probably be different...
-                    - actually, we could just use the room state endpoint for some of these things and cache the value
-                - should we rename state to location? or address? Maybe location since address
-                - ClientInfo? ClientData
-
-        - [x] room state endpoints
-        - [ ] service settings endpoints
-              - user, member, groups
-              - [ ] should these be under a new route path? like /service-settings?
-                  - or should they be under the users/groups paths?
-                  - probably their own path since it would be nice to have a method for getting combined/all settings
-
-                  - they could be nested under service hosts
-                      - service_hosts/{id}/settings/
-
-                  - [ ] CRUD options for users/groups/etc (based on a host)
-                      - should the ID be simple alphanumeric (+underscores?)
-
-                  - user/{username}/{service_host_ID} (get)
-                  - user/{username}/{service_host_ID} (post)
-                  - user/{username}/{service_host_ID} (delete)
-                  - user/{username}/{service_host_ID}/all (get)
-
-                  - group/{id}/{service_host_ID} (get)
-                  - group/{id}/{service_host_ID} (post)
-                  - group/{id}/{service_host_ID} (delete)
-
-                - should we store these in their own collection?
-                    - {host, settings, owner: {user: <username> | group: <groupID>}}
-                    - this would make the queries pretty straight-forward...
-
-                - services/hosts/
-                - services/settings/user/
-
-              - [ ] add operations to CLI?
-
-        - [ ] send message endpoints
-        
-        - [ ] what to do about oauth?
-            - should we support it in the rust server? Seems reasonable...
-              - if so, how should we interoperate with the services server?
-            - should we just support it in the services server?
-              - 
-            - skip this for now?
-
-        - [x] update the client index.html?
+    - this should probably be added to the cloud server
 
 - [ ] finish updating the browser
 
@@ -797,3 +673,140 @@
 - [x] auth integration with services endpoint
     - maybe the services endpoint should hit this one?
 
+- [x] update the services server connection (zmq)
+    - [-] add public role ID resolution endpoint?
+        - (public role ID resolution)
+        - Or the client could send this in the request...
+            - context: {project: {name, id}, role: {name, id}, app: ''}
+        - we will need to be able to lookup the username and the context...
+    - [x] add a REST endpoint for message sending?
+        - network/messages/send
+            - recipient address
+            - message type
+            - message content
+            - optional sender address
+        - how to authorize?
+            - app-level or user-level?
+
+            - if sender address is provided, we could check the requestor can edit the user
+            - else, we could use an app-level approach... Maybe something simple like a secret token for now?
+                - technically, this is all we need for now
+
+            - what if we connected the services server like a 3rd party app?
+                - it would need to authenticate as a single user though
+                    - NetsBloxServices?
+                    - address could be 
+                        - TicTacToe@NetsBlox #NetsBloxServices
+                        - ProjectID@TicTacToe@NetsBlox #NetsBloxServices
+
+                        - Services@NetsBlox #NetsBloxServices  // no response allowed
+                    - this could actually make it possible to add responding to messages to the spec, too!
+                        - the server would need to still be occupying those states though :/
+                            - maybe we could route the message using the sender ID?
+                                - wouldn't work since a project can use multiple services simultaneously
+
+    - what would app-level look like?
+        - admins adding a client 
+        - client adds Access ID & Secret Token to send message requests
+        - save these in the database
+        - this wouldn't be in the config anymore
+
+            - netsblox services add --authorize <client ID>
+            - netsblox services list --global
+            - netsblox services list --group
+            - netsblox services list --only-user
+
+            - netsblox service-host authorize <URL> <client ID> -> <secret token>
+            - netsblox service-host unauthorize <URL>
+
+        - these are actually different from the current services-hosts:
+            - current ones are client-side configurations about endpoints to ping
+            - new ones provide permissions to the service-host to be able to resolve client IDs and send messages
+
+            - netsblox integrations add <name> ID -> <secret token>
+            - netsblox integrations remove ID
+            - netsblox integrations list
+
+    - how is the API used by the services server?
+        - authenticate users
+            - (whoami endpoint)
+        - send messages
+        - CRD api keys (settings?)
+            - this would make this part easier...
+
+    - [x] add client ID resolution endpoint
+        - [x] authentication is at the app-level so this should be fine
+        - [ ] client ID secret should also be included so it isn't spoofed...
+
+    - [x] integrate them!
+        - [x] state endpoint
+            - what should the state look like?
+                - currently we already have ExternalClient
+                - add BrowserClientState?
+                    - option 1:
+                        - username (optional)
+                        - role_id
+                        - project_id
+                        - role_name
+                        - project_name
+                    - option 2:
+                        - username (optional)
+                        - state (optional)
+                            - project_id
+                            - role_id
+
+                            - username
+                            - address
+                            - app_id
+
+                - it would be nice to separate username, state
+                - the state should probably be different...
+                    - actually, we could just use the room state endpoint for some of these things and cache the value
+                - should we rename state to location? or address? Maybe location since address
+                - ClientInfo? ClientData
+
+        - [x] room state endpoints
+        - [x] service settings endpoints
+              - user, member, groups
+              - [ ] should these be under a new route path? like /service-settings?
+                  - or should they be under the users/groups paths?
+                  - probably their own path since it would be nice to have a method for getting combined/all settings
+
+                  - they could be nested under service hosts
+                      - service_hosts/{id}/settings/
+
+                  - [ ] CRUD options for users/groups/etc (based on a host)
+                      - should the ID be simple alphanumeric (+underscores?)
+
+                  - user/{username}/{service_host_ID} (get)
+                  - user/{username}/{service_host_ID} (post)
+                  - user/{username}/{service_host_ID} (delete)
+                  - user/{username}/{service_host_ID}/all (get)
+
+                  - group/{id}/{service_host_ID} (get)
+                  - group/{id}/{service_host_ID} (post)
+                  - group/{id}/{service_host_ID} (delete)
+
+                - should we store these in their own collection?
+                    - {host, settings, owner: {user: <username> | group: <groupID>}}
+                    - this would make the queries pretty straight-forward...
+
+                - services/hosts/
+                - services/settings/user/
+
+              - [x] add operations to CLI?
+
+        - [x] send message endpoints
+            - what types of messages/routing are going to be used?
+                - port the current ones:
+                    - send to address
+                    - send to client (if at project, role)
+                    - send to role
+                    - send to room
+
+                - should we consider how we might want to support external apps?
+                    - project_id, role_id should probably be state (browser or external)
+
+            - [x] update the services server to use the new integration
+        
+        - [x] update the client index.html?
