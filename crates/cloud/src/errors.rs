@@ -1,5 +1,6 @@
 use actix_web::{error, http::StatusCode, HttpResponse, HttpResponseBuilder};
 use derive_more::{Display, Error};
+use log::warn;
 
 #[derive(Debug, Display, Error)]
 pub enum InternalError {
@@ -122,8 +123,8 @@ impl error::ResponseError for UserError {
 }
 
 impl From<InternalError> for UserError {
-    fn from(_err: InternalError) -> UserError {
-        // TODO: log this?
+    fn from(err: InternalError) -> UserError {
+        warn!("Internal error occurred: {:?}", err);
         UserError::InternalError
     }
 }
