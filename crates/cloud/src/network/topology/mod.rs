@@ -147,6 +147,7 @@ impl Handler<SendMessage> for TopologyActor {
         ctx.spawn(fut);
     }
 }
+
 impl Handler<SetStorage> for TopologyActor {
     type Result = ();
 
@@ -389,5 +390,21 @@ impl Handler<SendMessageFromServices> for TopologyActor {
         };
         let fut = actix::fut::wrap_future(fut);
         ctx.spawn(fut);
+    }
+}
+
+#[derive(Message, Clone)]
+#[rtype(result = "()")]
+pub struct SendIDEMessage {
+    pub addresses: Vec<String>,
+    pub content: Value,
+}
+
+impl Handler<SendIDEMessage> for TopologyActor {
+    type Result = ();
+
+    fn handle(&mut self, msg: SendIDEMessage, _: &mut Context<Self>) -> Self::Result {
+        let topology = TOPOLOGY.read().unwrap();
+        topology.send_ide_msg(msg);
     }
 }

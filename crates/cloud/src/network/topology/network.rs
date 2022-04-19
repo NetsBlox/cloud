@@ -18,8 +18,8 @@ use crate::network::AppID;
 pub use super::address::DEFAULT_APP_ID;
 use super::client::{Client, ClientID, RoleRequest};
 use super::{
-    AddClient, BrokenClient, ClientMessage, RemoveClient, SendMessage, SendOccupantInvite,
-    SendRoomState, SetClientState,
+    AddClient, BrokenClient, ClientMessage, RemoveClient, SendIDEMessage, SendMessage,
+    SendOccupantInvite, SendRoomState, SetClientState,
 };
 
 #[derive(Clone, Debug)]
@@ -708,6 +708,18 @@ impl Topology {
         println!("Sending to {count} clients", count = recipients.len());
         let message = ClientMessage(msg.content);
         recipients.iter().for_each(|client| {
+            client.addr.do_send(message.clone()).unwrap();
+        });
+    }
+
+    pub fn send_ide_msg(&self, msg: SendIDEMessage) {
+        let recipients = msg
+            .addresses
+            .iter()
+            .filter_map(|client_id| self.clients.get(client_id));
+
+        let message = ClientMessage(msg.content);
+        recipients.for_each(|client| {
             client.addr.do_send(message.clone()).unwrap();
         });
     }

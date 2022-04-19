@@ -21,7 +21,7 @@ use netsblox_core::{
     BrowserClientState, ClientID, ClientStateData, OccupantInviteData, ProjectId, SaveState,
 };
 use serde::Deserialize;
-use serde_json::Value;
+use serde_json::{json, Value};
 
 pub type AppID = String;
 
@@ -483,7 +483,12 @@ struct WsSession {
 }
 
 impl WsSession {
-    pub fn handle_msg(&self, msg_type: &str, msg: Value, ctx: &mut <WsSession as Actor>::Context) {
+    pub fn handle_msg(
+        &self,
+        msg_type: &str,
+        mut msg: Value,
+        ctx: &mut <WsSession as Actor>::Context,
+    ) {
         if msg_type != "ping" {
             println!("received {} message", msg_type);
         }
@@ -508,13 +513,24 @@ impl WsSession {
                     content: msg,
                 });
             }
-            "client-message" => {
-                todo!("add support for sending messages btwn clients");
-            }
-            "user-action" => {
-                // TODO: Record: Can we get rid of these?
-            }
-            "request-actions" => { // TODO: move this to REST?
+            "ide-message" => {
+                let recipients = msg["recipients"].clone();
+                let addresses = match recipients {
+                    Value::Array(values) => values
+                        .into_iter()
+                        .filter_map(|v| match v {
+                            Value::String(v) => Some(v),
+                            _ => None,
+                        })
+                        .collect::<Vec<_>>(),
+                    _ => vec![],
+                };
+                msg["sender"] = json!(&self.client_id);
+
+                self.topology_addr.do_send(topology::SendIDEMessage {
+                    addresses,
+                    content: msg,
+                });
             }
             "ping" => ctx.text("{\"type\": \"pong\"}"),
             _ => {
