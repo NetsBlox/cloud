@@ -1,20 +1,4 @@
 # To Do
-- [ ] test...
-    - [ ] recording messages
-    - [x] message caching
-    - [ ] created (but never occupied) projects - they should be automatically deleted after 15 minutes or so
- 
-- [ ] add aspect ratio padding support
-    - use image crate
-
-- [ ] add email support
-    - [ ] new account creation
-    - [x] password reset
-
-    - [x] lettre crate?
-        - smtp or ses?
-        - mock the method now?
-
 - [ ] collaborative editing action acceptance
     - maybe we don't need to persist them...
     - accept actions when collaborating
@@ -33,8 +17,9 @@
     - [ ] check edit permissions
 
     - could I use client-message for this?
-        - 
-    - [ ] what would it look like w webrtc?
+        - possibly, but let's not for now. We might as well keep it simple
+
+    - [ ] what would it look like w/ webrtc?
         - a communication channel
         - a library for collab primitives (key, type)
             - CRDT text
@@ -42,6 +27,24 @@
             - project notes (CRDT or LWW)
             - LWW registers (rotation) w/ vector clocks
 
+    - accept_action()
+        - call update_one internally
+
+    - [ ] use a leader-based approach
+        - no need to worry about keeping the data in the db up to date
+        - [ ] what if changes happen while both offline?
+            - both could appear to be alone (and think they are the leader...)
+                - don't short-circuit if leader (then it will fail if they are not in charge)
+
+        - when an action is made, 
+            - [ ] send an IDEMessage to the leader
+                - action/edit
+            - [ ] leader should either accept/reject.
+                - On accept, broadcast to other occupants
+                - On reject, send error response
+            - [ ] if missing actions, request missing actions from the leader
+
+- [ ] finish updating the browser
 
 - [ ] what to do about oauth?
     - should we support it in the rust server? Seems reasonable...
@@ -52,8 +55,23 @@
 
     - this should probably be added to the cloud server
 
-- [ ] finish updating the browser
+- [ ] add aspect ratio padding support
+    - use image crate
 
+- [ ] add email support
+    - [ ] new account creation
+    - [x] password reset
+
+    - [x] lettre crate?
+        - smtp or ses?
+        - mock the method now?
+
+- [ ] test...
+    - [ ] recording messages
+    - [ ] save as should set project name, etc
+    - [x] message caching
+    - [ ] created (but never occupied) projects - they should be automatically deleted after 15 minutes or so
+ 
 - [ ] public URL is set when opening role
 
 - [ ] don't clean up projects when server goes down? (The ws close reason seems to be Away when the browser tab closes *and* when the server is terminated)
