@@ -157,43 +157,21 @@ impl AppData {
         };
         self.s3.create_bucket(request).await;
 
-        self.db
-            .run_command(
-                doc! {
-                    "createIndexes": &(self.prefix.to_owned() + "projects"),
-                    "indexes": [
-                        {
-                            "key": {"deleteAt": 1},
-                            "name": "broken_project_ttl",
-                            "sparse": true,
-                            "expireAfterSeconds": 10,
-                        }
-                    ],
-                },
-                None,
-            )
-            .await
-            .map_err(|err| InternalError::DatabaseConnectionError(err))?;
-
+        // Add database indexes
         let index_opts = IndexOptions::builder()
             .expire_after(Duration::from_secs(60 * 60))
             .build();
-        let invite_index = IndexModel::builder()
-            .keys(doc! {"createdAt": 1})
-            .options(index_opts)
-            .build();
+        let occupant_invite_indexes = vec![
+            IndexModel::builder()
+                .keys(doc! {"createdAt": 1})
+                .options(index_opts)
+                .build(),
+            IndexModel::builder()
+                .keys(doc! {"project_id": 1, "role_id": 1})
+                .build(),
+        ];
         self.occupant_invites
-            .create_index(invite_index, None)
-            .await
-            .map_err(|err| InternalError::DatabaseConnectionError(err))?;
-
-        self.occupant_invites
-            .create_index(
-                IndexModel::builder()
-                    .keys(doc! {"project_id": 1, "role_id": 1})
-                    .build(),
-                None,
-            )
+            .create_indexes(occupant_invite_indexes, None)
             .await
             .map_err(|err| InternalError::DatabaseConnectionError(err))?;
 
@@ -210,7 +188,33 @@ impl AppData {
             .map_err(|err| InternalError::DatabaseConnectionError(err))?;
 
         self.project_metadata
-            .create_index(IndexModel::builder().keys(doc! {"id": 1}).build(), None)
+            .create_indexes(
+                vec![
+                    IndexModel::builder().keys(doc! {"id": 1}).build(),
+                    // delete broken projects after a delay
+                    IndexModel::builder()
+                        .keys(doc! {"deleteAt": 1})
+                        .options(
+                            IndexOptions::builder()
+                                .expire_after(Duration::from_secs(10))
+                                .sparse(true)
+                                .build(),
+                        )
+                        .build(),
+                    // delete transient projects after 1 week
+                    IndexModel::builder()
+                        .keys(doc! { "originTime": 1})
+                        .options(
+                            IndexOptions::builder()
+                                .expire_after(Duration::from_secs(60 * 60 * 24 * 7))
+                                .partial_filter_expression(doc! {"saveState": SaveState::TRANSIENT})
+                                .background(true)
+                                .build(),
+                        )
+                        .build(),
+                ],
+                None,
+            )
             .await
             .map_err(|err| InternalError::DatabaseConnectionError(err))?;
 
