@@ -15,7 +15,7 @@ access_key = "KEY"
 secret_key = "MYSECRET"
 
 [[services_hosts]]
-url = "http://127.0.0.1:6060/services"
+url = "http://127.0.0.1:3030"
 categories = []
 
 [cookie]
