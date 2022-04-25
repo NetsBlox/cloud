@@ -9,6 +9,7 @@ pub enum InternalError {
     S3Error,
     S3ContentError,
     TorNodeListFetchError(reqwest::Error),
+    ActixMessageError(actix::MailboxError),
 }
 
 #[derive(Debug, Display, Error)]

@@ -22,6 +22,7 @@ use netsblox_core::{
 };
 use serde::Deserialize;
 use serde_json::{json, Value};
+use topology::ClientCommand;
 
 pub type AppID = String;
 
@@ -109,18 +110,18 @@ async fn connect_client(
 ) -> Result<HttpResponse, UserError> {
     // TODO: validate client secret?
     let (client_id,) = path.into_inner();
-    let exists = app
-        .network
-        .send(topology::CheckClientExists {
+
+    if !client_id.starts_with('_') {
+        return Err(UserError::InvalidClientIdError);
+    }
+
+    // close any existing client with the same ID
+    app.network
+        .send(topology::DisconnectClient {
             client_id: client_id.clone(),
         })
         .await
-        .map_err(|_err| UserError::InternalError)?
-        .0;
-
-    if !client_id.starts_with('_') || exists {
-        return Err(UserError::InvalidClientIdError);
-    }
+        .map_err(|err| InternalError::ActixMessageError(err))?;
 
     let handler = WsSession {
         client_id,
@@ -148,7 +149,7 @@ async fn get_room_state(
         .network
         .send(topology::GetRoomState { metadata })
         .await
-        .map_err(|_err| UserError::InternalError)?
+        .map_err(|err| InternalError::ActixMessageError(err))?
         .0
         .ok_or_else(|| UserError::ProjectNotActiveError)?;
 
@@ -163,7 +164,7 @@ async fn get_rooms(app: web::Data<AppData>, session: Session) -> Result<HttpResp
         .network
         .send(topology::GetActiveRooms {})
         .await
-        .map_err(|_err| UserError::InternalError)?
+        .map_err(|err| InternalError::ActixMessageError(err))?
         .0;
 
     Ok(HttpResponse::Ok().json(state))
@@ -180,7 +181,7 @@ async fn get_external_clients(
         .network
         .send(topology::GetExternalClients {})
         .await
-        .map_err(|_err| UserError::InternalError)?
+        .map_err(|err| InternalError::ActixMessageError(err))?
         .0;
 
     Ok(HttpResponse::Ok().json(clients))
@@ -246,7 +247,7 @@ async fn ensure_can_evict_client(
             client_id: client_id.to_owned(),
         })
         .await
-        .map_err(|_err| UserError::InternalError)?
+        .map_err(|err| InternalError::ActixMessageError(err))?
         .0;
 
     // Client can be evicted by project owners, collaborators
@@ -264,7 +265,7 @@ async fn ensure_can_evict_client(
             client_id: client_id.to_owned(),
         })
         .await
-        .map_err(|_err| UserError::InternalError)?
+        .map_err(|err| InternalError::ActixMessageError(err))?
         .0;
 
     match client_username {
@@ -448,14 +449,14 @@ async fn get_client_state(
             client_id: client_id.clone(),
         })
         .await
-        .map_err(|_err| UserError::InternalError)?
+        .map_err(|err| InternalError::ActixMessageError(err))?
         .0;
 
     let state = app
         .network
         .send(topology::GetClientState { client_id })
         .await
-        .map_err(|_err| UserError::InternalError)?
+        .map_err(|err| InternalError::ActixMessageError(err))?
         .0;
 
     Ok(HttpResponse::Ok().json(netsblox_core::ClientInfo { username, state }))
@@ -553,6 +554,7 @@ impl Actor for WsSession {
 
     fn stopping(&mut self, _: &mut Self::Context) -> actix::Running {
         // TODO: wait a little bit?
+        println!("stopping! {}", self.client_id);
         self.topology_addr.do_send(topology::RemoveClient {
             id: self.client_id.clone(),
         });
@@ -560,10 +562,16 @@ impl Actor for WsSession {
     }
 }
 
-impl Handler<topology::ClientMessage> for WsSession {
+impl Handler<ClientCommand> for WsSession {
     type Result = ();
-    fn handle(&mut self, msg: topology::ClientMessage, ctx: &mut Self::Context) {
-        ctx.text(msg.0.to_string());
+    fn handle(&mut self, msg: ClientCommand, ctx: &mut Self::Context) {
+        match msg {
+            ClientCommand::SendMessage(content) => ctx.text(content.to_string()),
+            ClientCommand::Close => {
+                println!("server side close!");
+                ctx.close(None)
+            }
+        }
     }
 }
 
@@ -593,6 +601,7 @@ impl StreamHandler<Result<ws::Message, ws::ProtocolError>> for WsSession {
                         id: self.client_id.clone(),
                     });
                 }
+                ctx.close(None);
             }
             _ => (),
         }

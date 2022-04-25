@@ -18,7 +18,7 @@ use crate::network::AppID;
 pub use super::address::DEFAULT_APP_ID;
 use super::client::{Client, ClientID, RoleRequest};
 use super::{
-    AddClient, BrokenClient, ClientMessage, RemoveClient, SendIDEMessage, SendMessage,
+    AddClient, BrokenClient, ClientCommand, RemoveClient, SendIDEMessage, SendMessage,
     SendOccupantInvite, SendRoomState, SetClientState,
 };
 
@@ -37,18 +37,18 @@ impl From<BrowserClientState> for BrowserAddress {
     }
 }
 
-impl From<RoomState> for ClientMessage {
-    fn from(msg: RoomState) -> ClientMessage {
+impl From<RoomState> for ClientCommand {
+    fn from(msg: RoomState) -> ClientCommand {
         let mut value = serde_json::to_value(msg).unwrap();
         let msg = value.as_object_mut().unwrap();
         msg.insert("type".into(), serde_json::to_value("room-roles").unwrap());
-        ClientMessage(value)
+        ClientCommand::SendMessage(value)
     }
 }
 
-impl From<SendOccupantInvite> for ClientMessage {
-    fn from(msg: SendOccupantInvite) -> ClientMessage {
-        ClientMessage(json!({
+impl From<SendOccupantInvite> for ClientCommand {
+    fn from(msg: SendOccupantInvite) -> ClientCommand {
+        ClientCommand::SendMessage(json!({
             "type": "room-invitation",
             "projectId": msg.invite.project_id,
             "roleId": msg.invite.role_id,
@@ -60,9 +60,9 @@ impl From<SendOccupantInvite> for ClientMessage {
 
 struct EvictionNotice;
 
-impl From<EvictionNotice> for ClientMessage {
-    fn from(_msg: EvictionNotice) -> ClientMessage {
-        ClientMessage(json!({"type": "eviction-notice"}))
+impl From<EvictionNotice> for ClientCommand {
+    fn from(_msg: EvictionNotice) -> ClientCommand {
+        ClientCommand::SendMessage(json!({"type": "eviction-notice"}))
     }
 }
 
@@ -287,7 +287,7 @@ impl Topology {
     }
 
     pub async fn send_msg(&self, msg: SendMessage) {
-        let message = ClientMessage(msg.content);
+        let message = ClientCommand::SendMessage(msg.content.clone());
         let recipients = join_all(
             msg.addresses
                 .iter()
@@ -344,7 +344,7 @@ impl Topology {
                         project_id.to_string(),
                         source.to_owned(),
                         dst_ids.clone(),
-                        message.0.clone(),
+                        msg.content.clone(),
                     )
                 })
                 .collect();
@@ -358,8 +358,14 @@ impl Topology {
         }
     }
 
-    pub fn has_client(&self, id: &str) -> bool {
+    fn has_client(&self, id: &str) -> bool {
         self.clients.contains_key(id)
+    }
+
+    pub fn disconnect_client(&self, id: &str) {
+        if let Some(client) = self.clients.get(id) {
+            client.addr.do_send(ClientCommand::Close).unwrap();
+        }
     }
 
     pub async fn set_client_state(&mut self, msg: SetClientState) {
@@ -706,7 +712,7 @@ impl Topology {
         };
 
         println!("Sending to {count} clients", count = recipients.len());
-        let message = ClientMessage(msg.content);
+        let message = ClientCommand::SendMessage(msg.content);
         recipients.iter().for_each(|client| {
             client.addr.do_send(message.clone()).unwrap();
         });
@@ -718,7 +724,7 @@ impl Topology {
             .iter()
             .filter_map(|client_id| self.clients.get(client_id));
 
-        let message = ClientMessage(msg.content);
+        let message = ClientCommand::SendMessage(msg.content);
         recipients.for_each(|client| {
             client.addr.do_send(message.clone()).unwrap();
         });

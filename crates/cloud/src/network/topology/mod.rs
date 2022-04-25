@@ -30,11 +30,14 @@ impl Actor for TopologyActor {
 
 #[derive(Message, Clone)]
 #[rtype(result = "()")]
-pub struct ClientMessage(pub Value);
+pub enum ClientCommand {
+    SendMessage(Value),
+    Close,
+}
 
-impl From<netsblox_core::SendMessage> for ClientMessage {
-    fn from(msg: netsblox_core::SendMessage) -> ClientMessage {
-        ClientMessage(msg.content)
+impl From<netsblox_core::SendMessage> for ClientCommand {
+    fn from(msg: netsblox_core::SendMessage) -> ClientCommand {
+        ClientCommand::SendMessage(msg.content)
     }
 }
 
@@ -42,7 +45,7 @@ impl From<netsblox_core::SendMessage> for ClientMessage {
 #[rtype(result = "()")]
 pub struct AddClient {
     pub id: String,
-    pub addr: Recipient<ClientMessage>,
+    pub addr: Recipient<ClientCommand>,
 }
 
 #[derive(Message)]
@@ -66,7 +69,7 @@ pub struct BrokenClient {
 #[derive(Message)]
 #[rtype(result = "()")]
 pub struct RemoveClient {
-    pub id: String,
+    pub id: ClientID,
 }
 
 #[derive(Message)]
@@ -335,21 +338,17 @@ impl Handler<GetClientUsername> for TopologyActor {
 }
 
 #[derive(Message)]
-#[rtype(result = "CheckClientExistsResult")]
-pub struct CheckClientExists {
+#[rtype(result = "()")]
+pub struct DisconnectClient {
     pub client_id: ClientID,
 }
 
-#[derive(Message)]
-#[rtype(result = "()")]
-pub struct CheckClientExistsResult(pub bool);
+impl Handler<DisconnectClient> for TopologyActor {
+    type Result = ();
 
-impl Handler<CheckClientExists> for TopologyActor {
-    type Result = MessageResult<CheckClientExists>;
-
-    fn handle(&mut self, msg: CheckClientExists, _: &mut Context<Self>) -> Self::Result {
+    fn handle(&mut self, msg: DisconnectClient, _: &mut Context<Self>) -> Self::Result {
         let topology = TOPOLOGY.read().unwrap();
-        MessageResult(CheckClientExistsResult(topology.has_client(&msg.client_id)))
+        topology.disconnect_client(&msg.client_id);
     }
 }
 

@@ -10,7 +10,7 @@ use std::{
 };
 use uuid::Uuid;
 
-use super::{BrowserClientState, ClientMessage};
+use super::{BrowserClientState, ClientCommand};
 use crate::{errors::InternalError, models::RoleData};
 
 lazy_static! {
@@ -21,9 +21,9 @@ lazy_static! {
 #[derive(Clone)]
 struct RoleRequestMessage(pub Uuid);
 
-impl From<RoleRequestMessage> for ClientMessage {
-    fn from(msg: RoleRequestMessage) -> ClientMessage {
-        ClientMessage(json!({"type": "role-data-request", "id": msg.0.to_string()}))
+impl From<RoleRequestMessage> for ClientCommand {
+    fn from(msg: RoleRequestMessage) -> ClientCommand {
+        ClientCommand::SendMessage(json!({"type": "role-data-request", "id": msg.0.to_string()}))
     }
 }
 
@@ -36,11 +36,11 @@ pub enum RoleDataResponseState {
 #[derive(Clone, Debug)]
 pub struct Client {
     pub id: ClientID,
-    pub addr: Recipient<ClientMessage>,
+    pub addr: Recipient<ClientCommand>,
 }
 
 impl Client {
-    pub fn new(id: ClientID, addr: Recipient<ClientMessage>) -> Self {
+    pub fn new(id: ClientID, addr: Recipient<ClientCommand>) -> Self {
         Client { id, addr }
     }
 }
@@ -48,12 +48,12 @@ impl Client {
 #[derive(Message)]
 #[rtype(result = "()")]
 pub struct RoleRequest {
-    addr: Recipient<ClientMessage>,
+    addr: Recipient<ClientCommand>,
     state: BrowserClientState,
 }
 
 impl RoleRequest {
-    pub fn new(addr: Recipient<ClientMessage>, state: BrowserClientState) -> Self {
+    pub fn new(addr: Recipient<ClientCommand>, state: BrowserClientState) -> Self {
         // TODO: add support for sending to multiple clients?
         RoleRequest {
             addr,
