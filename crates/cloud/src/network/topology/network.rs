@@ -329,21 +329,19 @@ impl Topology {
                 .map(|metadata| metadata.id.to_owned());
 
             let source = self.get_client_state(&msg.sender).unwrap();
-            let mut dst_ids = Vec::new();
-            for recipient_state in recipients.filter_map(|client| self.get_client_state(&client.id))
-            {
-                if let Some(address) = self.get_address_string(recipient_state).await {
-                    dst_ids.push(address);
-                }
-            }
+            let recipients = recipients
+                .filter_map(|client| self.get_client_state(&client.id))
+                .map(|state| state.to_owned())
+                .collect::<Vec<_>>();
 
+            // TODO: record the actual recipients
             let messages: Vec<_> = recording_ids
                 .into_iter()
                 .map(|project_id| {
                     SentMessage::new(
                         project_id.to_string(),
                         source.to_owned(),
-                        dst_ids.clone(),
+                        recipients.clone(),
                         msg.content.clone(),
                     )
                 })

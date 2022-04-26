@@ -359,7 +359,7 @@ impl OccupantInvite {
 #[serde(rename_all = "camelCase")]
 pub struct SentMessage {
     pub project_id: ProjectId,
-    pub dst_ids: Vec<String>,
+    pub recipients: Vec<ClientState>,
     pub time: DateTime,
     pub source: ClientState,
 
@@ -370,13 +370,13 @@ impl SentMessage {
     pub fn new(
         project_id: ProjectId,
         source: ClientState,
-        dst_ids: Vec<String>,
+        recipients: Vec<ClientState>,
         content: serde_json::Value,
     ) -> Self {
         let time = DateTime::from_system_time(SystemTime::now());
         SentMessage {
             project_id,
-            dst_ids,
+            recipients,
             time,
             source,
             content,
