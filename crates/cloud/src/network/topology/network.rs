@@ -371,7 +371,11 @@ impl Topology {
             return;
         }
 
-        self.reset_client_state(&msg.id).await;
+        let new_project_id = match msg.state {
+            ClientState::Browser(ref state) => Some(state.project_id.clone()),
+            _ => None,
+        };
+        self.reset_client_state(&msg.id, new_project_id).await;
         if let Some(username) = msg.username {
             self.usernames.insert(msg.id.clone(), username);
         }
@@ -431,10 +435,10 @@ impl Topology {
 
     pub async fn remove_client(&mut self, msg: RemoveClient) {
         self.clients.remove(&msg.id);
-        self.reset_client_state(&msg.id).await;
+        self.reset_client_state(&msg.id, None).await;
     }
 
-    async fn reset_client_state(&mut self, id: &str) {
+    async fn reset_client_state(&mut self, id: &str, new_project_id: Option<ProjectId>) {
         self.usernames.remove(id);
         match self.states.remove(id) {
             Some(ClientState::Browser(state)) => {
@@ -450,12 +454,16 @@ impl Topology {
 
                     if occupants.is_empty() {
                         let role_count = room.roles.len();
-                        if role_count == 1 {
+                        let is_leaving_project = new_project_id
+                            .map(|id| id != state.project_id)
+                            .unwrap_or(true);
+                        let remove_room = role_count == 1 && is_leaving_project;
+                        if remove_room {
                             self.remove_room(&state.project_id).await;
                             update_needed = false;
                         } else {
                             // remove the role
-                            let room = self.rooms.get_mut(&state.role_id).unwrap();
+                            let room = self.rooms.get_mut(&state.project_id).unwrap();
                             room.roles.remove(&state.role_id);
                         }
                     }
@@ -492,7 +500,7 @@ impl Topology {
         self.rooms.remove(project_id);
         if let Some(app) = &self.app_data {
             // If it has no broken connections, delete it!
-            let query = doc! {"id": project_id};
+            let query = doc! {"id": &project_id};
             let cleanup = app
                 .project_metadata
                 .find_one(query.clone(), None)
@@ -618,7 +626,7 @@ impl Topology {
 
     pub async fn evict_client(&mut self, id: ClientID) {
         let username = self.usernames.remove(&id);
-        self.reset_client_state(&id).await;
+        self.reset_client_state(&id, None).await;
         self.clients
             .get(&id)
             .map(|client| client.addr.do_send(EvictionNotice.into()));
