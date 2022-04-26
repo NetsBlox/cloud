@@ -1114,6 +1114,18 @@ impl Client {
         Ok(response.json::<RoomState>().await.unwrap())
     }
 
+    pub async fn get_client_state(&self, client_id: &ClientID) -> Result<ClientInfo, error::Error> {
+        let response = self
+            .request(Method::GET, &format!("/network/{}/state", client_id))
+            .send()
+            .await
+            .map_err(|err| error::Error::RequestError(err))?;
+
+        let response = check_response(response).await?;
+
+        Ok(response.json::<ClientInfo>().await.unwrap())
+    }
+
     pub async fn evict_occupant(&self, client_id: &ClientID) -> Result<(), error::Error> {
         let response = self
             .request(

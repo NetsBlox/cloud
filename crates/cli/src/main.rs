@@ -6,8 +6,8 @@ use clap::{Parser, Subcommand};
 use futures_util::StreamExt;
 use inquire::{Confirm, Password, PasswordDisplayMode};
 use netsblox_api::core::{
-    Credentials, FriendLinkState, InvitationState, LibraryPublishState, LinkedAccount, ServiceHost,
-    UserRole,
+    ClientID, Credentials, FriendLinkState, InvitationState, LibraryPublishState, LinkedAccount,
+    ServiceHost, UserRole,
 };
 use netsblox_api::{Client, Config};
 use std::path::Path;
@@ -339,6 +339,8 @@ enum Network {
         #[clap(short, long)]
         user: Option<String>,
     },
+    /// View the state of a given connected client
+    ViewClient { client_id: ClientID },
     /// Connect to NetsBlox and listen for messages
     Connect {
         #[clap(short, long, default_value = "project")]
@@ -833,6 +835,10 @@ async fn do_command(mut cfg: Config, args: Cli) -> Result<(), netsblox_api::erro
                     client.get_project_metadata(&owner, &project).await?.id
                 };
                 let state = client.get_room_state(&project_id).await?;
+                println!("{:?}", state);
+            }
+            Network::ViewClient { client_id } => {
+                let state = client.get_client_state(client_id).await?;
                 println!("{:?}", state);
             }
             Network::Connect { address } => {

@@ -1,5 +1,5 @@
 pub use netsblox_core::{
-    AuthorizedServiceHost, ClientConfig, ClientID, ClientState, ClientStateData,
+    AuthorizedServiceHost, ClientConfig, ClientID, ClientInfo, ClientState, ClientStateData,
     CollaborationInvite, CreateLibraryData, Credentials, ExternalClient, ExternalClientState,
     Group, InvitationId, InvitationState, LibraryMetadata, LibraryPublishState, LinkedAccount,
     LoginRequest, NewUser, Project, ProjectId, RoleData, RoomState, ServiceHost, ServiceSettings,
