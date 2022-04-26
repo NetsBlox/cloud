@@ -44,7 +44,17 @@
                 - On reject, send error response
             - [ ] if missing actions, request missing actions from the leader
 
+        - what if I used y.js for everything but the scripts and made my own similar (leader-based) alternative for that?
+            - what if we had an agreed upon tie-breaking mechanism:
+                - one option: owner > collaborator > client ID
+            - what actions are actually problematic? (Many are not.) Are we really only worried about moves?
+                - moving a block
+                - relabeling? This could change the number of inputs which affects the tree...
+
 - [ ] finish updating the browser
+
+- [ ] deleting user should delete groups
+    - what about members? maybe release them into the wild?
 
 - [ ] what to do about oauth?
     - should we support it in the rust server? Seems reasonable...
@@ -828,3 +838,5 @@
             - [x] update the services server to use the new integration
         
         - [x] update the client index.html?
+
+- [x] add endpoint for viewing the state of a specific client
