@@ -19,6 +19,7 @@ use actix_web::{
     cookie::SameSite, dev::Service, error::ErrorForbidden, get, http::Method, middleware, web, App,
     HttpResponse, HttpServer,
 };
+use log::error;
 use mongodb::Client;
 use netsblox_core::ClientConfig;
 use uuid::Uuid;
@@ -55,7 +56,14 @@ async fn main() -> std::io::Result<()> {
         .expect("Could not connect to mongodb.");
 
     let app_data = AppData::new(client, Settings::new().unwrap(), None, None);
-    app_data.initialize().await;
+    app_data
+        .initialize()
+        .await
+        .map_err(|err| {
+            error!("Error during initialization: {:?}", err);
+            err
+        })
+        .unwrap();
 
     HttpServer::new(move || {
         let cors = Cors::default()
