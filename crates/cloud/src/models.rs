@@ -420,13 +420,19 @@ impl From<SetPasswordToken> for Bson {
 pub struct AuthorizedServiceHost {
     pub url: String,
     pub id: String,
+    pub public: bool,
     pub secret: String,
 }
 
 impl AuthorizedServiceHost {
-    pub fn new(url: String, id: String) -> Self {
+    pub fn new(url: String, id: String, public: bool) -> Self {
         let secret = Uuid::new_v4().to_string();
-        AuthorizedServiceHost { url, id, secret }
+        AuthorizedServiceHost {
+            url,
+            id,
+            public,
+            secret,
+        }
     }
 }
 
@@ -435,6 +441,7 @@ impl From<AuthorizedServiceHost> for Bson {
         Bson::Document(doc! {
             "url": token.url,
             "id": token.id,
+            "public": token.public,
             "secret": token.secret,
         })
     }
@@ -442,7 +449,7 @@ impl From<AuthorizedServiceHost> for Bson {
 
 impl From<netsblox_core::AuthorizedServiceHost> for AuthorizedServiceHost {
     fn from(data: netsblox_core::AuthorizedServiceHost) -> AuthorizedServiceHost {
-        AuthorizedServiceHost::new(data.url, data.id)
+        AuthorizedServiceHost::new(data.url, data.id, data.public)
     }
 }
 
@@ -451,6 +458,16 @@ impl From<AuthorizedServiceHost> for netsblox_core::AuthorizedServiceHost {
         netsblox_core::AuthorizedServiceHost {
             id: host.id,
             url: host.url,
+            public: host.public,
+        }
+    }
+}
+
+impl From<AuthorizedServiceHost> for netsblox_core::ServiceHost {
+    fn from(host: AuthorizedServiceHost) -> netsblox_core::ServiceHost {
+        netsblox_core::ServiceHost {
+            url: host.url,
+            categories: Vec::new(),
         }
     }
 }

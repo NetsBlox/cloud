@@ -878,10 +878,16 @@ impl Client {
         Ok(())
     }
 
-    pub async fn authorize_host(&self, url: &str, id: &str) -> Result<String, error::Error> {
+    pub async fn authorize_host(
+        &self,
+        url: &str,
+        id: &str,
+        public: bool,
+    ) -> Result<String, error::Error> {
         let host = AuthorizedServiceHost {
             url: url.to_owned(),
             id: id.to_owned(),
+            public,
         };
         let response = self
             .request(Method::POST, "/services/hosts/authorized/")

@@ -1,7 +1,6 @@
 use std::env;
 
 use config::{Config, ConfigError, File};
-use netsblox_core::ServiceHost;
 use serde::Deserialize;
 
 #[derive(Clone, Deserialize)]
@@ -54,7 +53,6 @@ pub struct Settings {
     pub public_url: String,
     pub database: Database,
     pub s3: S3,
-    pub services_hosts: Vec<ServiceHost>,
     pub cookie: CookieSettings,
     pub email: EmailSettings,
     pub security: SecuritySettings,

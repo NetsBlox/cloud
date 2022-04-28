@@ -14,10 +14,6 @@ region_name = ""
 access_key = "KEY"
 secret_key = "MYSECRET"
 
-[[services_hosts]]
-url = "http://127.0.0.1:3030"
-categories = []
-
 [cookie]
 name = "netsblox"
 domain = "localhost:7777"

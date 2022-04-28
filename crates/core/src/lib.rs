@@ -418,6 +418,7 @@ pub struct OccupantInviteData {
 pub struct AuthorizedServiceHost {
     pub url: String,
     pub id: String,
+    pub public: bool,
 }
 
 #[derive(Deserialize, Serialize, Debug, Clone)]

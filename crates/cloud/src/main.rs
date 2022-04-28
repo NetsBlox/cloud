@@ -11,15 +11,18 @@ mod projects;
 mod services;
 mod users;
 
-use crate::app_data::AppData;
 use crate::config::Settings;
+use crate::errors::UserError;
+use crate::{app_data::AppData, errors::InternalError};
 use actix_cors::Cors;
 use actix_session::{CookieSession, Session};
 use actix_web::{
     cookie::SameSite, dev::Service, error::ErrorForbidden, get, http::Method, middleware, web, App,
     HttpResponse, HttpServer,
 };
+use futures::TryStreamExt;
 use log::error;
+use mongodb::bson::doc;
 use mongodb::Client;
 use netsblox_core::ClientConfig;
 use uuid::Uuid;
@@ -28,21 +31,32 @@ use uuid::Uuid;
 async fn get_client_config(
     app: web::Data<AppData>,
     session: Session,
-) -> Result<HttpResponse, std::io::Error> {
-    // TODO: if authenticated,
-    //  - [ ] retrieve services hosts
+) -> Result<HttpResponse, UserError> {
     println!(
         "Getting configuration for {:?}",
         // session.get::<String>("username")
         session.entries(),
     );
-    let default_hosts = app.settings.services_hosts.clone();
+    let query = doc! {"public": true};
+    let default_hosts: Vec<netsblox_core::ServiceHost> = app
+        .authorized_services
+        .find(query, None)
+        .await
+        .map_err(|err| InternalError::DatabaseConnectionError(err))?
+        .try_collect::<Vec<_>>()
+        .await
+        .map_err(|err| InternalError::DatabaseConnectionError(err))?
+        .into_iter()
+        .map(|host| host.into())
+        .collect();
+
     let config = ClientConfig {
         client_id: format!("_netsblox{}", Uuid::new_v4()),
         username: session.get::<String>("username").unwrap_or(None),
         services_hosts: default_hosts,
         cloud_url: app.settings.public_url.to_owned(),
     };
+
     Ok(HttpResponse::Ok().json(config))
 }
 

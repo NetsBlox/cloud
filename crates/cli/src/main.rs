@@ -203,15 +203,16 @@ enum ServiceHosts {
         #[clap(short, long)]
         user: Option<String>,
     },
-    // Authorize a service host to send messages and query user info from NetsBlox
+    /// Authorize a service host to send messages and query user info from NetsBlox
     Authorize {
         url: String,
         client_id: String,
+        /// Enable this service host for all users
+        #[clap(short, long)]
+        public: bool,
     },
-    // Revoke the service host's authorization
-    Unauthorize {
-        url: String,
-    },
+    /// Revoke the service host's authorization
+    Unauthorize { url: String },
 }
 
 #[derive(Subcommand, Debug)]
@@ -1008,8 +1009,12 @@ async fn do_command(mut cfg: Config, args: Cli) -> Result<(), netsblox_api::erro
                     client.set_user_hosts(&username, service_hosts).await?;
                 }
             }
-            ServiceHosts::Authorize { url, client_id } => {
-                let secret = client.authorize_host(url, client_id).await?;
+            ServiceHosts::Authorize {
+                url,
+                client_id,
+                public,
+            } => {
+                let secret = client.authorize_host(url, client_id, *public).await?;
                 println!("{}", secret);
             }
             ServiceHosts::Unauthorize { url } => {
