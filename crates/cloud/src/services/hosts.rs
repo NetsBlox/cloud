@@ -288,6 +288,7 @@ pub fn config(cfg: &mut web::ServiceConfig) {
         .service(set_user_hosts)
         .service(list_all_hosts)
         .service(authorize_host)
+        .service(get_authorized_hosts)
         .service(unauthorize_host);
 }
 
