@@ -334,13 +334,18 @@ impl AppData {
         owner: &str,
         name: &str,
         roles: Option<Vec<RoleData>>,
+        save_state: Option<SaveState>,
     ) -> Result<ProjectMetadata, UserError> {
         let query = doc! {"owner": &owner};
         // FIXME: Update the type if we use the projection
         //let projection = doc! {"name": true};
         //let options = FindOptions::builder().projection(projection).build();
         // TODO: validate the project name (no profanity)
-        let cursor = self.project_metadata.find(query, None).await.unwrap(); // FIXME: This can throw an error
+        let cursor = self
+            .project_metadata
+            .find(query, None)
+            .await
+            .map_err(|err| InternalError::DatabaseConnectionError(err))?;
         let project_names = cursor
             .try_collect::<Vec<_>>()
             .await
@@ -368,7 +373,8 @@ impl AppData {
         .map(|res| res.unwrap())
         .collect();
 
-        let metadata = ProjectMetadata::new(owner, &unique_name, role_mds);
+        let save_state = save_state.unwrap_or(SaveState::CREATED);
+        let metadata = ProjectMetadata::new(owner, &unique_name, role_mds, save_state);
         self.project_metadata
             .insert_one(metadata.clone(), None)
             .await

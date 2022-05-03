@@ -258,7 +258,12 @@ pub struct ProjectMetadata {
 }
 
 impl ProjectMetadata {
-    pub fn new(owner: &str, name: &str, roles: Vec<RoleMetadata>) -> ProjectMetadata {
+    pub fn new(
+        owner: &str,
+        name: &str,
+        roles: Vec<RoleMetadata>,
+        save_state: SaveState,
+    ) -> ProjectMetadata {
         let origin_time = DateTime::from_system_time(SystemTime::now());
         let roles = roles
             .into_iter()

@@ -370,7 +370,8 @@ pub struct CreateProjectData {
     pub owner: Option<String>,
     pub name: String,
     pub roles: Option<Vec<RoleData>>,
-    pub client_id: String,
+    pub client_id: Option<ClientID>,
+    pub save_state: Option<SaveState>,
 }
 
 // Network debugging data

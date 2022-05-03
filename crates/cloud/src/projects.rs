@@ -33,21 +33,20 @@ async fn create_project(
     body: web::Json<CreateProjectData>,
     session: Session,
 ) -> Result<HttpResponse, UserError> {
-    let username = session.get::<String>("username").unwrap_or(None);
-    // TODO: If the user is logged in, require permissions
-    let owner = if let Some(username) = username {
-        ensure_can_edit_user(&app, &session, &username).await?;
-        username
-    } else {
-        // TODO: make sure it is a valid client ID
-        body.client_id.to_owned()
-    };
+    let current_user = session.get::<String>("username").unwrap_or(None);
+    let project_data = body.into_inner();
+    let owner_name = project_data.owner.or_else(|| current_user);
+    if let Some(username) = &owner_name {
+        ensure_can_edit_user(&app, &session, username).await?;
+    }
 
-    // TODO: add authentication
-    let name = body.name.to_owned();
-    // TODO: validate name
+    let owner = owner_name
+        .or_else(|| project_data.client_id)
+        .ok_or_else(|| UserError::LoginRequiredError)?;
+
+    let name = project_data.name.to_owned();
     let metadata = app
-        .import_project(&owner, &name, body.into_inner().roles)
+        .import_project(&owner, &name, project_data.roles, project_data.save_state)
         .await?;
 
     let role_id = metadata.roles.keys().next().unwrap();
@@ -58,8 +57,6 @@ async fn create_project(
         name: metadata.name,
         role_name,
     }))
-    // TODO: should we automatically set the client to the role?
-    // TODO: how should we determine the role to open?
     // TODO: add allow_rename query string parameter?
 }
 
