@@ -6,7 +6,7 @@ use clap::{Parser, Subcommand};
 use futures_util::StreamExt;
 use inquire::{Confirm, Password, PasswordDisplayMode};
 use netsblox_api::core::{
-    ClientID, Credentials, FriendLinkState, InvitationState, LibraryPublishState, LinkedAccount,
+    ClientID, Credentials, FriendLinkState, InvitationState, LinkedAccount, PublishState,
     ServiceHost, UserRole,
 };
 use netsblox_api::{Client, Config};
@@ -1194,9 +1194,9 @@ async fn do_command(mut cfg: Config, args: Cli) -> Result<(), netsblox_api::erro
             } => {
                 let username = user.clone().unwrap_or(current_user);
                 let state = if *reject {
-                    LibraryPublishState::ApprovalDenied
+                    PublishState::ApprovalDenied
                 } else {
-                    LibraryPublishState::Public
+                    PublishState::Public
                 };
                 client.approve_library(&username, &library, &state).await?;
             }

@@ -1,5 +1,5 @@
 use crate::{
-    FriendInvite, FriendLinkState, Group, InvitationState, LibraryPublishState, LinkedAccount,
+    FriendInvite, FriendLinkState, Group, InvitationState, LinkedAccount, PublishState,
     RoleMetadata, SaveState, ServiceHost, UserRole,
 };
 use bson::{doc, Bson, DateTime};
@@ -76,13 +76,13 @@ impl From<RoleMetadata> for Bson {
     }
 }
 
-impl From<LibraryPublishState> for Bson {
-    fn from(state: LibraryPublishState) -> Bson {
+impl From<PublishState> for Bson {
+    fn from(state: PublishState) -> Bson {
         match state {
-            LibraryPublishState::Private => Bson::String("Private".into()),
-            LibraryPublishState::PendingApproval => Bson::String("PendingApproval".into()),
-            LibraryPublishState::ApprovalDenied => Bson::String("ApprovalDenied".into()),
-            LibraryPublishState::Public => Bson::String("Public".into()),
+            PublishState::Private => Bson::String("Private".into()),
+            PublishState::PendingApproval => Bson::String("PendingApproval".into()),
+            PublishState::ApprovalDenied => Bson::String("ApprovalDenied".into()),
+            PublishState::Public => Bson::String("Public".into()),
         }
     }
 }

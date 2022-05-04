@@ -712,7 +712,7 @@ impl Client {
         &self,
         username: &str,
         library: &str,
-        state: &LibraryPublishState,
+        state: &PublishState,
     ) -> Result<(), error::Error> {
         let path = format!("/libraries/mod/{}/{}", username, library);
         let response = self

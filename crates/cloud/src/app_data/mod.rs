@@ -9,7 +9,7 @@ use lettre::{Address, Message, SmtpTransport, Transport};
 use lru::LruCache;
 use mongodb::bson::{doc, Document};
 use mongodb::options::{FindOneAndUpdateOptions, IndexOptions, ReturnDocument};
-use netsblox_core::ProjectId;
+use netsblox_core::{LibraryMetadata, ProjectId};
 use rusoto_core::credential::StaticProvider;
 use rusoto_core::Region;
 use serde::{Deserialize, Serialize};
@@ -21,8 +21,8 @@ use uuid::Uuid;
 use crate::config::Settings;
 use crate::errors::{InternalError, UserError};
 use crate::models::{
-    AuthorizedServiceHost, CollaborationInvite, FriendLink, Group, Project, ProjectMetadata,
-    SaveState, SetPasswordToken, User,
+    AuthorizedServiceHost, CollaborationInvite, FriendLink, Group, Library, Project,
+    ProjectMetadata, SaveState, SetPasswordToken, User,
 };
 use crate::models::{OccupantInvite, RoleData, RoleMetadata, SentMessage};
 use crate::network::topology::{self, SetStorage, TopologyActor};
@@ -52,6 +52,8 @@ pub struct AppData {
     pub users: Collection<User>,
     pub friends: Collection<FriendLink>,
     pub project_metadata: Collection<ProjectMetadata>,
+    pub library_metadata: Collection<LibraryMetadata>,
+    pub libraries: Collection<Library>,
     pub authorized_services: Collection<AuthorizedServiceHost>,
 
     pub password_tokens: Collection<SetPasswordToken>,
@@ -110,6 +112,8 @@ impl AppData {
             db.collection::<SetPasswordToken>(&(prefix.to_owned() + "passwordTokens"));
         let users = db.collection::<User>(&(prefix.to_owned() + "users"));
         let project_metadata = db.collection::<ProjectMetadata>(&(prefix.to_owned() + "projects"));
+        let library_metadata = db.collection::<LibraryMetadata>(&(prefix.to_owned() + "libraries"));
+        let libraries = db.collection::<Library>(&(prefix.to_owned() + "libraries"));
         let authorized_services =
             db.collection::<AuthorizedServiceHost>(&(prefix.to_owned() + "authorizedServices"));
         let collab_invites =
@@ -133,6 +137,8 @@ impl AppData {
             users,
             prefix,
             project_metadata,
+            library_metadata,
+            libraries,
             authorized_services,
 
             collab_invites,

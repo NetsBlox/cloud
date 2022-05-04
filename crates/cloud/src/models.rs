@@ -1,5 +1,7 @@
 use mongodb::bson::{self, doc, Bson, DateTime};
-use netsblox_core::{ClientState, NewUser, OccupantInviteData, UserRole};
+use netsblox_core::{
+    ClientState, LibraryMetadata, NewUser, OccupantInviteData, PublishState, UserRole,
+};
 pub use netsblox_core::{
     CreateGroupData, FriendInvite, FriendLinkState, GroupId, InvitationState, LinkedAccount,
     ProjectId, RoleData, RoleMetadata, SaveState, ServiceHost,
@@ -474,6 +476,27 @@ impl From<AuthorizedServiceHost> for netsblox_core::ServiceHost {
             url: host.url,
             categories: Vec::new(),
         }
+    }
+}
+
+#[derive(Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct Library {
+    pub owner: String,
+    pub name: String,
+    pub notes: String,
+    pub blocks: String,
+    pub state: PublishState,
+}
+
+impl From<Library> for LibraryMetadata {
+    fn from(library: Library) -> LibraryMetadata {
+        LibraryMetadata::new(
+            library.owner.clone(),
+            library.name.clone(),
+            library.state,
+            Some(library.notes.clone()),
+        )
     }
 }
 
