@@ -285,7 +285,7 @@ impl ProjectMetadata {
             thumbnail: "".to_owned(),
             public: false,
             collaborators: vec![],
-            save_state: SaveState::CREATED,
+            save_state,
             delete_at: Some(delete_at),
             network_traces: Vec::new(),
             roles,
