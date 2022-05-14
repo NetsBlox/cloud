@@ -380,14 +380,23 @@ async fn update_project(
     Ok(HttpResponse::Ok().body("Project updated."))
 }
 
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct GetProjectRoleParams {
+    // FIXME: this isn't really secure since it is easy to spoof the client ID
+    client_id: Option<ClientID>,
+}
+
 #[get("/id/{projectID}/latest")]
 async fn get_latest_project(
     app: web::Data<AppData>,
     path: web::Path<(ProjectId,)>,
+    params: web::Query<GetProjectRoleParams>,
     session: Session,
 ) -> Result<HttpResponse, UserError> {
     let (project_id,) = path.into_inner();
-    let metadata = ensure_can_view_project(&app, &session, None, &project_id).await?;
+    let client_id = params.into_inner().client_id;
+    let metadata = ensure_can_view_project(&app, &session, client_id, &project_id).await?;
 
     let roles = metadata
         .roles
@@ -566,10 +575,12 @@ async fn rename_role(
 async fn get_latest_role(
     app: web::Data<AppData>,
     path: web::Path<(ProjectId, String)>,
+    params: web::Query<GetProjectRoleParams>,
     session: Session,
 ) -> Result<HttpResponse, UserError> {
     let (project_id, role_id) = path.into_inner();
-    let metadata = ensure_can_view_project(&app, &session, None, &project_id).await?;
+    let metadata =
+        ensure_can_view_project(&app, &session, params.into_inner().client_id, &project_id).await?;
 
     let (_, role_data) = fetch_role_data(&app, &metadata, role_id).await?;
     Ok(HttpResponse::Ok().json(role_data))
