@@ -52,6 +52,11 @@
                 - relabeling? This could change the number of inputs which affects the tree...
 
 - [ ] finish updating the browser
+    - [ ] error with sharing msgs
+        - it appears the project is missing
+            - not actually the case...
+            - doesn't seem to join the role when running all the tests...
+    - [ ] what other failures are there?
 
 - [ ] deleting user should delete groups
     - what about members? maybe release them into the wild?
@@ -87,15 +92,6 @@
 - [ ] don't clean up projects when server goes down? (The ws close reason seems to be Away when the browser tab closes *and* when the server is terminated)
     - set all projects to BROKEN
     - can we differentiate btwn server initiated Away and client?
-
-- [ ] ws support
-    - [x] sending (netsblox) messages
-    - [ ] client-message
-        - refactor a lot of things to use this...
-    - [ ] user-action
-        - how should we handle collaboration?
-    - [x] project-response
-    - [ ] request-actions
 
 - [ ] Block messages between users that don't share a group (+admin)
     - add the group IDs (+ GLOBAL) to the clients in the network topology?
@@ -840,3 +836,13 @@
         - [x] update the client index.html?
 
 - [x] add endpoint for viewing the state of a specific client
+
+- [x] ws support
+    - [x] sending (netsblox) messages
+    - [ ] client-message
+        - refactor a lot of things to use this...
+    - [ ] user-action
+        - how should we handle collaboration?
+    - [x] project-response
+    - [ ] request-actions
+
