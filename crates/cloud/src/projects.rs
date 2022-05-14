@@ -36,6 +36,7 @@ async fn create_project(
     let current_user = session.get::<String>("username").unwrap_or(None);
     let project_data = body.into_inner();
     let owner_name = project_data.owner.or_else(|| current_user);
+    // FIXME: what if the owner is a client ID?
     if let Some(username) = &owner_name {
         ensure_can_edit_user(&app, &session, username).await?;
     }

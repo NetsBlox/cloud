@@ -280,6 +280,7 @@ async fn start_network_trace(
     session: Session,
     path: web::Path<(ProjectId,)>,
 ) -> Result<HttpResponse, UserError> {
+    // TODO: do we need the client ID? Require login?
     let (project_id,) = path.into_inner();
     ensure_can_edit_project(&app, &session, None, &project_id).await?;
     let query = doc! {"id": project_id};
