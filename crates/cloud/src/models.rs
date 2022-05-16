@@ -1,6 +1,6 @@
 use mongodb::bson::{self, doc, Bson, DateTime};
 use netsblox_core::{
-    ClientState, LibraryMetadata, NewUser, OccupantInviteData, PublishState, UserRole,
+    ClientState, LibraryMetadata, NewUser, OccupantInviteData, PublishState, RoleId, UserRole,
 };
 pub use netsblox_core::{
     CreateGroupData, FriendInvite, FriendLinkState, GroupId, InvitationState, LinkedAccount,
@@ -119,13 +119,13 @@ pub struct CollaborationInvite {
     pub id: String,
     pub sender: String,
     pub receiver: String,
-    pub project_id: String,
+    pub project_id: ProjectId,
     pub state: InvitationState,
     pub created_at: DateTime,
 }
 
 impl CollaborationInvite {
-    pub fn new(sender: String, receiver: String, project_id: String) -> Self {
+    pub fn new(sender: String, receiver: String, project_id: ProjectId) -> Self {
         CollaborationInvite {
             id: Uuid::new_v4().to_string(),
             sender,
@@ -256,7 +256,7 @@ pub struct ProjectMetadata {
     pub save_state: SaveState,
     pub delete_at: Option<DateTime>,
     pub network_traces: Vec<NetworkTraceMetadata>,
-    pub roles: HashMap<String, RoleMetadata>,
+    pub roles: HashMap<RoleId, RoleMetadata>,
 }
 
 impl ProjectMetadata {
@@ -269,7 +269,7 @@ impl ProjectMetadata {
         let origin_time = DateTime::from_system_time(SystemTime::now());
         let roles = roles
             .into_iter()
-            .map(|role| (Uuid::new_v4().to_string(), role))
+            .map(|role| (RoleId::new(Uuid::new_v4().to_string()), role))
             .collect::<HashMap<_, _>>();
 
         let ten_minutes = Duration::new(10 * 60, 0);
@@ -277,7 +277,7 @@ impl ProjectMetadata {
             DateTime::from_system_time(SystemTime::now().checked_add(ten_minutes).unwrap());
 
         ProjectMetadata {
-            id: Uuid::new_v4().to_string(),
+            id: ProjectId::new(Uuid::new_v4().to_string()),
             owner: owner.to_owned(),
             name: name.to_owned(),
             updated: origin_time,
@@ -322,7 +322,7 @@ pub struct Project {
     pub collaborators: std::vec::Vec<String>,
     pub origin_time: DateTime,
     pub save_state: SaveState,
-    pub roles: HashMap<String, RoleData>,
+    pub roles: HashMap<RoleId, RoleData>,
 }
 
 impl From<Project> for netsblox_core::Project {
@@ -347,7 +347,7 @@ impl From<Project> for netsblox_core::Project {
 pub struct OccupantInvite {
     pub username: String,
     pub project_id: ProjectId,
-    pub role_id: String,
+    pub role_id: RoleId,
     created_at: DateTime,
 }
 

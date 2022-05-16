@@ -3,7 +3,7 @@ use lazy_static::lazy_static;
 use lru::LruCache;
 use mongodb::bson::{doc, DateTime};
 pub use netsblox_core::{BrowserClientState, ClientState, ExternalClientState};
-use netsblox_core::{ExternalClient, OccupantState, RoleState, RoomState};
+use netsblox_core::{ExternalClient, OccupantState, RoleId, RoleState, RoomState};
 use serde_json::json;
 use std::collections::{HashMap, HashSet};
 use std::str::FromStr;
@@ -24,8 +24,8 @@ use super::{
 
 #[derive(Clone, Debug)]
 struct BrowserAddress {
-    role_id: String,
-    project_id: String,
+    role_id: RoleId,
+    project_id: ProjectId,
 }
 
 impl From<BrowserClientState> for BrowserAddress {
@@ -68,12 +68,12 @@ impl From<EvictionNotice> for ClientCommand {
 
 #[derive(Debug)]
 struct ProjectNetwork {
-    id: String,
-    roles: HashMap<String, Vec<ClientID>>,
+    id: ProjectId,
+    roles: HashMap<RoleId, Vec<ClientID>>,
 }
 
 impl ProjectNetwork {
-    fn new(id: String) -> ProjectNetwork {
+    fn new(id: ProjectId) -> ProjectNetwork {
         ProjectNetwork {
             id,
             roles: HashMap::new(),
@@ -86,7 +86,7 @@ impl ProjectNetwork {
         usernames: &HashMap<ClientID, String>,
     ) -> RoomState {
         let empty = Vec::new();
-        let roles: HashMap<String, RoleState> = project
+        let roles: HashMap<RoleId, RoleState> = project
             .roles
             .into_iter()
             .map(|(id, role)| {
@@ -133,7 +133,7 @@ pub struct Topology {
     states: HashMap<ClientID, ClientState>,
     usernames: HashMap<ClientID, String>,
 
-    rooms: HashMap<String, ProjectNetwork>,
+    rooms: HashMap<ProjectId, ProjectNetwork>,
     external: HashMap<AppID, HashMap<String, ClientID>>,
 }
 
@@ -278,7 +278,7 @@ impl Topology {
                     .into_iter()
                     .filter_map(|name| name2id.get(&name))
                     .map(|role_id| BrowserAddress {
-                        project_id: metadata.id.to_string(),
+                        project_id: metadata.id.to_owned(),
                         role_id: role_id.to_owned(),
                     })
                     .collect()
@@ -339,7 +339,7 @@ impl Topology {
                 .into_iter()
                 .map(|project_id| {
                     SentMessage::new(
-                        project_id.to_string(),
+                        project_id,
                         source.to_owned(),
                         recipients.clone(),
                         msg.content.clone(),
@@ -491,8 +491,8 @@ impl Topology {
         }
     }
 
-    async fn remove_room(&mut self, project_id: &str) {
-        // TODO: Set the entry to be removed. After how long?
+    async fn remove_room(&mut self, project_id: &ProjectId) {
+        // Set the entry to be removed. After how long?
         //   - If the room has only one role, it can be deleted immediately
         //     - the client may need to be updated
         //   - if multiple roles and there is a broken connection:
@@ -543,8 +543,7 @@ impl Topology {
     pub fn send_room_state(&self, msg: SendRoomState) {
         self.invalidate_cached_addresses(&msg.project);
 
-        let id = msg.project.id.to_string();
-        if let Some(room) = self.rooms.get(&id) {
+        if let Some(room) = self.rooms.get(&msg.project.id) {
             let clients = room
                 .roles
                 .values()

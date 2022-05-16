@@ -154,7 +154,24 @@ pub struct FriendInvite {
     pub created_at: SystemTime,
 }
 
-pub type ProjectId = String;
+#[derive(Deserialize, Serialize, Clone, Debug, PartialEq, Eq, Display, Hash)]
+pub struct ProjectId(String);
+
+impl ProjectId {
+    pub fn new(id: String) -> Self {
+        ProjectId(id)
+    }
+}
+
+#[derive(Deserialize, Serialize, Clone, Debug, PartialEq, Eq, Display, Hash)]
+pub struct RoleId(String);
+
+impl RoleId {
+    pub fn new(id: String) -> Self {
+        RoleId(id)
+    }
+}
+
 #[derive(Deserialize, Serialize, Clone, Debug)]
 #[serde(rename_all = "camelCase")]
 pub struct ProjectMetadata {
@@ -167,7 +184,7 @@ pub struct ProjectMetadata {
     pub collaborators: std::vec::Vec<String>,
     pub origin_time: SystemTime,
     pub save_state: SaveState,
-    pub roles: HashMap<String, RoleMetadata>,
+    pub roles: HashMap<RoleId, RoleMetadata>,
 }
 
 #[derive(Deserialize, Serialize, Clone, Debug)]
@@ -197,7 +214,7 @@ pub struct Project {
     pub collaborators: std::vec::Vec<String>,
     pub origin_time: SystemTime,
     pub save_state: SaveState,
-    pub roles: HashMap<String, RoleData>,
+    pub roles: HashMap<RoleId, RoleData>,
 }
 
 impl Project {
@@ -247,8 +264,8 @@ pub enum ClientState {
 #[derive(Debug, Deserialize, Serialize, Clone)]
 #[serde(rename_all = "camelCase")]
 pub struct BrowserClientState {
-    pub role_id: String,
-    pub project_id: String,
+    pub role_id: RoleId,
+    pub project_id: ProjectId,
 }
 
 #[derive(Debug, Deserialize, Serialize, Clone)]
@@ -332,13 +349,13 @@ pub struct CollaborationInvite {
     pub id: String,
     pub sender: String,
     pub receiver: String,
-    pub project_id: String,
+    pub project_id: ProjectId,
     pub state: InvitationState,
     pub created_at: SystemTime,
 }
 
 impl CollaborationInvite {
-    pub fn new(sender: String, receiver: String, project_id: String) -> Self {
+    pub fn new(sender: String, receiver: String, project_id: ProjectId) -> Self {
         CollaborationInvite {
             id: Uuid::new_v4().to_string(),
             sender,
@@ -387,10 +404,10 @@ pub struct ExternalClient {
 
 #[derive(Deserialize, Serialize, Clone, Debug)]
 pub struct RoomState {
-    pub id: String,
+    pub id: ProjectId,
     pub owner: String,
     pub name: String,
-    pub roles: HashMap<String, RoleState>,
+    pub roles: HashMap<RoleId, RoleState>,
     pub collaborators: Vec<String>,
     pub version: u64,
 }
@@ -411,7 +428,7 @@ pub struct OccupantState {
 #[serde(rename_all = "camelCase")]
 pub struct OccupantInviteData {
     pub username: String,
-    pub role_id: String,
+    pub role_id: RoleId,
 }
 
 #[derive(Deserialize, Serialize, Debug, Clone)]
@@ -457,17 +474,39 @@ pub enum SendMessageTarget {
     },
     #[serde(rename_all = "camelCase")]
     Room {
-        project_id: String,
+        project_id: ProjectId,
     },
     #[serde(rename_all = "camelCase")]
     Role {
-        project_id: String,
-        role_id: String,
+        project_id: ProjectId,
+        role_id: RoleId,
     },
     #[serde(rename_all = "camelCase")]
     Client {
-        project_id: String,
-        role_id: String,
+        project_id: ProjectId,
+        role_id: RoleId,
         client_id: ClientID,
     },
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use uuid::Uuid;
+
+    #[test]
+    fn deserialize_project_id() {
+        let project_id_str = &format!("\"{}\"", Uuid::new_v4());
+        let project_id: ProjectId = serde_json::from_str(project_id_str).expect(&format!(
+            "Unable to parse ProjectId from {}",
+            project_id_str
+        ));
+    }
+
+    #[test]
+    fn deserialize_role_id() {
+        let role_id_str = &format!("\"{}\"", Uuid::new_v4());
+        let role_id: RoleId = serde_json::from_str(role_id_str)
+            .expect(&format!("Unable to parse RoleId from {}", role_id_str));
+    }
 }

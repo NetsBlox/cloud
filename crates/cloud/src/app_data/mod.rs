@@ -9,7 +9,7 @@ use lettre::{Address, Message, SmtpTransport, Transport};
 use lru::LruCache;
 use mongodb::bson::{doc, Document};
 use mongodb::options::{FindOneAndUpdateOptions, IndexOptions, ReturnDocument};
-use netsblox_core::{LibraryMetadata, ProjectId};
+use netsblox_core::{LibraryMetadata, ProjectId, RoleId};
 use rusoto_core::credential::StaticProvider;
 use rusoto_core::Region;
 use serde::{Deserialize, Serialize};
@@ -465,7 +465,7 @@ impl AppData {
             .into_iter()
             .zip(role_data)
             .filter_map(|(k, data)| data.map(|d| (k, d)).ok())
-            .collect::<HashMap<_, _>>();
+            .collect::<HashMap<RoleId, _>>();
 
         Ok(Project {
             // TODO: refactor?
@@ -531,7 +531,7 @@ impl AppData {
     pub async fn save_role(
         &self,
         metadata: &ProjectMetadata,
-        role_id: &str,
+        role_id: &RoleId,
         role: RoleData,
     ) -> Result<RoleMetadata, UserError> {
         let role_md = self
