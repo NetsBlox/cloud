@@ -3,6 +3,7 @@ use actix_web::{get, post};
 use actix_web::{web, HttpResponse};
 use futures::TryStreamExt;
 use mongodb::bson::doc;
+use netsblox_core::ProjectId;
 
 use crate::app_data::AppData;
 use crate::errors::{InternalError, UserError};
@@ -35,7 +36,7 @@ async fn list_invites(
 async fn send_invite(
     app: web::Data<AppData>,
     session: Session,
-    path: web::Path<(String, String)>,
+    path: web::Path<(ProjectId, String)>,
 ) -> Result<HttpResponse, UserError> {
     let (project_id, recipient) = path.into_inner();
 

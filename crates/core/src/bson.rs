@@ -1,5 +1,5 @@
 use crate::{
-    FriendInvite, FriendLinkState, Group, InvitationState, LinkedAccount, PublishState,
+    FriendInvite, FriendLinkState, Group, InvitationState, LinkedAccount, ProjectId, PublishState,
     RoleMetadata, SaveState, ServiceHost, UserRole,
 };
 use bson::{doc, Bson, DateTime};
@@ -105,5 +105,11 @@ impl From<InvitationState> for Bson {
             InvitationState::ACCEPTED => Bson::String("ACCEPTED".to_owned()),
             InvitationState::REJECTED => Bson::String("REJECTED".to_owned()),
         }
+    }
+}
+
+impl From<ProjectId> for Bson {
+    fn from(id: ProjectId) -> Bson {
+        Bson::String(id.0)
     }
 }

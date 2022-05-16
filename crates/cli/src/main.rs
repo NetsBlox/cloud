@@ -6,8 +6,8 @@ use clap::{Parser, Subcommand};
 use futures_util::StreamExt;
 use inquire::{Confirm, Password, PasswordDisplayMode};
 use netsblox_api::core::{
-    ClientID, Credentials, FriendLinkState, InvitationState, LinkedAccount, PublishState,
-    ServiceHost, UserRole,
+    ClientID, Credentials, FriendLinkState, InvitationState, LinkedAccount, ProjectId,
+    PublishState, ServiceHost, UserRole,
 };
 use netsblox_api::{Client, Config};
 use std::path::Path;
@@ -830,7 +830,7 @@ async fn do_command(mut cfg: Config, args: Cli) -> Result<(), netsblox_api::erro
                 user,
             } => {
                 let project_id = if *as_id {
-                    project.to_owned()
+                    ProjectId::new(project.to_owned())
                 } else {
                     let owner = user.clone().unwrap_or(current_user);
                     client.get_project_metadata(&owner, &project).await?.id

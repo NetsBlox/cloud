@@ -13,7 +13,8 @@ use mongodb::bson::doc;
 use mongodb::options::{FindOneAndUpdateOptions, ReturnDocument};
 use mongodb::Cursor;
 use netsblox_core::{
-    ClientID, CreateProjectData, Project, ProjectId, SaveState, UpdateProjectData, UpdateRoleData,
+    ClientID, CreateProjectData, Project, ProjectId, RoleId, SaveState, UpdateProjectData,
+    UpdateRoleData,
 };
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
@@ -21,8 +22,8 @@ use uuid::Uuid;
 #[derive(Serialize)]
 #[serde(rename_all = "camelCase")]
 struct CreatedRole<'a> {
-    project_id: String,
-    role_id: &'a str,
+    project_id: ProjectId,
+    role_id: &'a RoleId,
     name: String,
     role_name: &'a str,
 }
@@ -53,7 +54,7 @@ async fn create_project(
     let role_id = metadata.roles.keys().next().unwrap();
     let role_name = &metadata.roles.get(role_id).unwrap().name;
     Ok(HttpResponse::Ok().json(CreatedRole {
-        project_id: metadata.id.to_string(),
+        project_id: metadata.id,
         role_id,
         name: metadata.name,
         role_name,
@@ -404,7 +405,7 @@ async fn get_latest_project(
         .keys()
         .map(|role_id| fetch_role_data(&app, &metadata, role_id.to_owned()))
         .collect::<FuturesUnordered<_>>()
-        .try_collect::<HashMap<String, RoleData>>()
+        .try_collect::<HashMap<RoleId, RoleData>>()
         .await
         .unwrap(); // TODO: handle errors
 
@@ -479,7 +480,7 @@ async fn create_role(
 #[get("/id/{projectID}/{roleID}")]
 async fn get_role(
     app: web::Data<AppData>,
-    path: web::Path<(ProjectId, String)>,
+    path: web::Path<(ProjectId, RoleId)>,
     session: Session,
 ) -> Result<HttpResponse, UserError> {
     let (project_id, role_id) = path.into_inner();
@@ -497,7 +498,7 @@ async fn get_role(
 #[delete("/id/{projectID}/{roleID}")]
 async fn delete_role(
     app: web::Data<AppData>,
-    path: web::Path<(ProjectId, String)>,
+    path: web::Path<(ProjectId, RoleId)>,
     session: Session,
 ) -> Result<HttpResponse, UserError> {
     let (project_id, role_id) = path.into_inner();
@@ -528,7 +529,7 @@ async fn delete_role(
 async fn save_role(
     app: web::Data<AppData>,
     body: web::Json<RoleData>,
-    path: web::Path<(ProjectId, String)>,
+    path: web::Path<(ProjectId, RoleId)>,
     session: Session,
 ) -> Result<HttpResponse, UserError> {
     let (project_id, role_id) = path.into_inner();
@@ -543,7 +544,7 @@ async fn save_role(
 async fn rename_role(
     app: web::Data<AppData>,
     body: web::Json<UpdateRoleData>,
-    path: web::Path<(ProjectId, String)>,
+    path: web::Path<(ProjectId, RoleId)>,
     session: Session,
 ) -> Result<HttpResponse, UserError> {
     let (project_id, role_id) = path.into_inner();
@@ -575,7 +576,7 @@ async fn rename_role(
 #[get("/id/{projectID}/{roleID}/latest")]
 async fn get_latest_role(
     app: web::Data<AppData>,
-    path: web::Path<(ProjectId, String)>,
+    path: web::Path<(ProjectId, RoleId)>,
     params: web::Query<GetProjectRoleParams>,
     session: Session,
 ) -> Result<HttpResponse, UserError> {
@@ -590,8 +591,8 @@ async fn get_latest_role(
 async fn fetch_role_data(
     app: &AppData,
     metadata: &ProjectMetadata,
-    role_id: String,
-) -> Result<(String, RoleData), UserError> {
+    role_id: RoleId,
+) -> Result<(RoleId, RoleData), UserError> {
     let role_md = metadata
         .roles
         .get(&role_id)
@@ -634,7 +635,7 @@ struct RoleDataResponse {
 #[post("/id/{projectID}/{roleID}/latest")]
 async fn report_latest_role(
     app: web::Data<AppData>,
-    path: web::Path<(ProjectId, String)>,
+    path: web::Path<(ProjectId, RoleId)>,
     body: web::Json<RoleDataResponse>,
     session: Session,
 ) -> Result<HttpResponse, UserError> {
