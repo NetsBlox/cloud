@@ -497,7 +497,7 @@ mod tests {
     #[test]
     fn deserialize_project_id() {
         let project_id_str = &format!("\"{}\"", Uuid::new_v4());
-        let project_id: ProjectId = serde_json::from_str(project_id_str).expect(&format!(
+        let _project_id: ProjectId = serde_json::from_str(project_id_str).expect(&format!(
             "Unable to parse ProjectId from {}",
             project_id_str
         ));
@@ -506,7 +506,7 @@ mod tests {
     #[test]
     fn deserialize_role_id() {
         let role_id_str = &format!("\"{}\"", Uuid::new_v4());
-        let role_id: RoleId = serde_json::from_str(role_id_str)
+        let _role_id: RoleId = serde_json::from_str(role_id_str)
             .expect(&format!("Unable to parse RoleId from {}", role_id_str));
     }
 }
