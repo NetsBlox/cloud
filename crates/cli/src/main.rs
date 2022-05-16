@@ -32,6 +32,7 @@ enum Users {
     },
     Delete {
         username: String,
+        /// Skip confirmation prompts and delete the user
         #[clap(short, long)]
         no_confirm: bool,
     },
