@@ -1,6 +1,5 @@
 mod address;
 mod client;
-mod external;
 mod network;
 
 use crate::app_data::AppData;
