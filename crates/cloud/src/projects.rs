@@ -631,16 +631,24 @@ struct RoleDataResponse {
     pub data: RoleData,
 }
 
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct ReportRoleParams {
+    client_id: Option<ClientID>,
+}
+
 #[post("/id/{projectID}/{roleID}/latest")]
 async fn report_latest_role(
     app: web::Data<AppData>,
     path: web::Path<(ProjectId, RoleId)>,
     body: web::Json<RoleDataResponse>,
+    params: web::Query<ReportRoleParams>,
     session: Session,
 ) -> Result<HttpResponse, UserError> {
     let (project_id, role_id) = path.into_inner();
     let id = Uuid::parse_str(&body.id).map_err(|_err| UserError::ProjectNotFoundError)?;
-    let metadata = ensure_can_edit_project(&app, &session, None, &project_id).await?;
+    let client_id = params.into_inner().client_id;
+    let metadata = ensure_can_edit_project(&app, &session, client_id, &project_id).await?;
 
     if !metadata.roles.contains_key(&role_id) {
         return Err(UserError::RoleNotFoundError);
