@@ -11,7 +11,6 @@ use mongodb::options::{FindOneAndUpdateOptions, FindOptions};
 use netsblox_core::{CreateLibraryData, LibraryMetadata, PublishState};
 use regex::Regex;
 use rustrict::CensorStr;
-use serde::{Deserialize, Serialize};
 
 // TODO: add an endpoint for the official ones?
 #[get("/community")]

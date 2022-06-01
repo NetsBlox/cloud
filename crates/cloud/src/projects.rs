@@ -469,7 +469,6 @@ async fn create_role(
     session: Session,
 ) -> Result<HttpResponse, UserError> {
     let (project_id,) = path.into_inner();
-    let query = doc! {"id": &project_id};
     let metadata = ensure_can_edit_project(&app, &session, None, &project_id).await?;
 
     let updated_metadata = app.create_role(metadata, body.into_inner().into()).await?;
@@ -640,7 +639,6 @@ async fn report_latest_role(
     session: Session,
 ) -> Result<HttpResponse, UserError> {
     let (project_id, role_id) = path.into_inner();
-    let query = doc! {"id": &project_id};
     let id = Uuid::parse_str(&body.id).map_err(|_err| UserError::ProjectNotFoundError)?;
     let metadata = ensure_can_edit_project(&app, &session, None, &project_id).await?;
 

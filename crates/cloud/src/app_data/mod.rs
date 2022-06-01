@@ -5,6 +5,7 @@ use futures::join;
 use lazy_static::lazy_static;
 use lettre::message::Mailbox;
 use lettre::transport::smtp::authentication::Credentials;
+use log::{info, warn};
 use lettre::{Address, Message, SmtpTransport, Transport};
 use lru::LruCache;
 use mongodb::bson::{doc, Document};
@@ -161,7 +162,12 @@ impl AppData {
             bucket: bucket.clone(),
             ..Default::default()
         };
-        self.s3.create_bucket(request).await;
+        match self.s3.create_bucket(request).await {
+            // The only types of errors returned by this operation are due
+            // to the bucket already existing (or being owned by you)
+            Err(_err) => info!("Using existing s3 bucket."),
+            _ => {}
+        };
 
         // Add database indexes
         let index_opts = IndexOptions::builder()
@@ -246,7 +252,9 @@ impl AppData {
             let one_day = Duration::from_secs(60 * 60 * 24);
             let mut interval = time::interval(one_day);
             loop {
-                update_tor_nodes(&tor_exit_nodes).await; // TODO: add logging
+                if let Err(error) = update_tor_nodes(&tor_exit_nodes).await {
+                    warn!("Unable to update Tor nodes: {:?}", error);
+                }
                 interval.tick().await;
             }
         });
@@ -632,7 +640,7 @@ impl AppData {
             .body(body)
             .unwrap();
 
-        self.mailer.send(&email);
+        self.mailer.send(&email).map_err(|err| InternalError::SendEmailError(err))?;
         Ok(())
     }
 }

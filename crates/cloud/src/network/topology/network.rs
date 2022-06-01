@@ -14,6 +14,7 @@ use crate::app_data::AppData;
 use crate::models::{ProjectId, ProjectMetadata, SaveState, SentMessage};
 use crate::network::topology::address::ClientAddress;
 use crate::network::AppID;
+use crate::errors::InternalError;
 
 pub use super::address::DEFAULT_APP_ID;
 use super::client::{Client, ClientID, RoleRequest};
@@ -491,7 +492,7 @@ impl Topology {
         }
     }
 
-    async fn remove_room(&mut self, project_id: &ProjectId) {
+    async fn remove_room(&mut self, project_id: &ProjectId) -> Result<(), InternalError>{
         // Set the entry to be removed. After how long?
         //   - If the room has only one role, it can be deleted immediately
         //     - the client may need to be updated
@@ -516,7 +517,8 @@ impl Topology {
 
             match cleanup {
                 ProjectCleanup::IMMEDIATELY => {
-                    app.project_metadata.delete_one(query, None).await;
+                    app.project_metadata.delete_one(query, None).await
+                        .map_err(|err| InternalError::DatabaseConnectionError(err))?;
                 }
                 ProjectCleanup::DELAYED => {
                     let ten_minutes = Duration::new(10 * 60, 0);
@@ -524,11 +526,13 @@ impl Topology {
                         SystemTime::now().checked_add(ten_minutes).unwrap(),
                     );
                     let update = doc! {"$set": {"deleteAt": delete_at}};
-                    app.project_metadata.update_one(query, update, None).await;
+                    app.project_metadata.update_one(query, update, None).await
+                        .map_err(|err| InternalError::DatabaseConnectionError(err))?;
                 }
                 _ => {}
             }
         }
+        Ok(())
     }
 
     async fn send_room_state_for(&mut self, project_id: &ProjectId) {
