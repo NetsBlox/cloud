@@ -288,7 +288,7 @@ impl Client {
     pub async fn rename_role(
         &self,
         id: &ProjectId,
-        role_id: &str,
+        role_id: &RoleId,
         name: &str,
     ) -> Result<(), error::Error> {
         let response = self
@@ -318,7 +318,7 @@ impl Client {
         Ok(())
     }
 
-    pub async fn delete_role(&self, id: &ProjectId, role_id: &str) -> Result<(), error::Error> {
+    pub async fn delete_role(&self, id: &ProjectId, role_id: &RoleId) -> Result<(), error::Error> {
         let response = self
             .request(Method::DELETE, &format!("/projects/id/{}/{}", id, role_id))
             .send()
@@ -378,7 +378,7 @@ impl Client {
     pub async fn get_role(
         &self,
         id: &ProjectId,
-        role_id: &str,
+        role_id: &RoleId,
         latest: &bool,
     ) -> Result<RoleData, error::Error> {
         let path = if *latest {
