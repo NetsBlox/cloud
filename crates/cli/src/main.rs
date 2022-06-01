@@ -1270,8 +1270,3 @@ async fn do_command(mut cfg: Config, args: Cli) -> Result<(), netsblox_api::erro
 
     Ok(())
 }
-
-/// Resolve a group name to its ID
-async fn resolve_group_name() -> String {
-    todo!();
-}
