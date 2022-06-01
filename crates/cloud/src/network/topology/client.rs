@@ -10,7 +10,7 @@ use std::{
 };
 use uuid::Uuid;
 
-use super::{BrowserClientState, ClientCommand};
+use super::ClientCommand;
 use crate::{errors::InternalError, models::RoleData};
 
 lazy_static! {

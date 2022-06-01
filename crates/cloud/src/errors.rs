@@ -63,8 +63,6 @@ pub enum UserError {
     InvalidAppIdError,
     #[display(fmt = "Invalid service host ID.")]
     InvalidServiceHostIDError,
-    #[display(fmt = "Invalid authentication strategy.")]
-    InvalidAuthStrategyError,
     #[display(fmt = "Unable to connect to Snap! Please try again later.")]
     SnapConnectionError,
     #[display(fmt = "Account already linked to NetsBlox user.")]
@@ -109,7 +107,6 @@ impl error::ResponseError for UserError {
             | UserError::InvalidClientIdError
             | UserError::InvalidAppIdError
             | UserError::InvalidServiceHostIDError
-            | UserError::InvalidAuthStrategyError
             | UserError::AccountAlreadyLinkedError
             | UserError::PasswordResetLinkSentError
             | UserError::InvalidAccountTypeError

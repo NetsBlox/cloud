@@ -193,29 +193,6 @@ impl Topology {
             .collect()
     }
 
-    async fn get_address_string(&self, state: &ClientState) -> Option<String> {
-        match state {
-            ClientState::Browser(BrowserClientState {
-                role_id,
-                project_id,
-            }) => {
-                if let Some(app) = &self.app_data {
-                    let project = app.get_project_metadatum(&project_id).await.unwrap();
-
-                    project
-                        .roles
-                        .get(role_id)
-                        .map(|role| format!("{}@{}@{}", role.name, project.name, project.owner))
-                } else {
-                    None
-                }
-            }
-            ClientState::External(ExternalClientState { address, app_id }) => {
-                Some(format!("{} #{}", address, app_id))
-            }
-        }
-    }
-
     fn resolve_address_from_cache(&self, addr: &ClientAddress) -> Option<Vec<BrowserAddress>> {
         ADDRESS_CACHE
             .write()
