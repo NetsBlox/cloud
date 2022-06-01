@@ -21,6 +21,7 @@ use crate::{
 
 use super::sha512;
 
+#[allow(dead_code)]
 #[derive(Deserialize)]
 struct SnapUser {
     id: u32,

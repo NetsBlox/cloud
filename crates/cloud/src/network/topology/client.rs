@@ -49,16 +49,12 @@ impl Client {
 #[rtype(result = "()")]
 pub struct RoleRequest {
     addr: Recipient<ClientCommand>,
-    state: BrowserClientState,
 }
 
 impl RoleRequest {
-    pub fn new(addr: Recipient<ClientCommand>, state: BrowserClientState) -> Self {
+    pub fn new(addr: Recipient<ClientCommand>) -> Self {
         // TODO: add support for sending to multiple clients?
-        RoleRequest {
-            addr,
-            state: state.clone(),
-        }
+        RoleRequest { addr }
     }
 
     fn initialize_response(&self, id: Uuid) {

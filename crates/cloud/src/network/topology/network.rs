@@ -595,7 +595,7 @@ impl Topology {
             .and_then(|room| room.roles.get(&state.role_id))
             .and_then(|client_ids| client_ids.first())
             .and_then(|id| self.clients.get(id))
-            .map(|client| RoleRequest::new(client.addr.clone(), state.clone()))
+            .map(|client| RoleRequest::new(client.addr.clone()))
     }
 
     pub fn get_active_rooms(&self) -> Vec<ProjectId> {
