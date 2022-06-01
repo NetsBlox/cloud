@@ -5,8 +5,8 @@ use futures::join;
 use lazy_static::lazy_static;
 use lettre::message::Mailbox;
 use lettre::transport::smtp::authentication::Credentials;
-use log::{info, warn};
 use lettre::{Address, Message, SmtpTransport, Transport};
+use log::{info, warn};
 use lru::LruCache;
 use mongodb::bson::{doc, Document};
 use mongodb::options::{FindOneAndUpdateOptions, IndexOptions, ReturnDocument};
@@ -318,11 +318,6 @@ impl AppData {
         }
 
         Ok(results)
-    }
-
-    fn get_cached_projects(&self, id: &ProjectId) -> Option<ProjectMetadata> {
-        let mut cache = PROJECT_CACHE.write().unwrap();
-        cache.get(id).map(|md| md.to_owned())
     }
 
     fn get_cached_project(&self, id: &ProjectId) -> Option<ProjectMetadata> {
@@ -640,7 +635,9 @@ impl AppData {
             .body(body)
             .unwrap();
 
-        self.mailer.send(&email).map_err(|err| InternalError::SendEmailError(err))?;
+        self.mailer
+            .send(&email)
+            .map_err(|err| InternalError::SendEmailError(err))?;
         Ok(())
     }
 }

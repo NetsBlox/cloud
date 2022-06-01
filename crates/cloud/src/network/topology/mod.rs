@@ -8,6 +8,7 @@ use crate::models::{OccupantInvite, ProjectMetadata, RoleData};
 use actix::prelude::*;
 use actix::{Actor, AsyncContext, Context, Handler, MessageResult};
 use lazy_static::lazy_static;
+use log::warn;
 use mongodb::bson::doc;
 use netsblox_core::{ClientID, ExternalClient, ProjectId, RoomState};
 use serde_json::Value;
@@ -103,7 +104,9 @@ impl Handler<BrokenClient> for TopologyActor {
     fn handle(&mut self, msg: BrokenClient, ctx: &mut Context<Self>) -> Self::Result {
         let fut = async {
             let mut topology = TOPOLOGY.write().unwrap();
-            topology.set_broken_client(msg).await;
+            if let Err(error) = topology.set_broken_client(msg).await {
+                warn!("Unable to record broken client: {:?}", error);
+            }
         };
         let fut = actix::fut::wrap_future(fut);
         ctx.spawn(fut);

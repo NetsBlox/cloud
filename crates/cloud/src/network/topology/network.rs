@@ -1,5 +1,6 @@
 use futures::future::join_all;
 use lazy_static::lazy_static;
+use log::warn;
 use lru::LruCache;
 use mongodb::bson::{doc, DateTime};
 pub use netsblox_core::{BrowserClientState, ClientState, ExternalClientState};
@@ -11,10 +12,10 @@ use std::sync::{Arc, RwLock};
 use std::time::{Duration, SystemTime};
 
 use crate::app_data::AppData;
+use crate::errors::InternalError;
 use crate::models::{ProjectId, ProjectMetadata, SaveState, SentMessage};
 use crate::network::topology::address::ClientAddress;
 use crate::network::AppID;
-use crate::errors::InternalError;
 
 pub use super::address::DEFAULT_APP_ID;
 use super::client::{Client, ClientID, RoleRequest};
@@ -416,7 +417,7 @@ impl Topology {
         self.clients.insert(msg.id, client);
     }
 
-    pub async fn set_broken_client(&mut self, msg: BrokenClient) {
+    pub async fn set_broken_client(&mut self, msg: BrokenClient) -> Result<(), InternalError> {
         if let Some(app) = &self.app_data {
             if let Some(ClientState::Browser(state)) = self.states.get(&msg.id) {
                 let query = doc! {
@@ -424,13 +425,14 @@ impl Topology {
                     "saveState": SaveState::TRANSIENT
                 };
                 let update = doc! {"$set": {"saveState": SaveState::BROKEN}};
-                let result = app
-                    .project_metadata
+                app.project_metadata
                     .update_one(query, update, None)
                     .await
-                    .unwrap();
+                    .map_err(|err| InternalError::DatabaseConnectionError(err))?;
             }
         }
+
+        Ok(())
         // TODO: Record a list of broken clients for the project?
     }
 
@@ -460,7 +462,12 @@ impl Topology {
                             .unwrap_or(true);
                         let remove_room = role_count == 1 && is_leaving_project;
                         if remove_room {
-                            self.remove_room(&state.project_id).await;
+                            if let Err(error) = self.remove_room(&state.project_id).await {
+                                warn!(
+                                    "Unable to remove project {}: {:?}",
+                                    &state.project_id, error
+                                );
+                            }
                             update_needed = false;
                         } else {
                             // remove the role
@@ -492,7 +499,7 @@ impl Topology {
         }
     }
 
-    async fn remove_room(&mut self, project_id: &ProjectId) -> Result<(), InternalError>{
+    async fn remove_room(&mut self, project_id: &ProjectId) -> Result<(), InternalError> {
         // Set the entry to be removed. After how long?
         //   - If the room has only one role, it can be deleted immediately
         //     - the client may need to be updated
@@ -517,7 +524,9 @@ impl Topology {
 
             match cleanup {
                 ProjectCleanup::IMMEDIATELY => {
-                    app.project_metadata.delete_one(query, None).await
+                    app.project_metadata
+                        .delete_one(query, None)
+                        .await
                         .map_err(|err| InternalError::DatabaseConnectionError(err))?;
                 }
                 ProjectCleanup::DELAYED => {
@@ -526,7 +535,9 @@ impl Topology {
                         SystemTime::now().checked_add(ten_minutes).unwrap(),
                     );
                     let update = doc! {"$set": {"deleteAt": delete_at}};
-                    app.project_metadata.update_one(query, update, None).await
+                    app.project_metadata
+                        .update_one(query, update, None)
+                        .await
                         .map_err(|err| InternalError::DatabaseConnectionError(err))?;
                 }
                 _ => {}
