@@ -9,6 +9,7 @@ use crate::app_data::AppData;
 use crate::errors::{InternalError, UserError};
 use crate::models::{CollaborationInvite, InvitationState};
 use crate::users::ensure_can_edit_user;
+use mongodb::options::{FindOneAndUpdateOptions, ReturnDocument};
 
 #[get("/user/{recipient}/")]
 async fn list_invites(
@@ -108,18 +109,21 @@ async fn respond_to_invite(
     println!("state: {:?}", state);
     match state.into_inner() {
         InvitationState::ACCEPTED => {
+            let query = doc! {"id": &invite.project_id};
             let update = doc! {"$addToSet": {"collaborators": &invite.receiver}};
-            let result = app
-                .project_metadata
-                .update_one(doc! {"id": &invite.project_id}, update, None)
-                .await
-                .map_err(|err| InternalError::DatabaseConnectionError(err))?;
+            let options = FindOneAndUpdateOptions::builder()
+                .return_document(ReturnDocument::After)
+                .build();
 
-            if result.matched_count == 1 {
-                Ok(HttpResponse::Ok().body("Invitation accepted."))
-            } else {
-                Err(UserError::ProjectNotFoundError)
-            }
+            let updated_metadata = app
+                .project_metadata
+                .find_one_and_update(query, update, options)
+                .await
+                .map_err(|err| InternalError::DatabaseConnectionError(err))?
+                .ok_or_else(|| UserError::ProjectNotFoundError)?;
+
+            app.on_room_changed(updated_metadata);
+            Ok(HttpResponse::Ok().body("Invitation accepted."))
         }
         _ => Ok(HttpResponse::Ok().body("Invitation rejected.")),
     }
