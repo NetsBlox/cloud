@@ -11,6 +11,9 @@ pub enum InternalError {
     TorNodeListFetchError(reqwest::Error),
     ActixMessageError(actix::MailboxError),
     SendEmailError(lettre::transport::smtp::Error),
+    Base64DecodeError(base64::DecodeError),
+    ThumbnailDecodeError(image::ImageError),
+    ThumbnailEncodeError(image::ImageError),
 }
 
 #[derive(Debug, Display, Error)]
@@ -21,6 +24,8 @@ pub enum UserError {
     PermissionsError,
     #[display(fmt = "Project not found.")]
     ProjectNotFoundError,
+    #[display(fmt = "Thumbnail not available.")]
+    ThumbnailNotFoundError,
     #[display(fmt = "Password reset link already sent. Only 1 can be sent per hour.")]
     PasswordResetLinkSentError,
     #[display(fmt = "Network trace not found.")]
@@ -92,6 +97,7 @@ impl error::ResponseError for UserError {
             | UserError::IncorrectPasswordError => StatusCode::FORBIDDEN,
 
             UserError::ProjectNotFoundError
+            | UserError::ThumbnailNotFoundError
             | UserError::NetworkTraceNotFoundError
             | UserError::LibraryNotFoundError
             | UserError::ServiceHostNotFoundError

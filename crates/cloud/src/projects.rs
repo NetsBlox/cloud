@@ -1,4 +1,5 @@
 use std::collections::HashMap;
+use std::io::BufWriter;
 
 use crate::app_data::AppData;
 use crate::errors::{InternalError, UserError};
@@ -9,6 +10,10 @@ use actix_session::Session;
 use actix_web::{delete, get, patch, post};
 use actix_web::{web, HttpResponse};
 use futures::stream::{FuturesUnordered, TryStreamExt};
+use image::{
+    codecs::png::PngEncoder, ColorType, EncodableLayout, GenericImageView, ImageEncoder,
+    ImageFormat, RgbaImage,
+};
 use mongodb::bson::doc;
 use mongodb::options::{FindOneAndUpdateOptions, ReturnDocument};
 use mongodb::Cursor;
@@ -414,7 +419,7 @@ async fn get_latest_project(
         name: metadata.name.to_owned(),
         owner: metadata.owner.to_owned(),
         updated: metadata.updated.to_system_time(),
-        thumbnail: metadata.thumbnail.to_owned(),
+        thumbnail: metadata.thumbnail.to_owned(), // TODO: remove this
         public: metadata.public.to_owned(),
         collaborators: metadata.collaborators.to_owned(),
         origin_time: metadata.origin_time.to_system_time(),
@@ -427,7 +432,7 @@ async fn get_latest_project(
 #[derive(Deserialize)]
 #[serde(rename_all = "camelCase")]
 struct ThumbnailParams {
-    aspect_ratio: f32,
+    aspect_ratio: Option<f32>,
 }
 
 #[get("/id/{projectID}/thumbnail")]
@@ -440,8 +445,67 @@ async fn get_project_thumbnail(
     let (project_id,) = path.into_inner();
     let metadata = ensure_can_view_project(&app, &session, None, &project_id).await?;
 
-    // TODO: resize the thumbnail
-    Ok(HttpResponse::Ok().body(metadata.thumbnail))
+    let role_metadata = metadata.roles.values().next().unwrap(); // FIXME: get a meaningful role (last updated?)
+                                                                 // TODO: get the role data
+    let role = app.fetch_role(&role_metadata).await?;
+    let thumbnail = role
+        .code
+        .split("<thumbnail>data:image/png;base64,")
+        .skip(1)
+        .next()
+        .and_then(|text| text.split("</thumbnail>").next())
+        .ok_or_else(|| UserError::ThumbnailNotFoundError)
+        .and_then(|thumbnail_str| {
+            base64::decode(thumbnail_str)
+                .map_err(|err| InternalError::Base64DecodeError(err).into())
+        })
+        .and_then(|image_data| {
+            image::load_from_memory_with_format(&image_data, ImageFormat::Png)
+                .map_err(|err| InternalError::ThumbnailDecodeError(err).into())
+        })?;
+
+    let image_content = if let Some(aspect_ratio) = params.aspect_ratio {
+        let (width, height) = thumbnail.dimensions();
+        let current_ratio = (width as f32) / (height as f32);
+        let (resized_width, resized_height) = if current_ratio < aspect_ratio {
+            let new_width = (aspect_ratio * (height as f32)) as u32;
+            (new_width, height)
+        } else {
+            let new_height = ((width as f32) / aspect_ratio) as u32;
+            (width, new_height)
+        };
+
+        let top_offset: u32 = (resized_height - height) / 2;
+        let left_offset: u32 = (resized_width - width) / 2;
+        let mut image = RgbaImage::new(resized_width, resized_height);
+        for x in 0..width {
+            for y in 0..height {
+                let pixel = thumbnail.get_pixel(x, y);
+                image.put_pixel(x + left_offset, y + top_offset, pixel);
+            }
+        }
+        // encode the bytes as a png
+        let mut png_bytes = BufWriter::new(Vec::new());
+        let encoder = PngEncoder::new(&mut png_bytes);
+        let color = ColorType::Rgba8;
+        encoder
+            .write_image(image.as_bytes(), resized_width, resized_height, color)
+            .map_err(|err| InternalError::ThumbnailEncodeError(err))?;
+        actix_web::web::Bytes::copy_from_slice(&png_bytes.into_inner().unwrap())
+    } else {
+        let (width, height) = thumbnail.dimensions();
+        let mut png_bytes = BufWriter::new(Vec::new());
+        let encoder = PngEncoder::new(&mut png_bytes);
+        let color = ColorType::Rgba8;
+        encoder
+            .write_image(thumbnail.as_bytes(), width, height, color)
+            .map_err(|err| InternalError::ThumbnailEncodeError(err))?;
+        actix_web::web::Bytes::copy_from_slice(&png_bytes.into_inner().unwrap())
+    };
+
+    Ok(HttpResponse::Ok()
+        .content_type("image/png")
+        .body(image_content))
 }
 
 #[derive(Deserialize)]
