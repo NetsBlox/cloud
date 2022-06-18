@@ -476,7 +476,6 @@ impl AppData {
             name: metadata.name.to_owned(),
             owner: metadata.owner.to_owned(),
             updated: metadata.updated.to_owned(),
-            thumbnail: metadata.thumbnail.to_owned(),
             public: metadata.public.to_owned(),
             collaborators: metadata.collaborators.to_owned(),
             origin_time: metadata.origin_time,

@@ -419,7 +419,6 @@ async fn get_latest_project(
         name: metadata.name.to_owned(),
         owner: metadata.owner.to_owned(),
         updated: metadata.updated.to_system_time(),
-        thumbnail: metadata.thumbnail.to_owned(), // TODO: remove this
         public: metadata.public.to_owned(),
         collaborators: metadata.collaborators.to_owned(),
         origin_time: metadata.origin_time.to_system_time(),
