@@ -647,7 +647,9 @@ impl Topology {
         });
 
         clients.for_each(|client| {
-            client.addr.do_send(msg.clone().into());
+            if let Err(err) = client.addr.do_send(msg.clone().into()) {
+                warn!("Unable to send invite to client: {}", err);
+            }
         });
     }
 
