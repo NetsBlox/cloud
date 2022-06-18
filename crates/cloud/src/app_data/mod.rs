@@ -8,7 +8,7 @@ use lettre::transport::smtp::authentication::Credentials;
 use lettre::{Address, Message, SmtpTransport, Transport};
 use log::{info, warn};
 use lru::LruCache;
-use mongodb::bson::{doc, Document};
+use mongodb::bson::{doc, Document, DateTime};
 use mongodb::options::{FindOneAndUpdateOptions, IndexOptions, ReturnDocument};
 use netsblox_core::{LibraryMetadata, ProjectId, RoleId};
 use rusoto_core::credential::StaticProvider;
@@ -16,7 +16,7 @@ use rusoto_core::Region;
 use serde::{Deserialize, Serialize};
 use std::collections::{HashMap, HashSet};
 use std::sync::{Arc, RwLock};
-use std::time::Duration;
+use std::time::{Duration, SystemTime};
 use uuid::Uuid;
 
 use crate::config::Settings;
@@ -403,6 +403,7 @@ impl AppData {
             name: role.name.to_owned(),
             code: src_path,
             media: media_path,
+            updated: DateTime::from_system_time(SystemTime::now()),
         })
     }
 

@@ -4,7 +4,7 @@ use netsblox_core::{
 };
 pub use netsblox_core::{
     CreateGroupData, FriendInvite, FriendLinkState, GroupId, InvitationState, LinkedAccount,
-    ProjectId, RoleData, RoleMetadata, SaveState, ServiceHost,
+    ProjectId, RoleData, SaveState, ServiceHost,
 };
 use serde::{Deserialize, Serialize};
 use std::{
@@ -321,7 +321,7 @@ impl From<ProjectMetadata> for netsblox_core::ProjectMetadata {
             public: metadata.public,
             collaborators: metadata.collaborators,
             save_state: metadata.save_state,
-            roles: metadata.roles,
+            roles: metadata.roles.into_iter().map(|(k, v)| (k, v.into())).collect(),
         }
     }
 }
@@ -353,6 +353,36 @@ impl From<Project> for netsblox_core::Project {
             save_state: project.save_state,
             roles: project.roles,
         }
+    }
+}
+
+#[derive(Deserialize, Serialize, Clone)]
+#[serde(rename_all = "camelCase")]
+pub struct RoleMetadata {
+    pub name: String,
+    pub code: String,
+    pub media: String,
+    pub updated: DateTime,
+}
+
+impl From<RoleMetadata> for netsblox_core::RoleMetadata {
+    fn from(metadata: RoleMetadata) -> netsblox_core::RoleMetadata {
+        netsblox_core::RoleMetadata {
+            name: metadata.name,
+            code: metadata.code,
+            media: metadata.media,
+        }
+    }
+}
+
+impl From<RoleMetadata> for Bson {
+    fn from(metadata: RoleMetadata) -> Bson {
+        Bson::Document(doc! {
+            "name": metadata.name,
+            "code": metadata.code,
+            "media": metadata.media,
+            "updated": metadata.updated,
+        })
     }
 }
 

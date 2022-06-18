@@ -221,7 +221,6 @@ impl Project {
             .roles
             .clone()
             .into_values()
-            // .into_iter()
             .map(|role| role.to_xml())
             .collect::<Vec<_>>()
             .join(" ");
