@@ -3,19 +3,19 @@ mod strategies;
 use crate::app_data::AppData;
 use crate::errors::{InternalError, UserError};
 use crate::groups::ensure_can_edit_group;
-use crate::models::{SetPasswordToken, User};
+use crate::models::{SetPasswordToken, User, BannedAccount};
 use crate::services::ensure_is_authorized_host;
 use actix_session::Session;
 use actix_web::{get, patch, post, HttpRequest};
 use actix_web::{web, HttpResponse};
 use futures::TryStreamExt;
 use lazy_static::lazy_static;
-use mongodb::bson::{doc, DateTime};
+use mongodb::bson::doc;
 use mongodb::options::ReturnDocument;
 use netsblox_core::{LinkedAccount, LoginRequest, NewUser, UserRole};
 use regex::Regex;
 use rustrict::CensorStr;
-use serde::{Deserialize, Serialize};
+use serde::Deserialize;
 use sha2::{Digest, Sha512};
 use std::collections::HashSet;
 
@@ -155,8 +155,7 @@ async fn create_user(
     ensure_valid_username(&user.username)?;
 
     let query = doc! {"email": &user.email};
-    let banned_accounts = app.collection::<BannedAccount>("bannedAccounts");
-    if let Some(_account) = banned_accounts
+    if let Some(_account) = app.banned_accounts
         .find_one(query, None)
         .await
         .map_err(|err| InternalError::DatabaseConnectionError(err))?
@@ -246,8 +245,7 @@ async fn login(
         {"email": &user.email},
     ]};
 
-    let banned_accounts = app.collection::<BannedAccount>("bannedAccounts");
-    if let Some(_account) = banned_accounts
+    if let Some(_account) = app.banned_accounts
         .find_one(query.clone(), None)
         .await
         .map_err(|err| InternalError::DatabaseConnectionError(err))?
@@ -302,25 +300,6 @@ async fn whoami(session: Session) -> Result<HttpResponse, UserError> {
     }
 }
 
-#[derive(Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
-struct BannedAccount {
-    username: String,
-    email: String,
-    banned_at: DateTime,
-}
-
-impl BannedAccount {
-    pub fn new(username: String, email: String) -> BannedAccount {
-        let banned_at = DateTime::now();
-        BannedAccount {
-            username,
-            email,
-            banned_at,
-        }
-    }
-}
-
 #[post("/{username}/ban")]
 async fn ban_user(
     app: web::Data<AppData>,
@@ -334,9 +313,8 @@ async fn ban_user(
     let query = doc! {"username": username};
     match app.users.find_one(query, None).await.unwrap() {
         Some(user) => {
-            let banned_accounts = app.collection::<BannedAccount>("bannedAccounts");
             let account = BannedAccount::new(user.username, user.email);
-            banned_accounts.insert_one(account, None).await.unwrap();
+            app.banned_accounts.insert_one(account, None).await.unwrap();
             Ok(HttpResponse::Ok().body("User has been banned"))
         }
         None => Err(UserError::UserNotFoundError),

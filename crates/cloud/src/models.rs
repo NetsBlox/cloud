@@ -92,6 +92,25 @@ impl From<NewUser> for User {
     }
 }
 
+#[derive(Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct BannedAccount {
+    username: String,
+    email: String,
+    banned_at: DateTime,
+}
+
+impl BannedAccount {
+    pub fn new(username: String, email: String) -> BannedAccount {
+        let banned_at = DateTime::now();
+        BannedAccount {
+            username,
+            email,
+            banned_at,
+        }
+    }
+}
+
 #[derive(Serialize, Deserialize, Clone, Debug)]
 #[serde(rename_all = "camelCase")]
 pub struct Group {

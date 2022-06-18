@@ -23,13 +23,13 @@ use crate::config::Settings;
 use crate::errors::{InternalError, UserError};
 use crate::models::{
     AuthorizedServiceHost, CollaborationInvite, FriendLink, Group, Library, Project,
-    ProjectMetadata, SaveState, SetPasswordToken, User,
+    ProjectMetadata, SaveState, SetPasswordToken, User, BannedAccount
 };
 use crate::models::{OccupantInvite, RoleData, RoleMetadata, SentMessage};
 use crate::network::topology::{self, SetStorage, TopologyActor};
 use actix::{Actor, Addr};
 use futures::TryStreamExt;
-use mongodb::{Client, Collection, Database, IndexModel};
+use mongodb::{Client, Collection, IndexModel};
 use rusoto_s3::{
     CreateBucketRequest, DeleteObjectOutput, DeleteObjectRequest, GetObjectRequest,
     PutObjectOutput, PutObjectRequest, S3Client, S3,
@@ -42,15 +42,14 @@ lazy_static! {
 
 #[derive(Clone)]
 pub struct AppData {
-    prefix: &'static str,
     bucket: String,
     tor_exit_nodes: Collection<TorNode>,
     s3: S3Client,
     pub settings: Settings,
-    db: Database,
     pub network: Addr<TopologyActor>,
     pub groups: Collection<Group>,
     pub users: Collection<User>,
+    pub banned_accounts: Collection<BannedAccount>,
     pub friends: Collection<FriendLink>,
     pub project_metadata: Collection<ProjectMetadata>,
     pub library_metadata: Collection<LibraryMetadata>,
@@ -112,6 +111,7 @@ impl AppData {
         let password_tokens =
             db.collection::<SetPasswordToken>(&(prefix.to_owned() + "passwordTokens"));
         let users = db.collection::<User>(&(prefix.to_owned() + "users"));
+        let banned_accounts = db.collection::<BannedAccount>(&(prefix.to_owned() + "bannedAccounts"));
         let project_metadata = db.collection::<ProjectMetadata>(&(prefix.to_owned() + "projects"));
         let library_metadata = db.collection::<LibraryMetadata>(&(prefix.to_owned() + "libraries"));
         let libraries = db.collection::<Library>(&(prefix.to_owned() + "libraries"));
@@ -130,13 +130,12 @@ impl AppData {
 
         AppData {
             settings,
-            db,
             network,
             s3,
             bucket,
             groups,
             users,
-            prefix,
+            banned_accounts,
             project_metadata,
             library_metadata,
             libraries,
@@ -260,12 +259,6 @@ impl AppData {
         });
     }
 
-    pub fn collection<T>(&self, name: &str) -> Collection<T> {
-        // TODO: make this private
-        let name = &(self.prefix.to_owned() + name);
-        self.db.collection::<T>(name)
-    }
-
     pub async fn get_project_metadatum(
         &self,
         id: &ProjectId,
@@ -309,7 +302,6 @@ impl AppData {
                 .await
                 .map_err(|err| InternalError::DatabaseConnectionError(err))?;
 
-            // TODO: make this lazy static?
             let mut cache = PROJECT_CACHE.write().unwrap();
             projects.iter().for_each(|project| {
                 cache.put(project.id.clone(), project.clone());
