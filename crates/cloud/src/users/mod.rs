@@ -552,6 +552,7 @@ pub fn config(cfg: &mut web::ServiceConfig) {
         .service(ban_user)
         .service(reset_password)
         .service(change_password)
+        .service(whoami)
         .service(view_user)
         .service(link_account)
         .service(unlink_account);
