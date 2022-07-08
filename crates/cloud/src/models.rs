@@ -321,7 +321,11 @@ impl From<ProjectMetadata> for netsblox_core::ProjectMetadata {
             public: metadata.public,
             collaborators: metadata.collaborators,
             save_state: metadata.save_state,
-            roles: metadata.roles.into_iter().map(|(k, v)| (k, v.into())).collect(),
+            roles: metadata
+                .roles
+                .into_iter()
+                .map(|(k, v)| (k, v.into()))
+                .collect(),
         }
     }
 }

@@ -3,7 +3,7 @@ mod strategies;
 use crate::app_data::AppData;
 use crate::errors::{InternalError, UserError};
 use crate::groups::ensure_can_edit_group;
-use crate::models::{SetPasswordToken, User, BannedAccount};
+use crate::models::{BannedAccount, SetPasswordToken, User};
 use crate::services::ensure_is_authorized_host;
 use actix_session::Session;
 use actix_web::{get, patch, post, HttpRequest};
@@ -155,7 +155,8 @@ async fn create_user(
     ensure_valid_username(&user.username)?;
 
     let query = doc! {"email": &user.email};
-    if let Some(_account) = app.banned_accounts
+    if let Some(_account) = app
+        .banned_accounts
         .find_one(query, None)
         .await
         .map_err(|err| InternalError::DatabaseConnectionError(err))?
@@ -245,7 +246,8 @@ async fn login(
         {"email": &user.email},
     ]};
 
-    if let Some(_account) = app.banned_accounts
+    if let Some(_account) = app
+        .banned_accounts
         .find_one(query.clone(), None)
         .await
         .map_err(|err| InternalError::DatabaseConnectionError(err))?
