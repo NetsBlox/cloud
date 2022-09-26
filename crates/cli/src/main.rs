@@ -30,6 +30,7 @@ enum Users {
         #[clap(short, long, default_value = "user")]
         role: UserRole,
     },
+    /// Delete an existing NetsBlox account
     Delete {
         username: String,
         /// Skip confirmation prompts and delete the user
@@ -49,6 +50,7 @@ enum Users {
         #[clap(short, long)]
         user: Option<String>,
     },
+    /// List NetsBlox users
     List, // TODO: add verbose option?
     /// Ban a given user. Email address will also be blacklisted
     Ban {
@@ -172,6 +174,7 @@ enum Projects {
     },
 }
 
+/// Register (and authorize) NetsBlox service/RPC providers
 #[derive(Subcommand, Debug)]
 enum ServiceHosts {
     /// List service hosts registered for a given user/group or all authorized hosts
