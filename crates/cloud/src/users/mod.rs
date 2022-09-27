@@ -273,24 +273,26 @@ async fn update_ownership(
         }
 
         let query = doc! {"owner": client_id};
-        let metadata = app
+        if let Some(metadata) = app
             .project_metadata
             .find_one(query.clone(), None)
             .await
             .map_err(|err| InternalError::DatabaseConnectionError(err))?
-            .ok_or_else(|| UserError::ProjectNotFoundError)?;
-        let name = app
-            .get_valid_project_name(&username, &metadata.name)
-            .await?;
-        let update = doc! {"$set": {"owner": username, "name": name}};
-        let new_metadata = app
-            .project_metadata
-            .find_one_and_update(query, update, None)
-            .await
-            .map_err(|err| InternalError::DatabaseConnectionError(err))?
-            .ok_or_else(|| UserError::ProjectNotFoundError)?;
+        {
+            // No project will be found for non-NetsBlox clients such as PyBlox
+            let name = app
+                .get_valid_project_name(&username, &metadata.name)
+                .await?;
+            let update = doc! {"$set": {"owner": username, "name": name}};
+            let new_metadata = app
+                .project_metadata
+                .find_one_and_update(query, update, None)
+                .await
+                .map_err(|err| InternalError::DatabaseConnectionError(err))?
+                .ok_or_else(|| UserError::ProjectNotFoundError)?;
 
-        app.on_room_changed(new_metadata);
+            app.on_room_changed(new_metadata);
+        }
     }
     Ok(())
 }
