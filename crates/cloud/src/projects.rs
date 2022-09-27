@@ -444,7 +444,9 @@ async fn get_project_thumbnail(
     let (project_id,) = path.into_inner();
     let metadata = ensure_can_view_project(&app, &session, None, &project_id).await?;
 
-    let role_metadata = metadata.roles.values()
+    let role_metadata = metadata
+        .roles
+        .values()
         .max_by_key(|md| md.updated)
         .ok_or_else(|| UserError::ThumbnailNotFoundError)?;
     let role = app.fetch_role(&role_metadata).await?;

@@ -8,7 +8,7 @@ use lettre::transport::smtp::authentication::Credentials;
 use lettre::{Address, Message, SmtpTransport, Transport};
 use log::{info, warn};
 use lru::LruCache;
-use mongodb::bson::{doc, Document, DateTime};
+use mongodb::bson::{doc, DateTime, Document};
 use mongodb::options::{FindOneAndUpdateOptions, IndexOptions, ReturnDocument};
 use netsblox_core::{LibraryMetadata, ProjectId, RoleId};
 use rusoto_core::credential::StaticProvider;
@@ -22,8 +22,8 @@ use uuid::Uuid;
 use crate::config::Settings;
 use crate::errors::{InternalError, UserError};
 use crate::models::{
-    AuthorizedServiceHost, CollaborationInvite, FriendLink, Group, Library, Project,
-    ProjectMetadata, SaveState, SetPasswordToken, User, BannedAccount
+    AuthorizedServiceHost, BannedAccount, CollaborationInvite, FriendLink, Group, Library, Project,
+    ProjectMetadata, SaveState, SetPasswordToken, User,
 };
 use crate::models::{OccupantInvite, RoleData, RoleMetadata, SentMessage};
 use crate::network::topology::{self, SetStorage, TopologyActor};
@@ -111,7 +111,8 @@ impl AppData {
         let password_tokens =
             db.collection::<SetPasswordToken>(&(prefix.to_owned() + "passwordTokens"));
         let users = db.collection::<User>(&(prefix.to_owned() + "users"));
-        let banned_accounts = db.collection::<BannedAccount>(&(prefix.to_owned() + "bannedAccounts"));
+        let banned_accounts =
+            db.collection::<BannedAccount>(&(prefix.to_owned() + "bannedAccounts"));
         let project_metadata = db.collection::<ProjectMetadata>(&(prefix.to_owned() + "projects"));
         let library_metadata = db.collection::<LibraryMetadata>(&(prefix.to_owned() + "libraries"));
         let libraries = db.collection::<Library>(&(prefix.to_owned() + "libraries"));
@@ -330,17 +331,13 @@ impl AppData {
         Ok(cache.get(id).unwrap().clone())
     }
 
-    pub async fn import_project(
+    /// Get a unique project name for the given user and preferred name.
+    pub async fn get_valid_project_name(
         &self,
         owner: &str,
-        name: &str,
-        roles: Option<Vec<RoleData>>,
-        save_state: Option<SaveState>,
-    ) -> Result<ProjectMetadata, UserError> {
+        basename: &str,
+    ) -> Result<String, UserError> {
         let query = doc! {"owner": &owner};
-        // FIXME: Update the type if we use the projection
-        //let projection = doc! {"name": true};
-        //let options = FindOptions::builder().projection(projection).build();
         // TODO: validate the project name (no profanity)
         let cursor = self
             .project_metadata
@@ -355,7 +352,17 @@ impl AppData {
             .map(|md| md.name.to_owned())
             .collect();
 
-        let unique_name = get_unique_name(project_names, name);
+        Ok(get_unique_name(project_names, basename))
+    }
+
+    pub async fn import_project(
+        &self,
+        owner: &str,
+        name: &str,
+        roles: Option<Vec<RoleData>>,
+        save_state: Option<SaveState>,
+    ) -> Result<ProjectMetadata, UserError> {
+        let unique_name = self.get_valid_project_name(&owner, &name).await?;
         let roles = roles.unwrap_or_else(|| {
             vec![RoleData {
                 name: "myRole".to_owned(),

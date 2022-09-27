@@ -265,7 +265,7 @@ async fn update_ownership(
     app: &AppData,
     client_id: &Option<String>,
     username: &str,
-) -> Result<bool, UserError> {
+) -> Result<(), UserError> {
     // Update ownership of current project
     if let Some(client_id) = &client_id {
         if !client_id.starts_with('_') {
@@ -273,18 +273,26 @@ async fn update_ownership(
         }
 
         let query = doc! {"owner": client_id};
-        let update = doc! {"$set": {"owner": username}};
-        let result = app
+        let metadata = app
             .project_metadata
-            .update_one(query, update, None)
+            .find_one(query.clone(), None)
             .await
-            .map_err(|err| InternalError::DatabaseConnectionError(err))?;
+            .map_err(|err| InternalError::DatabaseConnectionError(err))?
+            .ok_or_else(|| UserError::ProjectNotFoundError)?;
+        let name = app
+            .get_valid_project_name(&username, &metadata.name)
+            .await?;
+        let update = doc! {"$set": {"owner": username, "name": name}};
+        let new_metadata = app
+            .project_metadata
+            .find_one_and_update(query, update, None)
+            .await
+            .map_err(|err| InternalError::DatabaseConnectionError(err))?
+            .ok_or_else(|| UserError::ProjectNotFoundError)?;
 
-        // TODO: Update the room
-        Ok(result.modified_count > 0)
-    } else {
-        Ok(false)
+        app.on_room_changed(new_metadata);
     }
+    Ok(())
 }
 
 #[post("/logout")]
