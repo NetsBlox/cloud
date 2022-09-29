@@ -27,6 +27,7 @@ pub struct S3Credentials {
 pub struct CookieSettings {
     pub name: String,
     pub domain: String,
+    pub key: String,
 }
 
 #[derive(Clone, Deserialize)]

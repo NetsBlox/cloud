@@ -17,6 +17,7 @@ secret_key = "MYSECRET"
 [cookie]
 name = "netsblox"
 domain = "localhost:7777"
+key = "abcdefghijklmnopqrstuvwxyzabcdefghijklmnopqrstuvwxyz0123456789ab"
 
 [email]
 sender = "NetsBlox <no-reply@netsblox.org>"

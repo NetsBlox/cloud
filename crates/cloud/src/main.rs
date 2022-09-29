@@ -83,9 +83,9 @@ async fn main() -> std::io::Result<()> {
         })
         .unwrap();
 
-    let secret_key = Key::from(&[1; 32]); // FIXME: specify this in the config
-
+    let secret_key = Key::from(&config.cookie.key.as_bytes());
     let secs_in_week: i64 = 60 * 60 * 24 * 7;
+
     HttpServer::new(move || {
         let cors = Cors::default()
             .allow_any_origin()
