@@ -490,7 +490,7 @@ impl Topology {
                 .project_metadata
                 .find_one(query.clone(), None)
                 .await
-                .unwrap()
+                .map_err(|err| InternalError::DatabaseConnectionError(err))?
                 .map(|md| match md.save_state {
                     SaveState::CREATED => unreachable!(),
                     SaveState::TRANSIENT => ProjectCleanup::IMMEDIATELY,
