@@ -27,6 +27,7 @@ enum Users {
         /// Perform the operation as this user
         #[clap(short, long)]
         user: Option<String>,
+        /// Set the user role (eg, admin, moderator)
         #[clap(short, long, default_value = "user")]
         role: UserRole,
     },
@@ -57,6 +58,7 @@ enum Users {
         /// NetsBlox user to ban
         username: String,
     },
+    /// Link an account to a Snap! account (for login)
     Link {
         /// Snap! username to link to NetsBlox account
         username: String,
@@ -68,6 +70,7 @@ enum Users {
         #[clap(short, long)]
         user: Option<String>,
     },
+    /// Unlink a Snap! account from a NetsBlox account
     Unlink {
         /// Snap! username to unlink from NetsBlox account
         username: String,
@@ -79,6 +82,7 @@ enum Users {
     },
 }
 
+/// Manage projects (or roles)
 #[derive(Subcommand, Debug)]
 enum Projects {
     /// Import a project into NetsBlox
@@ -126,6 +130,7 @@ enum Projects {
         #[clap(short, long)]
         user: Option<String>,
     },
+    /// Delete a project or role
     Delete {
         project: String,
         #[clap(short, long)]
@@ -133,6 +138,7 @@ enum Projects {
         #[clap(short, long)]
         user: Option<String>,
     },
+    /// Rename a project or role
     Rename {
         project: String,
         new_name: String,
@@ -141,16 +147,19 @@ enum Projects {
         #[clap(short, long)]
         user: Option<String>,
     },
+    /// Invite a collaborator to share the project
     InviteCollaborator {
         project: String,
         username: String,
         #[clap(short, long)]
         user: Option<String>,
     },
+    /// List collaboration invitations
     ListInvites {
         #[clap(short, long)]
         user: Option<String>,
     },
+    /// Accept a collaboration invitation
     AcceptInvite {
         project: String,
         username: String,
@@ -161,11 +170,13 @@ enum Projects {
         #[clap(short, long)]
         user: Option<String>,
     },
+    /// List all collaborators on a given project
     ListCollaborators {
         project: String,
         #[clap(short, long)]
         user: Option<String>,
     },
+    /// Remove a collaborator from a project
     RemoveCollaborator {
         project: String,
         username: String,
@@ -270,6 +281,7 @@ enum ServiceSettings {
     },
 }
 
+/// Manage libraries saved to the cloud
 #[derive(Subcommand, Debug)]
 enum Libraries {
     /// List available libraries. Lists own libraries by default.
@@ -298,26 +310,31 @@ enum Libraries {
         #[clap(short, long)]
         user: Option<String>,
     },
+    /// Download a library from the cloud
     Export {
         library: String,
         #[clap(short, long)]
         user: Option<String>,
     },
+    /// Delete a library from the cloud
     Delete {
         library: String,
         #[clap(short, long)]
         user: Option<String>,
     },
+    /// Make library publicly available
     Publish {
         library: String,
         #[clap(short, long)]
         user: Option<String>,
     },
+    /// Make a public library private again
     Unpublish {
         library: String,
         #[clap(short, long)]
         user: Option<String>,
     },
+    /// Approve libraries with potentially questionable content
     Approve {
         library: String,
         #[clap(long)]
@@ -327,7 +344,7 @@ enum Libraries {
     },
 }
 
-//    - network send {"some": "content"} --type MSG_TYPE --listen
+/// Connect to the NetsBlox network
 #[derive(Subcommand, Debug)]
 enum Network {
     /// List the active NetsBlox rooms or external clients
@@ -353,6 +370,17 @@ enum Network {
     },
     /// Evict a client from their current role
     Evict { client_id: String },
+    /// Send a NetsBlox message
+    Send {
+        /// Address of the intended recipient
+        address: String,
+        /// Message body to send (JSON)
+        #[clap(short, long, default_value = "{}")]
+        data: String,
+        /// Message type to send
+        #[clap(short, long, default_value = "message")]
+        r#type: String,
+    },
 }
 
 #[derive(Subcommand, Debug)]
@@ -867,6 +895,13 @@ async fn do_command(mut cfg: Config, args: Cli) -> Result<(), netsblox_api::erro
             }
             Network::Evict { client_id } => {
                 client.evict_occupant(client_id).await?;
+            }
+            Network::Send {
+                address,
+                r#type,
+                data,
+            } => {
+                todo!();
             }
         },
         Command::Friends(cmd) => match &cmd.subcmd {
