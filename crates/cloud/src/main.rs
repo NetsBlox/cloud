@@ -15,10 +15,14 @@ use crate::config::Settings;
 use crate::errors::UserError;
 use crate::{app_data::AppData, errors::InternalError};
 use actix_cors::Cors;
-use actix_session::{CookieSession, Session};
+use actix_session::{
+    config::CookieContentSecurity, config::PersistentSession, storage::CookieSessionStore, Session,
+    SessionMiddleware,
+};
+use actix_web::cookie::time::Duration;
 use actix_web::{
-    cookie::SameSite, dev::Service, error::ErrorForbidden, get, http::Method, middleware, web, App,
-    HttpResponse, HttpServer,
+    cookie::Key, cookie::SameSite, dev::Service, error::ErrorForbidden, get, http::Method,
+    middleware, web, App, HttpResponse, HttpServer,
 };
 use futures::TryStreamExt;
 use log::error;
@@ -79,6 +83,9 @@ async fn main() -> std::io::Result<()> {
         })
         .unwrap();
 
+    let secret_key = Key::from(&[1; 32]); // FIXME: specify this in the config
+
+    let secs_in_week: i64 = 60 * 60 * 24 * 7;
     HttpServer::new(move || {
         let cors = Cors::default()
             .allow_any_origin()
@@ -89,13 +96,17 @@ async fn main() -> std::io::Result<()> {
         App::new()
             .wrap(cors)
             .wrap(
-                CookieSession::signed(&[1; 32])
-                    //.domain(&config.cookie.domain)  // FIXME: Enable this again
-                    .expires_in(2 * 7 * 24 * 60 * 60)
-                    .same_site(SameSite::None)
-                    .lazy(true)
-                    .name(&config.cookie.name)
-                    .secure(true),
+                SessionMiddleware::builder(CookieSessionStore::default(), secret_key.clone())
+                    .cookie_name(config.cookie.name.clone())
+                    .cookie_same_site(SameSite::None)
+                    .cookie_secure(true)
+                    .cookie_http_only(true)
+                    .cookie_domain(Some(config.cookie.domain.clone()))
+                    .cookie_content_security(CookieContentSecurity::Private)
+                    .session_lifecycle(
+                        PersistentSession::default().session_ttl(Duration::seconds(secs_in_week)),
+                    )
+                    .build(),
             )
             .wrap(middleware::Logger::default())
             .wrap_fn(|req, srv| {
