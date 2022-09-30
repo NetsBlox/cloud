@@ -23,7 +23,7 @@ impl Default for Config {
             app_id: None,
             username: None,
             token: None,
-            url: "http://editor.netsblox.org".to_owned(),
+            url: "https://cloud.netsblox.org".to_owned(),
         }
     }
 }
