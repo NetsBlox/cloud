@@ -13,7 +13,7 @@ use regex::Regex;
 use rustrict::CensorStr;
 
 // TODO: add an endpoint for the official ones?
-#[get("/community")]
+#[get("/community/")]
 async fn list_community_libraries(app: web::Data<AppData>) -> Result<HttpResponse, UserError> {
     let options = FindOptions::builder().sort(doc! {"name": 1}).build();
     let public_filter = doc! {"state": PublishState::Public};
