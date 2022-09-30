@@ -117,19 +117,23 @@ async fn save_user_library(
                 _ => is_approval_required(&data.blocks),
             };
 
-            if needs_approval {
+            let publish_state = if needs_approval {
                 let update = doc! {"state": PublishState::PendingApproval};
                 app.libraries.update_one(query, update, None).await.unwrap();
-            }
-            Ok(HttpResponse::Ok().body("Library saved."))
+                PublishState::PendingApproval
+            } else {
+                library.state
+            };
+
+            Ok(HttpResponse::Ok().json(publish_state))
         }
-        None => Ok(HttpResponse::Created().body("Library saved.")),
+        None => Ok(HttpResponse::Created().json(PublishState::Private)),
     }
 }
 
 fn is_valid_name(name: &str) -> bool {
     lazy_static! {
-        static ref LIBRARY_NAME: Regex = Regex::new(r"^[A-zÀ-ÿ0-9 _-]+$").unwrap();
+        static ref LIBRARY_NAME: Regex = Regex::new(r"^[A-zÀ-ÿ0-9 \(\)_-]+$").unwrap();
     }
     LIBRARY_NAME.is_match(name) && !name.is_inappropriate()
 }
@@ -186,9 +190,9 @@ async fn publish_user_library(
             .update_one(query, update, None)
             .await
             .unwrap();
-        Ok(HttpResponse::Ok().body("Library published!"))
+        Ok(HttpResponse::Ok().json(PublishState::Public))
     } else {
-        Ok(HttpResponse::Ok().body("Library marked to publish (approval required)."))
+        Ok(HttpResponse::Ok().json(PublishState::PendingApproval))
     }
 }
 
