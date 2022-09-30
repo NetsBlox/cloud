@@ -284,9 +284,12 @@ async fn update_ownership(
                 .get_valid_project_name(&username, &metadata.name)
                 .await?;
             let update = doc! {"$set": {"owner": username, "name": name}};
+            let options = mongodb::options::FindOneAndUpdateOptions::builder()
+                .return_document(ReturnDocument::After)
+                .build();
             let new_metadata = app
                 .project_metadata
-                .find_one_and_update(query, update, None)
+                .find_one_and_update(query, update, Some(options))
                 .await
                 .map_err(|err| InternalError::DatabaseConnectionError(err))?
                 .ok_or_else(|| UserError::ProjectNotFoundError)?;
