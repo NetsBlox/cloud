@@ -83,9 +83,7 @@ async fn main() -> std::io::Result<()> {
         })
         .unwrap();
 
-    let secret_key = Key::from(&config.cookie.key.as_bytes());
-    let secs_in_week: i64 = 60 * 60 * 24 * 7;
-
+    let address = config.address.clone();
     HttpServer::new(move || {
         let cors = Cors::default()
             .allow_any_origin()
@@ -95,19 +93,7 @@ async fn main() -> std::io::Result<()> {
 
         App::new()
             .wrap(cors)
-            .wrap(
-                SessionMiddleware::builder(CookieSessionStore::default(), secret_key.clone())
-                    .cookie_name(config.cookie.name.clone())
-                    .cookie_same_site(SameSite::None)
-                    .cookie_secure(true)
-                    .cookie_http_only(true)
-                    .cookie_domain(Some(config.cookie.domain.clone()))
-                    .cookie_content_security(CookieContentSecurity::Private)
-                    .session_lifecycle(
-                        PersistentSession::default().session_ttl(Duration::seconds(secs_in_week)),
-                    )
-                    .build(),
-            )
+            .wrap(session_middleware(&config))
             .wrap(middleware::Logger::default())
             .wrap_fn(|req, srv| {
                 let source = req
@@ -137,7 +123,30 @@ async fn main() -> std::io::Result<()> {
             .service(web::scope("/services").configure(services::config))
             .service(get_client_config)
     })
-    .bind(&config.address)?
+    .bind(&address)?
     .run()
     .await
+}
+
+fn session_middleware(config: &Settings) -> SessionMiddleware<CookieSessionStore> {
+    let secret_key = Key::from(&config.cookie.key.as_bytes());
+    let secs_in_week: i64 = 60 * 60 * 24 * 7;
+
+    let mut builder = SessionMiddleware::builder(CookieSessionStore::default(), secret_key.clone())
+        .cookie_name(config.cookie.name.clone())
+        .cookie_same_site(SameSite::None)
+        .cookie_secure(true)
+        .cookie_http_only(true)
+        .cookie_domain(Some(config.cookie.domain.clone()))
+        .cookie_content_security(CookieContentSecurity::Private)
+        .session_lifecycle(
+            PersistentSession::default().session_ttl(Duration::seconds(secs_in_week)),
+        );
+
+    let domain = config.cookie.domain.clone();
+    if domain.starts_with("localhost") {
+        builder = builder.cookie_domain(Some(domain));
+    }
+
+    builder.build()
 }
