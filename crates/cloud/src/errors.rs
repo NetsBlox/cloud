@@ -56,8 +56,6 @@ pub enum UserError {
     UserExistsError,
     #[display(fmt = "Group already exists.")]
     GroupExistsError,
-    #[display(fmt = "Email already exists.")]
-    EmailExistsError,
     #[display(fmt = "Invalid username.")]
     InvalidUsername,
     #[display(fmt = "Invalid email address.")]
@@ -119,7 +117,6 @@ impl error::ResponseError for UserError {
             | UserError::TorAddressError
             | UserError::UserExistsError
             | UserError::GroupExistsError
-            | UserError::EmailExistsError
             | UserError::CannotDeleteLastRoleError
             | UserError::ServiceHostAlreadyAuthorizedError
             | UserError::ProjectNotActiveError => StatusCode::BAD_REQUEST,

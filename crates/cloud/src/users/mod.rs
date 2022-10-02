@@ -164,14 +164,7 @@ async fn create_user(
         return Err(UserError::InvalidEmailAddress);
     }
 
-    let case_insensitive_email = mongodb::bson::Regex {
-        pattern: format!("^{}$", &user.email),
-        options: String::from("i"),
-    };
-    let query = doc! {"$or": [
-        {"username": &user.username},
-        {"email": {"$regex": case_insensitive_email}}
-    ]};
+    let query = doc! {"username": &user.username};
     let update = doc! {"$setOnInsert": &user};
     let options = mongodb::options::FindOneAndUpdateOptions::builder()
         .return_document(ReturnDocument::Before)
@@ -184,11 +177,7 @@ async fn create_user(
         .map_err(|err| InternalError::DatabaseConnectionError(err))?;
 
     if let Some(existing_user) = existing_user {
-        if existing_user.username == user.username {
-            Err(UserError::UserExistsError)
-        } else {
-            Err(UserError::EmailExistsError)
-        }
+        Err(UserError::UserExistsError)
     } else {
         Ok(HttpResponse::Ok().body("User created"))
     }
