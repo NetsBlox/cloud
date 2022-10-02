@@ -471,12 +471,11 @@ impl AppData {
             .collect::<HashMap<RoleId, _>>();
 
         Ok(Project {
-            // TODO: refactor?
             id: metadata.id.to_owned(),
             name: metadata.name.to_owned(),
             owner: metadata.owner.to_owned(),
             updated: metadata.updated.to_owned(),
-            public: metadata.public.to_owned(),
+            state: metadata.state.to_owned(),
             collaborators: metadata.collaborators.to_owned(),
             origin_time: metadata.origin_time,
             save_state: metadata.save_state.to_owned(),

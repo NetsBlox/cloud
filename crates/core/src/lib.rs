@@ -179,7 +179,7 @@ pub struct ProjectMetadata {
     pub owner: String,
     pub name: String,
     pub updated: SystemTime,
-    pub public: bool,
+    pub state: PublishState,
     pub collaborators: std::vec::Vec<String>,
     pub origin_time: SystemTime,
     pub save_state: SaveState,
@@ -208,7 +208,7 @@ pub struct Project {
     pub owner: String,
     pub name: String,
     pub updated: SystemTime,
-    pub public: bool,
+    pub state: PublishState,
     pub collaborators: std::vec::Vec<String>,
     pub origin_time: SystemTime,
     pub save_state: SaveState,
@@ -279,7 +279,7 @@ pub struct CreateLibraryData {
     pub blocks: String,
 }
 
-#[derive(Serialize, Deserialize)]
+#[derive(Serialize, Deserialize, Debug, Clone)]
 pub enum PublishState {
     Private,
     PendingApproval,

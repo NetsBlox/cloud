@@ -18,8 +18,8 @@ use mongodb::bson::doc;
 use mongodb::options::{FindOneAndUpdateOptions, ReturnDocument};
 use mongodb::Cursor;
 use netsblox_core::{
-    ClientID, CreateProjectData, Project, ProjectId, RoleId, SaveState, UpdateProjectData,
-    UpdateRoleData,
+    ClientID, CreateProjectData, Project, ProjectId, PublishState, RoleId, SaveState,
+    UpdateProjectData, UpdateRoleData,
 };
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
@@ -101,7 +101,10 @@ async fn get_visible_projects(
             .await
             .unwrap()
             .into_iter()
-            .filter(|p| p.public)
+            .filter(|p| match p.state {
+                PublishState::Public => true,
+                _ => false,
+            })
             .collect::<Vec<_>>()
     };
     projects.into_iter().map(|project| project.into()).collect()
@@ -220,18 +223,20 @@ async fn can_view_project(
     client_id: Option<ClientID>,
     project: &ProjectMetadata,
 ) -> Result<bool, UserError> {
-    if project.public {
-        return Ok(true);
-    }
-    if let Some(username) = session.get::<String>("username").unwrap_or(None) {
-        let query = doc! {"username": username};
-        let invite = flatten(app.occupant_invites.find_one(query, None).await.ok());
-        if invite.is_some() {
-            return Ok(true);
+    match project.state {
+        PublishState::Public => Ok(true),
+        _ => {
+            if let Some(username) = session.get::<String>("username").unwrap_or(None) {
+                let query = doc! {"username": username};
+                let invite = flatten(app.occupant_invites.find_one(query, None).await.ok());
+                if invite.is_some() {
+                    return Ok(true);
+                }
+            }
+
+            can_edit_project(app, session, client_id, project).await
         }
     }
-
-    can_edit_project(app, session, client_id, project).await
 }
 
 pub async fn ensure_can_edit_project(
@@ -300,15 +305,16 @@ async fn publish_project(
     let (project_id,) = path.into_inner();
     let query = doc! {"id": &project_id};
     ensure_can_edit_project(&app, &session, None, &project_id).await?;
+    // TODO: check the name and the project contents
 
     // TODO: add moderation?
-    let update = doc! {"$set": {"public": true}};
+    let update = doc! {"$set": {"state": PublishState::Public}};
     app.project_metadata
         .update_one(query, update, None)
         .await
         .map_err(|err| InternalError::DatabaseConnectionError(err))?;
 
-    Ok(HttpResponse::Ok().body("Project published!"))
+    Ok(HttpResponse::Ok().json(PublishState::Public))
 }
 
 #[post("/id/{projectID}/unpublish")]
@@ -419,7 +425,7 @@ async fn get_latest_project(
         name: metadata.name.to_owned(),
         owner: metadata.owner.to_owned(),
         updated: metadata.updated.to_system_time(),
-        public: metadata.public.to_owned(),
+        state: metadata.state.to_owned(),
         collaborators: metadata.collaborators.to_owned(),
         origin_time: metadata.origin_time.to_system_time(),
         save_state: metadata.save_state.to_owned(),
