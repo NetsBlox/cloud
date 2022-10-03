@@ -3,6 +3,7 @@ use std::io::BufWriter;
 
 use crate::app_data::AppData;
 use crate::errors::{InternalError, UserError};
+use crate::libraries;
 use crate::models::{ProjectMetadata, RoleData};
 use crate::network::topology::{self, BrowserClientState};
 use crate::users::{can_edit_user, ensure_can_edit_user};
@@ -304,17 +305,33 @@ async fn publish_project(
 ) -> Result<HttpResponse, UserError> {
     let (project_id,) = path.into_inner();
     let query = doc! {"id": &project_id};
-    ensure_can_edit_project(&app, &session, None, &project_id).await?;
-    // TODO: check the name and the project contents
+    let metadata = ensure_can_edit_project(&app, &session, None, &project_id).await?;
+    let state = if is_approval_required(&app, &metadata).await? {
+        PublishState::PendingApproval
+    } else {
+        PublishState::Public
+    };
 
-    // TODO: add moderation?
-    let update = doc! {"$set": {"state": PublishState::Public}};
+    let update = doc! {"$set": {"state": &state}};
     app.project_metadata
         .update_one(query, update, None)
         .await
         .map_err(|err| InternalError::DatabaseConnectionError(err))?;
 
     Ok(HttpResponse::Ok().json(PublishState::Public))
+}
+
+async fn is_approval_required(
+    app: &AppData,
+    metadata: &ProjectMetadata,
+) -> Result<bool, UserError> {
+    for role_md in metadata.roles.values() {
+        let role = app.fetch_role(&role_md).await?;
+        if libraries::is_approval_required(&role.code) {
+            return Ok(true);
+        }
+    }
+    Ok(false)
 }
 
 #[post("/id/{projectID}/unpublish")]
@@ -327,7 +344,7 @@ async fn unpublish_project(
     let query = doc! {"id": &project_id};
     ensure_can_edit_project(&app, &session, None, &project_id).await?;
 
-    let update = doc! {"$set": {"public": false}};
+    let update = doc! {"$set": {"state": PublishState::Private}};
     let result = app
         .project_metadata
         .update_one(query, update, None)
@@ -605,10 +622,11 @@ async fn save_role(
 ) -> Result<HttpResponse, UserError> {
     let (project_id, role_id) = path.into_inner();
     let metadata = ensure_can_edit_project(&app, &session, None, &project_id).await?;
+    // TODO: if the project is public, check that it doesn't need to be approved again...
     app.save_role(&metadata, &role_id, body.into_inner())
         .await?;
 
-    Ok(HttpResponse::Ok().body("Saved!"))
+    Ok(HttpResponse::Ok().json(metadata.state))
 }
 
 #[patch("/id/{projectID}/{roleID}")]
