@@ -421,6 +421,7 @@ async fn send_message(
     message: web::Json<netsblox_core::SendMessage>,
     req: HttpRequest,
 ) -> Result<HttpResponse, UserError> {
+    // TODO: Should this be used to send messages from the CLI?
     ensure_is_authorized_host(&app, &req).await?;
 
     let message = message.into_inner();
