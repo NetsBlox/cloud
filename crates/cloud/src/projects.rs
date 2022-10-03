@@ -399,6 +399,7 @@ async fn update_project(
         .return_document(ReturnDocument::After)
         .build();
 
+    // TODO: How do we know there isn't a name collision?
     let updated_metadata = app
         .project_metadata
         .find_one_and_update(query, update, options)
@@ -622,11 +623,11 @@ async fn save_role(
 ) -> Result<HttpResponse, UserError> {
     let (project_id, role_id) = path.into_inner();
     let metadata = ensure_can_edit_project(&app, &session, None, &project_id).await?;
-    // TODO: if the project is public, check that it doesn't need to be approved again...
-    app.save_role(&metadata, &role_id, body.into_inner())
+    let updated_metdata = app
+        .save_role(&metadata, &role_id, body.into_inner())
         .await?;
 
-    Ok(HttpResponse::Ok().json(metadata.state))
+    Ok(HttpResponse::Ok().json(updated_metdata.state))
 }
 
 #[patch("/id/{projectID}/{roleID}")]

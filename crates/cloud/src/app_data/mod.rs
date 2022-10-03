@@ -534,7 +534,7 @@ impl AppData {
         metadata: &ProjectMetadata,
         role_id: &RoleId,
         role: RoleData,
-    ) -> Result<RoleMetadata, UserError> {
+    ) -> Result<ProjectMetadata, UserError> {
         let role_md = self
             .upload_role(&metadata.owner, &metadata.name, &role)
             .await?;
@@ -554,11 +554,8 @@ impl AppData {
 
         self.on_room_changed(updated_metadata.clone());
 
-        Ok(updated_metadata
-            .roles
-            .get(role_id)
-            .map(|md| md.to_owned())
-            .unwrap())
+        // TODO: check if the project needs to be re-approved
+        Ok(updated_metadata)
     }
 
     pub async fn create_role(
