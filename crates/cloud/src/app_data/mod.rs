@@ -10,7 +10,7 @@ use log::{info, warn};
 use lru::LruCache;
 use mongodb::bson::{doc, DateTime, Document};
 use mongodb::options::{FindOneAndUpdateOptions, IndexOptions, ReturnDocument};
-use netsblox_core::{LibraryMetadata, ProjectId, RoleId};
+use netsblox_core::{LibraryMetadata, ProjectId, PublishState, RoleId};
 use rusoto_core::credential::StaticProvider;
 use rusoto_core::Region;
 use serde::{Deserialize, Serialize};
@@ -21,6 +21,7 @@ use uuid::Uuid;
 
 use crate::config::Settings;
 use crate::errors::{InternalError, UserError};
+use crate::libraries;
 use crate::models::{
     AuthorizedServiceHost, BannedAccount, CollaborationInvite, FriendLink, Group, Library, Project,
     ProjectMetadata, SaveState, SetPasswordToken, User,
@@ -538,9 +539,28 @@ impl AppData {
         let role_md = self
             .upload_role(&metadata.owner, &metadata.name, &role)
             .await?;
+
+        // check if the (public) project needs to be re-approved
+        let state = match metadata.state {
+            PublishState::Public => {
+                let needs_approval = libraries::is_approval_required(&role.code);
+                if needs_approval {
+                    PublishState::PendingApproval
+                } else {
+                    PublishState::Public
+                }
+            }
+            _ => metadata.state.clone(),
+        };
+
         let query = doc! {"id": &metadata.id};
-        let update =
-            doc! {"$set": {&format!("roles.{}", role_id): role_md, "saveState": SaveState::SAVED}};
+        let update = doc! {
+            "$set": {
+                &format!("roles.{}", role_id): role_md,
+                "saveState": SaveState::SAVED,
+                "state": state,
+            }
+        };
         let options = FindOneAndUpdateOptions::builder()
             .return_document(ReturnDocument::After)
             .build();
@@ -554,7 +574,6 @@ impl AppData {
 
         self.on_room_changed(updated_metadata.clone());
 
-        // TODO: check if the project needs to be re-approved
         Ok(updated_metadata)
     }
 
