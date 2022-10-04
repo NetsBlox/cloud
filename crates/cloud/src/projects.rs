@@ -25,15 +25,6 @@ use netsblox_core::{
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
-#[derive(Serialize)]
-#[serde(rename_all = "camelCase")]
-struct CreatedRole<'a> {
-    project_id: ProjectId,
-    role_id: &'a RoleId,
-    name: String,
-    role_name: &'a str,
-}
-
 #[post("/")]
 async fn create_project(
     app: web::Data<AppData>,
@@ -59,12 +50,7 @@ async fn create_project(
 
     let role_id = metadata.roles.keys().next().unwrap();
     let role_name = &metadata.roles.get(role_id).unwrap().name;
-    Ok(HttpResponse::Ok().json(CreatedRole {
-        project_id: metadata.id,
-        role_id,
-        name: metadata.name,
-        role_name,
-    }))
+    Ok(HttpResponse::Ok().json(metadata))
     // TODO: add allow_rename query string parameter?
 }
 
