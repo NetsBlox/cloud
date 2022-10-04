@@ -225,8 +225,7 @@ async fn can_view_project(
     project: &ProjectMetadata,
 ) -> Result<bool, UserError> {
     match project.state {
-        PublishState::Public => Ok(true),
-        _ => {
+        PublishState::Private => {
             if let Some(username) = session.get::<String>("username").unwrap_or(None) {
                 let query = doc! {"username": username};
                 let invite = flatten(app.occupant_invites.find_one(query, None).await.ok());
@@ -237,6 +236,10 @@ async fn can_view_project(
 
             can_edit_project(app, session, client_id, project).await
         }
+        // Allow viewing projects pending approval. Disclaimer should be on client side
+        // Client can also disable JS or simply prompt the user if he/she would still like
+        // to open the project
+        _ => Ok(true),
     }
 }
 
