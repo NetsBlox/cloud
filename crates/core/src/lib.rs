@@ -368,14 +368,14 @@ impl CollaborationInvite {
 #[serde(rename_all = "camelCase")]
 pub struct UpdateProjectData {
     pub name: String,
-    pub client_id: Option<String>,
+    pub client_id: Option<ClientID>,
 }
 
 #[derive(Deserialize, Serialize, Debug)]
 #[serde(rename_all = "camelCase")]
 pub struct UpdateRoleData {
     pub name: String,
-    pub client_id: Option<String>,
+    pub client_id: Option<ClientID>,
 }
 
 #[derive(Deserialize, Serialize)]
@@ -389,7 +389,33 @@ pub struct CreateProjectData {
 }
 
 // Network debugging data
-pub type ClientID = String;
+#[derive(Deserialize, Serialize, Debug, Clone, PartialEq, Eq, Hash)]
+pub struct ClientID(String);
+
+impl ClientID {
+    pub fn new(addr: String) -> Self {
+        Self(addr)
+    }
+
+    pub fn as_str(&self) -> &str {
+        &self.0
+    }
+}
+
+#[derive(Debug, Display, Error)]
+#[display(fmt = "Invalid client ID. Must start with a _")]
+pub struct ClientIDError;
+
+impl FromStr for ClientID {
+    type Err = ClientIDError;
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        if s.starts_with("_") {
+            Ok(ClientID::new(s.to_owned()))
+        } else {
+            Err(ClientIDError)
+        }
+    }
+}
 
 #[derive(Deserialize, Serialize, Debug)]
 #[serde(rename_all = "camelCase")]

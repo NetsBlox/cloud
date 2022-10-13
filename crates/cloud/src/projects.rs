@@ -40,7 +40,7 @@ async fn create_project(
     }
 
     let owner = owner_name
-        .or_else(|| project_data.client_id)
+        .or_else(|| project_data.client_id.map(|id| id.as_str().to_string()))
         .ok_or_else(|| UserError::LoginRequiredError)?;
 
     let name = project_data.name.to_owned();
@@ -247,15 +247,13 @@ pub async fn ensure_can_edit_project(
 async fn can_edit_project(
     app: &AppData,
     session: &Session,
-    client_id: Option<String>,
+    client_id: Option<ClientID>,
     project: &ProjectMetadata,
 ) -> Result<bool, UserError> {
-    println!(
-        "Can {} edit the project? ({})",
-        client_id.as_deref().unwrap_or("None"),
-        project.owner
-    );
-    let is_owner = client_id.map(|id| id == project.owner).unwrap_or(false);
+    println!("Can {:?} edit the project? ({})", client_id, project.owner);
+    let is_owner = client_id
+        .map(|id| id.as_str() == &project.owner)
+        .unwrap_or(false);
 
     if is_owner {
         Ok(true)

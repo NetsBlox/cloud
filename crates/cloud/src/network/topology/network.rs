@@ -335,11 +335,11 @@ impl Topology {
         }
     }
 
-    fn has_client(&self, id: &str) -> bool {
+    fn has_client(&self, id: &ClientID) -> bool {
         self.clients.contains_key(id)
     }
 
-    pub fn disconnect_client(&self, id: &str) {
+    pub fn disconnect_client(&self, id: &ClientID) {
         if let Some(client) = self.clients.get(id) {
             client.addr.do_send(ClientCommand::Close).unwrap();
         }
@@ -418,12 +418,12 @@ impl Topology {
         self.reset_client_state(&msg.id, None).await;
     }
 
-    async fn reset_client_state(&mut self, id: &str, new_project_id: Option<ProjectId>) {
+    async fn reset_client_state(&mut self, id: &ClientID, new_project_id: Option<ProjectId>) {
         self.usernames.remove(id);
         match self.states.remove(id) {
             Some(ClientState::Browser(state)) => {
                 let room = self.rooms.get_mut(&state.project_id);
-                let mut empty: Vec<String> = Vec::new();
+                let mut empty: Vec<_> = Vec::new();
                 let mut update_needed = room.is_some();
 
                 if let Some(room) = room {
