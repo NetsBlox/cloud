@@ -70,9 +70,6 @@
 
     - this should probably be added to the cloud server
 
-- [ ] add aspect ratio padding support
-    - use image crate
-
 - [ ] add email support
     - [ ] new account creation
     - [x] password reset
@@ -845,4 +842,16 @@
         - how should we handle collaboration?
     - [x] project-response
     - [ ] request-actions
+
+- [x] add aspect ratio padding support
+    - use image crate
+    - use a thumbnail from the roles?
+        - which thumbnail should be used? Last updated (probably)?
+    - [ ] test without aspect ratio
+        - image seems to be incorrect...
+            - [x] verify that the image txt matches
+                - it matches
+            - [ ] loading must be incorrect. What is the format used by toDataURL('image/png')
+                - standard base64 encoding...
+                - should I try this on another image
 
