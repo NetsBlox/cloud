@@ -2,14 +2,14 @@ use crate::app_data::AppData;
 use crate::errors::{InternalError, UserError};
 use crate::models::{FriendLink, User};
 use crate::network::topology;
-use crate::users::{ensure_can_edit_user, is_super_user};
+use crate::users::{ensure_can_edit_user, get_user_role, is_super_user};
 use actix_session::Session;
 use actix_web::{get, post};
 use actix_web::{web, HttpResponse};
 use futures::TryStreamExt;
 use mongodb::bson::doc;
 use mongodb::options::UpdateOptions;
-use netsblox_core::{FriendInvite, FriendLinkState};
+use netsblox_core::{FriendInvite, FriendLinkState, UserRole};
 
 #[get("/{owner}/")]
 async fn list_friends(
@@ -18,8 +18,15 @@ async fn list_friends(
     session: Session,
 ) -> Result<HttpResponse, UserError> {
     let (owner,) = path.into_inner();
+    ensure_can_edit_user(&app, &session, &owner).await?;
+
     // Admins are considered a friend to everyone (at least one-way)
-    let friend_names = if is_super_user(&app, &session).await.unwrap_or(false) {
+    let is_universal_friend = match get_user_role(&app, &owner).await? {
+        UserRole::Admin => true,
+        _ => false,
+    };
+
+    let friend_names = if is_universal_friend {
         app.users
             .find(doc! {}, None)
             .await
@@ -29,9 +36,9 @@ async fn list_friends(
             .map_err(|err| InternalError::DatabaseConnectionError(err))?
             .into_iter()
             .map(|user| user.username)
+            .filter(|username| username != &owner)
             .collect()
     } else {
-        ensure_can_edit_user(&app, &session, &owner).await?;
         get_friends(&app, &owner).await
     };
 

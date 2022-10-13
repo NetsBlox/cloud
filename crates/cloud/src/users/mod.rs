@@ -28,18 +28,22 @@ pub async fn is_super_user(app: &AppData, session: &Session) -> Result<bool, Use
 
 async fn get_session_role(app: &AppData, session: &Session) -> Result<UserRole, UserError> {
     if let Some(username) = session.get::<String>("username").unwrap_or(None) {
-        let query = doc! {"username": username};
-        Ok(app
-            .users
-            .find_one(query, None)
-            .await
-            .unwrap()
-            .map(|user| user.role)
-            .unwrap_or(UserRole::User))
+        get_user_role(&app, &username).await
     } else {
         session.purge();
         Err(UserError::LoginRequiredError)
     }
+}
+
+pub(crate) async fn get_user_role(app: &AppData, username: &str) -> Result<UserRole, UserError> {
+    let query = doc! {"username": username};
+    Ok(app
+        .users
+        .find_one(query, None)
+        .await
+        .map_err(|err| InternalError::DatabaseConnectionError(err))?
+        .map(|user| user.role)
+        .unwrap_or(UserRole::User))
 }
 
 pub async fn is_moderator(app: &AppData, session: &Session) -> Result<bool, UserError> {
