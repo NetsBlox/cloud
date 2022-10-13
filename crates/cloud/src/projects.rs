@@ -48,8 +48,8 @@ async fn create_project(
         .import_project(&owner, &name, project_data.roles, project_data.save_state)
         .await?;
 
-    let role_id = metadata.roles.keys().next().unwrap();
-    let _role_name = &metadata.roles.get(role_id).unwrap().name;
+    //let role_id = metadata.roles.keys().next().unwrap();
+    //let _role_name = &metadata.roles.get(role_id).unwrap().name;
     Ok(HttpResponse::Ok().json(metadata))
     // TODO: add allow_rename query string parameter?
 }

@@ -180,7 +180,7 @@ async fn create_user(
         .await
         .map_err(InternalError::DatabaseConnectionError)?;
 
-    if let Some(_existing_user) = existing_user {
+    if existing_user.is_some() {
         Err(UserError::UserExistsError)
     } else {
         Ok(HttpResponse::Ok().body("User created"))
