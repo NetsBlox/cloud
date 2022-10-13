@@ -44,7 +44,7 @@ impl From<netsblox_core::SendMessage> for ClientCommand {
 #[derive(Message)]
 #[rtype(result = "()")]
 pub struct AddClient {
-    pub id: String,
+    pub id: ClientID,
     pub addr: Recipient<ClientCommand>,
 }
 
@@ -63,7 +63,7 @@ pub struct SendRoomState {
 #[derive(Message)]
 #[rtype(result = "()")]
 pub struct BrokenClient {
-    pub id: String,
+    pub id: ClientID,
 }
 
 #[derive(Message)]
@@ -75,7 +75,7 @@ pub struct RemoveClient {
 #[derive(Message)]
 #[rtype(result = "()")]
 pub struct SetClientState {
-    pub id: String,
+    pub id: ClientID,
     pub state: ClientState,
     pub username: Option<String>,
 }
@@ -83,7 +83,8 @@ pub struct SetClientState {
 #[derive(Message)]
 #[rtype(result = "()")]
 pub struct SendMessage {
-    pub sender: String,
+    // TODO: include sender username
+    pub sender: ClientID,
     pub addresses: Vec<String>,
     pub content: Value,
 }
@@ -397,7 +398,7 @@ impl Handler<SendMessageFromServices> for TopologyActor {
 #[derive(Message, Clone)]
 #[rtype(result = "()")]
 pub struct SendIDEMessage {
-    pub addresses: Vec<String>,
+    pub addresses: Vec<ClientID>,
     pub content: Value,
 }
 

@@ -29,14 +29,15 @@ pub type AppID = String;
 #[post("/{client}/state")] // TODO: add token here (in a header), too?
 async fn set_client_state(
     app: web::Data<AppData>,
-    path: web::Path<(String,)>,
+    path: web::Path<(ClientID,)>,
     body: web::Json<ClientStateData>,
     session: Session,
 ) -> Result<HttpResponse, UserError> {
     // TODO: should we allow users to set the client state for some other user?
     let username = session.get::<String>("username").unwrap();
     let (client_id,) = path.into_inner();
-    if !client_id.starts_with('_') {
+    if !client_id.as_str().starts_with('_') {
+        // TODO: move this to the struct parsing
         return Err(UserError::InvalidClientIdError);
     }
 
@@ -45,7 +46,11 @@ async fn set_client_state(
     let state = match body.into_inner().state {
         ClientState::External(client_state) => {
             // append the user ID to the address
-            let user_id = username.as_ref().unwrap_or_else(|| &client_id).to_owned();
+            let client_id_string = client_id.as_str().to_string();
+            let user_id = username
+                .as_ref()
+                .unwrap_or_else(|| &client_id_string)
+                .to_owned();
             let address = format!("{}@{}", client_state.address, user_id);
             let app_id = client_state.app_id;
             if app_id.to_lowercase() == topology::DEFAULT_APP_ID {
@@ -106,12 +111,12 @@ async fn connect_client(
     app: web::Data<AppData>,
     req: HttpRequest,
     stream: web::Payload,
-    path: web::Path<(String,)>,
+    path: web::Path<(ClientID,)>,
 ) -> Result<HttpResponse, UserError> {
     // TODO: validate client secret?
     let (client_id,) = path.into_inner();
 
-    if !client_id.starts_with('_') {
+    if !client_id.as_str().starts_with('_') {
         return Err(UserError::InvalidClientIdError);
     }
 
@@ -239,7 +244,7 @@ async fn evict_occupant(
 async fn ensure_can_evict_client(
     app: &AppData,
     session: &Session,
-    client_id: &str,
+    client_id: &ClientID,
 ) -> Result<(), UserError> {
     let client_state = app
         .network
@@ -481,7 +486,7 @@ pub fn config(cfg: &mut web::ServiceConfig) {
 }
 
 struct WsSession {
-    client_id: String,
+    client_id: ClientID,
     topology_addr: Addr<topology::TopologyActor>,
 }
 
@@ -522,7 +527,7 @@ impl WsSession {
                     Value::Array(values) => values
                         .into_iter()
                         .filter_map(|v| match v {
-                            Value::String(v) => Some(v),
+                            Value::String(v) => Some(ClientID::new(v)),
                             _ => None,
                         })
                         .collect::<Vec<_>>(),
@@ -556,7 +561,7 @@ impl Actor for WsSession {
 
     fn stopping(&mut self, _: &mut Self::Context) -> actix::Running {
         // TODO: wait a little bit?
-        println!("stopping! {}", self.client_id);
+        println!("stopping! {:?}", self.client_id);
         self.topology_addr.do_send(topology::RemoveClient {
             id: self.client_id.clone(),
         });

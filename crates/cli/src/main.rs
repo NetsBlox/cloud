@@ -369,7 +369,7 @@ enum Network {
         address: String,
     },
     /// Evict a client from their current role
-    Evict { client_id: String },
+    Evict { client_id: ClientID },
     /// Send a NetsBlox message
     Send {
         /// Address of the intended recipient

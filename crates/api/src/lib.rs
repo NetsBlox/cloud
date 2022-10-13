@@ -1122,7 +1122,10 @@ impl Client {
 
     pub async fn get_client_state(&self, client_id: &ClientID) -> Result<ClientInfo, error::Error> {
         let response = self
-            .request(Method::GET, &format!("/network/{}/state", client_id))
+            .request(
+                Method::GET,
+                &format!("/network/{}/state", client_id.as_str()),
+            )
             .send()
             .await
             .map_err(|err| error::Error::RequestError(err))?;
@@ -1136,7 +1139,7 @@ impl Client {
         let response = self
             .request(
                 Method::POST,
-                &format!("/network/clients/{}/evict", client_id),
+                &format!("/network/clients/{}/evict", client_id.as_str()),
             )
             .send()
             .await
