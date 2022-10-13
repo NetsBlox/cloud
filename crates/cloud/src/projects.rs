@@ -33,7 +33,7 @@ async fn create_project(
 ) -> Result<HttpResponse, UserError> {
     let current_user = session.get::<String>("username").unwrap_or(None);
     let project_data = body.into_inner();
-    let owner_name = project_data.owner.or_else(|| current_user);
+    let owner_name = project_data.owner.or(current_user);
     // FIXME: what if the owner is a client ID?
     if let Some(username) = &owner_name {
         ensure_can_edit_user(&app, &session, username).await?;
@@ -41,7 +41,7 @@ async fn create_project(
 
     let owner = owner_name
         .or_else(|| project_data.client_id.map(|id| id.as_str().to_string()))
-        .ok_or_else(|| UserError::LoginRequiredError)?;
+        .ok_or(UserError::LoginRequiredError)?;
 
     let name = project_data.name.to_owned();
     let metadata = app
@@ -49,7 +49,7 @@ async fn create_project(
         .await?;
 
     let role_id = metadata.roles.keys().next().unwrap();
-    let role_name = &metadata.roles.get(role_id).unwrap().name;
+    let _role_name = &metadata.roles.get(role_id).unwrap().name;
     Ok(HttpResponse::Ok().json(metadata))
     // TODO: add allow_rename query string parameter?
 }
@@ -67,7 +67,7 @@ async fn list_user_projects(
         .project_metadata
         .find(query, None)
         .await
-        .map_err(|err| InternalError::DatabaseConnectionError(err))?;
+        .map_err(InternalError::DatabaseConnectionError)?;
 
     let projects = get_visible_projects(&app, &session, &username, cursor).await;
     println!("Found {} projects for {}", projects.len(), username);
@@ -88,10 +88,7 @@ async fn get_visible_projects(
             .await
             .unwrap()
             .into_iter()
-            .filter(|p| match p.state {
-                PublishState::Public => true,
-                _ => false,
-            })
+            .filter(|p| matches!(p.state, PublishState::Public))
             .collect::<Vec<_>>()
     };
     projects.into_iter().map(|project| project.into()).collect()
@@ -129,8 +126,8 @@ async fn get_project_named(
         .project_metadata
         .find_one(query, None)
         .await
-        .map_err(|err| InternalError::DatabaseConnectionError(err))?
-        .ok_or_else(|| UserError::ProjectNotFoundError)?;
+        .map_err(InternalError::DatabaseConnectionError)?
+        .ok_or(UserError::ProjectNotFoundError)?;
 
     // TODO: Do I need to have edit permissions?
     ensure_can_view_project_metadata(&app, &session, None, &metadata).await?;
@@ -151,8 +148,8 @@ async fn get_project_metadata(
         .project_metadata
         .find_one(query, None)
         .await
-        .map_err(|err| InternalError::DatabaseConnectionError(err))?
-        .ok_or_else(|| UserError::ProjectNotFoundError)?;
+        .map_err(InternalError::DatabaseConnectionError)?
+        .ok_or(UserError::ProjectNotFoundError)?;
 
     ensure_can_view_project_metadata(&app, &session, None, &metadata).await?;
 
@@ -179,8 +176,8 @@ pub async fn ensure_can_view_project(
     client_id: Option<ClientID>,
     project_id: &ProjectId,
 ) -> Result<ProjectMetadata, UserError> {
-    let metadata = app.get_project_metadatum(&project_id).await?;
-    ensure_can_view_project_metadata(&app, &session, client_id, &metadata).await?;
+    let metadata = app.get_project_metadatum(project_id).await?;
+    ensure_can_view_project_metadata(app, session, client_id, &metadata).await?;
     Ok(metadata)
 }
 
@@ -252,7 +249,7 @@ async fn can_edit_project(
 ) -> Result<bool, UserError> {
     println!("Can {:?} edit the project? ({})", client_id, project.owner);
     let is_owner = client_id
-        .map(|id| id.as_str() == &project.owner)
+        .map(|id| id.as_str() == project.owner)
         .unwrap_or(false);
 
     if is_owner {
@@ -303,7 +300,7 @@ async fn publish_project(
     app.project_metadata
         .update_one(query, update, None)
         .await
-        .map_err(|err| InternalError::DatabaseConnectionError(err))?;
+        .map_err(InternalError::DatabaseConnectionError)?;
 
     Ok(HttpResponse::Ok().json(PublishState::Public))
 }
@@ -313,7 +310,7 @@ async fn is_approval_required(
     metadata: &ProjectMetadata,
 ) -> Result<bool, UserError> {
     for role_md in metadata.roles.values() {
-        let role = app.fetch_role(&role_md).await?;
+        let role = app.fetch_role(role_md).await?;
         if libraries::is_approval_required(&role.code) {
             return Ok(true);
         }
@@ -357,8 +354,8 @@ async fn delete_project(
         .project_metadata
         .find_one(query, None)
         .await
-        .map_err(|err| InternalError::DatabaseConnectionError(err))?
-        .ok_or_else(|| UserError::ProjectNotFoundError)?;
+        .map_err(InternalError::DatabaseConnectionError)?
+        .ok_or(UserError::ProjectNotFoundError)?;
 
     // collaborators cannot delete -> only user/admin/etc
     ensure_can_edit_user(&app, &session, &metadata.owner).await?;
@@ -391,8 +388,8 @@ async fn update_project(
         .project_metadata
         .find_one_and_update(query, update, options)
         .await
-        .map_err(|err| InternalError::DatabaseConnectionError(err))?
-        .ok_or_else(|| UserError::ProjectNotFoundError)?;
+        .map_err(InternalError::DatabaseConnectionError)?
+        .ok_or(UserError::ProjectNotFoundError)?;
 
     app.on_room_changed(updated_metadata);
     Ok(HttpResponse::Ok().body("Project updated."))
@@ -459,15 +456,14 @@ async fn get_project_thumbnail(
         .roles
         .values()
         .max_by_key(|md| md.updated)
-        .ok_or_else(|| UserError::ThumbnailNotFoundError)?;
-    let role = app.fetch_role(&role_metadata).await?;
+        .ok_or(UserError::ThumbnailNotFoundError)?;
+    let role = app.fetch_role(role_metadata).await?;
     let thumbnail = role
         .code
         .split("<thumbnail>data:image/png;base64,")
-        .skip(1)
-        .next()
+        .nth(1)
         .and_then(|text| text.split("</thumbnail>").next())
-        .ok_or_else(|| UserError::ThumbnailNotFoundError)
+        .ok_or(UserError::ThumbnailNotFoundError)
         .and_then(|thumbnail_str| {
             base64::decode(thumbnail_str)
                 .map_err(|err| InternalError::Base64DecodeError(err).into())
@@ -503,7 +499,7 @@ async fn get_project_thumbnail(
         let color = ColorType::Rgba8;
         encoder
             .write_image(image.as_bytes(), resized_width, resized_height, color)
-            .map_err(|err| InternalError::ThumbnailEncodeError(err))?;
+            .map_err(InternalError::ThumbnailEncodeError)?;
         actix_web::web::Bytes::copy_from_slice(&png_bytes.into_inner().unwrap())
     } else {
         let (width, height) = thumbnail.dimensions();
@@ -512,7 +508,7 @@ async fn get_project_thumbnail(
         let color = ColorType::Rgba8;
         encoder
             .write_image(thumbnail.as_bytes(), width, height, color)
-            .map_err(|err| InternalError::ThumbnailEncodeError(err))?;
+            .map_err(InternalError::ThumbnailEncodeError)?;
         actix_web::web::Bytes::copy_from_slice(&png_bytes.into_inner().unwrap())
     };
 
@@ -532,8 +528,8 @@ impl From<CreateRoleData> for RoleData {
     fn from(data: CreateRoleData) -> RoleData {
         RoleData {
             name: data.name,
-            code: data.code.unwrap_or_else(String::new),
-            media: data.media.unwrap_or_else(String::new),
+            code: data.code.unwrap_or_default(),
+            media: data.media.unwrap_or_default(),
         }
     }
 }
@@ -565,7 +561,7 @@ async fn get_role(
     let role_md = metadata
         .roles
         .get(&role_id)
-        .ok_or_else(|| UserError::RoleNotFoundError)?;
+        .ok_or(UserError::RoleNotFoundError)?;
 
     let role = app.fetch_role(role_md).await?;
     Ok(HttpResponse::Ok().json(role))
@@ -594,8 +590,8 @@ async fn delete_role(
         .project_metadata
         .find_one_and_update(query, update, options)
         .await
-        .map_err(|err| InternalError::DatabaseConnectionError(err))?
-        .ok_or_else(|| UserError::ProjectNotFoundError)?;
+        .map_err(InternalError::DatabaseConnectionError)?
+        .ok_or(UserError::ProjectNotFoundError)?;
 
     app.on_room_changed(updated_metadata);
     Ok(HttpResponse::Ok().body("Deleted!"))
@@ -640,8 +636,8 @@ async fn rename_role(
             .project_metadata
             .find_one_and_update(query, update, options)
             .await
-            .map_err(|err| InternalError::DatabaseConnectionError(err))?
-            .ok_or_else(|| UserError::ProjectNotFoundError)?;
+            .map_err(InternalError::DatabaseConnectionError)?
+            .ok_or(UserError::ProjectNotFoundError)?;
 
         app.on_room_changed(updated_metadata);
         Ok(HttpResponse::Ok().body("Role updated"))
@@ -673,7 +669,7 @@ async fn fetch_role_data(
     let role_md = metadata
         .roles
         .get(&role_id)
-        .ok_or_else(|| UserError::RoleNotFoundError)?;
+        .ok_or(UserError::RoleNotFoundError)?;
 
     // Try to fetch the role data from the current occupants
     let state = BrowserClientState {
@@ -685,7 +681,7 @@ async fn fetch_role_data(
         .send(topology::GetRoleRequest { state })
         .await
         .map_err(|_err| UserError::InternalError)
-        .and_then(|result| result.0.ok_or_else(|| UserError::InternalError));
+        .and_then(|result| result.0.ok_or(UserError::InternalError));
 
     let active_role = if let Ok(request) = request_opt {
         request.send().await.ok()
@@ -770,8 +766,8 @@ async fn remove_collaborator(
         .project_metadata
         .find_one_and_update(query, update, options)
         .await
-        .map_err(|err| InternalError::DatabaseConnectionError(err))?
-        .ok_or_else(|| UserError::ProjectNotFoundError)?;
+        .map_err(InternalError::DatabaseConnectionError)?
+        .ok_or(UserError::ProjectNotFoundError)?;
 
     app.on_room_changed(metadata);
     Ok(HttpResponse::Ok().body("Collaborator removed"))

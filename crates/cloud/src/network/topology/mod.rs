@@ -311,8 +311,7 @@ impl Handler<GetClientState> for TopologyActor {
         let topology = TOPOLOGY.read().unwrap();
         MessageResult(GetClientStateResult(
             topology
-                .get_client_state(&msg.client_id)
-                .map(|state| state.clone()),
+                .get_client_state(&msg.client_id).cloned(),
         ))
     }
 }

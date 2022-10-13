@@ -22,7 +22,7 @@ async fn list_group_hosts(
     let username = session
         .get::<String>("username")
         .unwrap()
-        .ok_or_else(|| UserError::PermissionsError)?;
+        .ok_or(UserError::PermissionsError)?;
 
     let query = if is_super_user(&app, &session).await? {
         doc! {"id": id}
@@ -34,10 +34,10 @@ async fn list_group_hosts(
         .groups
         .find_one(query, None)
         .await
-        .map_err(|err| InternalError::DatabaseConnectionError(err))?
-        .ok_or_else(|| UserError::GroupNotFoundError)?;
+        .map_err(InternalError::DatabaseConnectionError)?
+        .ok_or(UserError::GroupNotFoundError)?;
 
-    Ok(HttpResponse::Ok().json(group.services_hosts.unwrap_or_else(Vec::new)))
+    Ok(HttpResponse::Ok().json(group.services_hosts.unwrap_or_default()))
 }
 
 #[post("/group/{id}")]
@@ -52,7 +52,7 @@ async fn set_group_hosts(
     let username = session
         .get::<String>("username")
         .unwrap()
-        .ok_or_else(|| UserError::PermissionsError)?;
+        .ok_or(UserError::PermissionsError)?;
 
     let query = if is_super_user(&app, &session).await? {
         doc! {"id": id}
@@ -84,10 +84,10 @@ async fn list_user_hosts(
         .users
         .find_one(query, None)
         .await
-        .map_err(|err| InternalError::DatabaseConnectionError(err))?
-        .ok_or_else(|| UserError::UserNotFoundError)?;
+        .map_err(InternalError::DatabaseConnectionError)?
+        .ok_or(UserError::UserNotFoundError)?;
 
-    Ok(HttpResponse::Ok().json(user.services_hosts.unwrap_or_else(Vec::new)))
+    Ok(HttpResponse::Ok().json(user.services_hosts.unwrap_or_default()))
 }
 
 #[post("/user/{username}")]
@@ -107,7 +107,7 @@ async fn set_user_hosts(
         .users
         .update_one(filter, update, None)
         .await
-        .map_err(|err| InternalError::DatabaseConnectionError(err))?;
+        .map_err(InternalError::DatabaseConnectionError)?;
 
     if result.modified_count == 1 {
         Ok(HttpResponse::Ok().finish())
@@ -130,8 +130,8 @@ async fn list_all_hosts(
         .users
         .find_one(query, None)
         .await
-        .map_err(|err| InternalError::DatabaseConnectionError(err))?
-        .ok_or_else(|| UserError::UserNotFoundError)?;
+        .map_err(InternalError::DatabaseConnectionError)?
+        .ok_or(UserError::UserNotFoundError)?;
 
     let mut groups = app
         .groups
@@ -147,20 +147,19 @@ async fn list_all_hosts(
             .groups
             .find_one(doc! {"id": group_id}, None)
             .await
-            .map_err(|err| InternalError::DatabaseConnectionError(err))?
+            .map_err(InternalError::DatabaseConnectionError)?
         {
             groups.push(in_group);
         }
     };
 
     let services_hosts = user
-        .services_hosts
-        .unwrap_or_else(Vec::new)
+        .services_hosts.unwrap_or_default()
         .into_iter()
         .chain(
             groups
                 .into_iter()
-                .flat_map(|g| g.services_hosts.unwrap_or_else(Vec::new)),
+                .flat_map(|g| g.services_hosts.unwrap_or_default()),
         );
     Ok(HttpResponse::Ok().json(services_hosts.collect::<Vec<_>>()))
 }
@@ -177,7 +176,7 @@ async fn get_authorized_hosts(
         .authorized_services
         .find(query, None)
         .await
-        .map_err(|err| InternalError::DatabaseConnectionError(err))?;
+        .map_err(InternalError::DatabaseConnectionError)?;
 
     let hosts: Vec<netsblox_core::AuthorizedServiceHost> = cursor
         .try_collect::<Vec<_>>()
@@ -207,7 +206,7 @@ async fn authorize_host(
         .authorized_services
         .update_one(query, update, options)
         .await
-        .map_err(|err| InternalError::DatabaseConnectionError(err))?;
+        .map_err(InternalError::DatabaseConnectionError)?;
 
     if result.matched_count > 0 {
         Err(UserError::ServiceHostAlreadyAuthorizedError)
@@ -230,7 +229,7 @@ async fn unauthorize_host(
         .authorized_services
         .delete_one(query, None)
         .await
-        .map_err(|err| InternalError::DatabaseConnectionError(err))?;
+        .map_err(InternalError::DatabaseConnectionError)?;
 
     if result.deleted_count == 0 {
         Err(UserError::ServiceHostNotFoundError)
@@ -245,7 +244,7 @@ pub async fn ensure_is_authorized_host(app: &AppData, req: &HttpRequest) -> Resu
         .get("X-Authorization")
         .and_then(|value| value.to_str().ok())
         .and_then(|value_str| {
-            let mut chunks = value_str.split(":");
+            let mut chunks = value_str.split(':');
             let id = chunks.next();
             let secret = chunks.next();
             id.and_then(|id| secret.map(|s| (id, s)))
@@ -257,8 +256,8 @@ pub async fn ensure_is_authorized_host(app: &AppData, req: &HttpRequest) -> Resu
         app.authorized_services
             .find_one(query, None)
             .await
-            .map_err(|err| InternalError::DatabaseConnectionError(err))?
-            .ok_or_else(|| UserError::PermissionsError)?;
+            .map_err(InternalError::DatabaseConnectionError)?
+            .ok_or(UserError::PermissionsError)?;
         Ok(())
     } else {
         Err(UserError::PermissionsError)

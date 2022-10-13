@@ -21,12 +21,12 @@ async fn list_community_libraries(app: web::Data<AppData>) -> Result<HttpRespons
         .library_metadata
         .find(public_filter, options)
         .await
-        .map_err(|err| InternalError::DatabaseConnectionError(err))?;
+        .map_err(InternalError::DatabaseConnectionError)?;
 
     let libraries = cursor
         .try_collect::<Vec<_>>()
         .await
-        .map_err(|err| InternalError::DatabaseConnectionError(err))?;
+        .map_err(InternalError::DatabaseConnectionError)?;
     Ok(HttpResponse::Ok().json(libraries))
 }
 
@@ -43,7 +43,7 @@ async fn list_user_libraries(
         .library_metadata
         .find(query, options)
         .await
-        .map_err(|err| InternalError::DatabaseConnectionError(err))?;
+        .map_err(InternalError::DatabaseConnectionError)?;
 
     let mut libraries = Vec::new();
     while let Some(library) = cursor.try_next().await.expect("Could not fetch library") {
@@ -71,8 +71,8 @@ async fn get_user_library(
         .libraries
         .find_one(query, None)
         .await
-        .map_err(|err| InternalError::DatabaseConnectionError(err))?
-        .ok_or_else(|| UserError::LibraryNotFoundError)?;
+        .map_err(InternalError::DatabaseConnectionError)?
+        .ok_or(UserError::LibraryNotFoundError)?;
 
     let blocks = library.blocks.to_owned();
     ensure_can_view_library(&app, &session, &library.into()).await?;
@@ -157,7 +157,7 @@ async fn delete_user_library(
         .library_metadata
         .delete_one(query, None)
         .await
-        .map_err(|err| InternalError::DatabaseConnectionError(err))?;
+        .map_err(InternalError::DatabaseConnectionError)?;
 
     if result.deleted_count == 0 {
         Err(UserError::LibraryNotFoundError)
@@ -182,8 +182,8 @@ async fn publish_user_library(
         .libraries
         .find_one_and_update(query.clone(), update, None)
         .await
-        .map_err(|err| InternalError::DatabaseConnectionError(err))?
-        .ok_or_else(|| UserError::LibraryNotFoundError)?;
+        .map_err(InternalError::DatabaseConnectionError)?
+        .ok_or(UserError::LibraryNotFoundError)?;
 
     if !is_approval_required(&library.blocks) || is_moderator(&app, &session).await? {
         let update = doc! {"$set": {"state": PublishState::Public}};
@@ -212,7 +212,7 @@ async fn unpublish_user_library(
         .library_metadata
         .update_one(query, update, None)
         .await
-        .map_err(|err| InternalError::DatabaseConnectionError(err))?;
+        .map_err(InternalError::DatabaseConnectionError)?;
 
     if result.matched_count == 0 {
         Err(UserError::LibraryNotFoundError)
@@ -278,12 +278,12 @@ async fn list_pending_libraries(
         .library_metadata
         .find(doc! {"state": PublishState::PendingApproval}, None)
         .await
-        .map_err(|err| InternalError::DatabaseConnectionError(err))?;
+        .map_err(InternalError::DatabaseConnectionError)?;
 
     let libraries = cursor
         .try_collect::<Vec<_>>()
         .await
-        .map_err(|err| InternalError::DatabaseConnectionError(err))?;
+        .map_err(InternalError::DatabaseConnectionError)?;
 
     Ok(HttpResponse::Ok().json(libraries))
 }
@@ -303,7 +303,7 @@ async fn set_library_state(
     app.library_metadata
         .update_one(query, update, None)
         .await
-        .map_err(|err| InternalError::DatabaseConnectionError(err))?;
+        .map_err(InternalError::DatabaseConnectionError)?;
 
     Ok(HttpResponse::Ok().finish())
 }
@@ -323,8 +323,8 @@ pub fn config(cfg: &mut web::ServiceConfig) {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use actix_web::{http, test, App};
-    use mongodb::{Client, Database};
+    use actix_web::{test};
+    
 
     // async fn init_database(
     //     name: &str,

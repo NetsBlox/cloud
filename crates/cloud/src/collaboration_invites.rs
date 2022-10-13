@@ -46,14 +46,14 @@ async fn send_invite(
         .project_metadata
         .find_one(query, None)
         .await
-        .map_err(|err| InternalError::DatabaseConnectionError(err))?
-        .ok_or_else(|| UserError::ProjectNotFoundError)?;
+        .map_err(InternalError::DatabaseConnectionError)?
+        .ok_or(UserError::ProjectNotFoundError)?;
 
     ensure_can_edit_user(&app, &session, &metadata.owner).await?;
     let sender = session
         .get::<String>("username")
         .unwrap_or(None)
-        .ok_or_else(|| UserError::PermissionsError)?;
+        .ok_or(UserError::PermissionsError)?;
 
     let invitation = CollaborationInvite::new(sender.clone(), recipient.clone(), project_id);
 
@@ -96,15 +96,15 @@ async fn respond_to_invite(
         .collab_invites
         .find_one(query.clone(), None)
         .await
-        .map_err(|err| InternalError::DatabaseConnectionError(err))?
-        .ok_or_else(|| UserError::InviteNotFoundError)?;
+        .map_err(InternalError::DatabaseConnectionError)?
+        .ok_or(UserError::InviteNotFoundError)?;
 
     ensure_can_edit_user(&app, &session, &invite.sender).await?;
 
     app.collab_invites
         .delete_one(query, None)
         .await
-        .map_err(|err| InternalError::DatabaseConnectionError(err))?;
+        .map_err(InternalError::DatabaseConnectionError)?;
 
     println!("state: {:?}", state);
     match state.into_inner() {
@@ -119,8 +119,8 @@ async fn respond_to_invite(
                 .project_metadata
                 .find_one_and_update(query, update, options)
                 .await
-                .map_err(|err| InternalError::DatabaseConnectionError(err))?
-                .ok_or_else(|| UserError::ProjectNotFoundError)?;
+                .map_err(InternalError::DatabaseConnectionError)?
+                .ok_or(UserError::ProjectNotFoundError)?;
 
             app.on_room_changed(updated_metadata);
             Ok(HttpResponse::Ok().body("Invitation accepted."))

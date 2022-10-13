@@ -543,7 +543,7 @@ impl From<Library> for LibraryMetadata {
             library.owner.clone(),
             library.name.clone(),
             library.state,
-            Some(library.notes.clone()),
+            Some(library.notes),
         )
     }
 }

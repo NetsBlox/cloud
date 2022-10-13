@@ -42,7 +42,7 @@ async fn view_group(
     let username = session
         .get::<String>("username")
         .unwrap_or(None)
-        .ok_or_else(|| UserError::PermissionsError)?;
+        .ok_or(UserError::PermissionsError)?;
 
     let query = if is_super_user(&app, &session).await.unwrap_or(false) {
         doc! {"id": id}
@@ -54,8 +54,8 @@ async fn view_group(
         .groups
         .find_one(query, None)
         .await
-        .map_err(|err| InternalError::DatabaseConnectionError(err))?
-        .ok_or_else(|| UserError::GroupNotFoundError)?
+        .map_err(InternalError::DatabaseConnectionError)?
+        .ok_or(UserError::GroupNotFoundError)?
         .into();
 
     Ok(HttpResponse::Ok().json(group))
@@ -121,7 +121,7 @@ async fn create_group(
         .groups
         .update_one(query, update, options)
         .await
-        .map_err(|err| InternalError::DatabaseConnectionError(err))?;
+        .map_err(InternalError::DatabaseConnectionError)?;
 
     if result.matched_count == 1 {
         Err(UserError::GroupExistsError)
@@ -142,7 +142,7 @@ async fn update_group(
     let username = session
         .get::<String>("username")
         .unwrap()
-        .ok_or_else(|| UserError::PermissionsError)?;
+        .ok_or(UserError::PermissionsError)?;
 
     let query = if is_super_user(&app, &session).await.unwrap_or(false) {
         doc! {"id": id}
@@ -154,7 +154,7 @@ async fn update_group(
         .groups
         .update_one(query, update, None)
         .await
-        .map_err(|err| InternalError::DatabaseConnectionError(err))?;
+        .map_err(InternalError::DatabaseConnectionError)?;
 
     if result.matched_count > 0 {
         Ok(HttpResponse::Ok().body("Group deleted."))
@@ -174,7 +174,7 @@ async fn delete_group(
     let username = session
         .get::<String>("username")
         .unwrap()
-        .ok_or_else(|| UserError::PermissionsError)?;
+        .ok_or(UserError::PermissionsError)?;
 
     let query = if is_super_user(&app, &session).await.unwrap_or(false) {
         doc! {"id": id}
@@ -186,7 +186,7 @@ async fn delete_group(
         .groups
         .delete_one(query, None)
         .await
-        .map_err(|err| InternalError::DatabaseConnectionError(err))?;
+        .map_err(InternalError::DatabaseConnectionError)?;
 
     if result.deleted_count > 0 {
         Ok(HttpResponse::Ok().body("Group deleted."))
@@ -206,9 +206,9 @@ pub fn config(cfg: &mut web::ServiceConfig) {
 
 #[cfg(test)]
 mod tests {
-    use super::*;
-    use actix_web::{http, test, App};
-    use mongodb::{Client, Collection, Database};
+    
+    
+    
 
     #[actix_web::test]
     async fn test_list_groups() {

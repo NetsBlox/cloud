@@ -64,7 +64,7 @@ impl RoleRequest {
 
     fn has_response(&self, id: &Uuid) -> bool {
         let responses = RESPONSE_BUFFER.read().unwrap();
-        match responses.get(&id) {
+        match responses.get(id) {
             Some(RoleDataResponseState::Data(_)) => true,
             _ => false,
         }
@@ -72,7 +72,7 @@ impl RoleRequest {
 
     fn retrieve(&self, id: &Uuid) -> Option<RoleData> {
         let mut responses = RESPONSE_BUFFER.write().unwrap();
-        responses.remove(&id).and_then(|state| match state {
+        responses.remove(id).and_then(|state| match state {
             RoleDataResponseState::Data(role) => Some(role),
             _ => None,
         })
@@ -80,7 +80,7 @@ impl RoleRequest {
 
     pub async fn send(self) -> Result<RoleData, InternalError> {
         let id = Uuid::new_v4();
-        self.initialize_response(id.clone());
+        self.initialize_response(id);
 
         // send the message
         let message = RoleRequestMessage(id);
@@ -99,6 +99,6 @@ impl RoleRequest {
 
         // TODO: what if the requested project_id, role_id are not what we receive (race condition)
         self.retrieve(&id)
-            .ok_or_else(|| InternalError::TimeoutError)
+            .ok_or(InternalError::TimeoutError)
     }
 }

@@ -28,7 +28,7 @@ pub async fn is_super_user(app: &AppData, session: &Session) -> Result<bool, Use
 
 async fn get_session_role(app: &AppData, session: &Session) -> Result<UserRole, UserError> {
     if let Some(username) = session.get::<String>("username").unwrap_or(None) {
-        get_user_role(&app, &username).await
+        get_user_role(app, &username).await
     } else {
         session.purge();
         Err(UserError::LoginRequiredError)
@@ -41,7 +41,7 @@ pub(crate) async fn get_user_role(app: &AppData, username: &str) -> Result<UserR
         .users
         .find_one(query, None)
         .await
-        .map_err(|err| InternalError::DatabaseConnectionError(err))?
+        .map_err(InternalError::DatabaseConnectionError)?
         .map(|user| user.role)
         .unwrap_or(UserRole::User))
 }
@@ -163,7 +163,7 @@ async fn create_user(
         .banned_accounts
         .find_one(query, None)
         .await
-        .map_err(|err| InternalError::DatabaseConnectionError(err))?
+        .map_err(InternalError::DatabaseConnectionError)?
     {
         return Err(UserError::InvalidEmailAddress);
     }
@@ -178,9 +178,9 @@ async fn create_user(
         .users
         .find_one_and_update(query, update, options)
         .await
-        .map_err(|err| InternalError::DatabaseConnectionError(err))?;
+        .map_err(InternalError::DatabaseConnectionError)?;
 
-    if let Some(existing_user) = existing_user {
+    if let Some(_existing_user) = existing_user {
         Err(UserError::UserExistsError)
     } else {
         Ok(HttpResponse::Ok().body("User created"))
@@ -243,7 +243,7 @@ async fn login(
         .banned_accounts
         .find_one(query.clone(), None)
         .await
-        .map_err(|err| InternalError::DatabaseConnectionError(err))?
+        .map_err(InternalError::DatabaseConnectionError)?
     {
         return Err(UserError::BannedUserError);
     }
@@ -270,12 +270,10 @@ async fn update_ownership(
             .project_metadata
             .find_one(query.clone(), None)
             .await
-            .map_err(|err| InternalError::DatabaseConnectionError(err))?
+            .map_err(InternalError::DatabaseConnectionError)?
         {
             // No project will be found for non-NetsBlox clients such as PyBlox
-            let name = app
-                .get_valid_project_name(&username, &metadata.name)
-                .await?;
+            let name = app.get_valid_project_name(username, &metadata.name).await?;
             let update = doc! {"$set": {"owner": username, "name": name}};
             let options = mongodb::options::FindOneAndUpdateOptions::builder()
                 .return_document(ReturnDocument::After)
@@ -284,8 +282,8 @@ async fn update_ownership(
                 .project_metadata
                 .find_one_and_update(query, update, Some(options))
                 .await
-                .map_err(|err| InternalError::DatabaseConnectionError(err))?
-                .ok_or_else(|| UserError::ProjectNotFoundError)?;
+                .map_err(InternalError::DatabaseConnectionError)?
+                .ok_or(UserError::ProjectNotFoundError)?;
 
             app.on_room_changed(new_metadata);
         }
@@ -359,11 +357,11 @@ async fn reset_password(
         .users
         .find_one(doc! {"username": &username}, None)
         .await
-        .map_err(|err| InternalError::DatabaseConnectionError(err))?
-        .ok_or_else(|| UserError::UserNotFoundError)?;
+        .map_err(InternalError::DatabaseConnectionError)?
+        .ok_or(UserError::UserNotFoundError)?;
 
     let token = SetPasswordToken::new(username.clone());
-    let url = String::from("TODO"); // TODO: set the url;
+    let _url = String::from("TODO"); // TODO: set the url;
 
     let update = doc! {"$setOnInsert": token};
     let query = doc! {"username": &username};
@@ -375,7 +373,7 @@ async fn reset_password(
         .password_tokens
         .update_one(query, update, options)
         .await
-        .map_err(|err| InternalError::DatabaseConnectionError(err))?;
+        .map_err(InternalError::DatabaseConnectionError)?;
 
     if result.upserted_id.is_none() {
         return Err(UserError::PasswordResetLinkSentError);
@@ -412,8 +410,8 @@ async fn change_password(
                 .password_tokens
                 .find_one_and_delete(query, None) // If the username is incorrect, the token is compromised (so delete either way)
                 .await
-                .map_err(|err| InternalError::DatabaseConnectionError(err))?
-                .ok_or_else(|| UserError::PermissionsError)?;
+                .map_err(InternalError::DatabaseConnectionError)?
+                .ok_or(UserError::PermissionsError)?;
 
             if token.username != username {
                 return Err(UserError::PermissionsError);
@@ -432,8 +430,8 @@ async fn set_password(app: &AppData, username: &str, password: String) -> Result
         .users
         .find_one(query.clone(), None)
         .await
-        .map_err(|err| InternalError::DatabaseConnectionError(err))?
-        .ok_or_else(|| UserError::UserNotFoundError)?;
+        .map_err(InternalError::DatabaseConnectionError)?
+        .ok_or(UserError::UserNotFoundError)?;
 
     let update = doc! {
         "$set": {
@@ -444,7 +442,7 @@ async fn set_password(app: &AppData, username: &str, password: String) -> Result
         .users
         .update_one(query, update, None)
         .await
-        .map_err(|err| InternalError::DatabaseConnectionError(err))?;
+        .map_err(InternalError::DatabaseConnectionError)?;
 
     if result.matched_count == 0 {
         Err(UserError::UserNotFoundError)
@@ -479,8 +477,8 @@ async fn view_user(
         .users
         .find_one(query, None)
         .await
-        .map_err(|err| InternalError::DatabaseConnectionError(err))?
-        .ok_or_else(|| UserError::UserNotFoundError)?
+        .map_err(InternalError::DatabaseConnectionError)?
+        .ok_or(UserError::UserNotFoundError)?
         .into();
 
     Ok(HttpResponse::Ok().json(user))
@@ -511,8 +509,8 @@ async fn link_account(
         .users
         .find_one(query, None)
         .await
-        .map_err(|err| InternalError::DatabaseConnectionError(err))?; // TODO: wrap the error?
-                                                                      // .and_then(|_user| UserError::AccountAlreadyLinkedErrorli
+        .map_err(InternalError::DatabaseConnectionError)?; // TODO: wrap the error?
+                                                           // .and_then(|_user| UserError::AccountAlreadyLinkedErrorli
     if existing.is_some() {
         return Err(UserError::AccountAlreadyLinkedError);
     }
@@ -523,7 +521,7 @@ async fn link_account(
         .users
         .update_one(query, update, None)
         .await
-        .map_err(|err| InternalError::DatabaseConnectionError(err))?; // TODO: wrap the error?
+        .map_err(InternalError::DatabaseConnectionError)?; // TODO: wrap the error?
 
     if result.matched_count == 0 {
         Ok(HttpResponse::NotFound().finish())

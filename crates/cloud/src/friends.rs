@@ -30,10 +30,10 @@ async fn list_friends(
         app.users
             .find(doc! {}, None)
             .await
-            .map_err(|err| InternalError::DatabaseConnectionError(err))?
+            .map_err(InternalError::DatabaseConnectionError)?
             .try_collect::<Vec<User>>()
             .await
-            .map_err(|err| InternalError::DatabaseConnectionError(err))?
+            .map_err(InternalError::DatabaseConnectionError)?
             .into_iter()
             .map(|user| user.username)
             .filter(|username| username != &owner)
@@ -107,7 +107,7 @@ async fn unfriend(
         .friends
         .delete_one(query, None)
         .await
-        .map_err(|err| InternalError::DatabaseConnectionError(err))?;
+        .map_err(InternalError::DatabaseConnectionError)?;
 
     if result.deleted_count > 0 {
         Ok(HttpResponse::Ok().body("User has been unfriended!"))
@@ -203,7 +203,7 @@ async fn send_invite(
         .friends
         .update_one(query, update, None)
         .await
-        .map_err(|err| InternalError::DatabaseConnectionError(err))?
+        .map_err(InternalError::DatabaseConnectionError)?
         .modified_count
         > 0;
 

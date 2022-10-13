@@ -47,10 +47,7 @@ async fn set_client_state(
         ClientState::External(client_state) => {
             // append the user ID to the address
             let client_id_string = client_id.as_str().to_string();
-            let user_id = username
-                .as_ref()
-                .unwrap_or_else(|| &client_id_string)
-                .to_owned();
+            let user_id = username.as_ref().unwrap_or(&client_id_string).to_owned();
             let address = format!("{}@{}", client_state.address, user_id);
             let app_id = client_state.app_id;
             if app_id.to_lowercase() == topology::DEFAULT_APP_ID {
@@ -85,7 +82,7 @@ async fn set_client_state(
             app.project_metadata
                 .update_one(query, update, None)
                 .await
-                .map_err(|err| InternalError::DatabaseConnectionError(err))?;
+                .map_err(InternalError::DatabaseConnectionError)?;
 
             ClientState::Browser(client_state)
         }
@@ -97,7 +94,7 @@ async fn set_client_state(
         username,
     });
 
-    Ok(HttpResponse::Ok().body(response.unwrap_or_else(String::new)))
+    Ok(HttpResponse::Ok().body(response.unwrap_or_default()))
 }
 
 #[derive(Deserialize)]
@@ -126,7 +123,7 @@ async fn connect_client(
             client_id: client_id.clone(),
         })
         .await
-        .map_err(|err| InternalError::ActixMessageError(err))?;
+        .map_err(InternalError::ActixMessageError)?;
 
     let handler = WsSession {
         client_id,
@@ -154,9 +151,9 @@ async fn get_room_state(
         .network
         .send(topology::GetRoomState { metadata })
         .await
-        .map_err(|err| InternalError::ActixMessageError(err))?
+        .map_err(InternalError::ActixMessageError)?
         .0
-        .ok_or_else(|| UserError::ProjectNotActiveError)?;
+        .ok_or(UserError::ProjectNotActiveError)?;
 
     Ok(HttpResponse::Ok().json(state))
 }
@@ -169,7 +166,7 @@ async fn get_rooms(app: web::Data<AppData>, session: Session) -> Result<HttpResp
         .network
         .send(topology::GetActiveRooms {})
         .await
-        .map_err(|err| InternalError::ActixMessageError(err))?
+        .map_err(InternalError::ActixMessageError)?
         .0;
 
     Ok(HttpResponse::Ok().json(state))
@@ -186,7 +183,7 @@ async fn get_external_clients(
         .network
         .send(topology::GetExternalClients {})
         .await
-        .map_err(|err| InternalError::ActixMessageError(err))?
+        .map_err(InternalError::ActixMessageError)?
         .0;
 
     Ok(HttpResponse::Ok().json(clients))
@@ -210,12 +207,12 @@ async fn invite_occupant(
     app.occupant_invites
         .insert_one(&invite, None)
         .await
-        .map_err(|err| InternalError::DatabaseConnectionError(err))?;
+        .map_err(InternalError::DatabaseConnectionError)?;
 
     let inviter = session
         .get::<String>("username")
         .map_err(|_err| UserError::PermissionsError)?
-        .ok_or_else(|| UserError::PermissionsError)?;
+        .ok_or(UserError::PermissionsError)?;
 
     app.network.do_send(topology::SendOccupantInvite {
         inviter,
@@ -252,7 +249,7 @@ async fn ensure_can_evict_client(
             client_id: client_id.to_owned(),
         })
         .await
-        .map_err(|err| InternalError::ActixMessageError(err))?
+        .map_err(InternalError::ActixMessageError)?
         .0;
 
     // Client can be evicted by project owners, collaborators
@@ -270,7 +267,7 @@ async fn ensure_can_evict_client(
             client_id: client_id.to_owned(),
         })
         .await
-        .map_err(|err| InternalError::ActixMessageError(err))?
+        .map_err(InternalError::ActixMessageError)?
         .0;
 
     match client_username {
@@ -298,8 +295,8 @@ async fn start_network_trace(
         .project_metadata
         .find_one_and_update(query, update, options)
         .await
-        .map_err(|err| InternalError::DatabaseConnectionError(err))?
-        .ok_or_else(|| UserError::ProjectNotFoundError)?;
+        .map_err(InternalError::DatabaseConnectionError)?
+        .ok_or(UserError::ProjectNotFoundError)?;
 
     app.update_project_cache(metadata);
     Ok(HttpResponse::Ok().body(new_trace.id))
@@ -317,7 +314,7 @@ async fn stop_network_trace(
         .network_traces
         .iter()
         .find(|trace| trace.id == trace_id)
-        .ok_or_else(|| UserError::NetworkTraceNotFoundError)?;
+        .ok_or(UserError::NetworkTraceNotFoundError)?;
     let query = doc! {"id": project_id};
     let update = doc! {"$pull": {"networkTraces": &trace}};
     let options = FindOneAndUpdateOptions::builder()
@@ -328,8 +325,8 @@ async fn stop_network_trace(
         .project_metadata
         .find_one_and_update(query, update, options)
         .await
-        .map_err(|err| InternalError::DatabaseConnectionError(err))?
-        .ok_or_else(|| UserError::ProjectNotFoundError)?;
+        .map_err(InternalError::DatabaseConnectionError)?
+        .ok_or(UserError::ProjectNotFoundError)?;
 
     app.update_project_cache(metadata);
     Ok(HttpResponse::Ok().body("Stopped"))
@@ -347,12 +344,12 @@ async fn get_network_trace(
         .network_traces
         .iter()
         .find(|trace| trace.id == trace_id)
-        .ok_or_else(|| UserError::NetworkTraceNotFoundError)?;
+        .ok_or(UserError::NetworkTraceNotFoundError)?;
 
     let start_time = trace.start_time;
     let end_time = trace
         .end_time
-        .unwrap_or(DateTime::from_system_time(SystemTime::now()));
+        .unwrap_or_else(|| DateTime::from_system_time(SystemTime::now()));
 
     let query = doc! {
         "projectId": project_id,
@@ -362,12 +359,12 @@ async fn get_network_trace(
         .recorded_messages
         .find(query, None)
         .await
-        .map_err(|err| InternalError::DatabaseConnectionError(err))?;
+        .map_err(InternalError::DatabaseConnectionError)?;
 
     let messages: Vec<SentMessage> = cursor
         .try_collect::<Vec<_>>()
         .await
-        .map_err(|err| InternalError::DatabaseConnectionError(err))?;
+        .map_err(InternalError::DatabaseConnectionError)?;
 
     Ok(HttpResponse::Ok().json(messages))
 }
@@ -384,7 +381,7 @@ async fn delete_network_trace(
         .network_traces
         .iter()
         .find(|trace| trace.id == trace_id)
-        .ok_or_else(|| UserError::NetworkTraceNotFoundError)?;
+        .ok_or(UserError::NetworkTraceNotFoundError)?;
 
     let query = doc! {"id": &project_id};
     let update = doc! {"$pull": {"networkTraces": &trace}};
@@ -395,8 +392,8 @@ async fn delete_network_trace(
         .project_metadata
         .find_one_and_update(query, update, options)
         .await
-        .map_err(|err| InternalError::DatabaseConnectionError(err))?
-        .ok_or_else(|| UserError::ProjectNotFoundError)?;
+        .map_err(InternalError::DatabaseConnectionError)?
+        .ok_or(UserError::ProjectNotFoundError)?;
 
     // remove all the messages
     let earliest_start_time = metadata
@@ -414,7 +411,7 @@ async fn delete_network_trace(
     app.recorded_messages
         .delete_many(query, None)
         .await
-        .map_err(|err| InternalError::DatabaseConnectionError(err))?;
+        .map_err(InternalError::DatabaseConnectionError)?;
 
     app.update_project_cache(metadata);
     Ok(HttpResponse::Ok().body("Network trace deleted"))
@@ -443,9 +440,8 @@ async fn get_client_state(
     session: Session,
     req: HttpRequest,
 ) -> Result<HttpResponse, UserError> {
-    match ensure_is_authorized_host(&app, &req).await {
-        Err(_) => ensure_is_super_user(&app, &session).await?,
-        _ => {}
+    if (ensure_is_authorized_host(&app, &req).await).is_err() {
+        ensure_is_super_user(&app, &session).await?
     };
 
     let (client_id,) = path.into_inner();
@@ -456,14 +452,14 @@ async fn get_client_state(
             client_id: client_id.clone(),
         })
         .await
-        .map_err(|err| InternalError::ActixMessageError(err))?
+        .map_err(InternalError::ActixMessageError)?
         .0;
 
     let state = app
         .network
         .send(topology::GetClientState { client_id })
         .await
-        .map_err(|err| InternalError::ActixMessageError(err))?
+        .map_err(InternalError::ActixMessageError)?
         .0;
 
     Ok(HttpResponse::Ok().json(netsblox_core::ClientInfo { username, state }))
@@ -597,10 +593,7 @@ impl StreamHandler<Result<ws::Message, ws::ProtocolError>> for WsSession {
             Ok(ws::Message::Close(reason_opt)) => {
                 println!("Closing! Reason: {:?}", &reason_opt);
                 let is_broken = reason_opt
-                    .map(|reason| match reason.code {
-                        CloseCode::Normal | CloseCode::Away => false,
-                        _ => true,
-                    })
+                    .map(|reason| !matches!(reason.code, CloseCode::Normal | CloseCode::Away))
                     .unwrap_or(true);
 
                 if is_broken {
@@ -616,8 +609,6 @@ impl StreamHandler<Result<ws::Message, ws::ProtocolError>> for WsSession {
 }
 #[cfg(test)]
 mod tests {
-    use super::*;
-    use serde_json::json;
 
     #[actix_web::test]
     async fn test_connect_client() {

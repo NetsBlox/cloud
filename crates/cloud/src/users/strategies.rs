@@ -38,7 +38,7 @@ pub async fn authenticate(credentials: &Credentials) -> Result<Option<Response>,
         Credentials::Snap { username, password } => {
             let url = &format!("https://snap.berkeley.edu/api/v1/users/{}/login", username,);
             let client = reqwest::Client::new();
-            let pwd_hash = sha512(&password);
+            let pwd_hash = sha512(password);
             let response = client
                 .request(Method::POST, url)
                 .body(pwd_hash)
@@ -60,7 +60,7 @@ pub async fn login(app: &AppData, credentials: Credentials) -> Result<User, User
         Credentials::Snap { ref username, .. } => {
             let response = authenticate(&credentials)
                 .await?
-                .ok_or_else(|| UserError::SnapConnectionError)?;
+                .ok_or(UserError::SnapConnectionError)?;
 
             let account = LinkedAccount {
                 username: username.to_lowercase(),
@@ -72,7 +72,7 @@ pub async fn login(app: &AppData, credentials: Credentials) -> Result<User, User
                 .users
                 .find_one(query, None)
                 .await
-                .map_err(|err| InternalError::DatabaseConnectionError(err))?;
+                .map_err(InternalError::DatabaseConnectionError)?;
 
             let user = if let Some(user) = user_opt {
                 user
@@ -80,7 +80,7 @@ pub async fn login(app: &AppData, credentials: Credentials) -> Result<User, User
                 let cookie = response
                     .cookies()
                     .next()
-                    .ok_or_else(|| UserError::SnapConnectionError)?;
+                    .ok_or(UserError::SnapConnectionError)?;
                 let url = &format!("https://snap.berkeley.edu/api/v1/users/{}", username);
 
                 let client = reqwest::Client::new();
@@ -96,7 +96,7 @@ pub async fn login(app: &AppData, credentials: Credentials) -> Result<User, User
 
                 // TODO: ensure email isn't banned?
 
-                create_account(&app, user_data.email, &account).await?
+                create_account(app, user_data.email, &account).await?
             };
 
             Ok(user)
@@ -107,8 +107,8 @@ pub async fn login(app: &AppData, credentials: Credentials) -> Result<User, User
                 .users
                 .find_one(query, None)
                 .await
-                .map_err(|err| InternalError::DatabaseConnectionError(err))?
-                .ok_or_else(|| UserError::UserNotFoundError)?;
+                .map_err(InternalError::DatabaseConnectionError)?
+                .ok_or(UserError::UserNotFoundError)?;
 
             let hash = sha512(&(password + &user.salt));
             if hash != user.hash {
@@ -154,7 +154,7 @@ async fn create_account(
     app.users
         .update_one(query, update, options)
         .await
-        .map_err(|err| InternalError::DatabaseConnectionError(err))?;
+        .map_err(InternalError::DatabaseConnectionError)?;
 
     Ok(user)
 }
@@ -171,10 +171,10 @@ async fn username_from(app: &AppData, credentials: &LinkedAccount) -> Result<Str
         .users
         .find(query, None)
         .await
-        .map_err(|err| InternalError::DatabaseConnectionError(err))?
+        .map_err(InternalError::DatabaseConnectionError)?
         .try_collect::<Vec<_>>()
         .await
-        .map_err(|err| InternalError::DatabaseConnectionError(err))?
+        .map_err(InternalError::DatabaseConnectionError)?
         .into_iter()
         .map(|user| user.username)
         .collect::<HashSet<String>>();

@@ -25,8 +25,8 @@ async fn list_user_hosts_with_settings(
         .users
         .find_one(query, None)
         .await
-        .map_err(|err| InternalError::DatabaseConnectionError(err))?
-        .ok_or_else(|| UserError::UserNotFoundError)?;
+        .map_err(InternalError::DatabaseConnectionError)?
+        .ok_or(UserError::UserNotFoundError)?;
 
     let hosts: Vec<_> = user.service_settings.keys().collect();
     Ok(HttpResponse::Ok().json(hosts))
@@ -46,8 +46,8 @@ async fn get_user_settings(
         .users
         .find_one(query, None)
         .await
-        .map_err(|err| InternalError::DatabaseConnectionError(err))?
-        .ok_or_else(|| UserError::UserNotFoundError)?;
+        .map_err(InternalError::DatabaseConnectionError)?
+        .ok_or(UserError::UserNotFoundError)?;
 
     let default_settings = String::from("");
     let settings = user
@@ -76,8 +76,8 @@ async fn get_all_settings(
         .users
         .find_one(query, None)
         .await
-        .map_err(|err| InternalError::DatabaseConnectionError(err))?
-        .ok_or_else(|| UserError::UserNotFoundError)?;
+        .map_err(InternalError::DatabaseConnectionError)?
+        .ok_or(UserError::UserNotFoundError)?;
 
     let query = match user.group_id {
         Some(ref group_id) => doc! {"$or": [
@@ -90,12 +90,12 @@ async fn get_all_settings(
         .groups
         .find(query, None)
         .await
-        .map_err(|err| InternalError::DatabaseConnectionError(err))?;
+        .map_err(InternalError::DatabaseConnectionError)?;
 
     let mut groups: Vec<_> = cursor
         .try_collect::<Vec<_>>()
         .await
-        .map_err(|err| InternalError::DatabaseConnectionError(err))?;
+        .map_err(InternalError::DatabaseConnectionError)?;
 
     let member_settings = user
         .group_id
@@ -134,7 +134,7 @@ async fn set_user_settings(
         .users
         .update_one(query, update, None)
         .await
-        .map_err(|err| InternalError::DatabaseConnectionError(err))?;
+        .map_err(InternalError::DatabaseConnectionError)?;
 
     if result.matched_count == 0 {
         Err(UserError::UserNotFoundError)
@@ -159,7 +159,7 @@ async fn delete_user_settings(
         .users
         .update_one(query, update, None)
         .await
-        .map_err(|err| InternalError::DatabaseConnectionError(err))?;
+        .map_err(InternalError::DatabaseConnectionError)?;
 
     if result.matched_count == 0 {
         Err(UserError::UserNotFoundError)
@@ -182,8 +182,8 @@ async fn list_group_hosts_with_settings(
         .groups
         .find_one(query, None)
         .await
-        .map_err(|err| InternalError::DatabaseConnectionError(err))?
-        .ok_or_else(|| UserError::UserNotFoundError)?;
+        .map_err(InternalError::DatabaseConnectionError)?
+        .ok_or(UserError::UserNotFoundError)?;
 
     let hosts: Vec<_> = group.service_settings.keys().collect();
     Ok(HttpResponse::Ok().json(hosts))
@@ -203,8 +203,8 @@ async fn get_group_settings(
         .groups
         .find_one(query, None)
         .await
-        .map_err(|err| InternalError::DatabaseConnectionError(err))?
-        .ok_or_else(|| UserError::GroupNotFoundError)?;
+        .map_err(InternalError::DatabaseConnectionError)?
+        .ok_or(UserError::GroupNotFoundError)?;
 
     let default_settings = String::from("");
     let settings = group
@@ -231,7 +231,7 @@ async fn set_group_settings(
         .groups
         .update_one(query, update, None)
         .await
-        .map_err(|err| InternalError::DatabaseConnectionError(err))?;
+        .map_err(InternalError::DatabaseConnectionError)?;
 
     if result.matched_count == 0 {
         Err(UserError::GroupNotFoundError)
@@ -256,7 +256,7 @@ async fn delete_group_settings(
         .users
         .update_one(query, update, None)
         .await
-        .map_err(|err| InternalError::DatabaseConnectionError(err))?;
+        .map_err(InternalError::DatabaseConnectionError)?;
 
     if result.matched_count == 0 {
         Err(UserError::UserNotFoundError)

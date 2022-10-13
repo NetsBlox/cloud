@@ -215,7 +215,7 @@ impl Topology {
         }
         let addresses = self.resolve_address_from_db(addr).await;
 
-        if addresses.len() > 0 {
+        if !addresses.is_empty() {
             self.cache_address(addr, &addresses);
         }
 
@@ -303,8 +303,7 @@ impl Topology {
                     metadata
                         .network_traces
                         .iter()
-                        .find(|trace| trace.end_time == None)
-                        .is_some()
+                        .any(|trace| trace.end_time == None)
                 })
                 .map(|metadata| metadata.id.to_owned());
 
@@ -327,7 +326,7 @@ impl Topology {
                 })
                 .collect();
 
-            if messages.len() > 0 {
+            if !messages.is_empty() {
                 app.recorded_messages
                     .insert_many(messages, None)
                     .await
@@ -406,7 +405,7 @@ impl Topology {
                 app.project_metadata
                     .update_one(query, update, None)
                     .await
-                    .map_err(|err| InternalError::DatabaseConnectionError(err))?;
+                    .map_err(InternalError::DatabaseConnectionError)?;
             }
         }
 
@@ -491,7 +490,7 @@ impl Topology {
                 .project_metadata
                 .find_one(query.clone(), None)
                 .await
-                .map_err(|err| InternalError::DatabaseConnectionError(err))?
+                .map_err(InternalError::DatabaseConnectionError)?
                 .map(|md| match md.save_state {
                     SaveState::CREATED => unreachable!(),
                     SaveState::TRANSIENT => ProjectCleanup::IMMEDIATELY,
@@ -505,7 +504,7 @@ impl Topology {
                     app.project_metadata
                         .delete_one(query, None)
                         .await
-                        .map_err(|err| InternalError::DatabaseConnectionError(err))?;
+                        .map_err(InternalError::DatabaseConnectionError)?;
                 }
                 ProjectCleanup::DELAYED => {
                     let ten_minutes = Duration::new(10 * 60, 0);
@@ -516,7 +515,7 @@ impl Topology {
                     app.project_metadata
                         .update_one(query, update, None)
                         .await
-                        .map_err(|err| InternalError::DatabaseConnectionError(err))?;
+                        .map_err(InternalError::DatabaseConnectionError)?;
                 }
                 _ => {}
             }
@@ -697,8 +696,7 @@ impl Topology {
                             .filter_map(|id| self.clients.get(id))
                             .collect::<Vec<_>>()
                     })
-                })
-                .unwrap_or_else(|| Vec::new()),
+                }).unwrap_or_default(),
             netsblox_core::SendMessageTarget::Room { project_id } => self
                 .rooms
                 .get(&project_id)
@@ -708,7 +706,7 @@ impl Topology {
                         .filter_map(|id| self.clients.get(id))
                         .collect::<Vec<_>>()
                 })
-                .unwrap_or_else(|| Vec::new()),
+                .unwrap_or_else(Vec::new),
         };
 
         println!("Sending to {count} clients", count = recipients.len());

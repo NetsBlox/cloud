@@ -46,10 +46,10 @@ async fn get_client_config(
         .authorized_services
         .find(query, None)
         .await
-        .map_err(|err| InternalError::DatabaseConnectionError(err))?
+        .map_err(InternalError::DatabaseConnectionError)?
         .try_collect::<Vec<_>>()
         .await
-        .map_err(|err| InternalError::DatabaseConnectionError(err))?
+        .map_err(InternalError::DatabaseConnectionError)?
         .into_iter()
         .map(|host| host.into())
         .collect();
@@ -99,8 +99,7 @@ async fn main() -> std::io::Result<()> {
                 let source = req
                     .headers()
                     .get("x-source")
-                    .map(|v| v.to_str().ok())
-                    .flatten()
+                    .and_then(|v| v.to_str().ok())
                     .unwrap_or("unknown");
                 let allow = *req.method() == Method::GET || source != "NetsBlox";
 
@@ -129,10 +128,10 @@ async fn main() -> std::io::Result<()> {
 }
 
 fn session_middleware(config: &Settings) -> SessionMiddleware<CookieSessionStore> {
-    let secret_key = Key::from(&config.cookie.key.as_bytes());
+    let secret_key = Key::from(config.cookie.key.as_bytes());
     let secs_in_week: i64 = 60 * 60 * 24 * 7;
 
-    let mut builder = SessionMiddleware::builder(CookieSessionStore::default(), secret_key.clone())
+    let mut builder = SessionMiddleware::builder(CookieSessionStore::default(), secret_key)
         .cookie_name(config.cookie.name.clone())
         .cookie_same_site(SameSite::None)
         .cookie_secure(true)
