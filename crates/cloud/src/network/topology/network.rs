@@ -267,6 +267,7 @@ impl Topology {
 
     pub async fn send_msg(&self, msg: SendMessage) {
         let message = ClientCommand::SendMessage(msg.content.clone());
+        // TODO: block the messages for clients who are not friends/share a group
         let recipients = join_all(
             msg.addresses
                 .iter()
