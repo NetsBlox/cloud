@@ -21,10 +21,7 @@ async fn list_friends(
     ensure_can_edit_user(&app, &session, &owner).await?;
 
     // Admins are considered a friend to everyone (at least one-way)
-    let is_universal_friend = match get_user_role(&app, &owner).await? {
-        UserRole::Admin => true,
-        _ => false,
-    };
+    let is_universal_friend = matches!(get_user_role(&app, &owner).await?, UserRole::Admin);
 
     let friend_names = if is_universal_friend {
         app.users
@@ -69,11 +66,13 @@ async fn list_online_friends(
     session: Session,
 ) -> Result<HttpResponse, UserError> {
     let (owner,) = path.into_inner();
-    let filter_usernames = if is_super_user(&app, &session).await.unwrap_or(false) {
+
+    ensure_can_edit_user(&app, &session, &owner).await?;
+
+    let is_universal_friend = matches!(get_user_role(&app, &owner).await?, UserRole::Admin);
+    let filter_usernames = if is_universal_friend {
         None
     } else {
-        ensure_can_edit_user(&app, &session, &owner).await?;
-
         Some(get_friends(&app, &owner).await)
     };
 
