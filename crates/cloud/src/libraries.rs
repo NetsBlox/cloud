@@ -300,12 +300,17 @@ async fn set_library_state(
     let (owner, name) = path.into_inner();
     let query = doc! {"owner": owner, "name": name};
     let update = doc! {"$set": {"state": state.into_inner()}};
-    app.library_metadata
+    let result = app
+        .library_metadata
         .update_one(query, update, None)
         .await
         .map_err(InternalError::DatabaseConnectionError)?;
 
-    Ok(HttpResponse::Ok().finish())
+    if result.matched_count == 0 {
+        Err(UserError::LibraryNotFoundError)
+    } else {
+        Ok(HttpResponse::Ok().finish())
+    }
 }
 
 pub fn config(cfg: &mut web::ServiceConfig) {
