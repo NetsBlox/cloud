@@ -187,6 +187,7 @@ async fn ensure_can_view_project_metadata(
     client_id: Option<ClientID>,
     project: &ProjectMetadata,
 ) -> Result<(), UserError> {
+    // TODO: also allow if there is a pending collaborate request
     if !can_view_project(app, session, client_id, project).await? {
         Err(UserError::PermissionsError)
     } else {
