@@ -32,10 +32,7 @@ async fn check_response(response: Response) -> Result<Response, error::Error> {
     let status_code = response.status().as_u16();
     let is_error = status_code > 399;
     if is_error {
-        let msg = response
-            .text()
-            .await
-            .map_err(|err| error::Error::RequestError(err))?;
+        let msg = response.text().await.map_err(error::Error::RequestError)?;
 
         match status_code {
             400 => Err(error::Error::BadRequestError(msg)),
@@ -57,7 +54,7 @@ pub async fn login(cfg: &mut Config, credentials: &LoginRequest) -> Result<(), e
         .json(&credentials)
         .send()
         .await
-        .map_err(|err| error::Error::RequestError(err))?;
+        .map_err(error::Error::RequestError)?;
 
     let response = check_response(response).await?;
     let cookie = response
@@ -123,7 +120,7 @@ impl Client {
             .json(&user_data)
             .send()
             .await
-            .map_err(|err| error::Error::RequestError(err))?;
+            .map_err(error::Error::RequestError)?;
 
         println!(
             "status {} {}",
@@ -138,7 +135,7 @@ impl Client {
             .request(Method::GET, "/users/")
             .send()
             .await
-            .map_err(|err| error::Error::RequestError(err))?;
+            .map_err(error::Error::RequestError)?;
 
         let response = check_response(response).await?;
         Ok(response.json::<Vec<User>>().await.unwrap())
@@ -149,7 +146,7 @@ impl Client {
             .request(Method::POST, &format!("/users/{}/delete", username))
             .send()
             .await
-            .map_err(|err| error::Error::RequestError(err))?;
+            .map_err(error::Error::RequestError)?;
 
         check_response(response).await?;
         Ok(())
@@ -160,7 +157,7 @@ impl Client {
             .request(Method::GET, &format!("/users/{}", username))
             .send()
             .await
-            .map_err(|err| error::Error::RequestError(err))?;
+            .map_err(error::Error::RequestError)?;
 
         let response = check_response(response).await?;
         Ok(response.json::<User>().await.unwrap())
@@ -173,7 +170,7 @@ impl Client {
             .json(&password)
             .send()
             .await
-            .map_err(|err| error::Error::RequestError(err))?;
+            .map_err(error::Error::RequestError)?;
 
         check_response(response).await?;
         Ok(())
@@ -189,7 +186,7 @@ impl Client {
             .json(&credentials)
             .send()
             .await
-            .map_err(|err| error::Error::RequestError(err))?;
+            .map_err(error::Error::RequestError)?;
 
         check_response(response).await?;
         Ok(())
@@ -205,7 +202,7 @@ impl Client {
             .json(&account)
             .send()
             .await
-            .map_err(|err| error::Error::RequestError(err))?;
+            .map_err(error::Error::RequestError)?;
 
         check_response(response).await?;
         Ok(())
@@ -216,7 +213,7 @@ impl Client {
             .request(Method::POST, &format!("/users/{}/ban", username))
             .send()
             .await
-            .map_err(|err| error::Error::RequestError(err))?;
+            .map_err(error::Error::RequestError)?;
 
         check_response(response).await?;
         Ok(())
@@ -228,7 +225,7 @@ impl Client {
             .request(Method::GET, &format!("/projects/user/{}", &owner))
             .send()
             .await
-            .map_err(|err| error::Error::RequestError(err))?;
+            .map_err(error::Error::RequestError)?;
 
         let response = check_response(response).await?;
 
@@ -243,7 +240,7 @@ impl Client {
             .request(Method::GET, &format!("/projects/shared/{}", &owner))
             .send()
             .await
-            .map_err(|err| error::Error::RequestError(err))?;
+            .map_err(error::Error::RequestError)?;
 
         let response = check_response(response).await?;
 
@@ -262,7 +259,7 @@ impl Client {
             )
             .send()
             .await
-            .map_err(|err| error::Error::RequestError(err))?;
+            .map_err(error::Error::RequestError)?;
 
         let response = check_response(response).await?;
 
@@ -278,7 +275,7 @@ impl Client {
             })
             .send()
             .await
-            .map_err(|err| error::Error::RequestError(err))?;
+            .map_err(error::Error::RequestError)?;
 
         check_response(response).await?;
 
@@ -299,7 +296,7 @@ impl Client {
             })
             .send()
             .await
-            .map_err(|err| error::Error::RequestError(err))?;
+            .map_err(error::Error::RequestError)?;
 
         check_response(response).await?;
 
@@ -311,7 +308,7 @@ impl Client {
             .request(Method::DELETE, &format!("/projects/id/{}", id))
             .send()
             .await
-            .map_err(|err| error::Error::RequestError(err))?;
+            .map_err(error::Error::RequestError)?;
 
         check_response(response).await?;
 
@@ -323,7 +320,7 @@ impl Client {
             .request(Method::DELETE, &format!("/projects/id/{}/{}", id, role_id))
             .send()
             .await
-            .map_err(|err| error::Error::RequestError(err))?;
+            .map_err(error::Error::RequestError)?;
 
         check_response(response).await?;
 
@@ -335,7 +332,7 @@ impl Client {
             .request(Method::POST, &format!("/projects/id/{}/publish", id))
             .send()
             .await
-            .map_err(|err| error::Error::RequestError(err))?;
+            .map_err(error::Error::RequestError)?;
 
         check_response(response).await?;
 
@@ -347,7 +344,7 @@ impl Client {
             .request(Method::POST, &format!("/projects/id/{}/unpublish", id))
             .send()
             .await
-            .map_err(|err| error::Error::RequestError(err))?;
+            .map_err(error::Error::RequestError)?;
 
         check_response(response).await?;
 
@@ -368,7 +365,7 @@ impl Client {
             .request(Method::GET, &path)
             .send()
             .await
-            .map_err(|err| error::Error::RequestError(err))?;
+            .map_err(error::Error::RequestError)?;
 
         let response = check_response(response).await?;
 
@@ -390,7 +387,7 @@ impl Client {
             .request(Method::GET, &path)
             .send()
             .await
-            .map_err(|err| error::Error::RequestError(err))?;
+            .map_err(error::Error::RequestError)?;
 
         let response = check_response(response).await?;
 
@@ -403,7 +400,7 @@ impl Client {
             .request(Method::GET, &format!("/id/{}/collaborators/", project_id))
             .send()
             .await
-            .map_err(|err| error::Error::RequestError(err))?;
+            .map_err(error::Error::RequestError)?;
 
         let response = check_response(response).await?;
 
@@ -422,7 +419,7 @@ impl Client {
             )
             .send()
             .await
-            .map_err(|err| error::Error::RequestError(err))?;
+            .map_err(error::Error::RequestError)?;
 
         check_response(response).await?;
 
@@ -440,7 +437,7 @@ impl Client {
             )
             .send()
             .await
-            .map_err(|err| error::Error::RequestError(err))?;
+            .map_err(error::Error::RequestError)?;
 
         let response = check_response(response).await?;
 
@@ -459,7 +456,7 @@ impl Client {
             )
             .send()
             .await
-            .map_err(|err| error::Error::RequestError(err))?;
+            .map_err(error::Error::RequestError)?;
 
         check_response(response).await?;
         Ok(())
@@ -475,7 +472,7 @@ impl Client {
             .json(state)
             .send()
             .await
-            .map_err(|err| error::Error::RequestError(err))?;
+            .map_err(error::Error::RequestError)?;
 
         check_response(response).await?;
         Ok(())
@@ -488,7 +485,7 @@ impl Client {
             .request(Method::GET, path)
             .send()
             .await
-            .map_err(|err| error::Error::RequestError(err))?;
+            .map_err(error::Error::RequestError)?;
 
         let response = check_response(response).await?;
         Ok(response.json::<Vec<String>>().await.unwrap())
@@ -500,7 +497,7 @@ impl Client {
             .request(Method::GET, path)
             .send()
             .await
-            .map_err(|err| error::Error::RequestError(err))?;
+            .map_err(error::Error::RequestError)?;
 
         let response = check_response(response).await?;
         Ok(response.json::<Vec<String>>().await.unwrap())
@@ -515,7 +512,7 @@ impl Client {
             .request(Method::GET, path)
             .send()
             .await
-            .map_err(|err| error::Error::RequestError(err))?;
+            .map_err(error::Error::RequestError)?;
 
         let response = check_response(response).await?;
         Ok(response.json::<Vec<FriendInvite>>().await.unwrap())
@@ -532,7 +529,7 @@ impl Client {
             .json(recipient)
             .send()
             .await
-            .map_err(|err| error::Error::RequestError(err))?;
+            .map_err(error::Error::RequestError)?;
 
         check_response(response).await?;
         Ok(())
@@ -550,7 +547,7 @@ impl Client {
             .json(&state)
             .send()
             .await
-            .map_err(|err| error::Error::RequestError(err))?;
+            .map_err(error::Error::RequestError)?;
 
         check_response(response).await?;
         Ok(())
@@ -562,7 +559,7 @@ impl Client {
             .request(Method::POST, &path)
             .send()
             .await
-            .map_err(|err| error::Error::RequestError(err))?;
+            .map_err(error::Error::RequestError)?;
 
         check_response(response).await?;
         Ok(())
@@ -574,7 +571,7 @@ impl Client {
             .request(Method::POST, &path)
             .send()
             .await
-            .map_err(|err| error::Error::RequestError(err))?;
+            .map_err(error::Error::RequestError)?;
 
         check_response(response).await?;
         Ok(())
@@ -586,7 +583,7 @@ impl Client {
             .request(Method::POST, &path)
             .send()
             .await
-            .map_err(|err| error::Error::RequestError(err))?;
+            .map_err(error::Error::RequestError)?;
 
         check_response(response).await?;
         Ok(())
@@ -602,7 +599,7 @@ impl Client {
             .request(Method::GET, &path)
             .send()
             .await
-            .map_err(|err| error::Error::RequestError(err))?;
+            .map_err(error::Error::RequestError)?;
 
         let response = check_response(response).await?;
         Ok(response.json::<Vec<LibraryMetadata>>().await.unwrap())
@@ -613,7 +610,7 @@ impl Client {
             .request(Method::GET, "/libraries/mod/pending")
             .send()
             .await
-            .map_err(|err| error::Error::RequestError(err))?;
+            .map_err(error::Error::RequestError)?;
 
         let response = check_response(response).await?;
 
@@ -622,10 +619,10 @@ impl Client {
 
     pub async fn get_public_libraries(&self) -> Result<Vec<LibraryMetadata>, error::Error> {
         let response = self
-            .request(Method::GET, "/libraries/community")
+            .request(Method::GET, "/libraries/community/")
             .send()
             .await
-            .map_err(|err| error::Error::RequestError(err))?;
+            .map_err(error::Error::RequestError)?;
 
         let response = check_response(response).await?;
 
@@ -638,7 +635,7 @@ impl Client {
             .request(Method::GET, &path)
             .send()
             .await
-            .map_err(|err| error::Error::RequestError(err))?;
+            .map_err(error::Error::RequestError)?;
 
         let response = check_response(response).await?;
 
@@ -662,7 +659,7 @@ impl Client {
             })
             .send()
             .await
-            .map_err(|err| error::Error::RequestError(err))?;
+            .map_err(error::Error::RequestError)?;
 
         check_response(response).await?;
         Ok(())
@@ -674,7 +671,7 @@ impl Client {
             .request(Method::DELETE, &path)
             .send()
             .await
-            .map_err(|err| error::Error::RequestError(err))?;
+            .map_err(error::Error::RequestError)?;
 
         check_response(response).await?;
         Ok(())
@@ -686,7 +683,7 @@ impl Client {
             .request(Method::POST, &path)
             .send()
             .await
-            .map_err(|err| error::Error::RequestError(err))?;
+            .map_err(error::Error::RequestError)?;
 
         check_response(response).await?;
         Ok(())
@@ -702,7 +699,7 @@ impl Client {
             .request(Method::POST, &path)
             .send()
             .await
-            .map_err(|err| error::Error::RequestError(err))?;
+            .map_err(error::Error::RequestError)?;
 
         check_response(response).await?;
         Ok(())
@@ -720,7 +717,7 @@ impl Client {
             .json(&state)
             .send()
             .await
-            .map_err(|err| error::Error::RequestError(err))?;
+            .map_err(error::Error::RequestError)?;
 
         check_response(response).await?;
         Ok(())
@@ -733,7 +730,7 @@ impl Client {
             .request(Method::GET, &path)
             .send()
             .await
-            .map_err(|err| error::Error::RequestError(err))?;
+            .map_err(error::Error::RequestError)?;
 
         let response = check_response(response).await?;
 
@@ -751,7 +748,7 @@ impl Client {
             .json(&group)
             .send()
             .await
-            .map_err(|err| error::Error::RequestError(err))?;
+            .map_err(error::Error::RequestError)?;
 
         check_response(response).await?;
         Ok(())
@@ -763,7 +760,7 @@ impl Client {
             .request(Method::DELETE, &path)
             .send()
             .await
-            .map_err(|err| error::Error::RequestError(err))?;
+            .map_err(error::Error::RequestError)?;
 
         check_response(response).await?;
         Ok(())
@@ -775,7 +772,7 @@ impl Client {
             .request(Method::GET, &path)
             .send()
             .await
-            .map_err(|err| error::Error::RequestError(err))?;
+            .map_err(error::Error::RequestError)?;
 
         let response = check_response(response).await?;
         Ok(response.json::<Vec<User>>().await.unwrap())
@@ -790,7 +787,7 @@ impl Client {
             })
             .send()
             .await
-            .map_err(|err| error::Error::RequestError(err))?;
+            .map_err(error::Error::RequestError)?;
 
         check_response(response).await?;
         Ok(())
@@ -802,7 +799,7 @@ impl Client {
             .request(Method::GET, &path)
             .send()
             .await
-            .map_err(|err| error::Error::RequestError(err))?;
+            .map_err(error::Error::RequestError)?;
 
         let response = check_response(response).await?;
 
@@ -815,7 +812,7 @@ impl Client {
             .request(Method::GET, &format!("/services/hosts/user/{}", username))
             .send()
             .await
-            .map_err(|err| error::Error::RequestError(err))?;
+            .map_err(error::Error::RequestError)?;
 
         let response = check_response(response).await?;
 
@@ -827,7 +824,7 @@ impl Client {
             .request(Method::GET, &format!("/services/hosts/group/{}", group_id))
             .send()
             .await
-            .map_err(|err| error::Error::RequestError(err))?;
+            .map_err(error::Error::RequestError)?;
 
         let response = check_response(response).await?;
 
@@ -839,7 +836,7 @@ impl Client {
             .request(Method::GET, &format!("/services/hosts/all/{}", username))
             .send()
             .await
-            .map_err(|err| error::Error::RequestError(err))?;
+            .map_err(error::Error::RequestError)?;
 
         let response = check_response(response).await?;
 
@@ -856,7 +853,7 @@ impl Client {
             .json(&hosts)
             .send()
             .await
-            .map_err(|err| error::Error::RequestError(err))?;
+            .map_err(error::Error::RequestError)?;
 
         check_response(response).await?;
         Ok(())
@@ -872,7 +869,7 @@ impl Client {
             .json(&hosts)
             .send()
             .await
-            .map_err(|err| error::Error::RequestError(err))?;
+            .map_err(error::Error::RequestError)?;
 
         check_response(response).await?;
         Ok(())
@@ -894,7 +891,7 @@ impl Client {
             .json(&host)
             .send()
             .await
-            .map_err(|err| error::Error::RequestError(err))?;
+            .map_err(error::Error::RequestError)?;
 
         let response = check_response(response).await?;
         Ok(response.json::<String>().await.unwrap())
@@ -908,7 +905,7 @@ impl Client {
             )
             .send()
             .await
-            .map_err(|err| error::Error::RequestError(err))?;
+            .map_err(error::Error::RequestError)?;
 
         check_response(response).await?;
         Ok(())
@@ -919,7 +916,7 @@ impl Client {
             .request(Method::GET, "/services/hosts/authorized/")
             .send()
             .await
-            .map_err(|err| error::Error::RequestError(err))?;
+            .map_err(error::Error::RequestError)?;
 
         let response = check_response(response).await?;
         Ok(response.json::<Vec<AuthorizedServiceHost>>().await.unwrap())
@@ -934,7 +931,7 @@ impl Client {
             )
             .send()
             .await
-            .map_err(|err| error::Error::RequestError(err))?;
+            .map_err(error::Error::RequestError)?;
 
         let response = check_response(response).await?;
         Ok(response.json::<Vec<String>>().await.unwrap())
@@ -948,7 +945,7 @@ impl Client {
             )
             .send()
             .await
-            .map_err(|err| error::Error::RequestError(err))?;
+            .map_err(error::Error::RequestError)?;
 
         let response = check_response(response).await?;
         Ok(response.json::<Vec<String>>().await.unwrap())
@@ -966,7 +963,7 @@ impl Client {
             )
             .send()
             .await
-            .map_err(|err| error::Error::RequestError(err))?;
+            .map_err(error::Error::RequestError)?;
 
         let response = check_response(response).await?;
         Ok(response.json::<ServiceSettings>().await.unwrap())
@@ -984,7 +981,7 @@ impl Client {
             )
             .send()
             .await
-            .map_err(|err| error::Error::RequestError(err))?;
+            .map_err(error::Error::RequestError)?;
 
         let response = check_response(response).await?;
         Ok(response.text().await.unwrap())
@@ -1002,7 +999,7 @@ impl Client {
             )
             .send()
             .await
-            .map_err(|err| error::Error::RequestError(err))?;
+            .map_err(error::Error::RequestError)?;
 
         let response = check_response(response).await?;
         Ok(response.text().await.unwrap())
@@ -1022,7 +1019,7 @@ impl Client {
             .body(settings)
             .send()
             .await
-            .map_err(|err| error::Error::RequestError(err))?;
+            .map_err(error::Error::RequestError)?;
 
         let response = check_response(response).await?;
         Ok(response.text().await.unwrap())
@@ -1042,7 +1039,7 @@ impl Client {
             .body(settings)
             .send()
             .await
-            .map_err(|err| error::Error::RequestError(err))?;
+            .map_err(error::Error::RequestError)?;
 
         let response = check_response(response).await?;
         Ok(response.text().await.unwrap())
@@ -1060,7 +1057,7 @@ impl Client {
             )
             .send()
             .await
-            .map_err(|err| error::Error::RequestError(err))?;
+            .map_err(error::Error::RequestError)?;
 
         let response = check_response(response).await?;
         Ok(response.text().await.unwrap())
@@ -1078,7 +1075,7 @@ impl Client {
             )
             .send()
             .await
-            .map_err(|err| error::Error::RequestError(err))?;
+            .map_err(error::Error::RequestError)?;
 
         let response = check_response(response).await?;
         Ok(response.text().await.unwrap())
@@ -1089,7 +1086,7 @@ impl Client {
             .request(Method::GET, "/network/external")
             .send()
             .await
-            .map_err(|err| error::Error::RequestError(err))?;
+            .map_err(error::Error::RequestError)?;
 
         let response = check_response(response).await?;
 
@@ -1101,7 +1098,7 @@ impl Client {
             .request(Method::GET, "/network/")
             .send()
             .await
-            .map_err(|err| error::Error::RequestError(err))?;
+            .map_err(error::Error::RequestError)?;
 
         let response = check_response(response).await?;
 
@@ -1113,7 +1110,7 @@ impl Client {
             .request(Method::GET, &format!("/network/id/{}", id))
             .send()
             .await
-            .map_err(|err| error::Error::RequestError(err))?;
+            .map_err(error::Error::RequestError)?;
 
         let response = check_response(response).await?;
 
@@ -1128,7 +1125,7 @@ impl Client {
             )
             .send()
             .await
-            .map_err(|err| error::Error::RequestError(err))?;
+            .map_err(error::Error::RequestError)?;
 
         let response = check_response(response).await?;
 
@@ -1143,7 +1140,7 @@ impl Client {
             )
             .send()
             .await
-            .map_err(|err| error::Error::RequestError(err))?;
+            .map_err(error::Error::RequestError)?;
 
         check_response(response).await?;
         Ok(())
@@ -1154,7 +1151,7 @@ impl Client {
             .request(Method::GET, "/configuration")
             .send()
             .await
-            .map_err(|err| error::Error::RequestError(err))?;
+            .map_err(error::Error::RequestError)?;
 
         let response = check_response(response).await?;
 
@@ -1185,7 +1182,7 @@ impl Client {
             .json(&state)
             .send()
             .await
-            .map_err(|err| error::Error::RequestError(err))?;
+            .map_err(error::Error::RequestError)?;
 
         let response = check_response(response).await?;
 
