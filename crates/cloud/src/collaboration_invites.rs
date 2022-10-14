@@ -99,7 +99,7 @@ async fn respond_to_invite(
         .map_err(InternalError::DatabaseConnectionError)?
         .ok_or(UserError::InviteNotFoundError)?;
 
-    ensure_can_edit_user(&app, &session, &invite.sender).await?;
+    ensure_can_edit_user(&app, &session, &invite.receiver).await?;
 
     app.collab_invites
         .delete_one(query, None)
