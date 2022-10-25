@@ -5,13 +5,14 @@ mod network;
 use crate::app_data::AppData;
 use crate::models::{OccupantInvite, ProjectMetadata, RoleData};
 use actix::prelude::*;
-use actix::{Actor, AsyncContext, Context, Handler, MessageResult};
+use actix::{Actor, AsyncContext, Context, Handler};
 use lazy_static::lazy_static;
 use log::warn;
 use mongodb::bson::doc;
 use netsblox_core::{ClientID, ExternalClient, ProjectId, RoomState};
 use serde_json::Value;
-use std::sync::{Arc, RwLock};
+use std::sync::Arc;
+use tokio::sync::RwLock;
 use uuid::Uuid;
 
 use self::client::{RoleDataResponseState, RoleRequest, RESPONSE_BUFFER};
@@ -92,9 +93,13 @@ pub struct SendMessage {
 impl Handler<AddClient> for TopologyActor {
     type Result = ();
 
-    fn handle(&mut self, msg: AddClient, _: &mut Context<Self>) -> Self::Result {
-        let mut topology = TOPOLOGY.write().unwrap();
-        topology.add_client(msg);
+    fn handle(&mut self, msg: AddClient, ctx: &mut Context<Self>) -> Self::Result {
+        let fut = async {
+            let mut topology = TOPOLOGY.write().await;
+            topology.add_client(msg);
+        };
+        let fut = actix::fut::wrap_future(fut);
+        ctx.spawn(fut);
     }
 }
 
@@ -103,7 +108,7 @@ impl Handler<BrokenClient> for TopologyActor {
 
     fn handle(&mut self, msg: BrokenClient, ctx: &mut Context<Self>) -> Self::Result {
         let fut = async {
-            let mut topology = TOPOLOGY.write().unwrap();
+            let mut topology = TOPOLOGY.write().await;
             if let Err(error) = topology.set_broken_client(msg).await {
                 warn!("Unable to record broken client: {:?}", error);
             }
@@ -118,7 +123,7 @@ impl Handler<RemoveClient> for TopologyActor {
 
     fn handle(&mut self, msg: RemoveClient, ctx: &mut Context<Self>) -> Self::Result {
         let fut = async {
-            let mut topology = TOPOLOGY.write().unwrap();
+            let mut topology = TOPOLOGY.write().await;
             topology.remove_client(msg).await;
         };
         let fut = actix::fut::wrap_future(fut);
@@ -131,7 +136,7 @@ impl Handler<SetClientState> for TopologyActor {
 
     fn handle(&mut self, msg: SetClientState, ctx: &mut Context<Self>) -> Self::Result {
         let fut = async {
-            let mut topology = TOPOLOGY.write().unwrap();
+            let mut topology = TOPOLOGY.write().await;
             topology.set_client_state(msg).await;
         };
         let fut = actix::fut::wrap_future(fut);
@@ -146,7 +151,7 @@ impl Handler<SendMessage> for TopologyActor {
         // TODO: check if the message should be recorded
         // TODO: should we first check what clients are going to receive it?
         let fut = async {
-            let topology = TOPOLOGY.read().unwrap();
+            let topology = TOPOLOGY.read().await;
             topology.send_msg(msg).await;
         };
         let fut = actix::fut::wrap_future(fut);
@@ -157,37 +162,26 @@ impl Handler<SendMessage> for TopologyActor {
 impl Handler<SetStorage> for TopologyActor {
     type Result = ();
 
-    fn handle(&mut self, msg: SetStorage, _: &mut Context<Self>) -> Self::Result {
-        let mut topology = TOPOLOGY.write().unwrap();
-        topology.set_app_data(msg.app_data);
+    fn handle(&mut self, msg: SetStorage, ctx: &mut Context<Self>) -> Self::Result {
+        let fut = async {
+            let mut topology = TOPOLOGY.write().await;
+            topology.set_app_data(msg.app_data);
+        };
+        let fut = actix::fut::wrap_future(fut);
+        ctx.spawn(fut);
     }
 }
 
 impl Handler<SendRoomState> for TopologyActor {
     type Result = ();
 
-    fn handle(&mut self, msg: SendRoomState, _: &mut Context<Self>) -> Self::Result {
-        let topology = TOPOLOGY.read().unwrap();
-        topology.send_room_state(msg);
-    }
-}
-
-#[derive(Message)]
-#[rtype(result = "GetRoleRequestResult")]
-pub struct GetRoleRequest {
-    pub state: BrowserClientState,
-}
-
-#[derive(Message)]
-#[rtype(result = "()")]
-pub struct GetRoleRequestResult(pub Option<RoleRequest>);
-
-impl Handler<GetRoleRequest> for TopologyActor {
-    type Result = MessageResult<GetRoleRequest>;
-
-    fn handle(&mut self, msg: GetRoleRequest, _: &mut Context<Self>) -> Self::Result {
-        let topology = TOPOLOGY.read().unwrap();
-        MessageResult(GetRoleRequestResult(topology.get_role_request(msg.state)))
+    fn handle(&mut self, msg: SendRoomState, ctx: &mut Context<Self>) -> Self::Result {
+        let fut = async {
+            let topology = TOPOLOGY.read().await;
+            topology.send_room_state(msg);
+        };
+        let fut = actix::fut::wrap_future(fut);
+        ctx.spawn(fut);
     }
 }
 
@@ -208,74 +202,6 @@ impl Handler<RoleDataResponse> for TopologyActor {
 }
 
 #[derive(Message)]
-#[rtype(result = "GetActiveRoomsResult")]
-pub struct GetActiveRooms;
-
-#[derive(Message)]
-#[rtype(result = "()")]
-pub struct GetActiveRoomsResult(pub Vec<ProjectId>);
-
-impl Handler<GetActiveRooms> for TopologyActor {
-    type Result = MessageResult<GetActiveRooms>;
-
-    fn handle(&mut self, _: GetActiveRooms, _: &mut Context<Self>) -> Self::Result {
-        let topology = TOPOLOGY.read().unwrap();
-        MessageResult(GetActiveRoomsResult(topology.get_active_rooms()))
-    }
-}
-
-#[derive(Message)]
-#[rtype(result = "Vec<String>")]
-pub struct GetOnlineUsers {
-    pub usernames: Option<Vec<String>>,
-}
-
-impl Handler<GetOnlineUsers> for TopologyActor {
-    type Result = Vec<String>;
-
-    fn handle(&mut self, msg: GetOnlineUsers, _: &mut Context<Self>) -> Self::Result {
-        let topology = TOPOLOGY.read().unwrap();
-        topology.get_online_users(msg.usernames)
-    }
-}
-
-#[derive(Message)]
-#[rtype(result = "GetExternalClientsResult")]
-pub struct GetExternalClients;
-
-#[derive(Message)]
-#[rtype(result = "()")]
-pub struct GetExternalClientsResult(pub Vec<ExternalClient>);
-
-impl Handler<GetExternalClients> for TopologyActor {
-    type Result = MessageResult<GetExternalClients>;
-
-    fn handle(&mut self, _: GetExternalClients, _: &mut Context<Self>) -> Self::Result {
-        let topology = TOPOLOGY.read().unwrap();
-        MessageResult(GetExternalClientsResult(topology.get_external_clients()))
-    }
-}
-
-#[derive(Message)]
-#[rtype(result = "GetRoomStateResult")]
-pub struct GetRoomState {
-    pub metadata: ProjectMetadata,
-}
-
-#[derive(Message)]
-#[rtype(result = "()")]
-pub struct GetRoomStateResult(pub Option<RoomState>);
-
-impl Handler<GetRoomState> for TopologyActor {
-    type Result = MessageResult<GetRoomState>;
-
-    fn handle(&mut self, msg: GetRoomState, _: &mut Context<Self>) -> Self::Result {
-        let topology = TOPOLOGY.read().unwrap();
-        MessageResult(GetRoomStateResult(topology.get_room_state(msg.metadata)))
-    }
-}
-
-#[derive(Message)]
 #[rtype(result = "()")]
 pub struct EvictOccupant {
     pub client_id: ClientID,
@@ -286,56 +212,11 @@ impl Handler<EvictOccupant> for TopologyActor {
 
     fn handle(&mut self, msg: EvictOccupant, ctx: &mut Context<Self>) -> Self::Result {
         let fut = async {
-            let mut topology = TOPOLOGY.write().unwrap();
+            let mut topology = TOPOLOGY.write().await;
             topology.evict_client(msg.client_id).await;
         };
         let fut = actix::fut::wrap_future(fut);
         ctx.spawn(fut);
-    }
-}
-
-#[derive(Message)]
-#[rtype(result = "GetClientStateResult")]
-pub struct GetClientState {
-    pub client_id: ClientID,
-}
-
-#[derive(Message)]
-#[rtype(result = "()")]
-pub struct GetClientStateResult(pub Option<ClientState>);
-
-impl Handler<GetClientState> for TopologyActor {
-    type Result = MessageResult<GetClientState>;
-
-    fn handle(&mut self, msg: GetClientState, _: &mut Context<Self>) -> Self::Result {
-        let topology = TOPOLOGY.read().unwrap();
-        MessageResult(GetClientStateResult(
-            topology
-                .get_client_state(&msg.client_id).cloned(),
-        ))
-    }
-}
-
-#[derive(Message)]
-#[rtype(result = "GetClientUsernameResult")]
-pub struct GetClientUsername {
-    pub client_id: ClientID,
-}
-
-#[derive(Message)]
-#[rtype(result = "()")]
-pub struct GetClientUsernameResult(pub Option<String>);
-
-impl Handler<GetClientUsername> for TopologyActor {
-    type Result = MessageResult<GetClientUsername>;
-
-    fn handle(&mut self, msg: GetClientUsername, _: &mut Context<Self>) -> Self::Result {
-        let topology = TOPOLOGY.read().unwrap();
-        MessageResult(GetClientUsernameResult(
-            topology
-                .get_client_username(&msg.client_id)
-                .map(|state| state.to_owned()),
-        ))
     }
 }
 
@@ -348,9 +229,14 @@ pub struct DisconnectClient {
 impl Handler<DisconnectClient> for TopologyActor {
     type Result = ();
 
-    fn handle(&mut self, msg: DisconnectClient, _: &mut Context<Self>) -> Self::Result {
-        let topology = TOPOLOGY.read().unwrap();
-        topology.disconnect_client(&msg.client_id);
+    fn handle(&mut self, msg: DisconnectClient, ctx: &mut Context<Self>) -> Self::Result {
+        let client_id = msg.client_id;
+        let fut = async move {
+            let topology = TOPOLOGY.read().await;
+            topology.disconnect_client(&client_id);
+        };
+        let fut = actix::fut::wrap_future(fut);
+        ctx.spawn(fut);
     }
 }
 
@@ -365,9 +251,13 @@ pub struct SendOccupantInvite {
 impl Handler<SendOccupantInvite> for TopologyActor {
     type Result = ();
 
-    fn handle(&mut self, msg: SendOccupantInvite, _: &mut Context<Self>) -> Self::Result {
-        let topology = TOPOLOGY.read().unwrap();
-        topology.send_occupant_invite(msg);
+    fn handle(&mut self, msg: SendOccupantInvite, ctx: &mut Context<Self>) -> Self::Result {
+        let fut = async {
+            let topology = TOPOLOGY.read().await;
+            topology.send_occupant_invite(msg);
+        };
+        let fut = actix::fut::wrap_future(fut);
+        ctx.spawn(fut);
     }
 }
 
@@ -386,7 +276,7 @@ impl Handler<SendMessageFromServices> for TopologyActor {
         ctx: &mut Context<Self>,
     ) -> Self::Result {
         let fut = async {
-            let topology = TOPOLOGY.read().unwrap();
+            let topology = TOPOLOGY.read().await;
             topology.send_msg_from_services(send_msg_req.message).await;
         };
         let fut = actix::fut::wrap_future(fut);
@@ -404,8 +294,52 @@ pub struct SendIDEMessage {
 impl Handler<SendIDEMessage> for TopologyActor {
     type Result = ();
 
-    fn handle(&mut self, msg: SendIDEMessage, _: &mut Context<Self>) -> Self::Result {
-        let topology = TOPOLOGY.read().unwrap();
-        topology.send_ide_msg(msg);
+    fn handle(&mut self, msg: SendIDEMessage, ctx: &mut Context<Self>) -> Self::Result {
+        let fut = async {
+            let topology = TOPOLOGY.read().await;
+            topology.send_ide_msg(msg);
+        };
+        let fut = actix::fut::wrap_future(fut);
+        ctx.spawn(fut);
     }
+}
+
+// methods for querying information from the topology
+// TODO: There might be a better name for this. maybe make this an async builder?
+pub(crate) async fn get_role_request(state: BrowserClientState) -> Option<RoleRequest> {
+    let topology = TOPOLOGY.read().await;
+    topology.get_role_request(state)
+}
+
+pub(crate) async fn get_active_rooms() -> Vec<ProjectId> {
+    let topology = TOPOLOGY.read().await;
+    topology.get_active_rooms()
+}
+
+pub(crate) async fn get_online_users(filter_names: Option<Vec<String>>) -> Vec<String> {
+    let topology = TOPOLOGY.read().await;
+
+    topology.get_online_users(filter_names)
+}
+
+pub(crate) async fn get_client_username(client_id: &ClientID) -> Option<String> {
+    let topology = TOPOLOGY.read().await;
+    topology
+        .get_client_username(client_id)
+        .map(|state| state.to_owned())
+}
+
+pub(crate) async fn get_client_state(client_id: &ClientID) -> Option<ClientState> {
+    let topology = TOPOLOGY.read().await;
+    topology.get_client_state(client_id).cloned()
+}
+
+pub(crate) async fn get_room_state(project: ProjectMetadata) -> Option<RoomState> {
+    let topology = TOPOLOGY.read().await;
+    topology.get_room_state(project)
+}
+
+pub(crate) async fn get_external_clients() -> Vec<ExternalClient> {
+    let topology = TOPOLOGY.read().await;
+    topology.get_external_clients()
 }

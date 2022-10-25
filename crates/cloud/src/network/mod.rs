@@ -147,12 +147,8 @@ async fn get_room_state(
         _ => app.get_project_metadatum(&project_id).await?,
     };
 
-    let state = app
-        .network
-        .send(topology::GetRoomState { metadata })
+    let state = topology::get_room_state(metadata)
         .await
-        .map_err(InternalError::ActixMessageError)?
-        .0
         .ok_or(UserError::ProjectNotActiveError)?;
 
     Ok(HttpResponse::Ok().json(state))
@@ -162,12 +158,7 @@ async fn get_room_state(
 async fn get_rooms(app: web::Data<AppData>, session: Session) -> Result<HttpResponse, UserError> {
     ensure_is_super_user(&app, &session).await?;
 
-    let state = app
-        .network
-        .send(topology::GetActiveRooms {})
-        .await
-        .map_err(InternalError::ActixMessageError)?
-        .0;
+    let state = topology::get_active_rooms().await;
 
     Ok(HttpResponse::Ok().json(state))
 }
@@ -179,12 +170,7 @@ async fn get_external_clients(
 ) -> Result<HttpResponse, UserError> {
     ensure_is_super_user(&app, &session).await?;
 
-    let clients = app
-        .network
-        .send(topology::GetExternalClients {})
-        .await
-        .map_err(InternalError::ActixMessageError)?
-        .0;
+    let clients = topology::get_external_clients().await;
 
     Ok(HttpResponse::Ok().json(clients))
 }
@@ -243,14 +229,7 @@ async fn ensure_can_evict_client(
     session: &Session,
     client_id: &ClientID,
 ) -> Result<(), UserError> {
-    let client_state = app
-        .network
-        .send(topology::GetClientState {
-            client_id: client_id.to_owned(),
-        })
-        .await
-        .map_err(InternalError::ActixMessageError)?
-        .0;
+    let client_state = topology::get_client_state(&client_id).await;
 
     // Client can be evicted by project owners, collaborators
     if let Some(ClientState::Browser(BrowserClientState { project_id, .. })) = client_state {
@@ -261,14 +240,7 @@ async fn ensure_can_evict_client(
     }
 
     // or by anyone who can edit the corresponding user
-    let client_username = app
-        .network
-        .send(topology::GetClientUsername {
-            client_id: client_id.to_owned(),
-        })
-        .await
-        .map_err(InternalError::ActixMessageError)?
-        .0;
+    let client_username = topology::get_client_username(&client_id).await;
 
     match client_username {
         Some(username) => ensure_can_edit_user(app, session, &username).await,
@@ -446,21 +418,8 @@ async fn get_client_state(
 
     let (client_id,) = path.into_inner();
 
-    let username = app
-        .network
-        .send(topology::GetClientUsername {
-            client_id: client_id.clone(),
-        })
-        .await
-        .map_err(InternalError::ActixMessageError)?
-        .0;
-
-    let state = app
-        .network
-        .send(topology::GetClientState { client_id })
-        .await
-        .map_err(InternalError::ActixMessageError)?
-        .0;
+    let username = topology::get_client_username(&client_id).await;
+    let state = topology::get_client_state(&client_id).await;
 
     Ok(HttpResponse::Ok().json(netsblox_core::ClientInfo { username, state }))
 }
@@ -510,7 +469,6 @@ impl WsSession {
                     Value::String(value) => vec![value],
                     _ => vec![],
                 };
-                println!("Sending message to {:?}", addresses);
                 self.topology_addr.do_send(topology::SendMessage {
                     sender: self.client_id.to_owned(),
                     addresses,

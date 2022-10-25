@@ -677,12 +677,10 @@ async fn fetch_role_data(
         project_id: metadata.id.clone(),
         role_id: role_id.clone(),
     };
-    let request_opt = app
-        .network
-        .send(topology::GetRoleRequest { state })
+
+    let request_opt = topology::get_role_request(state)
         .await
-        .map_err(|_err| UserError::InternalError)
-        .and_then(|result| result.0.ok_or(UserError::InternalError));
+        .ok_or(UserError::InternalError);
 
     let active_role = if let Ok(request) = request_opt {
         request.send().await.ok()
