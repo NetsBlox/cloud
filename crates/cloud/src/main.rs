@@ -7,6 +7,7 @@ mod groups;
 mod libraries;
 mod models;
 mod network;
+mod oauth;
 mod projects;
 mod services;
 mod users;
@@ -118,6 +119,7 @@ async fn main() -> std::io::Result<()> {
             .service(web::scope("/groups").configure(groups::config))
             .service(web::scope("/friends").configure(friends::config))
             .service(web::scope("/network").configure(network::config))
+            .service(web::scope("/oauth").configure(oauth::config))
             .service(web::scope("/collaboration-invites").configure(collaboration_invites::config))
             .service(web::scope("/services").configure(services::config))
             .service(get_client_config)
