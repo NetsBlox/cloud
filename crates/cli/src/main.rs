@@ -702,8 +702,8 @@ async fn do_command(mut cfg: Config, args: Cli) -> Result<(), netsblox_api::erro
                 latest,
                 user,
             } => {
-                let username = user.clone().unwrap_or(get_current_user(&cfg));
-                let metadata = client.get_project_metadata(&username, &project).await?;
+                let username = user.clone().unwrap_or_else(|| get_current_user(&cfg));
+                let metadata = client.get_project_metadata(&username, project).await?;
                 let project_id = metadata.id;
                 let xml = if let Some(role) = role {
                     let role_id = metadata
@@ -723,7 +723,7 @@ async fn do_command(mut cfg: Config, args: Cli) -> Result<(), netsblox_api::erro
                 println!("{}", xml);
             }
             Projects::List { user, shared } => {
-                let username = user.clone().unwrap_or(get_current_user(&cfg));
+                let username = user.clone().unwrap_or_else(|| get_current_user(&cfg));
                 let projects = if *shared {
                     client.list_shared_projects(&username).await?
                 } else {
@@ -735,7 +735,7 @@ async fn do_command(mut cfg: Config, args: Cli) -> Result<(), netsblox_api::erro
                 }
             }
             Projects::Publish { project, user } => {
-                let username = user.clone().unwrap_or(get_current_user(&cfg));
+                let username = user.clone().unwrap_or_else(|| get_current_user(&cfg));
                 let metadata = client.get_project_metadata(&username, &project).await?;
                 let project_id = metadata.id;
 

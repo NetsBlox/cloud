@@ -409,7 +409,7 @@ pub struct ClientIDError;
 impl FromStr for ClientID {
     type Err = ClientIDError;
     fn from_str(s: &str) -> Result<Self, Self::Err> {
-        if s.starts_with("_") {
+        if s.starts_with('_') {
             Ok(ClientID::new(s.to_owned()))
         } else {
             Err(ClientIDError)
