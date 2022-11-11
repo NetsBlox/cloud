@@ -50,7 +50,7 @@ pub struct NewUser {
 #[derive(Serialize, Deserialize, Clone, Debug)]
 #[serde(rename_all = "camelCase")]
 pub enum UserRole {
-    User,
+    User, // TODO: add teacher here
     Moderator,
     Admin,
 }
@@ -410,7 +410,7 @@ pub struct ClientIDError;
 impl FromStr for ClientID {
     type Err = ClientIDError;
     fn from_str(s: &str) -> Result<Self, Self::Err> {
-        if s.starts_with("_") {
+        if s.starts_with('_') {
             Ok(ClientID::new(s.to_owned()))
         } else {
             Err(ClientIDError)
@@ -521,16 +521,14 @@ mod tests {
     #[test]
     fn deserialize_project_id() {
         let project_id_str = &format!("\"{}\"", Uuid::new_v4());
-        let _project_id: ProjectId = serde_json::from_str(project_id_str).expect(&format!(
-            "Unable to parse ProjectId from {}",
-            project_id_str
-        ));
+        let _project_id: ProjectId = serde_json::from_str(project_id_str)
+            .unwrap_or_else(|_err| panic!("Unable to parse ProjectId from {}", project_id_str));
     }
 
     #[test]
     fn deserialize_role_id() {
         let role_id_str = &format!("\"{}\"", Uuid::new_v4());
         let _role_id: RoleId = serde_json::from_str(role_id_str)
-            .expect(&format!("Unable to parse RoleId from {}", role_id_str));
+            .unwrap_or_else(|_err| panic!("Unable to parse RoleId from {}", role_id_str));
     }
 }
