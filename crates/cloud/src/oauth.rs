@@ -32,25 +32,26 @@ async fn authorization_page(
 ) -> Result<HttpResponse, UserError> {
     // TODO: allow authorizing clients for others (potentially useful for classroom use)
     // TODO: If not logged in, redirect
-    let logged_in = session.get::<String>("username").ok().is_some();
-    if !logged_in {
-        let url = app
-            .settings
-            .login_url
-            .as_ref()
-            .ok_or(UserError::LoginRequiredError)?;
+    // let logged_in = session.get::<String>("username").ok().is_some();
+    // if !logged_in {
+    //     let url = app
+    //         .settings
+    //         .login_url
+    //         .as_ref()
+    //         .ok_or(UserError::LoginRequiredError)?;
 
-        let response = HttpResponse::Found()
-            .insert_header(("Location", url.as_str()))
-            .finish();
+    //     let response = HttpResponse::Found()
+    //         .insert_header(("Location", url.as_str()))
+    //         .finish();
 
-        Ok(response)
-    } else {
-        todo!()
-        //params.client_id
-        // TODO: look up the client
-        // TODO: return the sign up page?
-    }
+    //     Ok(response)
+    // } else {
+    //     todo!()
+    //     //params.client_id
+    //     // TODO: look up the client
+    //     // TODO: return the sign up page?
+    // }
+    todo!();
 }
 
 #[derive(Deserialize)]

@@ -23,8 +23,8 @@ use crate::config::Settings;
 use crate::errors::{InternalError, UserError};
 use crate::libraries;
 use crate::models::{
-    AuthorizedServiceHost, BannedAccount, CollaborationInvite, FriendLink, Group, Library,
-    OAuthClient, Project, ProjectMetadata, SaveState, SetPasswordToken, User,
+    AuthorizedServiceHost, BannedAccount, CollaborationInvite, FriendLink, Group, Library, Project,
+    ProjectMetadata, SaveState, SetPasswordToken, User,
 };
 use crate::models::{OccupantInvite, RoleData, RoleMetadata, SentMessage};
 use crate::network::topology::{self, SetStorage, TopologyActor};
