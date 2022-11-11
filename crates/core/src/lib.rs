@@ -50,7 +50,7 @@ pub struct NewUser {
 #[derive(Serialize, Deserialize, Clone, Debug)]
 #[serde(rename_all = "camelCase")]
 pub enum UserRole {
-    User, // TODO: add teacher here
+    User,
     Moderator,
     Admin,
 }
