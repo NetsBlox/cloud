@@ -220,6 +220,22 @@ impl Client {
     }
 
     // Project management
+    pub async fn create_project(
+        &self,
+        data: &CreateProjectData,
+    ) -> Result<ProjectMetadata, error::Error> {
+        // TODO: what should the method signature look like for this? Probably should accept CreateProjectData
+        let response = self
+            .request(Method::POST, "/projects/")
+            .json(data)
+            .send()
+            .await
+            .map_err(error::Error::RequestError)?;
+
+        let response = check_response(response).await?;
+        Ok(response.json::<ProjectMetadata>().await.unwrap())
+    }
+
     pub async fn list_projects(&self, owner: &str) -> Result<Vec<ProjectMetadata>, error::Error> {
         let response = self
             .request(Method::GET, &format!("/projects/user/{}", &owner))

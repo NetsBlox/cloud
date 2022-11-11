@@ -724,7 +724,18 @@ async fn do_command(mut cfg: Config, args: Cli) -> Result<(), netsblox_api::erro
                 name,
                 user,
             } => {
-                todo!("Parse the file and import it...");
+                let username = user.clone().unwrap_or_else(|| get_current_user(&cfg));
+                let project_xml = fs::read_to_string(filename).expect("Unable to read file");
+                // TODO: parse the xml into RoleData objects. Structure is <role>...<media></media></role>
+                let roles = todo!();
+                let project_data = CreateProjectData {
+                    owner: Some(username),
+                    name: name.unwrap_or_else(|| filename.to_owned()),
+                    roles,
+                    save_state: Some(SaveState::SAVED),
+                    client_id: None,
+                };
+                client.create_project(&project_data).await?;
             }
             Projects::Export {
                 project,
