@@ -10,7 +10,7 @@ use log::{info, warn};
 use lru::LruCache;
 use mongodb::bson::{doc, DateTime, Document};
 use mongodb::options::{FindOneAndUpdateOptions, IndexOptions, ReturnDocument};
-use netsblox_core::{LibraryMetadata, ProjectId, PublishState, RoleId};
+use netsblox_core::{oauth, LibraryMetadata, ProjectId, PublishState, RoleId};
 use rusoto_core::credential::StaticProvider;
 use rusoto_core::Region;
 use serde::{Deserialize, Serialize};
@@ -23,8 +23,8 @@ use crate::config::Settings;
 use crate::errors::{InternalError, UserError};
 use crate::libraries;
 use crate::models::{
-    AuthorizedServiceHost, BannedAccount, CollaborationInvite, FriendLink, Group, Library, Project,
-    ProjectMetadata, SaveState, SetPasswordToken, User,
+    AuthorizedServiceHost, BannedAccount, CollaborationInvite, FriendLink, Group, Library,
+    OAuthClient, Project, ProjectMetadata, SaveState, SetPasswordToken, User,
 };
 use crate::models::{OccupantInvite, RoleData, RoleMetadata, SentMessage};
 use crate::network::topology::{self, SetStorage, TopologyActor};
@@ -61,6 +61,10 @@ pub struct AppData {
     pub recorded_messages: Collection<SentMessage>,
     pub collab_invites: Collection<CollaborationInvite>,
     pub occupant_invites: Collection<OccupantInvite>,
+
+    pub oauth_clients: Collection<oauth::Client>,
+    pub oauth_tokens: Collection<oauth::Token>,
+    pub oauth_codes: Collection<oauth::Code>,
 
     mailer: SmtpTransport,
     sender: Mailbox,
@@ -127,6 +131,9 @@ impl AppData {
         let recorded_messages =
             db.collection::<SentMessage>(&(prefix.to_owned() + "recordedMessages"));
         let network = network.unwrap_or_else(|| TopologyActor {}.start());
+        let oauth_clients = db.collection::<oauth::Client>(&(prefix.to_owned() + "oauthClients"));
+        let oauth_tokens = db.collection::<oauth::Token>(&(prefix.to_owned() + "oauthToken"));
+        let oauth_codes = db.collection::<oauth::Code>(&(prefix.to_owned() + "oauthCode"));
         let tor_exit_nodes = db.collection::<TorNode>(&(prefix.to_owned() + "torExitNodes"));
         let bucket = settings.s3.bucket.clone();
 
@@ -150,6 +157,10 @@ impl AppData {
 
             mailer,
             sender,
+
+            oauth_clients,
+            oauth_tokens,
+            oauth_codes,
 
             tor_exit_nodes,
             recorded_messages,
@@ -612,6 +623,7 @@ impl AppData {
         Ok(updated_metadata)
     }
 
+    // Tor-related restrictions
     pub async fn ensure_not_tor_ip(&self, req: HttpRequest) -> Result<(), UserError> {
         match req.peer_addr().map(|addr| addr.ip()) {
             Some(addr) => {

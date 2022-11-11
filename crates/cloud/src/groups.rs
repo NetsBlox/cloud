@@ -20,7 +20,11 @@ async fn list_groups(
     ensure_can_edit_user(&app, &session, &owner).await?;
 
     let query = doc! {"owner": owner};
-    let cursor = app.groups.find(query, None).await.unwrap();
+    let cursor = app
+        .groups
+        .find(query, None)
+        .await
+        .map_err(InternalError::DatabaseConnectionError)?;
     let groups: Vec<netsblox_core::Group> = cursor
         .try_collect::<Vec<_>>()
         .await
@@ -41,7 +45,8 @@ async fn view_group(
     let (id,) = path.into_inner();
     let username = session
         .get::<String>("username")
-        .unwrap_or(None)
+        .ok()
+        .flatten()
         .ok_or(UserError::PermissionsError)?;
 
     let query = if is_super_user(&app, &session).await.unwrap_or(false) {
@@ -71,11 +76,15 @@ async fn list_members(
 
     ensure_can_edit_group(&app, &session, &id).await?;
     let query = doc! {"groupId": id};
-    let cursor = app.users.find(query, None).await.unwrap();
+    let cursor = app
+        .users
+        .find(query, None)
+        .await
+        .map_err(InternalError::DatabaseConnectionError)?;
     let members: Vec<User> = cursor
         .try_collect::<Vec<_>>()
         .await
-        .unwrap()
+        .map_err(InternalError::DatabaseConnectionError)?
         .into_iter()
         .map(|u| u.into())
         .collect();
@@ -89,7 +98,12 @@ pub async fn ensure_can_edit_group(
     group_id: &GroupId,
 ) -> Result<(), UserError> {
     let query = doc! {"id": group_id};
-    match app.groups.find_one(query, None).await.unwrap() {
+    match app
+        .groups
+        .find_one(query, None)
+        .await
+        .map_err(InternalError::DatabaseConnectionError)?
+    {
         Some(group) => ensure_can_edit_user(app, session, &group.owner).await,
         None => Err(UserError::GroupNotFoundError),
     }
@@ -141,7 +155,8 @@ async fn update_group(
 
     let username = session
         .get::<String>("username")
-        .unwrap()
+        .ok()
+        .flatten()
         .ok_or(UserError::PermissionsError)?;
 
     let query = if is_super_user(&app, &session).await.unwrap_or(false) {
@@ -173,7 +188,8 @@ async fn delete_group(
 
     let username = session
         .get::<String>("username")
-        .unwrap()
+        .ok()
+        .flatten()
         .ok_or(UserError::PermissionsError)?;
 
     let query = if is_super_user(&app, &session).await.unwrap_or(false) {
@@ -206,9 +222,6 @@ pub fn config(cfg: &mut web::ServiceConfig) {
 
 #[cfg(test)]
 mod tests {
-    
-    
-    
 
     #[actix_web::test]
     async fn test_list_groups() {

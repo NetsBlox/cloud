@@ -1,5 +1,6 @@
 #[cfg(feature = "bson")]
 mod bson;
+pub mod oauth;
 
 use core::fmt;
 use derive_more::{Display, Error};

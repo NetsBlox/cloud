@@ -6,8 +6,8 @@ use clap::{Parser, Subcommand};
 use futures_util::StreamExt;
 use inquire::{Confirm, Password, PasswordDisplayMode};
 use netsblox_api::core::{
-    ClientID, Credentials, FriendLinkState, InvitationState, LinkedAccount, ProjectId,
-    PublishState, ServiceHost, UserRole,
+    oauth, ClientID, CreateProjectData, Credentials, FriendLinkState, InvitationState,
+    LinkedAccount, ProjectId, PublishState, SaveState, ServiceHost, UserRole,
 };
 use netsblox_api::{Client, Config};
 use std::path::Path;
@@ -344,6 +344,29 @@ enum Libraries {
     },
 }
 
+/// Manage OAuth registered clients
+#[derive(Subcommand, Debug)]
+enum Oauth {
+    /// Authorize an OAuth client for a user
+    Authorize {
+        client_id: oauth::ClientId,
+        #[clap(short, long)]
+        user: Option<String>,
+    },
+    /// Revoke authorization for an OAuth client
+    Revoke {
+        client: String, // TODO: should we use an ID or name?
+        #[clap(short, long)]
+        user: Option<String>,
+    },
+    /// List all OAuth clients
+    List,
+    /// Register new OAuth client with NetsBlox
+    AddClient { name: String },
+    /// Remove registered OAuth client from NetsBlox
+    RemoveClient { id: oauth::ClientId },
+}
+
 /// Connect to the NetsBlox network
 #[derive(Subcommand, Debug)]
 enum Network {
@@ -507,6 +530,12 @@ struct LibraryCommand {
 }
 
 #[derive(Parser, Debug)]
+struct OauthCommand {
+    #[clap(subcommand)]
+    subcmd: Oauth,
+}
+
+#[derive(Parser, Debug)]
 enum Command {
     Login,
     Logout,
@@ -518,6 +547,7 @@ enum Command {
     ServiceHosts(ServiceHostCommand),
     ServiceSettings(ServiceSettingsCommand),
     Libraries(LibraryCommand),
+    Oauth(OauthCommand),
 }
 
 #[derive(Parser, Debug)]
@@ -1284,7 +1314,7 @@ async fn do_command(mut cfg: Config, args: Cli) -> Result<(), netsblox_api::erro
                 new_name,
                 user,
             } => {
-                let username = user.clone().unwrap_or(get_current_user(&cfg));
+                let username = user.clone().unwrap_or_else(|| get_current_user(&cfg));
                 let groups = client.list_groups(&username).await?;
                 let group_id = groups
                     .into_iter()
@@ -1292,10 +1322,10 @@ async fn do_command(mut cfg: Config, args: Cli) -> Result<(), netsblox_api::erro
                     .map(|group| group.id)
                     .unwrap();
 
-                client.rename_group(&group_id, &new_name).await?;
+                client.rename_group(&group_id, new_name).await?;
             }
             Groups::View { group, user } => {
-                let username = user.clone().unwrap_or(get_current_user(&cfg));
+                let username = user.clone().unwrap_or_else(|| get_current_user(&cfg));
                 let groups = client.list_groups(&username).await?;
                 let group_id = groups
                     .into_iter()
@@ -1305,6 +1335,30 @@ async fn do_command(mut cfg: Config, args: Cli) -> Result<(), netsblox_api::erro
 
                 let group = client.view_group(&group_id).await?;
                 println!("{:?}", group);
+            }
+        },
+        Command::Oauth(cmd) => match &cmd.subcmd {
+            Oauth::List => {
+                let clients = client.list_oauth_clients().await?;
+                clients
+                    .into_iter()
+                    .for_each(|client| println!("{:?}", client));
+            }
+            Oauth::AddClient { name } => {
+                let client_data = oauth::CreateClientData {
+                    name: name.to_owned(),
+                };
+                let client_id = client.add_oauth_client(&client_data).await?;
+                println!("{:?}", client_id);
+            }
+            Oauth::RemoveClient { id } => {
+                client.remove_oauth_client(id).await?;
+            }
+            Oauth::Authorize { client_id, user } => {
+                todo!();
+            }
+            Oauth::Revoke { client, user } => {
+                todo!();
             }
         },
     }
