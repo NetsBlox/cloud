@@ -6,7 +6,7 @@ use core::fmt;
 use derive_more::{Display, Error};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
-use std::{collections::HashMap, str::FromStr, time::SystemTime};
+use std::{cmp::Ordering, collections::HashMap, str::FromStr, time::SystemTime};
 use uuid::Uuid;
 
 const APP_NAME: &str = "NetsBlox";
@@ -47,12 +47,21 @@ pub struct NewUser {
     pub role: Option<UserRole>,
 }
 
-#[derive(Serialize, Deserialize, Clone, Debug)]
+#[derive(Serialize, Deserialize, Clone, Debug, PartialEq, Eq)]
 #[serde(rename_all = "camelCase")]
 pub enum UserRole {
-    User,
-    Moderator,
-    Admin,
+    User = 0,
+    Teacher = 1,
+    Moderator = 2,
+    Admin = 3,
+}
+
+impl PartialOrd for UserRole {
+    fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
+        let my_val = *self as u32;
+        let other_val = *other as u32;
+        my_val.partial_cmp(&other_val)
+    }
 }
 
 #[derive(Debug, Display, Error)]
@@ -65,6 +74,7 @@ impl FromStr for UserRole {
         match s {
             "admin" => Ok(UserRole::Admin),
             "moderator" => Ok(UserRole::Moderator),
+            "teacher" => Ok(UserRole::Teacher),
             "user" => Ok(UserRole::User),
             _ => Err(UserRoleError),
         }
@@ -530,5 +540,23 @@ mod tests {
         let role_id_str = &format!("\"{}\"", Uuid::new_v4());
         let _role_id: RoleId = serde_json::from_str(role_id_str)
             .unwrap_or_else(|_err| panic!("Unable to parse RoleId from {}", role_id_str));
+    }
+
+    #[test]
+    fn should_compare_roles() {
+        assert!(UserRole::Teacher > UserRole::User);
+        assert!(UserRole::Moderator > UserRole::User);
+        assert!(UserRole::Admin > UserRole::User);
+
+        assert!(UserRole::User == UserRole::User);
+        assert!(UserRole::Teacher == UserRole::Teacher);
+        assert!(UserRole::Moderator == UserRole::Moderator);
+        assert!(UserRole::Admin == UserRole::Admin);
+
+        assert!(!(UserRole::Teacher < UserRole::User));
+        assert!(!(UserRole::Moderator < UserRole::User));
+        assert!(!(UserRole::Admin < UserRole::User));
+
+        assert!(UserRole::Admin > UserRole::Moderator);
     }
 }

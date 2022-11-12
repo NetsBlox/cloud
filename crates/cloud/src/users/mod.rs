@@ -47,10 +47,8 @@ pub(crate) async fn get_user_role(app: &AppData, username: &str) -> Result<UserR
 }
 
 pub async fn is_moderator(app: &AppData, session: &Session) -> Result<bool, UserError> {
-    match get_session_role(app, session).await? {
-        UserRole::Admin | UserRole::Moderator => Ok(true),
-        _ => Ok(false),
-    }
+    let role = get_session_role(app, session).await?;
+    Ok(role >= UserRole::Moderator)
 }
 
 pub async fn ensure_is_moderator(app: &AppData, session: &Session) -> Result<(), UserError> {

@@ -40,6 +40,7 @@ impl From<UserRole> for Bson {
             UserRole::Admin => Bson::String("admin".into()),
             UserRole::Moderator => Bson::String("moderator".into()),
             UserRole::User => Bson::String("user".into()),
+            UserRole::Teacher => Bson::String("teacher".into()),
         }
     }
 }
