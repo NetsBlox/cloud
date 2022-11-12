@@ -251,7 +251,7 @@ pub struct RoleData {
 
 impl RoleData {
     pub fn to_xml(self) -> String {
-        let name = self.name.replace("\"", "\\\"");
+        let name = self.name.replace('\"', "\\\"");
         format!("<role name=\"{}\">{}{}</role>", name, self.code, self.media)
     }
 }
@@ -316,7 +316,7 @@ impl LibraryMetadata {
         LibraryMetadata {
             owner,
             name,
-            notes: notes.unwrap_or_else(String::new),
+            notes: notes.unwrap_or_default(),
             state,
         }
     }
@@ -552,10 +552,6 @@ mod tests {
         assert!(UserRole::Teacher == UserRole::Teacher);
         assert!(UserRole::Moderator == UserRole::Moderator);
         assert!(UserRole::Admin == UserRole::Admin);
-
-        assert!(!(UserRole::Teacher < UserRole::User));
-        assert!(!(UserRole::Moderator < UserRole::User));
-        assert!(!(UserRole::Admin < UserRole::User));
 
         assert!(UserRole::Admin > UserRole::Moderator);
     }
