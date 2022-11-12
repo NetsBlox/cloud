@@ -467,9 +467,8 @@ async fn view_user(
 ) -> Result<HttpResponse, UserError> {
     let (username,) = path.into_inner();
 
-    match ensure_is_authorized_host(&app, &req).await {
-        Err(_) => ensure_can_edit_user(&app, &session, &username).await?,
-        _ => {}
+    if let Err(_) = ensure_is_authorized_host(&app, &req).await {
+        ensure_can_edit_user(&app, &session, &username).await?
     };
 
     let query = doc! {"username": username};

@@ -153,14 +153,11 @@ async fn list_all_hosts(
         }
     };
 
-    let services_hosts = user
-        .services_hosts.unwrap_or_default()
-        .into_iter()
-        .chain(
-            groups
-                .into_iter()
-                .flat_map(|g| g.services_hosts.unwrap_or_default()),
-        );
+    let services_hosts = user.services_hosts.unwrap_or_default().into_iter().chain(
+        groups
+            .into_iter()
+            .flat_map(|g| g.services_hosts.unwrap_or_default()),
+    );
     Ok(HttpResponse::Ok().json(services_hosts.collect::<Vec<_>>()))
 }
 
@@ -249,19 +246,16 @@ pub async fn ensure_is_authorized_host(app: &AppData, req: &HttpRequest) -> Resu
             let secret = chunks.next();
             id.and_then(|id| secret.map(|s| (id, s)))
         })
-        .map(|(id, secret)| doc! {"id": id, "secret": secret});
+        .map(|(id, secret)| doc! {"id": id, "secret": secret})
+        .ok_or(UserError::PermissionsError)?; // permissions error since there are no credentials
 
-    println!("{:?}", query);
-    if let Some(query) = query {
-        app.authorized_services
-            .find_one(query, None)
-            .await
-            .map_err(InternalError::DatabaseConnectionError)?
-            .ok_or(UserError::PermissionsError)?;
-        Ok(())
-    } else {
-        Err(UserError::PermissionsError)
-    }
+    app.authorized_services
+        .find_one(query, None)
+        .await
+        .map_err(InternalError::DatabaseConnectionError)?
+        .ok_or(UserError::PermissionsError)?;
+
+    Ok(())
 }
 
 pub fn ensure_valid_service_id(id: &str) -> Result<(), UserError> {

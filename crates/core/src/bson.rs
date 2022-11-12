@@ -1,6 +1,6 @@
 use crate::{
-    FriendInvite, FriendLinkState, Group, InvitationState, LinkedAccount, ProjectId, PublishState,
-    RoleMetadata, SaveState, ServiceHost, UserRole,
+    oauth, FriendInvite, FriendLinkState, Group, InvitationState, LinkedAccount, ProjectId,
+    PublishState, RoleMetadata, SaveState, ServiceHost, UserRole,
 };
 use bson::{doc, Bson, DateTime};
 
@@ -111,5 +111,38 @@ impl From<InvitationState> for Bson {
 impl From<ProjectId> for Bson {
     fn from(id: ProjectId) -> Bson {
         Bson::String(id.0)
+    }
+}
+
+impl From<oauth::ClientId> for Bson {
+    fn from(id: oauth::ClientId) -> Bson {
+        Bson::String(id.as_str().to_owned())
+    }
+}
+
+impl From<oauth::Client> for Bson {
+    fn from(client: oauth::Client) -> Bson {
+        Bson::Document(doc! {
+            "name": client.name,
+            "id": client.id,
+        })
+    }
+}
+
+impl From<oauth::CodeId> for Bson {
+    fn from(id: oauth::CodeId) -> Bson {
+        Bson::String(id.as_str().to_owned())
+    }
+}
+
+impl From<oauth::Code> for Bson {
+    fn from(code: oauth::Code) -> Bson {
+        Bson::Document(doc! {
+            "id": code.id,
+            "username": code.username,
+            "clientId": code.client_id,
+            "redirectUri": code.redirect_uri,
+            "createdAt": DateTime::from_system_time(code.created_at),
+        })
     }
 }
