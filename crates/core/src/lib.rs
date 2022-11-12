@@ -559,4 +559,10 @@ mod tests {
 
         assert!(UserRole::Admin > UserRole::Moderator);
     }
+
+    #[test]
+    fn serialize_userroles_as_strings() {
+        let role_str = serde_json::to_string(&UserRole::User).unwrap();
+        assert_eq!(&role_str, "\"user\"");
+    }
 }
