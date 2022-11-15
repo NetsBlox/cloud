@@ -52,6 +52,7 @@ pub struct SecuritySettings {
 pub struct Settings {
     pub address: String,
     pub public_url: String,
+    pub login_url: Option<String>,
     pub database: Database,
     pub s3: S3,
     pub cookie: CookieSettings,

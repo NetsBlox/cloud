@@ -727,6 +727,7 @@ async fn do_command(mut cfg: Config, args: Cli) -> Result<(), netsblox_api::erro
             } => {
                 let username = user.clone().unwrap_or_else(|| get_current_user(&cfg));
                 let project_xml = fs::read_to_string(filename).expect("Unable to read file");
+
                 let mut found_role = false;
                 let mut role_spans: Vec<RoleSpan> = Vec::new();
                 let mut role_start = None;

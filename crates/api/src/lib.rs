@@ -1231,7 +1231,7 @@ impl Client {
     pub async fn add_oauth_client(
         &self,
         client: &oauth::CreateClientData,
-    ) -> Result<oauth::ClientId, error::Error> {
+    ) -> Result<oauth::CreatedClientData, error::Error> {
         let response = self
             .request(Method::POST, "/oauth/clients/")
             .json(&client)
@@ -1241,7 +1241,7 @@ impl Client {
 
         let response = check_response(response).await?;
 
-        Ok(response.json::<oauth::ClientId>().await.unwrap())
+        Ok(response.json::<oauth::CreatedClientData>().await.unwrap())
     }
 
     pub async fn remove_oauth_client(&self, id: &oauth::ClientId) -> Result<(), error::Error> {

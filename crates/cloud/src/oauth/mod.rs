@@ -1,8 +1,11 @@
+mod html_template;
+
 use std::time::SystemTime;
 
 use actix_session::Session;
 use actix_web::http::header;
 use actix_web::{delete, get, post, web, HttpResponse};
+use derive_more::Display;
 use futures::TryStreamExt;
 use mongodb::bson::doc;
 use mongodb::options::ReturnDocument;
@@ -26,34 +29,49 @@ struct AuthorizeParams {
 // TODO: view projects and libraries
 // TODO: edit projects and libraries
 
-#[get("/")]
+#[derive(Debug, Display)]
+pub(crate) enum Scope {
+    #[display(fmt = "View created Alexa skills")]
+    ViewAlexaSkills,
+    #[display(fmt = "Execute blocks on your behalf")]
+    ExecuteBlocks,
+}
+
+#[get("/authorize")]
 async fn authorization_page(
     app: web::Data<AppData>,
     params: web::Query<AuthorizeParams>,
     session: Session,
 ) -> Result<HttpResponse, UserError> {
-    // TODO: allow authorizing clients for others (potentially useful for classroom use)
-    // TODO: If not logged in, redirect
-    // let logged_in = session.get::<String>("username").ok().is_some();
-    // if !logged_in {
-    //     let url = app
-    //         .settings
-    //         .login_url
-    //         .as_ref()
-    //         .ok_or(UserError::LoginRequiredError)?;
+    let current_user = session.get::<String>("username").ok().flatten();
+    if let Some(username) = current_user {
+        let query = doc! {"id": &params.client_id};
+        let client = app
+            .oauth_clients
+            .find_one(query, None)
+            .await
+            .map_err(InternalError::DatabaseConnectionError)?
+            .ok_or(UserError::OAuthClientNotFoundError)?;
 
-    //     let response = HttpResponse::Found()
-    //         .insert_header(("Location", url.as_str()))
-    //         .finish();
+        // FIXME: the requestor should pass the scopes
+        let scopes = [Scope::ViewAlexaSkills, Scope::ExecuteBlocks];
+        let html = html_template::authorize_page(&username, &client.name, &scopes);
+        Ok(HttpResponse::Ok()
+            .content_type(header::ContentType::html())
+            .body(html))
+    } else {
+        let url = app
+            .settings
+            .login_url
+            .as_ref()
+            .ok_or(UserError::LoginRequiredError)?;
 
-    //     Ok(response)
-    // } else {
-    //     todo!()
-    //     //params.client_id
-    //     // TODO: look up the client
-    //     // TODO: return the sign up page?
-    // }
-    todo!();
+        let response = HttpResponse::Found()
+            .insert_header(("Location", url.as_str()))
+            .finish();
+
+        Ok(response)
+    }
 }
 
 #[derive(Deserialize)]
@@ -117,6 +135,7 @@ async fn authorize_client(
         .map_err(InternalError::DatabaseConnectionError)?
         .is_some();
 
+    // TODO: is incorrect secret a different error?
     if !client_exists {
         return Err(UserError::OAuthClientNotFoundError);
     }
