@@ -11,6 +11,7 @@ use actix_web::{get, patch, post, HttpRequest};
 use actix_web::{web, HttpResponse};
 use futures::TryStreamExt;
 use lazy_static::lazy_static;
+use lettre::Address;
 use mongodb::bson::doc;
 use mongodb::options::ReturnDocument;
 use netsblox_core::{LinkedAccount, LoginRequest, NewUser, UserRole};
@@ -187,14 +188,11 @@ async fn create_user(
 }
 
 fn ensure_valid_email(email: &str) -> Result<(), UserError> {
-    lazy_static! {
-        static ref EMAIL_REGEX: Regex = Regex::new(r"^.+@.+\..+$").unwrap();
-    }
-    if EMAIL_REGEX.is_match(email) {
-        Ok(())
-    } else {
-        Err(UserError::InvalidEmailAddress)
-    }
+    email
+        .parse::<Address>()
+        .map_err(|_err| UserError::InvalidEmailAddress)?;
+
+    Ok(())
 }
 
 fn ensure_valid_username(name: &str) -> Result<(), UserError> {

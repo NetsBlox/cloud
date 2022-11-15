@@ -100,7 +100,7 @@ impl AppData {
             settings.email.smtp.password.clone(),
         );
         let mailer = SmtpTransport::relay(&settings.email.smtp.host)
-            .unwrap()
+            .expect("Unable to connect to SMTP host.")
             .credentials(credentials)
             .build();
         let sender = settings
@@ -390,8 +390,7 @@ impl AppData {
         )
         .await
         .into_iter()
-        .map(|res| res.unwrap())
-        .collect();
+        .collect::<Result<Vec<RoleMetadata>, _>>()?;
 
         let save_state = save_state.unwrap_or(SaveState::CREATED);
         let metadata = ProjectMetadata::new(owner, &unique_name, role_mds, save_state);
@@ -426,13 +425,19 @@ impl AppData {
         })
     }
 
-    async fn delete(&self, key: &str) -> DeleteObjectOutput {
+    async fn delete(&self, key: &str) -> Result<(), UserError> {
         let request = DeleteObjectRequest {
             bucket: self.bucket.clone(),
             key: String::from(key),
             ..Default::default()
         };
-        self.s3.delete_object(request).await.unwrap()
+
+        self.s3
+            .delete_object(request)
+            .await
+            .map_err(|_err| InternalError::S3Error)?;
+
+        Ok(())
     }
 
     async fn upload(&self, key: &str, body: String) -> Result<PutObjectOutput, InternalError> {
@@ -501,7 +506,7 @@ impl AppData {
             .project_metadata
             .find_one_and_delete(query, None)
             .await
-            .unwrap();
+            .map_err(InternalError::DatabaseConnectionError)?;
 
         if let Some(metadata) = result {
             let paths: Vec<_> = metadata
@@ -616,8 +621,8 @@ impl AppData {
             .project_metadata
             .find_one_and_update(query, update, options)
             .await
-            .unwrap()
-            .expect("Project not found.");
+            .map_err(InternalError::DatabaseConnectionError)?
+            .ok_or(UserError::ProjectNotFoundError)?;
 
         self.on_room_changed(updated_metadata.clone());
         Ok(updated_metadata)
@@ -648,18 +653,23 @@ impl AppData {
 
     pub async fn send_email(
         &self,
-        to_email: &String,
+        to_email: &str,
         subject: &str,
         body: String,
     ) -> Result<(), UserError> {
         println!("Sending email to {}: {}", to_email, body);
         let email = Message::builder()
             .from(self.sender.clone())
-            .to(Mailbox::new(None, to_email.parse::<Address>().unwrap())) // TODO: use this to validate emails on creation?
+            .to(Mailbox::new(
+                None,
+                to_email
+                    .parse::<Address>()
+                    .map_err(|_err| UserError::InvalidEmailAddress)?,
+            ))
             .subject(subject.to_string())
             .date_now()
             .body(body)
-            .unwrap();
+            .map_err(|_err| InternalError::EmailBuildError)?;
 
         self.mailer
             .send(&email)

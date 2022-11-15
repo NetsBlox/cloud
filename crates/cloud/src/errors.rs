@@ -12,6 +12,7 @@ pub enum InternalError {
     TorNodeListFetchError(reqwest::Error),
     ActixMessageError(actix::MailboxError),
     SendEmailError(lettre::transport::smtp::Error),
+    EmailBuildError,
     Base64DecodeError(base64::DecodeError),
     ThumbnailDecodeError(image::ImageError),
     ThumbnailEncodeError(image::ImageError),
