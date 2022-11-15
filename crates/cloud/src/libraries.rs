@@ -109,7 +109,7 @@ async fn save_user_library(
         .libraries
         .find_one_and_update(query.clone(), update, options)
         .await
-        .unwrap()
+        .map_err(InternalError::DatabaseConnectionError)?
     {
         Some(library) => {
             let needs_approval = match library.state {
@@ -119,7 +119,10 @@ async fn save_user_library(
 
             let publish_state = if needs_approval {
                 let update = doc! {"state": PublishState::PendingApproval};
-                app.libraries.update_one(query, update, None).await.unwrap();
+                app.libraries
+                    .update_one(query, update, None)
+                    .await
+                    .map_err(InternalError::DatabaseConnectionError)?;
                 PublishState::PendingApproval
             } else {
                 library.state
@@ -190,7 +193,7 @@ async fn publish_user_library(
         app.library_metadata
             .update_one(query, update, None)
             .await
-            .unwrap();
+            .map_err(InternalError::DatabaseConnectionError)?;
         Ok(HttpResponse::Ok().json(PublishState::Public))
     } else {
         Ok(HttpResponse::Ok().json(PublishState::PendingApproval))

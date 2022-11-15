@@ -28,7 +28,7 @@ async fn list_groups(
     let groups: Vec<netsblox_core::Group> = cursor
         .try_collect::<Vec<_>>()
         .await
-        .unwrap()
+        .map_err(InternalError::DatabaseConnectionError)?
         .into_iter()
         .map(|g| g.into())
         .collect();

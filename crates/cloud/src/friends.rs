@@ -36,16 +36,23 @@ async fn list_friends(
             .filter(|username| username != &owner)
             .collect()
     } else {
-        get_friends(&app, &owner).await
+        get_friends(&app, &owner).await?
     };
 
     Ok(HttpResponse::Ok().json(friend_names))
 }
 
-async fn get_friends(app: &AppData, owner: &str) -> Vec<String> {
+async fn get_friends(app: &AppData, owner: &str) -> Result<Vec<String>, UserError> {
     let query = doc! {"$or": [{"sender": &owner, "state": FriendLinkState::APPROVED}, {"recipient": &owner, "state": FriendLinkState::APPROVED}]};
-    let cursor = app.friends.find(query, None).await.unwrap();
-    let links = cursor.try_collect::<Vec<_>>().await.unwrap();
+    let cursor = app
+        .friends
+        .find(query, None)
+        .await
+        .map_err(InternalError::DatabaseConnectionError)?;
+    let links = cursor
+        .try_collect::<Vec<_>>()
+        .await
+        .map_err(InternalError::DatabaseConnectionError)?;
     let friend_names: Vec<_> = links
         .into_iter()
         .map(|l| {
@@ -56,7 +63,8 @@ async fn get_friends(app: &AppData, owner: &str) -> Vec<String> {
             }
         })
         .collect();
-    friend_names
+
+    Ok(friend_names)
 }
 
 #[get("/{owner}/online")]
@@ -73,7 +81,7 @@ async fn list_online_friends(
     let filter_usernames = if is_universal_friend {
         None
     } else {
-        Some(get_friends(&app, &owner).await)
+        Some(get_friends(&app, &owner).await?)
     };
 
     let online_friends = topology::get_online_users(filter_usernames).await;
@@ -123,10 +131,16 @@ async fn block_user(
             {"sender": &friend, "recipient": &owner}
         ]
     };
-    app.friends.delete_one(query, None).await.unwrap();
+    app.friends
+        .delete_one(query, None)
+        .await
+        .map_err(InternalError::DatabaseConnectionError)?;
 
     let link = FriendLink::new(owner, friend, Some(FriendLinkState::BLOCKED));
-    app.friends.insert_one(link, None).await.unwrap();
+    app.friends
+        .insert_one(link, None)
+        .await
+        .map_err(InternalError::DatabaseConnectionError)?;
     Ok(HttpResponse::Ok().body("User has been blocked."))
 }
 
@@ -143,7 +157,11 @@ async fn unblock_user(
         "recipient": &friend,
         "state": FriendLinkState::BLOCKED,
     };
-    let result = app.friends.delete_one(query, None).await.unwrap();
+    let result = app
+        .friends
+        .delete_one(query, None)
+        .await
+        .map_err(InternalError::DatabaseConnectionError)?;
     if result.deleted_count == 1 {
         Ok(HttpResponse::Ok().body("User has been unblocked."))
     } else {
@@ -161,11 +179,15 @@ async fn list_invites(
     ensure_can_edit_user(&app, &session, &owner).await?;
 
     let query = doc! {"recipient": &owner, "state": FriendLinkState::PENDING}; // TODO: ensure they are still pending
-    let cursor = app.friends.find(query, None).await.unwrap();
+    let cursor = app
+        .friends
+        .find(query, None)
+        .await
+        .map_err(InternalError::DatabaseConnectionError)?;
     let invites: Vec<FriendInvite> = cursor
         .try_collect::<Vec<_>>()
         .await
-        .unwrap()
+        .map_err(InternalError::DatabaseConnectionError)?
         .into_iter()
         .map(|link| link.into())
         .collect();
@@ -220,7 +242,7 @@ async fn send_invite(
         .friends
         .update_one(query, update, options)
         .await
-        .unwrap();
+        .map_err(InternalError::DatabaseConnectionError)?;
 
     if result.upserted_id.is_some() {
         Ok(HttpResponse::Ok().body("Invitation sent."))
@@ -242,7 +264,11 @@ async fn respond_to_invite(
     let new_state = body.into_inner();
     let query = doc! {"recipient": &recipient, "sender": &sender};
     let update = doc! {"$set": {"state": new_state}};
-    let result = app.friends.update_one(query, update, None).await.unwrap();
+    let result = app
+        .friends
+        .update_one(query, update, None)
+        .await
+        .map_err(InternalError::DatabaseConnectionError)?;
     if result.matched_count > 0 {
         Ok(HttpResponse::Ok().body("Responded to invitation."))
     } else {

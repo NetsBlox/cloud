@@ -64,10 +64,7 @@ impl RoleRequest {
 
     fn has_response(&self, id: &Uuid) -> bool {
         let responses = RESPONSE_BUFFER.read().unwrap();
-        match responses.get(id) {
-            Some(RoleDataResponseState::Data(_)) => true,
-            _ => false,
-        }
+        matches!(responses.get(id), Some(RoleDataResponseState::Data(_)))
     }
 
     fn retrieve(&self, id: &Uuid) -> Option<RoleData> {
@@ -98,7 +95,6 @@ impl RoleRequest {
         }
 
         // TODO: what if the requested project_id, role_id are not what we receive (race condition)
-        self.retrieve(&id)
-            .ok_or(InternalError::TimeoutError)
+        self.retrieve(&id).ok_or(InternalError::TimeoutError)
     }
 }

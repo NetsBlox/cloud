@@ -90,7 +90,7 @@ pub async fn can_edit_user(
         println!("Can {} edit {}?", requestor, username);
         let can_edit = requestor == username
             || is_super_user(app, session).await?
-            || has_group_containing(app, &requestor, username).await;
+            || has_group_containing(app, &requestor, username).await?;
         Ok(can_edit)
     } else {
         println!("Could not get username from cookie!");
@@ -98,23 +98,35 @@ pub async fn can_edit_user(
     }
 }
 
-async fn has_group_containing(app: &AppData, owner: &str, member: &str) -> bool {
+async fn has_group_containing(app: &AppData, owner: &str, member: &str) -> Result<bool, UserError> {
     let query = doc! {"username": member};
-    match app.users.find_one(query, None).await.unwrap() {
+    match app
+        .users
+        .find_one(query, None)
+        .await
+        .map_err(InternalError::DatabaseConnectionError)?
+    {
         Some(user) => match user.group_id {
             Some(group_id) => {
                 let query = doc! {"owner": owner};
-                let cursor = app.groups.find(query, None).await.unwrap();
-                let groups = cursor.try_collect::<Vec<_>>().await.unwrap();
+                let cursor = app
+                    .groups
+                    .find(query, None)
+                    .await
+                    .map_err(InternalError::DatabaseConnectionError)?;
+                let groups = cursor
+                    .try_collect::<Vec<_>>()
+                    .await
+                    .map_err(InternalError::DatabaseConnectionError)?;
                 let group_ids = groups
                     .into_iter()
                     .map(|group| group.id)
                     .collect::<HashSet<_>>();
-                group_ids.contains(&group_id)
+                Ok(group_ids.contains(&group_id))
             }
-            None => false,
+            None => Ok(false),
         },
-        None => false,
+        None => Ok(false),
     }
 }
 
@@ -122,11 +134,15 @@ async fn has_group_containing(app: &AppData, owner: &str, member: &str) -> bool 
 async fn list_users(app: web::Data<AppData>, session: Session) -> Result<HttpResponse, UserError> {
     ensure_is_super_user(&app, &session).await?;
     let query = doc! {};
-    let cursor = app.users.find(query, None).await.unwrap();
+    let cursor = app
+        .users
+        .find(query, None)
+        .await
+        .map_err(InternalError::DatabaseConnectionError)?;
     let users: Vec<netsblox_core::User> = cursor
         .try_collect::<Vec<_>>()
         .await
-        .unwrap()
+        .map_err(InternalError::DatabaseConnectionError)?
         .into_iter()
         .map(|user| user.into())
         .collect();
@@ -296,7 +312,7 @@ async fn logout(session: Session) -> HttpResponse {
 
 #[get("/whoami")]
 async fn whoami(session: Session) -> Result<HttpResponse, UserError> {
-    if let Some(username) = session.get::<String>("username").unwrap() {
+    if let Some(username) = session.get::<String>("username").ok().flatten() {
         Ok(HttpResponse::Ok().body(username))
     } else {
         Err(UserError::PermissionsError)
@@ -310,14 +326,21 @@ async fn ban_user(
     session: Session,
 ) -> Result<HttpResponse, UserError> {
     let (username,) = path.into_inner();
-    // TODO: disallow self-ban?
     ensure_can_edit_user(&app, &session, &username).await?;
 
     let query = doc! {"username": username};
-    match app.users.find_one(query, None).await.unwrap() {
+    match app
+        .users
+        .find_one(query, None)
+        .await
+        .map_err(InternalError::DatabaseConnectionError)?
+    {
         Some(user) => {
             let account = BannedAccount::new(user.username, user.email);
-            app.banned_accounts.insert_one(account, None).await.unwrap();
+            app.banned_accounts
+                .insert_one(account, None)
+                .await
+                .map_err(InternalError::DatabaseConnectionError)?;
             Ok(HttpResponse::Ok().body("User has been banned"))
         }
         None => Err(UserError::UserNotFoundError),
@@ -334,7 +357,11 @@ async fn delete_user(
     ensure_can_edit_user(&app, &session, &username).await?;
 
     let query = doc! {"username": username};
-    let result = app.users.delete_one(query, None).await.unwrap();
+    let result = app
+        .users
+        .delete_one(query, None)
+        .await
+        .map_err(InternalError::DatabaseConnectionError)?;
     if result.deleted_count > 0 {
         Ok(HttpResponse::Ok().finish())
     } else {
@@ -534,7 +561,11 @@ async fn unlink_account(
     ensure_can_edit_user(&app, &session, &username).await?;
     let query = doc! {"username": username};
     let update = doc! {"$pull": {"linkedAccounts": &account.into_inner()}};
-    let result = app.users.update_one(query, update, None).await.unwrap();
+    let result = app
+        .users
+        .update_one(query, update, None)
+        .await
+        .map_err(InternalError::DatabaseConnectionError)?;
     if result.matched_count == 0 {
         Ok(HttpResponse::NotFound().finish())
     } else {

@@ -301,7 +301,10 @@ impl Topology {
                 })
                 .collect();
 
-            let projects = app.get_project_metadata(&project_ids).await.unwrap();
+            let projects = app
+                .get_project_metadata(&project_ids)
+                .await
+                .unwrap_or_else(|_err| Vec::new());
             let recording_ids = projects
                 .iter()
                 .filter(|metadata| {
@@ -531,7 +534,14 @@ impl Topology {
     async fn send_room_state_for(&mut self, project_id: &ProjectId) {
         if let Some(app) = &self.app_data {
             let query = doc! {"id": project_id};
-            if let Some(project) = app.project_metadata.find_one(query, None).await.unwrap() {
+            if let Some(project) = app
+                .project_metadata
+                .find_one(query, None)
+                .await
+                .map_err(InternalError::DatabaseConnectionError)
+                .ok()
+                .flatten()
+            {
                 self.send_room_state(SendRoomState { project });
             }
         }

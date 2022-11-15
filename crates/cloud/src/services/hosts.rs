@@ -21,7 +21,8 @@ async fn list_group_hosts(
     let (id,) = path.into_inner();
     let username = session
         .get::<String>("username")
-        .unwrap()
+        .ok()
+        .flatten()
         .ok_or(UserError::PermissionsError)?;
 
     let query = if is_super_user(&app, &session).await? {
@@ -51,7 +52,8 @@ async fn set_group_hosts(
 
     let username = session
         .get::<String>("username")
-        .unwrap()
+        .ok()
+        .flatten()
         .ok_or(UserError::PermissionsError)?;
 
     let query = if is_super_user(&app, &session).await? {
@@ -61,7 +63,11 @@ async fn set_group_hosts(
     };
 
     let update = doc! {"$set": {"servicesHosts": &hosts.into_inner()}};
-    let result = app.groups.update_one(query, update, None).await.unwrap();
+    let result = app
+        .groups
+        .update_one(query, update, None)
+        .await
+        .map_err(InternalError::DatabaseConnectionError)?;
     if result.matched_count > 0 {
         Ok(HttpResponse::Ok().body("Group updated"))
     } else {
@@ -137,10 +143,10 @@ async fn list_all_hosts(
         .groups
         .find(doc! {"owner": &username}, None)
         .await
-        .unwrap()
+        .map_err(InternalError::DatabaseConnectionError)?
         .try_collect::<Vec<_>>()
         .await
-        .unwrap();
+        .map_err(InternalError::DatabaseConnectionError)?;
 
     if let Some(group_id) = user.group_id {
         if let Some(in_group) = app
@@ -178,7 +184,7 @@ async fn get_authorized_hosts(
     let hosts: Vec<netsblox_core::AuthorizedServiceHost> = cursor
         .try_collect::<Vec<_>>()
         .await
-        .unwrap()
+        .map_err(InternalError::DatabaseConnectionError)?
         .into_iter()
         .map(|invite| invite.into())
         .collect();
@@ -263,6 +269,7 @@ pub fn ensure_valid_service_id(id: &str) -> Result<(), UserError> {
     let min_len = 3;
     let char_count = id.chars().count();
     lazy_static! {
+        // This is safe to unwrap since it is a constant
         static ref SERVICE_ID_REGEX: Regex = Regex::new(r"^[A-Za-z][A-Za-z0-9_\-]+$").unwrap();
     }
 

@@ -34,7 +34,7 @@ async fn set_client_state(
     session: Session,
 ) -> Result<HttpResponse, UserError> {
     // TODO: should we allow users to set the client state for some other user?
-    let username = session.get::<String>("username").unwrap();
+    let username = session.get::<String>("username").ok().flatten();
     let (client_id,) = path.into_inner();
     if !client_id.as_str().starts_with('_') {
         // TODO: move this to the struct parsing
@@ -528,10 +528,7 @@ impl Handler<ClientCommand> for WsSession {
     fn handle(&mut self, msg: ClientCommand, ctx: &mut Self::Context) {
         match msg {
             ClientCommand::SendMessage(content) => ctx.text(content.to_string()),
-            ClientCommand::Close => {
-                println!("server side close!");
-                ctx.close(None)
-            }
+            ClientCommand::Close => ctx.close(None),
         }
     }
 }
@@ -541,11 +538,10 @@ impl StreamHandler<Result<ws::Message, ws::ProtocolError>> for WsSession {
         match msg {
             Ok(ws::Message::Ping(msg)) => ctx.pong(&msg),
             Ok(ws::Message::Text(text)) => {
-                let v: Value = serde_json::from_str(&text).unwrap(); // FIXME
-                if let Value::String(msg_type) = &v["type"] {
-                    self.handle_msg(&msg_type.clone(), v, ctx);
-                } else {
-                    println!("Unexpected message type");
+                if let Ok(v) = serde_json::from_str::<Value>(&text) {
+                    if let Value::String(msg_type) = &v["type"] {
+                        self.handle_msg(&msg_type.clone(), v, ctx);
+                    }
                 }
             }
             Ok(ws::Message::Close(reason_opt)) => {
