@@ -7,10 +7,11 @@ use futures_util::StreamExt;
 use inquire::{Confirm, Password, PasswordDisplayMode};
 use netsblox_api::core::{
     oauth, ClientID, CreateProjectData, Credentials, FriendLinkState, InvitationState,
-    LinkedAccount, ProjectId, PublishState, SaveState, ServiceHost, UserRole,
+    LinkedAccount, ProjectId, PublishState, RoleData, SaveState, ServiceHost, UserRole,
 };
 use netsblox_api::{Client, Config};
 use std::path::Path;
+use xmlparser::{Token, Tokenizer};
 
 #[derive(Subcommand, Debug)]
 enum Users {
@@ -726,12 +727,65 @@ async fn do_command(mut cfg: Config, args: Cli) -> Result<(), netsblox_api::erro
             } => {
                 let username = user.clone().unwrap_or_else(|| get_current_user(&cfg));
                 let project_xml = fs::read_to_string(filename).expect("Unable to read file");
-                // TODO: parse the xml into RoleData objects. Structure is <role>...<media></media></role>
-                let roles = todo!();
+                let mut found_role = false;
+                let mut role_spans: Vec<RoleSpan> = Vec::new();
+                let mut role_start = None;
+                let mut media_start = None;
+                let mut role_name: Option<&str> = None;
+                for token in Tokenizer::from(project_xml.as_str()) {
+                    match token {
+                        Ok(Token::ElementStart { local, .. }) => {
+                            let is_role = local.as_str() == "role";
+                            if found_role {
+                                role_start = Some(local.start() - 1);
+                            }
+
+                            found_role = is_role;
+
+                            let is_media = local.as_str() == "media";
+                            if is_media {
+                                media_start = Some(local.start() - 1);
+                            }
+                        }
+                        Ok(Token::ElementEnd { span, .. }) => {
+                            if span.as_str().contains("media") {
+                                let media_end = span.end();
+                                if let (Some(name), Some(start), Some(media_start), end) =
+                                    (role_name, role_start, media_start, media_end)
+                                {
+                                    role_spans.push(RoleSpan::new(
+                                        name.to_owned(),
+                                        start,
+                                        media_start,
+                                        end,
+                                    ));
+                                }
+                            }
+                        }
+                        Ok(Token::Attribute { local, value, .. }) => {
+                            if found_role && local.as_str() == "name" {
+                                role_name = Some(value.as_str());
+                            }
+                        }
+                        _ => {}
+                    }
+                }
+                let roles: Vec<_> = role_spans
+                    .into_iter()
+                    .map(|rspan| rspan.into_role(&project_xml))
+                    .collect();
+
                 let project_data = CreateProjectData {
                     owner: Some(username),
-                    name: name.unwrap_or_else(|| filename.to_owned()),
-                    roles,
+                    name: name.to_owned().unwrap_or_else(|| {
+                        Path::new(filename)
+                            .file_stem()
+                            .expect("Could not determine default name. Try passing --name")
+                            .to_str()
+                            .unwrap()
+                            .to_owned()
+                    }),
+                    roles: Some(roles),
                     save_state: Some(SaveState::SAVED),
                     client_id: None,
                 };
@@ -1375,4 +1429,34 @@ async fn do_command(mut cfg: Config, args: Cli) -> Result<(), netsblox_api::erro
     }
 
     Ok(())
+}
+
+#[derive(Debug)]
+struct RoleSpan {
+    name: String,
+    start: usize,
+    media_start: usize,
+    end: usize,
+}
+
+impl RoleSpan {
+    pub(crate) fn new(name: String, start: usize, media_start: usize, end: usize) -> Self {
+        Self {
+            name,
+            start,
+            media_start,
+            end,
+        }
+    }
+
+    pub(crate) fn into_role(self, xml: &str) -> RoleData {
+        let code = &xml[self.start..self.media_start];
+        let media = &xml[self.media_start..self.end];
+
+        RoleData {
+            name: self.name,
+            code: code.to_owned(),
+            media: media.to_owned(),
+        }
+    }
 }
