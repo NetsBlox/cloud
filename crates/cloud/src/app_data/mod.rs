@@ -174,11 +174,8 @@ impl AppData {
             bucket: bucket.clone(),
             ..Default::default()
         };
-        match self.s3.create_bucket(request).await {
-            // The only types of errors returned by this operation are due
-            // to the bucket already existing (or being owned by you)
-            Err(_err) => info!("Using existing s3 bucket."),
-            _ => {}
+        if self.s3.create_bucket(request).await.is_err() {
+            info!("Using existing s3 bucket.")
         };
 
         // Add database indexes
