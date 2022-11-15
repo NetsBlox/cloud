@@ -348,18 +348,18 @@ enum Libraries {
 /// Manage OAuth registered clients
 #[derive(Subcommand, Debug)]
 enum Oauth {
-    /// Authorize an OAuth client for a user
-    Authorize {
-        client_id: oauth::ClientId,
-        #[clap(short, long)]
-        user: Option<String>,
-    },
-    /// Revoke authorization for an OAuth client
-    Revoke {
-        client: String, // TODO: should we use an ID or name?
-        #[clap(short, long)]
-        user: Option<String>,
-    },
+    // /// Authorize an OAuth client for a user
+    // Authorize {
+    //     client_id: oauth::ClientId,
+    //     #[clap(short, long)]
+    //     user: Option<String>,
+    // },
+    // /// Revoke authorization for an OAuth client
+    // Revoke {
+    //     client: String, // TODO: should we use an ID or name?
+    //     #[clap(short, long)]
+    //     user: Option<String>,
+    // },
     /// List all OAuth clients
     List,
     /// Register new OAuth client with NetsBlox
@@ -583,7 +583,7 @@ fn get_current_user(cfg: &Config) -> String {
 
 #[tokio::main]
 async fn main() {
-    let mut cfg: Config = confy::load(&APP_NAME).expect("Unable to load configuration.");
+    let mut cfg: Config = confy::load(APP_NAME).expect("Unable to load configuration.");
     cfg.app_id = Some("NetsBloxCLI".to_owned());
 
     let args = Cli::parse();
@@ -624,7 +624,7 @@ async fn do_command(mut cfg: Config, args: Cli) -> Result<(), netsblox_api::erro
             .await
             .expect("Login failed");
 
-        confy::store(&APP_NAME, &cfg).expect("Unable to save configuration file.");
+        confy::store(APP_NAME, &cfg).expect("Unable to save configuration file.");
     }
     let client = Client::new(cfg.clone());
 
@@ -633,7 +633,7 @@ async fn do_command(mut cfg: Config, args: Cli) -> Result<(), netsblox_api::erro
         Command::Logout => {
             cfg.token = None;
             cfg.username = None;
-            confy::store(&APP_NAME, &cfg).expect("Unable to save configuration file.");
+            confy::store(APP_NAME, &cfg).expect("Unable to save configuration file.");
         }
         Command::Users(cmd) => match &cmd.subcmd {
             Users::Create {
@@ -645,7 +645,7 @@ async fn do_command(mut cfg: Config, args: Cli) -> Result<(), netsblox_api::erro
                 user,
             } => {
                 let group_id = if let Some(group_name) = group {
-                    let username = user.clone().unwrap_or(get_current_user(&cfg));
+                    let username = user.clone().unwrap_or_else(|| get_current_user(&cfg));
                     let groups = client.list_groups(&username).await?;
                     groups
                         .into_iter()
@@ -657,7 +657,7 @@ async fn do_command(mut cfg: Config, args: Cli) -> Result<(), netsblox_api::erro
 
                 client
                     .create_user(
-                        &username,
+                        username,
                         email,
                         password.as_deref(),
                         group_id.as_deref(),
@@ -666,8 +666,8 @@ async fn do_command(mut cfg: Config, args: Cli) -> Result<(), netsblox_api::erro
                     .await?;
             }
             Users::SetPassword { password, user } => {
-                let username = user.clone().unwrap_or(get_current_user(&cfg));
-                client.set_password(&username, &password).await?;
+                let username = user.clone().unwrap_or_else(|| get_current_user(&cfg));
+                client.set_password(&username, password).await?;
             }
             Users::List => {
                 for user in client.list_users().await? {
@@ -686,12 +686,12 @@ async fn do_command(mut cfg: Config, args: Cli) -> Result<(), netsblox_api::erro
                         .unwrap_or(false)
                 };
                 if confirmed {
-                    client.delete_user(&username).await?;
+                    client.delete_user(username).await?;
                     println!("deleted {}", username);
                 }
             }
             Users::View { user } => {
-                let username = user.clone().unwrap_or(get_current_user(&cfg));
+                let username = user.clone().unwrap_or_else(|| get_current_user(&cfg));
                 let user = client.view_user(&username).await?;
                 println!("{:?}", user);
             }
@@ -700,7 +700,7 @@ async fn do_command(mut cfg: Config, args: Cli) -> Result<(), netsblox_api::erro
                 password,
                 user,
             } => {
-                let as_user = user.clone().unwrap_or(get_current_user(&cfg));
+                let as_user = user.clone().unwrap_or_else(|| get_current_user(&cfg));
                 let creds = netsblox_api::core::Credentials::Snap {
                     username: username.to_owned(),
                     password: password.to_owned(),
@@ -832,15 +832,15 @@ async fn do_command(mut cfg: Config, args: Cli) -> Result<(), netsblox_api::erro
             }
             Projects::Publish { project, user } => {
                 let username = user.clone().unwrap_or_else(|| get_current_user(&cfg));
-                let metadata = client.get_project_metadata(&username, &project).await?;
+                let metadata = client.get_project_metadata(&username, project).await?;
                 let project_id = metadata.id;
 
                 client.publish_project(&project_id).await?;
                 // TODO: add moderation here, too?
             }
             Projects::Unpublish { project, user } => {
-                let username = user.clone().unwrap_or(get_current_user(&cfg));
-                let metadata = client.get_project_metadata(&username, &project).await?;
+                let username = user.clone().unwrap_or_else(|| get_current_user(&cfg));
+                let metadata = client.get_project_metadata(&username, project).await?;
                 let project_id = metadata.id;
 
                 client.unpublish_project(&project_id).await?;
@@ -850,13 +850,13 @@ async fn do_command(mut cfg: Config, args: Cli) -> Result<(), netsblox_api::erro
                 username,
                 user,
             } => {
-                let owner = user.clone().unwrap_or(get_current_user(&cfg));
-                let metadata = client.get_project_metadata(&owner, &project).await?;
+                let owner = user.clone().unwrap_or_else(|| get_current_user(&cfg));
+                let metadata = client.get_project_metadata(&owner, project).await?;
                 let project_id = metadata.id;
-                client.invite_collaborator(&project_id, &username).await?;
+                client.invite_collaborator(&project_id, username).await?;
             }
             Projects::ListInvites { user } => {
-                let username = user.clone().unwrap_or(get_current_user(&cfg));
+                let username = user.clone().unwrap_or_else(|| get_current_user(&cfg));
                 let invites = client.list_collaboration_invites(&username).await?;
                 for invite in invites {
                     println!("{:?}", invite);
@@ -868,9 +868,9 @@ async fn do_command(mut cfg: Config, args: Cli) -> Result<(), netsblox_api::erro
                 reject,
                 user,
             } => {
-                let receiver = user.clone().unwrap_or(get_current_user(&cfg));
+                let receiver = user.clone().unwrap_or_else(|| get_current_user(&cfg));
                 let invites = client.list_collaboration_invites(&receiver).await?;
-                let project_id = client.get_project_metadata(&username, &project).await?.id;
+                let project_id = client.get_project_metadata(username, project).await?.id;
                 let invite = invites
                     .iter()
                     .find(|inv| inv.sender == *username && inv.project_id == project_id)
@@ -886,8 +886,8 @@ async fn do_command(mut cfg: Config, args: Cli) -> Result<(), netsblox_api::erro
                     .await?;
             }
             Projects::ListCollaborators { project, user } => {
-                let owner = user.clone().unwrap_or(get_current_user(&cfg));
-                let metadata = client.get_project_metadata(&owner, &project).await?;
+                let owner = user.clone().unwrap_or_else(|| get_current_user(&cfg));
+                let metadata = client.get_project_metadata(&owner, project).await?;
                 for user in metadata.collaborators {
                     println!("{}", user);
                 }
@@ -897,17 +897,17 @@ async fn do_command(mut cfg: Config, args: Cli) -> Result<(), netsblox_api::erro
                 username,
                 user,
             } => {
-                let owner = user.clone().unwrap_or(get_current_user(&cfg));
-                let metadata = client.get_project_metadata(&owner, &project).await?;
-                client.remove_collaborator(&metadata.id, &username).await?;
+                let owner = user.clone().unwrap_or_else(|| get_current_user(&cfg));
+                let metadata = client.get_project_metadata(&owner, project).await?;
+                client.remove_collaborator(&metadata.id, username).await?;
             }
             Projects::Delete {
                 project,
                 role,
                 user,
             } => {
-                let owner = user.clone().unwrap_or(get_current_user(&cfg));
-                let metadata = client.get_project_metadata(&owner, &project).await?;
+                let owner = user.clone().unwrap_or_else(|| get_current_user(&cfg));
+                let metadata = client.get_project_metadata(&owner, project).await?;
                 if let Some(role_name) = role {
                     let role_id = metadata
                         .roles
@@ -927,8 +927,8 @@ async fn do_command(mut cfg: Config, args: Cli) -> Result<(), netsblox_api::erro
                 role,
                 user,
             } => {
-                let owner = user.clone().unwrap_or(get_current_user(&cfg));
-                let metadata = client.get_project_metadata(&owner, &project).await?;
+                let owner = user.clone().unwrap_or_else(|| get_current_user(&cfg));
+                let metadata = client.get_project_metadata(&owner, project).await?;
                 if let Some(role_name) = role {
                     let role_id = metadata
                         .roles
@@ -963,7 +963,7 @@ async fn do_command(mut cfg: Config, args: Cli) -> Result<(), netsblox_api::erro
                 let project_id = if *as_id {
                     ProjectId::new(project.to_owned())
                 } else {
-                    let owner = user.clone().unwrap_or(get_current_user(&cfg));
+                    let owner = user.clone().unwrap_or_else(|| get_current_user(&cfg));
                     client.get_project_metadata(&owner, project).await?.id
                 };
                 let state = client.get_room_state(&project_id).await?;
@@ -1002,7 +1002,7 @@ async fn do_command(mut cfg: Config, args: Cli) -> Result<(), netsblox_api::erro
         },
         Command::Friends(cmd) => match &cmd.subcmd {
             Friends::List { online, user } => {
-                let username = user.clone().unwrap_or(get_current_user(&cfg));
+                let username = user.clone().unwrap_or_else(|| get_current_user(&cfg));
                 let friends = if *online {
                     client.list_online_friends(&username).await?
                 } else {
@@ -1015,33 +1015,33 @@ async fn do_command(mut cfg: Config, args: Cli) -> Result<(), netsblox_api::erro
             }
 
             Friends::ListInvites { user } => {
-                let username = user.clone().unwrap_or(get_current_user(&cfg));
+                let username = user.clone().unwrap_or_else(|| get_current_user(&cfg));
                 for invite in client.list_friend_invites(&username).await? {
                     println!("{:?}", invite);
                 }
             }
             Friends::Block { username, user } => {
-                let requestor = user.clone().unwrap_or(get_current_user(&cfg));
+                let requestor = user.clone().unwrap_or_else(|| get_current_user(&cfg));
                 client.block_user(&requestor, username).await?;
             }
             Friends::Unblock { username, user } => {
-                let requestor = user.clone().unwrap_or(get_current_user(&cfg));
+                let requestor = user.clone().unwrap_or_else(|| get_current_user(&cfg));
                 client.unblock_user(&requestor, username).await?;
             }
             Friends::Remove { username, user } => {
-                let owner = user.clone().unwrap_or(get_current_user(&cfg));
+                let owner = user.clone().unwrap_or_else(|| get_current_user(&cfg));
                 client.unfriend(&owner, username).await?;
             }
             Friends::SendInvite { username, user } => {
-                let sender = user.clone().unwrap_or(get_current_user(&cfg));
-                client.send_friend_invite(&sender, &username).await?;
+                let sender = user.clone().unwrap_or_else(|| get_current_user(&cfg));
+                client.send_friend_invite(&sender, username).await?;
             }
             Friends::AcceptInvite {
                 sender,
                 reject,
                 user,
             } => {
-                let recipient = user.clone().unwrap_or(get_current_user(&cfg));
+                let recipient = user.clone().unwrap_or_else(|| get_current_user(&cfg));
                 let state = if *reject {
                     FriendLinkState::REJECTED
                 } else {
@@ -1064,7 +1064,7 @@ async fn do_command(mut cfg: Config, args: Cli) -> Result<(), netsblox_api::erro
                         println!("{:?}", host);
                     }
                 } else {
-                    let username = user.clone().unwrap_or(get_current_user(&cfg));
+                    let username = user.clone().unwrap_or_else(|| get_current_user(&cfg));
                     let service_hosts = if *user_only {
                         client.list_user_hosts(&username).await?
                     } else if let Some(group_name) = group {
@@ -1090,7 +1090,7 @@ async fn do_command(mut cfg: Config, args: Cli) -> Result<(), netsblox_api::erro
                 group,
                 user,
             } => {
-                let username = user.clone().unwrap_or(get_current_user(&cfg));
+                let username = user.clone().unwrap_or_else(|| get_current_user(&cfg));
                 let group_id = if let Some(group_name) = group {
                     let groups = client.list_groups(&username).await?;
                     groups
@@ -1108,7 +1108,7 @@ async fn do_command(mut cfg: Config, args: Cli) -> Result<(), netsblox_api::erro
 
                 service_hosts.push(ServiceHost {
                     url: url.to_owned(),
-                    categories: categories.split(",").map(|s| s.to_owned()).collect(),
+                    categories: categories.split(',').map(|s| s.to_owned()).collect(),
                 });
 
                 if let Some(group_id) = group_id {
@@ -1118,7 +1118,7 @@ async fn do_command(mut cfg: Config, args: Cli) -> Result<(), netsblox_api::erro
                 }
             }
             ServiceHosts::Unregister { url, group, user } => {
-                let username = user.clone().unwrap_or(get_current_user(&cfg));
+                let username = user.clone().unwrap_or_else(|| get_current_user(&cfg));
                 let group_id = if let Some(group_name) = group {
                     let groups = client.list_groups(&username).await?;
                     groups
@@ -1171,7 +1171,7 @@ async fn do_command(mut cfg: Config, args: Cli) -> Result<(), netsblox_api::erro
         },
         Command::ServiceSettings(cmd) => match &cmd.subcmd {
             ServiceSettings::List { group, user } => {
-                let username = user.clone().unwrap_or(get_current_user(&cfg));
+                let username = user.clone().unwrap_or_else(|| get_current_user(&cfg));
                 let group_id = if let Some(group_name) = group {
                     let groups = client.list_groups(&username).await?;
                     groups
@@ -1199,10 +1199,10 @@ async fn do_command(mut cfg: Config, args: Cli) -> Result<(), netsblox_api::erro
                 all,
                 user,
             } => {
-                let username = user.clone().unwrap_or(get_current_user(&cfg));
+                let username = user.clone().unwrap_or_else(|| get_current_user(&cfg));
 
                 if *all {
-                    let all_settings = client.get_all_settings(&username, &host).await?;
+                    let all_settings = client.get_all_settings(&username, host).await?;
                     println!("{:?}", all_settings);
                 } else {
                     let group_id = if let Some(group_name) = group {
@@ -1215,9 +1215,9 @@ async fn do_command(mut cfg: Config, args: Cli) -> Result<(), netsblox_api::erro
                         None
                     };
                     let settings = if let Some(group_id) = group_id.clone() {
-                        client.get_group_settings(&group_id, &host).await?
+                        client.get_group_settings(&group_id, host).await?
                     } else {
-                        client.get_user_settings(&username, &host).await?
+                        client.get_user_settings(&username, host).await?
                     };
                     println!("{}", settings);
                 }
@@ -1228,7 +1228,7 @@ async fn do_command(mut cfg: Config, args: Cli) -> Result<(), netsblox_api::erro
                 group,
                 user,
             } => {
-                let username = user.clone().unwrap_or(get_current_user(&cfg));
+                let username = user.clone().unwrap_or_else(|| get_current_user(&cfg));
 
                 let group_id = if let Some(group_name) = group {
                     let groups = client.list_groups(&username).await?;
@@ -1241,17 +1241,17 @@ async fn do_command(mut cfg: Config, args: Cli) -> Result<(), netsblox_api::erro
                 };
                 let settings = if let Some(group_id) = group_id.clone() {
                     client
-                        .set_group_settings(&group_id, &host, settings.to_owned())
+                        .set_group_settings(&group_id, host, settings.to_owned())
                         .await?
                 } else {
                     client
-                        .set_user_settings(&username, &host, settings.to_owned())
+                        .set_user_settings(&username, host, settings.to_owned())
                         .await?
                 };
                 println!("{}", settings);
             }
             ServiceSettings::Delete { host, group, user } => {
-                let username = user.clone().unwrap_or(get_current_user(&cfg));
+                let username = user.clone().unwrap_or_else(|| get_current_user(&cfg));
 
                 let group_id = if let Some(group_name) = group {
                     let groups = client.list_groups(&username).await?;
@@ -1263,9 +1263,9 @@ async fn do_command(mut cfg: Config, args: Cli) -> Result<(), netsblox_api::erro
                     None
                 };
                 if let Some(group_id) = group_id.clone() {
-                    client.delete_group_settings(&group_id, &host).await?;
+                    client.delete_group_settings(&group_id, host).await?;
                 } else {
-                    client.delete_user_settings(&username, &host).await?;
+                    client.delete_user_settings(&username, host).await?;
                 };
             }
         },
@@ -1275,7 +1275,7 @@ async fn do_command(mut cfg: Config, args: Cli) -> Result<(), netsblox_api::erro
                 user,
                 approval_needed,
             } => {
-                let username = user.clone().unwrap_or(get_current_user(&cfg));
+                let username = user.clone().unwrap_or_else(|| get_current_user(&cfg));
                 let libraries = if *community {
                     client.get_public_libraries().await?
                 } else if *approval_needed {
@@ -1294,7 +1294,7 @@ async fn do_command(mut cfg: Config, args: Cli) -> Result<(), netsblox_api::erro
                 name,
                 user,
             } => {
-                let username = user.clone().unwrap_or(get_current_user(&cfg));
+                let username = user.clone().unwrap_or_else(|| get_current_user(&cfg));
                 let blocks = fs::read_to_string(filename).expect("Unable to read file");
                 let name = name.clone().unwrap_or_else(|| {
                     Path::new(filename)
@@ -1309,21 +1309,21 @@ async fn do_command(mut cfg: Config, args: Cli) -> Result<(), netsblox_api::erro
                     .await?;
             }
             Libraries::Export { library, user } => {
-                let username = user.clone().unwrap_or(get_current_user(&cfg));
-                let xml = client.get_library(&username, &library).await?;
+                let username = user.clone().unwrap_or_else(|| get_current_user(&cfg));
+                let xml = client.get_library(&username, library).await?;
                 println!("{}", xml);
             }
             Libraries::Delete { library, user } => {
-                let username = user.clone().unwrap_or(get_current_user(&cfg));
-                client.delete_library(&username, &library).await?;
+                let username = user.clone().unwrap_or_else(|| get_current_user(&cfg));
+                client.delete_library(&username, library).await?;
             }
             Libraries::Publish { library, user } => {
-                let username = user.clone().unwrap_or(get_current_user(&cfg));
-                client.publish_library(&username, &library).await?;
+                let username = user.clone().unwrap_or_else(|| get_current_user(&cfg));
+                client.publish_library(&username, library).await?;
             }
             Libraries::Unpublish { library, user } => {
-                let username = user.clone().unwrap_or(get_current_user(&cfg));
-                client.unpublish_library(&username, &library).await?;
+                let username = user.clone().unwrap_or_else(|| get_current_user(&cfg));
+                client.unpublish_library(&username, library).await?;
             }
             Libraries::Approve {
                 library,
@@ -1341,18 +1341,18 @@ async fn do_command(mut cfg: Config, args: Cli) -> Result<(), netsblox_api::erro
         },
         Command::Groups(cmd) => match &cmd.subcmd {
             Groups::List { user } => {
-                let username = user.clone().unwrap_or(get_current_user(&cfg));
+                let username = user.clone().unwrap_or_else(|| get_current_user(&cfg));
                 let groups = client.list_groups(&username).await?;
                 for group in groups {
                     println!("{}", group.name);
                 }
             }
             Groups::Create { name, user } => {
-                let username = user.clone().unwrap_or(get_current_user(&cfg));
-                client.create_group(&username, &name).await?;
+                let username = user.clone().unwrap_or_else(|| get_current_user(&cfg));
+                client.create_group(&username, name).await?;
             }
             Groups::Delete { group, user } => {
-                let username = user.clone().unwrap_or(get_current_user(&cfg));
+                let username = user.clone().unwrap_or_else(|| get_current_user(&cfg));
                 let groups = client.list_groups(&username).await?;
                 let group_id = groups
                     .into_iter()
@@ -1363,7 +1363,7 @@ async fn do_command(mut cfg: Config, args: Cli) -> Result<(), netsblox_api::erro
                 client.delete_group(&group_id).await?;
             }
             Groups::Members { group, user } => {
-                let username = user.clone().unwrap_or(get_current_user(&cfg));
+                let username = user.clone().unwrap_or_else(|| get_current_user(&cfg));
                 let groups = client.list_groups(&username).await?;
                 let group_id = groups
                     .into_iter()
@@ -1419,12 +1419,6 @@ async fn do_command(mut cfg: Config, args: Cli) -> Result<(), netsblox_api::erro
             }
             Oauth::RemoveClient { id } => {
                 client.remove_oauth_client(id).await?;
-            }
-            Oauth::Authorize { client_id, user } => {
-                todo!();
-            }
-            Oauth::Revoke { client, user } => {
-                todo!();
             }
         },
     }
