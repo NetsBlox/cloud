@@ -549,7 +549,6 @@ impl From<Library> for LibraryMetadata {
     }
 }
 
-// TODO: add oauth client
 #[derive(Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub(crate) struct OAuthClient {

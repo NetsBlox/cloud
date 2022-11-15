@@ -132,7 +132,6 @@ impl From<&OAuthFlowError> for OAuthErrorBody {
 impl error::ResponseError for UserError {
     fn error_response(&self) -> HttpResponse {
         // TODO: make these JSON?
-        // TODO: handle OAuth flow errors specially
         match self {
             UserError::OAuthFlowError(err) => {
                 let body: OAuthErrorBody = err.into();
