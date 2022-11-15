@@ -465,7 +465,7 @@ async fn view_user(
 ) -> Result<HttpResponse, UserError> {
     let (username,) = path.into_inner();
 
-    if let Err(_) = ensure_is_authorized_host(&app, &req).await {
+    if (ensure_is_authorized_host(&app, &req).await).is_err() {
         ensure_can_edit_user(&app, &session, &username).await?
     };
 
@@ -492,12 +492,10 @@ async fn link_account(
     ensure_can_edit_user(&app, &session, &username).await?;
     let creds = creds.into_inner();
 
-    match creds {
-        strategies::Credentials::NetsBlox { .. } => return Err(UserError::InvalidAccountTypeError),
-        _ => {}
+    if let strategies::Credentials::NetsBlox { .. } = creds {
+        return Err(UserError::InvalidAccountTypeError);
     };
 
-    // TODO: should we wrap this error?
     strategies::authenticate(&creds).await?;
 
     let account: LinkedAccount = creds.into();
@@ -506,8 +504,8 @@ async fn link_account(
         .users
         .find_one(query, None)
         .await
-        .map_err(InternalError::DatabaseConnectionError)?; // TODO: wrap the error?
-                                                           // .and_then(|_user| UserError::AccountAlreadyLinkedErrorli
+        .map_err(InternalError::DatabaseConnectionError)?;
+
     if existing.is_some() {
         return Err(UserError::AccountAlreadyLinkedError);
     }
@@ -518,7 +516,7 @@ async fn link_account(
         .users
         .update_one(query, update, None)
         .await
-        .map_err(InternalError::DatabaseConnectionError)?; // TODO: wrap the error?
+        .map_err(InternalError::DatabaseConnectionError)?;
 
     if result.matched_count == 0 {
         Ok(HttpResponse::NotFound().finish())

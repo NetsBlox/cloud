@@ -708,7 +708,7 @@ async fn do_command(mut cfg: Config, args: Cli) -> Result<(), netsblox_api::erro
                 client.link_account(&as_user, &creds).await?;
             }
             Users::Unlink { username, user } => {
-                let as_user = user.clone().unwrap_or(get_current_user(&cfg));
+                let as_user = user.clone().unwrap_or_else(|| get_current_user(&cfg));
                 let account = LinkedAccount {
                     username: username.to_owned(),
                     strategy: "snap".to_owned(), // FIXME: add to linked account impl?
@@ -716,7 +716,7 @@ async fn do_command(mut cfg: Config, args: Cli) -> Result<(), netsblox_api::erro
                 client.unlink_account(&as_user, &account).await?;
             }
             Users::Ban { username } => {
-                client.ban_user(&username).await?;
+                client.ban_user(username).await?;
             }
         },
         Command::Projects(cmd) => match &cmd.subcmd {
@@ -963,7 +963,7 @@ async fn do_command(mut cfg: Config, args: Cli) -> Result<(), netsblox_api::erro
                     ProjectId::new(project.to_owned())
                 } else {
                     let owner = user.clone().unwrap_or(get_current_user(&cfg));
-                    client.get_project_metadata(&owner, &project).await?.id
+                    client.get_project_metadata(&owner, project).await?.id
                 };
                 let state = client.get_room_state(&project_id).await?;
                 println!("{:?}", state);
@@ -1329,13 +1329,13 @@ async fn do_command(mut cfg: Config, args: Cli) -> Result<(), netsblox_api::erro
                 user,
                 reject,
             } => {
-                let username = user.clone().unwrap_or(get_current_user(&cfg));
+                let username = user.clone().unwrap_or_else(|| get_current_user(&cfg));
                 let state = if *reject {
                     PublishState::ApprovalDenied
                 } else {
                     PublishState::Public
                 };
-                client.approve_library(&username, &library, &state).await?;
+                client.approve_library(&username, library, &state).await?;
             }
         },
         Command::Groups(cmd) => match &cmd.subcmd {

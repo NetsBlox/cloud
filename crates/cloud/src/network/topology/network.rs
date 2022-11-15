@@ -696,7 +696,8 @@ impl Topology {
                             .filter_map(|id| self.clients.get(id))
                             .collect::<Vec<_>>()
                     })
-                }).unwrap_or_default(),
+                })
+                .unwrap_or_default(),
             netsblox_core::SendMessageTarget::Room { project_id } => self
                 .rooms
                 .get(&project_id)
