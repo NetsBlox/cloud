@@ -237,7 +237,12 @@ impl Topology {
         project_metadata
             .find_one(query, None)
             .await
-            .unwrap()
+            .map_err(|err| {
+                warn!("Unable to resolve address due to DB error: {:?}", err);
+                InternalError::DatabaseConnectionError(err)
+            })
+            .ok()
+            .flatten()
             .map(|metadata| {
                 let role_names = role.map(|name| vec![name.to_owned()]).unwrap_or_else(|| {
                     metadata
