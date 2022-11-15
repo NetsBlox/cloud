@@ -32,8 +32,8 @@ use actix::{Actor, Addr};
 use futures::TryStreamExt;
 use mongodb::{Client, Collection, IndexModel};
 use rusoto_s3::{
-    CreateBucketRequest, DeleteObjectOutput, DeleteObjectRequest, GetObjectRequest,
-    PutObjectOutput, PutObjectRequest, S3Client, S3,
+    CreateBucketRequest, DeleteObjectRequest, GetObjectRequest, PutObjectOutput, PutObjectRequest,
+    S3Client, S3,
 };
 
 lazy_static! {
@@ -287,10 +287,10 @@ impl AppData {
         cache.put(metadata.id.clone(), metadata);
     }
 
-    pub async fn get_project_metadata(
+    fn get_cached_project_metadata<'a>(
         &self,
-        ids: &Vec<ProjectId>,
-    ) -> Result<Vec<ProjectMetadata>, UserError> {
+        ids: &'a [ProjectId],
+    ) -> (Vec<ProjectMetadata>, Vec<&'a ProjectId>) {
         let mut results = Vec::new();
         let mut missing_projects = Vec::new();
         let mut cache = PROJECT_CACHE.write().unwrap();
@@ -300,6 +300,14 @@ impl AppData {
                 None => missing_projects.push(id),
             }
         }
+        (results, missing_projects)
+    }
+
+    pub async fn get_project_metadata(
+        &self,
+        ids: &[ProjectId],
+    ) -> Result<Vec<ProjectMetadata>, UserError> {
+        let (mut results, missing_projects) = self.get_cached_project_metadata(ids);
 
         if !missing_projects.is_empty() {
             let docs: Vec<Document> = missing_projects.iter().map(|id| doc! {"id": id}).collect();
@@ -425,10 +433,10 @@ impl AppData {
         })
     }
 
-    async fn delete(&self, key: &str) -> Result<(), UserError> {
+    async fn delete(&self, key: String) -> Result<(), UserError> {
         let request = DeleteObjectRequest {
             bucket: self.bucket.clone(),
-            key: String::from(key),
+            key,
             ..Default::default()
         };
 
@@ -509,15 +517,16 @@ impl AppData {
             .map_err(InternalError::DatabaseConnectionError)?;
 
         if let Some(metadata) = result {
-            let paths: Vec<_> = metadata
+            let paths = metadata
                 .roles
                 .into_values()
-                .flat_map(|role| vec![role.code, role.media])
-                .collect();
+                .flat_map(|role| vec![role.code, role.media]);
 
-            for path in paths {
-                self.delete(&path).await;
-            }
+            join_all(paths.map(move |path| self.delete(path)))
+                .await
+                .into_iter()
+                .collect::<Result<Vec<_>, _>>()?;
+
             // TODO: send update to any current occupants
             Ok(())
         } else {
