@@ -1,3 +1,4 @@
+mod html_template;
 mod strategies;
 
 use crate::app_data::AppData;
@@ -359,9 +360,8 @@ async fn reset_password(
         .ok_or(UserError::UserNotFoundError)?;
 
     let token = SetPasswordToken::new(username.clone());
-    let _url = String::from("TODO"); // TODO: set the url;
 
-    let update = doc! {"$setOnInsert": token};
+    let update = doc! {"$setOnInsert": &token};
     let query = doc! {"username": &username};
     let options = mongodb::options::UpdateOptions::builder()
         .upsert(true)
@@ -378,12 +378,12 @@ async fn reset_password(
     }
 
     let subject = "Password Reset Request";
-    //let message = format!("<h1>Password Reset Request<h1>Click the link below to reset the password for {}");
-    let message = String::from("TODO:");
+    let url = format!(
+        "{}/users/{}/password?token={}",
+        app.settings.public_url, &username, &token.secret
+    );
+    let message = html_template::set_password_email(&username, &url);
     app.send_email(&user.email, subject, message).await?;
-    // TODO: This will need to send an email with the token link...
-    //user.email
-
     Ok(HttpResponse::Ok().finish())
 }
 
