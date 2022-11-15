@@ -639,7 +639,7 @@ impl AppData {
         match req.peer_addr().map(|addr| addr.ip()) {
             Some(addr) => {
                 let addr = addr.to_string();
-                let query = doc! {"addr": addr};
+                let query = doc! {"addr": &addr};
                 let node = self
                     .tor_exit_nodes
                     .find_one(query, None)
@@ -648,8 +648,9 @@ impl AppData {
 
                 if node.is_some() {
                     Err(UserError::TorAddressError)
+                } else if is_opera_vpn(&addr) {
+                    Err(UserError::OperaVPNError)
                 } else {
-                    // TODO: check if it is an Opera VPN
                     Ok(())
                 }
             }
@@ -728,6 +729,14 @@ fn get_unique_name(existing: Vec<String>, name: &str) -> String {
         number += 1;
     }
     role_name
+}
+
+fn is_opera_vpn(addr: &str) -> bool {
+    let opera_prefixes = ["77.111.244.", "77.111.245.", "77.111.246.", "77.111.247."];
+    opera_prefixes
+        .into_iter()
+        .find(|prefix| addr.starts_with(prefix))
+        .is_some()
 }
 
 #[cfg(test)]

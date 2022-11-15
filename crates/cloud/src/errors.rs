@@ -77,6 +77,8 @@ pub enum UserError {
     InvalidAccountTypeError,
     #[display(fmt = "Login from Tor not allowed.")]
     TorAddressError,
+    #[display(fmt = "Login from Opera VPN not allowed.")]
+    OperaVPNError,
     #[display(fmt = "An internal error occurred. Please try again later.")]
     InternalError,
     #[display(fmt = "Services endpoint already authorized.")]
@@ -143,41 +145,40 @@ impl error::ResponseError for UserError {
 
     fn status_code(&self) -> StatusCode {
         match *self {
-            UserError::LoginRequiredError => StatusCode::UNAUTHORIZED,
-            UserError::PermissionsError
-            | UserError::IncorrectUsernameOrPasswordError
-            | UserError::BannedUserError
-            | UserError::IncorrectPasswordError => StatusCode::FORBIDDEN,
+            Self::LoginRequiredError => StatusCode::UNAUTHORIZED,
+            Self::PermissionsError
+            | Self::IncorrectUsernameOrPasswordError
+            | Self::BannedUserError
+            | Self::IncorrectPasswordError => StatusCode::FORBIDDEN,
 
-            UserError::ProjectNotFoundError
-            | UserError::ThumbnailNotFoundError
-            | UserError::NetworkTraceNotFoundError
-            | UserError::LibraryNotFoundError
-            | UserError::ServiceHostNotFoundError
-            | UserError::RoleNotFoundError
-            | UserError::InviteNotFoundError
-            | UserError::UserNotFoundError
-            | UserError::OAuthClientNotFoundError
-            | UserError::GroupNotFoundError => StatusCode::NOT_FOUND,
-            UserError::InternalError | UserError::SnapConnectionError => {
-                StatusCode::INTERNAL_SERVER_ERROR
-            }
-            UserError::InvalidUsername
-            | UserError::InvalidEmailAddress
-            | UserError::InvalidClientIdError
-            | UserError::InvalidAppIdError
-            | UserError::InvalidServiceHostIDError
-            | UserError::AccountAlreadyLinkedError
-            | UserError::PasswordResetLinkSentError
-            | UserError::InvalidAccountTypeError
-            | UserError::TorAddressError
-            | UserError::UserExistsError
-            | UserError::OAuthClientAlreadyExistsError
-            | UserError::GroupExistsError
-            | UserError::CannotDeleteLastRoleError
-            | UserError::ServiceHostAlreadyAuthorizedError
-            | UserError::OAuthFlowError(..)
-            | UserError::ProjectNotActiveError => StatusCode::BAD_REQUEST,
+            Self::ProjectNotFoundError
+            | Self::ThumbnailNotFoundError
+            | Self::NetworkTraceNotFoundError
+            | Self::LibraryNotFoundError
+            | Self::ServiceHostNotFoundError
+            | Self::RoleNotFoundError
+            | Self::InviteNotFoundError
+            | Self::UserNotFoundError
+            | Self::OAuthClientNotFoundError
+            | Self::GroupNotFoundError => StatusCode::NOT_FOUND,
+            Self::InternalError | Self::SnapConnectionError => StatusCode::INTERNAL_SERVER_ERROR,
+            Self::InvalidUsername
+            | Self::InvalidEmailAddress
+            | Self::InvalidClientIdError
+            | Self::InvalidAppIdError
+            | Self::InvalidServiceHostIDError
+            | Self::AccountAlreadyLinkedError
+            | Self::PasswordResetLinkSentError
+            | Self::InvalidAccountTypeError
+            | Self::TorAddressError
+            | Self::OperaVPNError
+            | Self::UserExistsError
+            | Self::OAuthClientAlreadyExistsError
+            | Self::GroupExistsError
+            | Self::CannotDeleteLastRoleError
+            | Self::ServiceHostAlreadyAuthorizedError
+            | Self::OAuthFlowError(..)
+            | Self::ProjectNotActiveError => StatusCode::BAD_REQUEST,
         }
     }
 }
