@@ -15,6 +15,7 @@ pub enum InternalError {
     Base64DecodeError(base64::DecodeError),
     ThumbnailDecodeError(image::ImageError),
     ThumbnailEncodeError(image::ImageError),
+    PasswordGenerationError,
 }
 
 #[derive(Debug, Display, Error)]

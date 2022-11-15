@@ -23,8 +23,8 @@ use crate::config::Settings;
 use crate::errors::{InternalError, UserError};
 use crate::libraries;
 use crate::models::{
-    AuthorizedServiceHost, BannedAccount, CollaborationInvite, FriendLink, Group, Library, Project,
-    ProjectMetadata, SaveState, SetPasswordToken, User,
+    AuthorizedServiceHost, BannedAccount, CollaborationInvite, FriendLink, Group, Library,
+    OAuthClient, Project, ProjectMetadata, SaveState, SetPasswordToken, User,
 };
 use crate::models::{OccupantInvite, RoleData, RoleMetadata, SentMessage};
 use crate::network::topology::{self, SetStorage, TopologyActor};
@@ -46,25 +46,25 @@ pub struct AppData {
     bucket: String,
     tor_exit_nodes: Collection<TorNode>,
     s3: S3Client,
-    pub settings: Settings,
-    pub network: Addr<TopologyActor>,
-    pub groups: Collection<Group>,
-    pub users: Collection<User>,
-    pub banned_accounts: Collection<BannedAccount>,
-    pub friends: Collection<FriendLink>,
-    pub project_metadata: Collection<ProjectMetadata>,
-    pub library_metadata: Collection<LibraryMetadata>,
-    pub libraries: Collection<Library>,
-    pub authorized_services: Collection<AuthorizedServiceHost>,
+    pub(crate) settings: Settings,
+    pub(crate) network: Addr<TopologyActor>,
+    pub(crate) groups: Collection<Group>,
+    pub(crate) users: Collection<User>,
+    pub(crate) banned_accounts: Collection<BannedAccount>,
+    pub(crate) friends: Collection<FriendLink>,
+    pub(crate) project_metadata: Collection<ProjectMetadata>,
+    pub(crate) library_metadata: Collection<LibraryMetadata>,
+    pub(crate) libraries: Collection<Library>,
+    pub(crate) authorized_services: Collection<AuthorizedServiceHost>,
 
-    pub password_tokens: Collection<SetPasswordToken>,
-    pub recorded_messages: Collection<SentMessage>,
-    pub collab_invites: Collection<CollaborationInvite>,
-    pub occupant_invites: Collection<OccupantInvite>,
+    pub(crate) password_tokens: Collection<SetPasswordToken>,
+    pub(crate) recorded_messages: Collection<SentMessage>,
+    pub(crate) collab_invites: Collection<CollaborationInvite>,
+    pub(crate) occupant_invites: Collection<OccupantInvite>,
 
-    pub oauth_clients: Collection<oauth::Client>,
-    pub oauth_tokens: Collection<oauth::Token>,
-    pub oauth_codes: Collection<oauth::Code>,
+    pub(crate) oauth_clients: Collection<OAuthClient>,
+    pub(crate) oauth_tokens: Collection<oauth::Token>,
+    pub(crate) oauth_codes: Collection<oauth::Code>,
 
     mailer: SmtpTransport,
     sender: Mailbox,
@@ -131,7 +131,7 @@ impl AppData {
         let recorded_messages =
             db.collection::<SentMessage>(&(prefix.to_owned() + "recordedMessages"));
         let network = network.unwrap_or_else(|| TopologyActor {}.start());
-        let oauth_clients = db.collection::<oauth::Client>(&(prefix.to_owned() + "oauthClients"));
+        let oauth_clients = db.collection::<OAuthClient>(&(prefix.to_owned() + "oauthClients"));
         let oauth_tokens = db.collection::<oauth::Token>(&(prefix.to_owned() + "oauthToken"));
         let oauth_codes = db.collection::<oauth::Code>(&(prefix.to_owned() + "oauthCode"));
         let tor_exit_nodes = db.collection::<TorNode>(&(prefix.to_owned() + "torExitNodes"));

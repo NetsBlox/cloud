@@ -22,6 +22,12 @@ pub struct CreateClientData {
 }
 
 #[derive(Deserialize, Serialize, Clone, Debug)]
+pub struct CreatedClientData {
+    pub id: ClientId,
+    pub password: String,
+}
+
+#[derive(Deserialize, Serialize, Clone, Debug)]
 pub struct Client {
     pub id: ClientId,
     pub name: String,

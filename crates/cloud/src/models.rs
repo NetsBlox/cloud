@@ -549,6 +549,59 @@ impl From<Library> for LibraryMetadata {
     }
 }
 
+// TODO: add oauth client
+#[derive(Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub(crate) struct OAuthClient {
+    pub id: oauth::ClientId,
+    pub name: String,
+    created_at: DateTime,
+    hash: String,
+    salt: String,
+}
+
+impl OAuthClient {
+    pub(crate) fn new(name: String, password: String) -> Self {
+        let salt = passwords::PasswordGenerator::new()
+            .length(8)
+            .exclude_similar_characters(true)
+            .numbers(true)
+            .spaces(false)
+            .generate_one()
+            .unwrap_or_else(|_err| "salt".to_owned());
+
+        let hash = sha512(&(password + &salt));
+        Self {
+            id: oauth::ClientId::new(Uuid::new_v4().to_string()),
+            name,
+            created_at: DateTime::from_system_time(SystemTime::now()),
+            hash,
+            salt,
+        }
+    }
+}
+
+impl From<OAuthClient> for Bson {
+    fn from(client: OAuthClient) -> Bson {
+        Bson::Document(doc! {
+            "id": client.id,
+            "name": client.name,
+            "createdAt": client.created_at,
+            "hash": client.hash,
+            "salt": client.salt,
+        })
+    }
+}
+
+impl From<OAuthClient> for oauth::Client {
+    fn from(client: OAuthClient) -> oauth::Client {
+        oauth::Client {
+            id: client.id,
+            name: client.name,
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
 

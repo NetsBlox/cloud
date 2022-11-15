@@ -7,12 +7,14 @@ use futures::TryStreamExt;
 use mongodb::bson::doc;
 use mongodb::options::ReturnDocument;
 use netsblox_core::oauth;
+use passwords::PasswordGenerator;
 use serde::Deserialize;
 use uuid::Uuid;
 
 use crate::app_data::AppData;
 use crate::errors::{InternalError, OAuthFlowError, UserError};
-use crate::users::{ensure_can_edit_user, ensure_is_super_user};
+use crate::models::OAuthClient;
+use crate::users::{ensure_can_edit_user, ensure_is_super_user, sha512};
 
 #[derive(Deserialize)]
 struct AuthorizeParams {
@@ -57,6 +59,7 @@ async fn authorization_page(
 #[derive(Deserialize)]
 struct AuthorizeClientParams {
     client_id: oauth::ClientId,
+    client_secret: String,
     redirect_uri: Option<String>,
     error: Option<String>,
     error_description: Option<String>,
@@ -101,7 +104,12 @@ async fn authorize_client(
     // TODO: Check that the client exists
     // TODO: create a new code for the user
     // TODO: return the codeId
-    let query = doc! {"id": &params.client_id};
+    let hashed_secret = sha512(&params.client_secret);
+    let query = doc! {
+        "id": &params.client_id,
+        "hash": hashed_secret
+    };
+
     let client_exists = app
         .oauth_clients
         .find_one(query, None)
@@ -221,11 +229,18 @@ async fn create_client(
     ensure_is_super_user(&app, &session).await?;
 
     let query = doc! {"name": &params.name};
-    let client = oauth::Client {
-        id: oauth::ClientId::new(Uuid::new_v4().to_string()),
-        name: params.name.clone(),
-    };
-    let update = doc! {"$setOnInsert": &client};
+
+    let password = PasswordGenerator::new()
+        .length(12)
+        .spaces(false)
+        .exclude_similar_characters(true)
+        .generate_one()
+        .map_err(|_err| InternalError::PasswordGenerationError)?;
+
+    let client = OAuthClient::new(params.name.clone(), password.clone());
+    let client_id = client.id.clone();
+
+    let update = doc! {"$setOnInsert": client};
     let options = mongodb::options::FindOneAndUpdateOptions::builder()
         .return_document(ReturnDocument::Before)
         .upsert(true)
@@ -240,7 +255,10 @@ async fn create_client(
     if existing_client.is_some() {
         Err(UserError::OAuthClientAlreadyExistsError)
     } else {
-        Ok(HttpResponse::Ok().json(client.id))
+        Ok(HttpResponse::Ok().json(oauth::CreatedClientData {
+            id: client_id,
+            password,
+        }))
     }
 }
 
@@ -260,7 +278,10 @@ async fn list_clients(
     let clients: Vec<oauth::Client> = cursor
         .try_collect::<Vec<_>>()
         .await
-        .map_err(InternalError::DatabaseConnectionError)?;
+        .map_err(InternalError::DatabaseConnectionError)?
+        .into_iter()
+        .map(|c| c.into())
+        .collect();
 
     Ok(HttpResponse::Ok().json(clients))
 }

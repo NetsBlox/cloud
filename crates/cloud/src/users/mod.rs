@@ -449,7 +449,7 @@ async fn set_password(app: &AppData, username: &str, password: String) -> Result
     }
 }
 
-pub fn sha512(text: &str) -> String {
+pub(crate) fn sha512(text: &str) -> String {
     let mut hasher = Sha512::new();
     hasher.update(text);
     let hash = hasher.finalize();
