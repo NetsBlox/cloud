@@ -18,7 +18,7 @@ use futures::TryStreamExt;
 use mongodb::bson::{doc, DateTime};
 use mongodb::options::{FindOneAndUpdateOptions, ReturnDocument};
 use netsblox_core::{
-    BrowserClientState, ClientID, ClientStateData, OccupantInviteData, ProjectId, SaveState,
+    BrowserClientState, ClientId, ClientStateData, OccupantInviteData, ProjectId, SaveState,
 };
 use serde::Deserialize;
 use serde_json::{json, Value};
@@ -29,7 +29,7 @@ pub type AppID = String;
 #[post("/{client}/state")] // TODO: add token here (in a header), too?
 async fn set_client_state(
     app: web::Data<AppData>,
-    path: web::Path<(ClientID,)>,
+    path: web::Path<(ClientId,)>,
     body: web::Json<ClientStateData>,
     session: Session,
 ) -> Result<HttpResponse, UserError> {
@@ -50,8 +50,7 @@ async fn set_client_state(
             let user_id = username.as_ref().unwrap_or(&client_id_string).to_owned();
             let address = format!("{}@{}", client_state.address, user_id);
             let app_id = client_state.app_id;
-            if app_id.to_lowercase() == topology::DEFAULT_APP_ID {
-                // TODO: make AppID a type
+            if app_id.as_str().to_lowercase() == topology::DEFAULT_APP_ID {
                 return Err(UserError::InvalidAppIdError);
             }
 
@@ -108,7 +107,7 @@ async fn connect_client(
     app: web::Data<AppData>,
     req: HttpRequest,
     stream: web::Payload,
-    path: web::Path<(ClientID,)>,
+    path: web::Path<(ClientId,)>,
 ) -> Result<HttpResponse, UserError> {
     // TODO: validate client secret?
     let (client_id,) = path.into_inner();
@@ -213,7 +212,7 @@ async fn invite_occupant(
 async fn evict_occupant(
     app: web::Data<AppData>,
     session: Session,
-    path: web::Path<(ClientID,)>,
+    path: web::Path<(ClientId,)>,
 ) -> Result<HttpResponse, UserError> {
     let (client_id,) = path.into_inner();
 
@@ -227,7 +226,7 @@ async fn evict_occupant(
 async fn ensure_can_evict_client(
     app: &AppData,
     session: &Session,
-    client_id: &ClientID,
+    client_id: &ClientId,
 ) -> Result<(), UserError> {
     let client_state = topology::get_client_state(&client_id).await;
 
@@ -408,7 +407,7 @@ async fn send_message(
 #[get("/{client}/state")]
 async fn get_client_state(
     app: web::Data<AppData>,
-    path: web::Path<(ClientID,)>,
+    path: web::Path<(ClientId,)>,
     session: Session,
     req: HttpRequest,
 ) -> Result<HttpResponse, UserError> {
@@ -441,7 +440,7 @@ pub fn config(cfg: &mut web::ServiceConfig) {
 }
 
 struct WsSession {
-    client_id: ClientID,
+    client_id: ClientId,
     topology_addr: Addr<topology::TopologyActor>,
 }
 
@@ -481,7 +480,7 @@ impl WsSession {
                     Value::Array(values) => values
                         .into_iter()
                         .filter_map(|v| match v {
-                            Value::String(v) => Some(ClientID::new(v)),
+                            Value::String(v) => Some(ClientId::new(v)),
                             _ => None,
                         })
                         .collect::<Vec<_>>(),

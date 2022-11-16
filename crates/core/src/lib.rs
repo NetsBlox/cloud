@@ -4,7 +4,10 @@ pub mod oauth;
 
 use core::fmt;
 use derive_more::{Display, Error};
-use serde::{Deserialize, Serialize};
+use serde::{
+    de::{self, Visitor},
+    Deserialize, Deserializer, Serialize,
+};
 use serde_json::Value;
 use std::{cmp::Ordering, collections::HashMap, str::FromStr, time::SystemTime};
 use uuid::Uuid;
@@ -276,11 +279,57 @@ pub struct BrowserClientState {
     pub project_id: ProjectId,
 }
 
+#[derive(Debug, Serialize, Clone, Hash, Eq, PartialEq)]
+pub struct AppId(String);
+
+impl AppId {
+    pub fn new(addr: &str) -> Self {
+        Self(addr.to_lowercase())
+    }
+
+    pub fn as_str(&self) -> &str {
+        &self.0
+    }
+}
+
+impl<'de> Deserialize<'de> for AppId {
+    fn deserialize<D>(deserializer: D) -> Result<AppId, D::Error>
+    where
+        D: Deserializer<'de>,
+    {
+        let value = Value::deserialize(deserializer)?;
+        if let Value::String(s) = value {
+            Ok(AppId::new(s.as_str()))
+        } else {
+            Err(de::Error::custom("Invalid App ID expected a string"))
+        }
+    }
+}
+
+struct AppIdVisitor;
+impl<'de> Visitor<'de> for AppIdVisitor {
+    type Value = AppId;
+
+    fn expecting(&self, formatter: &mut fmt::Formatter) -> fmt::Result {
+        formatter.write_str("an App ID string")
+    }
+
+    fn visit_str<E>(self, value: &str) -> Result<Self::Value, E> {
+        println!("deserializing {}", value);
+        Ok(AppId::new(value))
+    }
+
+    fn visit_string<E>(self, value: String) -> Result<Self::Value, E> {
+        println!("deserializing {}", value);
+        Ok(AppId::new(value.as_str()))
+    }
+}
+
 #[derive(Debug, Deserialize, Serialize, Clone)]
 #[serde(rename_all = "camelCase")]
 pub struct ExternalClientState {
     pub address: String,
-    pub app_id: String,
+    pub app_id: AppId,
 }
 
 #[derive(Serialize, Deserialize)]
@@ -379,14 +428,14 @@ impl CollaborationInvite {
 #[serde(rename_all = "camelCase")]
 pub struct UpdateProjectData {
     pub name: String,
-    pub client_id: Option<ClientID>,
+    pub client_id: Option<ClientId>,
 }
 
 #[derive(Deserialize, Serialize, Debug)]
 #[serde(rename_all = "camelCase")]
 pub struct UpdateRoleData {
     pub name: String,
-    pub client_id: Option<ClientID>,
+    pub client_id: Option<ClientId>,
 }
 
 #[derive(Deserialize, Serialize)]
@@ -395,15 +444,15 @@ pub struct CreateProjectData {
     pub owner: Option<String>,
     pub name: String,
     pub roles: Option<Vec<RoleData>>,
-    pub client_id: Option<ClientID>,
+    pub client_id: Option<ClientId>,
     pub save_state: Option<SaveState>,
 }
 
 // Network debugging data
 #[derive(Deserialize, Serialize, Debug, Clone, PartialEq, Eq, Hash)]
-pub struct ClientID(String);
+pub struct ClientId(String);
 
-impl ClientID {
+impl ClientId {
     pub fn new(addr: String) -> Self {
         Self(addr)
     }
@@ -417,11 +466,11 @@ impl ClientID {
 #[display(fmt = "Invalid client ID. Must start with a _")]
 pub struct ClientIDError;
 
-impl FromStr for ClientID {
+impl FromStr for ClientId {
     type Err = ClientIDError;
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         if s.starts_with('_') {
-            Ok(ClientID::new(s.to_owned()))
+            Ok(ClientId::new(s.to_owned()))
         } else {
             Err(ClientIDError)
         }
@@ -433,7 +482,7 @@ impl FromStr for ClientID {
 pub struct ExternalClient {
     pub username: Option<String>,
     pub address: String,
-    pub app_id: String,
+    pub app_id: AppId,
 }
 
 #[derive(Deserialize, Serialize, Clone, Debug)]
@@ -454,7 +503,7 @@ pub struct RoleState {
 
 #[derive(Deserialize, Serialize, Clone, Debug)]
 pub struct OccupantState {
-    pub id: ClientID,
+    pub id: ClientId,
     pub name: String,
 }
 
@@ -519,7 +568,7 @@ pub enum SendMessageTarget {
     Client {
         project_id: ProjectId,
         role_id: RoleId,
-        client_id: ClientID,
+        client_id: ClientId,
     },
 }
 
@@ -560,5 +609,13 @@ mod tests {
     fn serialize_userroles_as_strings() {
         let role_str = serde_json::to_string(&UserRole::User).unwrap();
         assert_eq!(&role_str, "\"user\"");
+    }
+
+    #[test]
+    fn deserialize_app_id_lowercase() {
+        let app_id_str = String::from("\"NetsBlox\"");
+        let app_id: AppId = serde_json::from_str(&app_id_str).unwrap();
+        assert_eq!(&app_id.as_str(), &"netsblox");
+        assert_eq!(app_id, AppId::new("netsblox"));
     }
 }

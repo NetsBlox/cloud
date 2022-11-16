@@ -19,7 +19,7 @@ use mongodb::bson::doc;
 use mongodb::options::{FindOneAndUpdateOptions, ReturnDocument};
 use mongodb::Cursor;
 use netsblox_core::{
-    ClientID, CreateProjectData, Project, ProjectId, PublishState, RoleId, SaveState,
+    ClientId, CreateProjectData, Project, ProjectId, PublishState, RoleId, SaveState,
     UpdateProjectData, UpdateRoleData,
 };
 use serde::{Deserialize, Serialize};
@@ -170,7 +170,7 @@ async fn get_project_id_metadata(
 pub async fn ensure_can_view_project(
     app: &AppData,
     session: &Session,
-    client_id: Option<ClientID>,
+    client_id: Option<ClientId>,
     project_id: &ProjectId,
 ) -> Result<ProjectMetadata, UserError> {
     let metadata = app.get_project_metadatum(project_id).await?;
@@ -181,7 +181,7 @@ pub async fn ensure_can_view_project(
 async fn ensure_can_view_project_metadata(
     app: &AppData,
     session: &Session,
-    client_id: Option<ClientID>,
+    client_id: Option<ClientId>,
     project: &ProjectMetadata,
 ) -> Result<(), UserError> {
     // TODO: also allow if there is a pending collaborate request
@@ -202,7 +202,7 @@ fn flatten<T>(nested: Option<Option<T>>) -> Option<T> {
 async fn can_view_project(
     app: &AppData,
     session: &Session,
-    client_id: Option<ClientID>,
+    client_id: Option<ClientId>,
     project: &ProjectMetadata,
 ) -> Result<bool, UserError> {
     match project.state {
@@ -227,7 +227,7 @@ async fn can_view_project(
 pub async fn ensure_can_edit_project(
     app: &AppData,
     session: &Session,
-    client_id: Option<ClientID>,
+    client_id: Option<ClientId>,
     project_id: &ProjectId,
 ) -> Result<ProjectMetadata, UserError> {
     let metadata = app.get_project_metadatum(project_id).await?;
@@ -242,7 +242,7 @@ pub async fn ensure_can_edit_project(
 async fn can_edit_project(
     app: &AppData,
     session: &Session,
-    client_id: Option<ClientID>,
+    client_id: Option<ClientId>,
     project: &ProjectMetadata,
 ) -> Result<bool, UserError> {
     println!("Can {:?} edit the project? ({})", client_id, project.owner);
@@ -397,7 +397,7 @@ async fn update_project(
 #[serde(rename_all = "camelCase")]
 struct GetProjectRoleParams {
     // FIXME: this isn't really secure since it is easy to spoof the client ID
-    client_id: Option<ClientID>,
+    client_id: Option<ClientId>,
 }
 
 #[get("/id/{projectID}/latest")]
@@ -704,7 +704,7 @@ struct RoleDataResponse {
 #[derive(Deserialize)]
 #[serde(rename_all = "camelCase")]
 struct ReportRoleParams {
-    client_id: Option<ClientID>,
+    client_id: Option<ClientId>,
 }
 
 #[post("/id/{projectID}/{roleID}/latest")]

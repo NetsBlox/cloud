@@ -262,7 +262,6 @@ async fn login(
     }
 
     update_ownership(&app, &client_id, &user.username).await?;
-    // TODO: should we record more here? like user roles?
     session.insert("username", &user.username).unwrap();
     Ok(HttpResponse::Ok().body(user.username))
 }

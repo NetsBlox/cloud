@@ -6,7 +6,7 @@ use clap::{Parser, Subcommand};
 use futures_util::StreamExt;
 use inquire::{Confirm, Password, PasswordDisplayMode};
 use netsblox_api::core::{
-    oauth, ClientID, CreateProjectData, Credentials, FriendLinkState, InvitationState,
+    oauth, AppId, ClientId, CreateProjectData, Credentials, FriendLinkState, InvitationState,
     LinkedAccount, ProjectId, PublishState, RoleData, SaveState, ServiceHost, UserRole,
 };
 use netsblox_api::{Client, Config};
@@ -386,14 +386,14 @@ enum Network {
         user: Option<String>,
     },
     /// View the state of a given connected client
-    ViewClient { client_id: ClientID },
+    ViewClient { client_id: ClientId },
     /// Connect to NetsBlox and listen for messages
     Connect {
         #[clap(short, long, default_value = "project")]
         address: String,
     },
     /// Evict a client from their current role
-    Evict { client_id: ClientID },
+    Evict { client_id: ClientId },
     /// Send a NetsBlox message
     Send {
         /// Address of the intended recipient
@@ -584,7 +584,7 @@ fn get_current_user(cfg: &Config) -> String {
 #[tokio::main]
 async fn main() {
     let mut cfg: Config = confy::load(APP_NAME).expect("Unable to load configuration.");
-    cfg.app_id = Some("NetsBloxCLI".to_owned());
+    cfg.app_id = Some(AppId::new("NetsBloxCLI"));
 
     let args = Cli::parse();
     if let Err(err) = do_command(cfg, args).await {

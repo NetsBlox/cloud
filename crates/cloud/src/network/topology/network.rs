@@ -3,7 +3,7 @@ use lazy_static::lazy_static;
 use log::warn;
 use lru::LruCache;
 use mongodb::bson::{doc, DateTime};
-pub use netsblox_core::{BrowserClientState, ClientState, ExternalClientState};
+pub use netsblox_core::{AppId, BrowserClientState, ClientState, ExternalClientState};
 use netsblox_core::{ExternalClient, OccupantState, RoleId, RoleState, RoomState};
 use serde_json::json;
 use std::collections::{HashMap, HashSet};
@@ -15,10 +15,9 @@ use crate::app_data::AppData;
 use crate::errors::InternalError;
 use crate::models::{ProjectId, ProjectMetadata, SaveState, SentMessage};
 use crate::network::topology::address::ClientAddress;
-use crate::network::AppID;
 
 pub use super::address::DEFAULT_APP_ID;
-use super::client::{Client, ClientID, RoleRequest};
+use super::client::{Client, ClientId, RoleRequest};
 use super::{
     AddClient, BrokenClient, ClientCommand, RemoveClient, SendIDEMessage, SendMessage,
     SendOccupantInvite, SendRoomState, SetClientState,
@@ -71,7 +70,7 @@ impl From<EvictionNotice> for ClientCommand {
 #[derive(Debug)]
 struct ProjectNetwork {
     id: ProjectId,
-    roles: HashMap<RoleId, Vec<ClientID>>,
+    roles: HashMap<RoleId, Vec<ClientId>>,
 }
 
 impl ProjectNetwork {
@@ -85,7 +84,7 @@ impl ProjectNetwork {
     fn get_state(
         &self,
         project: ProjectMetadata,
-        usernames: &HashMap<ClientID, String>,
+        usernames: &HashMap<ClientId, String>,
     ) -> RoomState {
         let empty = Vec::new();
         let roles: HashMap<RoleId, RoleState> = project
@@ -131,12 +130,12 @@ lazy_static! {
 pub struct Topology {
     app_data: Option<AppData>,
 
-    clients: HashMap<ClientID, Client>,
-    states: HashMap<ClientID, ClientState>,
-    usernames: HashMap<ClientID, String>,
+    clients: HashMap<ClientId, Client>,
+    states: HashMap<ClientId, ClientState>,
+    usernames: HashMap<ClientId, String>,
 
     rooms: HashMap<ProjectId, ProjectNetwork>,
-    external: HashMap<AppID, HashMap<String, ClientID>>,
+    external: HashMap<AppId, HashMap<String, ClientId>>,
 }
 
 #[derive(Debug)]
@@ -163,10 +162,10 @@ impl Topology {
     }
 
     async fn get_clients_at(&self, addr: ClientAddress) -> Vec<&Client> {
-        let mut client_ids: Vec<&ClientID> = Vec::new();
+        let mut client_ids: Vec<&ClientId> = Vec::new();
         let empty = Vec::new();
-        for app_id in &addr.app_ids {
-            if app_id == DEFAULT_APP_ID {
+        for app_id_str in &addr.app_ids {
+            if app_id_str == DEFAULT_APP_ID {
                 let addresses = self.resolve_address(&addr).await;
                 let ids = addresses.into_iter().flat_map(|addr| {
                     self.rooms
@@ -176,9 +175,10 @@ impl Topology {
                 });
                 client_ids.extend(ids);
             } else {
+                let app_id = AppId::new(app_id_str);
                 let id = self
                     .external
-                    .get(app_id)
+                    .get(&app_id)
                     .map(|network| network.get(&addr.to_app_string()));
 
                 if let Some(id) = id {
@@ -343,11 +343,11 @@ impl Topology {
         }
     }
 
-    fn has_client(&self, id: &ClientID) -> bool {
+    fn has_client(&self, id: &ClientId) -> bool {
         self.clients.contains_key(id)
     }
 
-    pub fn disconnect_client(&self, id: &ClientID) {
+    pub fn disconnect_client(&self, id: &ClientId) {
         if let Some(client) = self.clients.get(id) {
             client.addr.do_send(ClientCommand::Close).unwrap();
         }
@@ -388,7 +388,7 @@ impl Topology {
             ClientState::External(state) => {
                 let app_net = self
                     .external
-                    .entry(state.app_id.to_lowercase())
+                    .entry(state.app_id.to_owned())
                     .or_insert_with(HashMap::new);
 
                 app_net.insert(state.address.to_owned(), msg.id.to_owned());
@@ -426,7 +426,7 @@ impl Topology {
         self.reset_client_state(&msg.id, None).await;
     }
 
-    async fn reset_client_state(&mut self, id: &ClientID, new_project_id: Option<ProjectId>) {
+    async fn reset_client_state(&mut self, id: &ClientId, new_project_id: Option<ProjectId>) {
         self.usernames.remove(id);
         match self.states.remove(id) {
             Some(ClientState::Browser(state)) => {
@@ -630,7 +630,7 @@ impl Topology {
             .map(|room| room.get_state(metadata, &self.usernames))
     }
 
-    pub async fn evict_client(&mut self, id: ClientID) {
+    pub async fn evict_client(&mut self, id: ClientId) {
         let username = self.usernames.remove(&id);
         self.reset_client_state(&id, None).await;
         self.clients
@@ -644,11 +644,11 @@ impl Topology {
         }
     }
 
-    pub fn get_client_state(&self, id: &ClientID) -> Option<&ClientState> {
+    pub fn get_client_state(&self, id: &ClientId) -> Option<&ClientState> {
         self.states.get(id)
     }
 
-    pub fn get_client_username(&self, id: &ClientID) -> Option<&String> {
+    pub fn get_client_username(&self, id: &ClientId) -> Option<&String> {
         self.usernames.get(id)
     }
 

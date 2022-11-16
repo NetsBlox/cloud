@@ -9,7 +9,7 @@ use actix::{Actor, AsyncContext, Context, Handler};
 use lazy_static::lazy_static;
 use log::warn;
 use mongodb::bson::doc;
-use netsblox_core::{ClientID, ExternalClient, ProjectId, RoomState};
+use netsblox_core::{ClientId, ExternalClient, ProjectId, RoomState};
 use serde_json::Value;
 use std::sync::Arc;
 use tokio::sync::RwLock;
@@ -45,7 +45,7 @@ impl From<netsblox_core::SendMessage> for ClientCommand {
 #[derive(Message)]
 #[rtype(result = "()")]
 pub struct AddClient {
-    pub id: ClientID,
+    pub id: ClientId,
     pub addr: Recipient<ClientCommand>,
 }
 
@@ -64,19 +64,19 @@ pub struct SendRoomState {
 #[derive(Message)]
 #[rtype(result = "()")]
 pub struct BrokenClient {
-    pub id: ClientID,
+    pub id: ClientId,
 }
 
 #[derive(Message)]
 #[rtype(result = "()")]
 pub struct RemoveClient {
-    pub id: ClientID,
+    pub id: ClientId,
 }
 
 #[derive(Message)]
 #[rtype(result = "()")]
 pub struct SetClientState {
-    pub id: ClientID,
+    pub id: ClientId,
     pub state: ClientState,
     pub username: Option<String>,
 }
@@ -85,7 +85,7 @@ pub struct SetClientState {
 #[rtype(result = "()")]
 pub struct SendMessage {
     // TODO: include sender username
-    pub sender: ClientID,
+    pub sender: ClientId,
     pub addresses: Vec<String>,
     pub content: Value,
 }
@@ -204,7 +204,7 @@ impl Handler<RoleDataResponse> for TopologyActor {
 #[derive(Message)]
 #[rtype(result = "()")]
 pub struct EvictOccupant {
-    pub client_id: ClientID,
+    pub client_id: ClientId,
 }
 
 impl Handler<EvictOccupant> for TopologyActor {
@@ -223,7 +223,7 @@ impl Handler<EvictOccupant> for TopologyActor {
 #[derive(Message)]
 #[rtype(result = "()")]
 pub struct DisconnectClient {
-    pub client_id: ClientID,
+    pub client_id: ClientId,
 }
 
 impl Handler<DisconnectClient> for TopologyActor {
@@ -287,7 +287,7 @@ impl Handler<SendMessageFromServices> for TopologyActor {
 #[derive(Message, Clone)]
 #[rtype(result = "()")]
 pub struct SendIDEMessage {
-    pub addresses: Vec<ClientID>,
+    pub addresses: Vec<ClientId>,
     pub content: Value,
 }
 
@@ -322,14 +322,14 @@ pub(crate) async fn get_online_users(filter_names: Option<Vec<String>>) -> Vec<S
     topology.get_online_users(filter_names)
 }
 
-pub(crate) async fn get_client_username(client_id: &ClientID) -> Option<String> {
+pub(crate) async fn get_client_username(client_id: &ClientId) -> Option<String> {
     let topology = TOPOLOGY.read().await;
     topology
         .get_client_username(client_id)
         .map(|state| state.to_owned())
 }
 
-pub(crate) async fn get_client_state(client_id: &ClientID) -> Option<ClientState> {
+pub(crate) async fn get_client_state(client_id: &ClientId) -> Option<ClientState> {
     let topology = TOPOLOGY.read().await;
     topology.get_client_state(client_id).cloned()
 }

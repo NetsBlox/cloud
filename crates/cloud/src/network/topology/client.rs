@@ -1,7 +1,7 @@
 use actix::prelude::{Message, Recipient};
 use actix_web::rt::time::sleep;
 use lazy_static::lazy_static;
-pub use netsblox_core::ClientID;
+pub use netsblox_core::ClientId;
 use serde_json::json;
 use std::{
     collections::HashMap,
@@ -35,12 +35,12 @@ pub enum RoleDataResponseState {
 
 #[derive(Clone, Debug)]
 pub struct Client {
-    pub id: ClientID,
+    pub id: ClientId,
     pub addr: Recipient<ClientCommand>,
 }
 
 impl Client {
-    pub fn new(id: ClientID, addr: Recipient<ClientCommand>) -> Self {
+    pub fn new(id: ClientId, addr: Recipient<ClientCommand>) -> Self {
         Client { id, addr }
     }
 }

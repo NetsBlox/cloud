@@ -11,7 +11,7 @@ use tokio_tungstenite::{connect_async, MaybeTlsStream, WebSocketStream};
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct Config {
-    pub app_id: Option<String>,
+    pub app_id: Option<AppId>,
     pub url: String,
     pub token: Option<String>,
     pub username: Option<String>,
@@ -1133,7 +1133,7 @@ impl Client {
         Ok(response.json::<RoomState>().await.unwrap())
     }
 
-    pub async fn get_client_state(&self, client_id: &ClientID) -> Result<ClientInfo, error::Error> {
+    pub async fn get_client_state(&self, client_id: &ClientId) -> Result<ClientInfo, error::Error> {
         let response = self
             .request(
                 Method::GET,
@@ -1148,7 +1148,7 @@ impl Client {
         Ok(response.json::<ClientInfo>().await.unwrap())
     }
 
-    pub async fn evict_occupant(&self, client_id: &ClientID) -> Result<(), error::Error> {
+    pub async fn evict_occupant(&self, client_id: &ClientId) -> Result<(), error::Error> {
         let response = self
             .request(
                 Method::POST,
