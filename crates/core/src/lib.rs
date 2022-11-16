@@ -50,7 +50,7 @@ pub struct NewUser {
     pub role: Option<UserRole>,
 }
 
-#[derive(Serialize, Deserialize, Clone, Debug, PartialEq, Eq)]
+#[derive(Serialize, Deserialize, Clone, Copy, Debug, PartialEq, Eq)]
 #[serde(rename_all = "camelCase")]
 pub enum UserRole {
     User = 0,
