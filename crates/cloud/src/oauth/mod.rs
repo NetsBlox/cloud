@@ -16,7 +16,7 @@ use uuid::Uuid;
 
 use crate::app_data::AppData;
 use crate::errors::{InternalError, OAuthFlowError, UserError};
-use crate::models::OAuthClient;
+use crate::models::{OAuthClient, OAuthToken};
 use crate::users::{ensure_can_edit_user, ensure_is_super_user, sha512};
 
 #[derive(Deserialize)]
@@ -174,7 +174,7 @@ struct CreateTokenParams {
     grant_type: Option<String>,
 }
 
-#[post("/token")]
+#[post("/token/")]
 async fn create_token(
     app: web::Data<AppData>,
     params: web::Json<CreateTokenParams>,
@@ -210,13 +210,7 @@ async fn create_token(
         return Err(OAuthFlowError::InvalidRedirectUrlError.into());
     }
 
-    let token = oauth::Token {
-        id: oauth::TokenId::new(Uuid::new_v4().to_string()),
-        client_id: code.client_id,
-        username: code.username,
-        created_at: SystemTime::now(),
-    };
-
+    let token = OAuthToken::new(code.client_id, code.username);
     app.oauth_tokens
         .insert_one(&token, None)
         .await
@@ -227,6 +221,27 @@ async fn create_token(
         .insert_header(("Pragma", "no-cache"))
         .json(token.id);
     Ok(response)
+}
+
+#[get("/token/{tokenId}")]
+async fn get_token(
+    app: web::Data<AppData>,
+    path: web::Path<(oauth::TokenId,)>,
+) -> Result<HttpResponse, UserError> {
+    // TODO: limit the number of requests from a single source?
+    // TODO: ensure they are an authorized service host?
+    let (token_id,) = path.into_inner();
+    let query = doc! {"id": &token_id};
+
+    let token: oauth::Token = app
+        .oauth_tokens
+        .find_one(query, None)
+        .await
+        .map_err(InternalError::DatabaseConnectionError)?
+        .ok_or(UserError::OAuthTokenNotFoundError)?
+        .into();
+
+    Ok(HttpResponse::Ok().json(token))
 }
 
 #[post("/clients/")]

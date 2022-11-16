@@ -601,6 +601,51 @@ impl From<OAuthClient> for oauth::Client {
     }
 }
 
+#[derive(Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub(crate) struct OAuthToken {
+    pub(crate) id: oauth::TokenId,
+    pub(crate) client_id: oauth::ClientId,
+    pub(crate) username: String,
+    pub(crate) created_at: DateTime,
+}
+
+impl OAuthToken {
+    pub fn new(client_id: oauth::ClientId, username: String) -> Self {
+        let id = oauth::TokenId::new(Uuid::new_v4().to_string());
+        let created_at = DateTime::from_system_time(SystemTime::now());
+
+        Self {
+            id,
+            client_id,
+            username,
+            created_at,
+        }
+    }
+}
+
+impl From<OAuthToken> for oauth::Token {
+    fn from(token: OAuthToken) -> oauth::Token {
+        oauth::Token {
+            id: token.id,
+            client_id: token.client_id,
+            username: token.username,
+            created_at: token.created_at.to_system_time(),
+        }
+    }
+}
+
+impl From<OAuthToken> for Bson {
+    fn from(token: OAuthToken) -> Bson {
+        Bson::Document(doc! {
+            "id": token.id,
+            "client_id": token.client_id,
+            "username": token.username,
+            "createdAt": token.created_at,
+        })
+    }
+}
+
 #[cfg(test)]
 mod tests {
 

@@ -24,7 +24,7 @@ use crate::errors::{InternalError, UserError};
 use crate::libraries;
 use crate::models::{
     AuthorizedServiceHost, BannedAccount, CollaborationInvite, FriendLink, Group, Library,
-    OAuthClient, Project, ProjectMetadata, SaveState, SetPasswordToken, User,
+    OAuthClient, OAuthToken, Project, ProjectMetadata, SaveState, SetPasswordToken, User,
 };
 use crate::models::{OccupantInvite, RoleData, RoleMetadata, SentMessage};
 use crate::network::topology::{self, SetStorage, TopologyActor};
@@ -63,7 +63,7 @@ pub struct AppData {
     pub(crate) occupant_invites: Collection<OccupantInvite>,
 
     pub(crate) oauth_clients: Collection<OAuthClient>,
-    pub(crate) oauth_tokens: Collection<oauth::Token>,
+    pub(crate) oauth_tokens: Collection<OAuthToken>,
     pub(crate) oauth_codes: Collection<oauth::Code>,
 
     mailer: SmtpTransport,
@@ -132,7 +132,7 @@ impl AppData {
             db.collection::<SentMessage>(&(prefix.to_owned() + "recordedMessages"));
         let network = network.unwrap_or_else(|| TopologyActor {}.start());
         let oauth_clients = db.collection::<OAuthClient>(&(prefix.to_owned() + "oauthClients"));
-        let oauth_tokens = db.collection::<oauth::Token>(&(prefix.to_owned() + "oauthToken"));
+        let oauth_tokens = db.collection::<OAuthToken>(&(prefix.to_owned() + "oauthToken"));
         let oauth_codes = db.collection::<oauth::Code>(&(prefix.to_owned() + "oauthCode"));
         let tor_exit_nodes = db.collection::<TorNode>(&(prefix.to_owned() + "torExitNodes"));
         let bucket = settings.s3.bucket.clone();

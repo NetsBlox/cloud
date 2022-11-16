@@ -147,3 +147,9 @@ impl From<oauth::Code> for Bson {
         })
     }
 }
+
+impl From<oauth::TokenId> for Bson {
+    fn from(id: oauth::TokenId) -> Bson {
+        Bson::String(id.as_str().to_owned())
+    }
+}

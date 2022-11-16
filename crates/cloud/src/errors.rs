@@ -87,6 +87,8 @@ pub enum UserError {
     OAuthClientAlreadyExistsError,
     #[display(fmt = "OAuth client not found.")]
     OAuthClientNotFoundError,
+    #[display(fmt = "OAuth token not found.")]
+    OAuthTokenNotFoundError,
 
     #[display(fmt = "Error occurred during ")]
     OAuthFlowError(OAuthFlowError),
@@ -160,6 +162,7 @@ impl error::ResponseError for UserError {
             | Self::InviteNotFoundError
             | Self::UserNotFoundError
             | Self::OAuthClientNotFoundError
+            | Self::OAuthTokenNotFoundError
             | Self::GroupNotFoundError => StatusCode::NOT_FOUND,
             Self::InternalError | Self::SnapConnectionError => StatusCode::INTERNAL_SERVER_ERROR,
             Self::InvalidUsername
