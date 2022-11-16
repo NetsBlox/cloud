@@ -9,7 +9,7 @@ use netsblox_api::core::{
     oauth, AppId, ClientId, CreateProjectData, Credentials, FriendLinkState, InvitationState,
     LinkedAccount, ProjectId, PublishState, RoleData, SaveState, ServiceHost, UserRole,
 };
-use netsblox_api::{Client, Config};
+use netsblox_api::{serde_json, Client, Config};
 use std::path::Path;
 use xmlparser::{Token, Tokenizer};
 
@@ -835,8 +835,12 @@ async fn do_command(mut cfg: Config, args: Cli) -> Result<(), netsblox_api::erro
                 let metadata = client.get_project_metadata(&username, project).await?;
                 let project_id = metadata.id;
 
-                client.publish_project(&project_id).await?;
-                // TODO: add moderation here, too?
+                if matches!(
+                    client.publish_project(&project_id).await?,
+                    PublishState::PendingApproval
+                ) {
+                    println!("Approval is required before the project will be officially public.");
+                }
             }
             Projects::Unpublish { project, user } => {
                 let username = user.clone().unwrap_or_else(|| get_current_user(&cfg));
@@ -997,7 +1001,13 @@ async fn do_command(mut cfg: Config, args: Cli) -> Result<(), netsblox_api::erro
                 r#type,
                 data,
             } => {
-                todo!();
+                let mut channel = client.connect(address).await?;
+                let value: serde_json::Value =
+                    serde_json::from_str(data).expect("Invalid message. Must be valid JSON.");
+                channel
+                    .send_json(address, r#type, &value)
+                    .await
+                    .expect("Unable to send message");
             }
         },
         Command::Friends(cmd) => match &cmd.subcmd {
@@ -1172,18 +1182,13 @@ async fn do_command(mut cfg: Config, args: Cli) -> Result<(), netsblox_api::erro
         Command::ServiceSettings(cmd) => match &cmd.subcmd {
             ServiceSettings::List { group, user } => {
                 let username = user.clone().unwrap_or_else(|| get_current_user(&cfg));
-                let group_id = if let Some(group_name) = group {
+                let service_hosts = if let Some(group_name) = group {
                     let groups = client.list_groups(&username).await?;
-                    groups
+                    let group_id = groups
                         .into_iter()
                         .find(|g| g.name == *group_name)
                         .map(|group| group.id)
-                    // TODO: throw error if not found (don't ignore and got to users)
-                } else {
-                    None
-                };
-
-                let service_hosts = if let Some(group_id) = group_id.clone() {
+                        .expect("Could not find group with the given name");
                     client.list_group_settings(&group_id).await?
                 } else {
                     client.list_user_settings(&username).await?

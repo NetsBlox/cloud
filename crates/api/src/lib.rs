@@ -2,11 +2,14 @@ pub mod core;
 pub mod error;
 
 use crate::core::*;
-use futures_util::stream::SplitStream;
+use futures_util::SinkExt;
 use netsblox_core::{CreateGroupData, UpdateGroupData};
 use reqwest::{self, Method, RequestBuilder, Response};
 use serde::{Deserialize, Serialize};
+pub use serde_json;
+use serde_json::{json, Value};
 use tokio::net::TcpStream;
+use tokio_tungstenite::tungstenite::Message;
 use tokio_tungstenite::{connect_async, MaybeTlsStream, WebSocketStream};
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
@@ -343,16 +346,16 @@ impl Client {
         Ok(())
     }
 
-    pub async fn publish_project(&self, id: &ProjectId) -> Result<(), error::Error> {
+    pub async fn publish_project(&self, id: &ProjectId) -> Result<PublishState, error::Error> {
         let response = self
             .request(Method::POST, &format!("/projects/id/{}/publish", id))
             .send()
             .await
             .map_err(error::Error::RequestError)?;
 
-        check_response(response).await?;
+        let response = check_response(response).await?;
 
-        Ok(())
+        Ok(response.json::<PublishState>().await.unwrap())
     }
 
     pub async fn unpublish_project(&self, id: &ProjectId) -> Result<(), error::Error> {
@@ -1173,20 +1176,17 @@ impl Client {
 
         let config = response.json::<ClientConfig>().await.unwrap();
 
-        println!("Connecting with client ID: {}", &config.client_id);
         let url = format!(
             "{}/network/{}/connect",
             self.cfg.url.replace("http", "ws"),
             config.client_id
         );
-        println!("trying to connect to: {}", &url);
         let (ws_stream, _) = connect_async(&url).await.unwrap();
 
         let state = ClientStateData {
             state: ClientState::External(ExternalClientState {
                 address: address.to_owned(),
                 app_id: self.cfg.app_id.as_ref().unwrap().clone(),
-                // .ok_or(ClientError::NoAppID)?,
             }),
         };
 
@@ -1200,31 +1200,12 @@ impl Client {
             .await
             .map_err(error::Error::RequestError)?;
 
-        let response = check_response(response).await?;
-
-        println!("status {}", response.status());
+        check_response(response).await?;
 
         Ok(MessageChannel {
             id: config.client_id,
             stream: ws_stream,
         })
-        // let (write, read) = ws_stream.split();
-        // let read_channel = read.filter_map(|msg| {
-        //     future::ready(match msg {
-        //         Ok(Message::Text(txt)) => Some(txt),
-        //         _ => None,
-        //     })
-        // });
-        // // let read_channel = read.filter(|msg| future::ready(msg.is_ok()));
-        // MessageChannel {
-        //     id: config.client_id,
-        //     read: Box::new(read_channel),
-        //     //     .filter_map(|msg| match msg {
-        //     //     Ok(Message::Text(txt)) => Some(txt),
-        //     //     _ => None,
-        //     // }),
-        //     write,
-        // }
     }
 
     // NetsBlox OAuth capabilities
@@ -1268,14 +1249,6 @@ impl Client {
     }
 }
 
-struct MessageReadStream {
-    read: SplitStream<WebSocketStream<MaybeTlsStream<TcpStream>>>,
-}
-
-// impl Stream for MessageReadStream {
-// type Item =
-// }
-
 pub struct MessageChannel {
     pub id: String,
     pub stream: WebSocketStream<MaybeTlsStream<TcpStream>>,
@@ -1283,13 +1256,32 @@ pub struct MessageChannel {
 
 impl MessageChannel {
     // TODO: do we need a method for sending other types?
-    pub async fn send(&self, msg_type: &str) {
-        todo!();
+    // TODO: sending a generic struct (implementing Deserialize)
+    pub async fn send_json(
+        &mut self,
+        addr: &str,
+        r#type: &str,
+        data: &Value,
+    ) -> Result<(), error::Error> {
+        let msg = json!({
+            "type": "message",
+            "dstId": addr,
+            "msgType": r#type,
+            "content": data
+        });
+        let msg_text = serde_json::to_string(&msg).unwrap();
+        self.stream
+            .send(Message::Text(msg_text))
+            .await
+            .map_err(error::Error::WebSocketSendError)?;
+
+        Ok(())
     }
 }
 
 #[cfg(test)]
 mod tests {
+
     #[test]
     fn it_works() {
         let result = 2 + 2;

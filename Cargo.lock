@@ -1878,6 +1878,7 @@ dependencies = [
  "netsblox_core",
  "reqwest",
  "serde 1.0.136",
+ "serde_json",
  "tokio",
  "tokio-tungstenite",
  "tungstenite",

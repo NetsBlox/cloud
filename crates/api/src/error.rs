@@ -13,4 +13,5 @@ pub enum Error {
     #[display(fmt = "{}", _0)]
     InternalServerError(String),
     RequestError(reqwest::Error),
+    WebSocketSendError(tokio_tungstenite::tungstenite::Error),
 }
