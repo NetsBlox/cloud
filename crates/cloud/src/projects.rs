@@ -300,7 +300,7 @@ async fn publish_project(
         .await
         .map_err(InternalError::DatabaseConnectionError)?;
 
-    Ok(HttpResponse::Ok().json(PublishState::Public))
+    Ok(HttpResponse::Ok().json(state))
 }
 
 async fn is_approval_required(

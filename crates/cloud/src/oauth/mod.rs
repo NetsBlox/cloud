@@ -140,10 +140,6 @@ async fn authorize_client(
         return Err(UserError::OAuthClientNotFoundError);
     }
 
-    let query = doc! {
-        "username": &username,
-        "clientId": &params.client_id,
-    };
     let code = oauth::Code {
         id: oauth::CodeId::new(Uuid::new_v4().to_string()),
         username: username.to_owned(),
@@ -151,15 +147,9 @@ async fn authorize_client(
         redirect_uri: redirect_uri.to_owned(),
         created_at: SystemTime::now(),
     };
-    let update = doc! {"$setOnInsert": &code};
-    let options = mongodb::options::FindOneAndUpdateOptions::builder()
-        .return_document(ReturnDocument::Before)
-        .upsert(true)
-        .build();
 
-    let existing_code = app
-        .oauth_codes
-        .find_one_and_update(query, update, options)
+    app.oauth_codes
+        .insert_one(&code, None)
         .await
         // FIXME: we may need to handle these errors differently
         .map_err(InternalError::DatabaseConnectionError)?;
