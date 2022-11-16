@@ -24,8 +24,6 @@ use serde::Deserialize;
 use serde_json::{json, Value};
 use topology::ClientCommand;
 
-pub type AppID = String;
-
 #[post("/{client}/state")] // TODO: add token here (in a header), too?
 async fn set_client_state(
     app: web::Data<AppData>,
