@@ -37,11 +37,6 @@ async fn get_client_config(
     app: web::Data<AppData>,
     session: Session,
 ) -> Result<HttpResponse, UserError> {
-    println!(
-        "Getting configuration for {:?}",
-        // session.get::<String>("username")
-        session.entries(),
-    );
     let query = doc! {"public": true};
     let default_hosts: Vec<netsblox_core::ServiceHost> = app
         .authorized_services

@@ -232,7 +232,6 @@ async fn get_token(
     // TODO: ensure they are an authorized service host?
     let (token_id,) = path.into_inner();
     let query = doc! {"id": &token_id};
-
     let token: oauth::Token = app
         .oauth_tokens
         .find_one(query, None)

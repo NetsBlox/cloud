@@ -10,7 +10,7 @@ use log::{info, warn};
 use lru::LruCache;
 use mongodb::bson::{doc, DateTime, Document};
 use mongodb::options::{FindOneAndUpdateOptions, IndexOptions, ReturnDocument};
-use netsblox_core::{oauth, LibraryMetadata, ProjectId, PublishState, RoleId};
+use netsblox_core::{oauth, LibraryMetadata, NewUser, ProjectId, PublishState, RoleId, UserRole};
 use rusoto_core::credential::StaticProvider;
 use rusoto_core::Region;
 use serde::{Deserialize, Serialize};
@@ -250,6 +250,28 @@ impl AppData {
 
         if !self.settings.security.allow_tor_login {
             self.start_update_interval();
+        }
+
+        if let Some(admin) = self.settings.admin.as_ref() {
+            let user: User = NewUser {
+                username: admin.username.to_owned(),
+                password: Some(admin.password.to_owned()),
+                email: admin.email.to_owned(),
+                group_id: None,
+                role: Some(UserRole::Admin),
+            }
+            .into();
+
+            let query = doc! {"username": &user.username};
+            let update = doc! {"$setOnInsert": &user};
+            let options = mongodb::options::FindOneAndUpdateOptions::builder()
+                .upsert(true)
+                .build();
+
+            self.users
+                .find_one_and_update(query, update, options)
+                .await
+                .map_err(InternalError::DatabaseConnectionError)?;
         }
 
         Ok(())

@@ -49,6 +49,13 @@ pub struct SecuritySettings {
 }
 
 #[derive(Clone, Deserialize)]
+pub struct UserCreds {
+    pub username: String,
+    pub password: String,
+    pub email: String,
+}
+
+#[derive(Clone, Deserialize)]
 pub struct Settings {
     pub address: String,
     pub public_url: String,
@@ -58,6 +65,7 @@ pub struct Settings {
     pub cookie: CookieSettings,
     pub email: EmailSettings,
     pub security: SecuritySettings,
+    pub admin: Option<UserCreds>,
 }
 
 impl Settings {
