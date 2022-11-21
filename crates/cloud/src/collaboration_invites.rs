@@ -3,7 +3,7 @@ use actix_web::{get, post};
 use actix_web::{web, HttpResponse};
 use futures::TryStreamExt;
 use mongodb::bson::doc;
-use netsblox_core::ProjectId;
+use netsblox_api_common::ProjectId;
 
 use crate::app_data::AppData;
 use crate::errors::{InternalError, UserError};
@@ -22,7 +22,7 @@ async fn list_invites(
 
     let query = doc! {"recipient": recipient};
     let cursor = app.collab_invites.find(query, None).await.unwrap();
-    let invites: Vec<netsblox_core::CollaborationInvite> = cursor
+    let invites: Vec<netsblox_api_common::CollaborationInvite> = cursor
         .try_collect::<Vec<_>>()
         .await
         .unwrap()

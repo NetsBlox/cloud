@@ -18,7 +18,7 @@ use image::{
 use mongodb::bson::doc;
 use mongodb::options::{FindOneAndUpdateOptions, ReturnDocument};
 use mongodb::Cursor;
-use netsblox_core::{
+use netsblox_api_common::{
     ClientId, CreateProjectData, Project, ProjectId, PublishState, RoleId, SaveState,
     UpdateProjectData, UpdateRoleData,
 };
@@ -76,7 +76,7 @@ async fn get_visible_projects(
     session: &Session,
     owner: &str,
     cursor: Cursor<ProjectMetadata>,
-) -> Vec<netsblox_core::ProjectMetadata> {
+) -> Vec<netsblox_api_common::ProjectMetadata> {
     let projects = if can_edit_user(app, session, owner).await.unwrap_or(false) {
         cursor.try_collect::<Vec<_>>().await.unwrap()
     } else {
@@ -150,7 +150,7 @@ async fn get_project_metadata(
 
     ensure_can_view_project_metadata(&app, &session, None, &metadata).await?;
 
-    let metadata: netsblox_core::ProjectMetadata = metadata.into();
+    let metadata: netsblox_api_common::ProjectMetadata = metadata.into();
     Ok(HttpResponse::Ok().json(metadata))
 }
 
@@ -163,7 +163,7 @@ async fn get_project_id_metadata(
     let (project_id,) = path.into_inner();
     let metadata = ensure_can_view_project(&app, &session, None, &project_id).await?;
 
-    let metadata: netsblox_core::ProjectMetadata = metadata.into();
+    let metadata: netsblox_api_common::ProjectMetadata = metadata.into();
     Ok(HttpResponse::Ok().json(metadata))
 }
 
@@ -275,7 +275,7 @@ async fn get_project(
     let (project_id,) = path.into_inner();
     let metadata = ensure_can_view_project(&app, &session, None, &project_id).await?;
 
-    let project: netsblox_core::Project = app.fetch_project(&metadata).await?.into();
+    let project: netsblox_api_common::Project = app.fetch_project(&metadata).await?.into();
     Ok(HttpResponse::Ok().json(project)) // TODO: Update this to a responder?
 }
 

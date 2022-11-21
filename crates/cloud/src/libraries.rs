@@ -8,7 +8,7 @@ use futures::stream::TryStreamExt;
 use lazy_static::lazy_static;
 use mongodb::bson::doc;
 use mongodb::options::{FindOneAndUpdateOptions, FindOptions};
-use netsblox_core::{CreateLibraryData, LibraryMetadata, PublishState};
+use netsblox_api_common::{CreateLibraryData, LibraryMetadata, PublishState};
 use regex::Regex;
 use rustrict::CensorStr;
 

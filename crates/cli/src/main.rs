@@ -5,7 +5,7 @@ use std::fs;
 use clap::{Parser, Subcommand};
 use futures_util::StreamExt;
 use inquire::{Confirm, Password, PasswordDisplayMode};
-use netsblox_api::core::{
+use netsblox_api::common::{
     oauth, AppId, ClientId, CreateProjectData, Credentials, FriendLinkState, InvitationState,
     LinkedAccount, ProjectId, PublishState, RoleData, SaveState, ServiceHost, UserRole,
 };
@@ -616,7 +616,7 @@ async fn do_command(mut cfg: Config, args: Cli) -> Result<(), netsblox_api::erro
         } else {
             Credentials::NetsBlox { username, password }
         };
-        let request = netsblox_api::core::LoginRequest {
+        let request = netsblox_api::common::LoginRequest {
             credentials,
             client_id: None,
         };
@@ -701,7 +701,7 @@ async fn do_command(mut cfg: Config, args: Cli) -> Result<(), netsblox_api::erro
                 user,
             } => {
                 let as_user = user.clone().unwrap_or_else(|| get_current_user(&cfg));
-                let creds = netsblox_api::core::Credentials::Snap {
+                let creds = netsblox_api::common::Credentials::Snap {
                     username: username.to_owned(),
                     password: password.to_owned(),
                 };

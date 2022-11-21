@@ -29,7 +29,7 @@ use futures::TryStreamExt;
 use log::error;
 use mongodb::bson::doc;
 use mongodb::Client;
-use netsblox_core::ClientConfig;
+use netsblox_api_common::ClientConfig;
 use uuid::Uuid;
 
 #[get("/configuration")]
@@ -38,7 +38,7 @@ async fn get_client_config(
     session: Session,
 ) -> Result<HttpResponse, UserError> {
     let query = doc! {"public": true};
-    let default_hosts: Vec<netsblox_core::ServiceHost> = app
+    let default_hosts: Vec<netsblox_api_common::ServiceHost> = app
         .authorized_services
         .find(query, None)
         .await

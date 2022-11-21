@@ -14,7 +14,7 @@ use lazy_static::lazy_static;
 use lettre::Address;
 use mongodb::bson::doc;
 use mongodb::options::ReturnDocument;
-use netsblox_core::{LinkedAccount, LoginRequest, NewUser, UserRole};
+use netsblox_api_common::{LinkedAccount, LoginRequest, NewUser, UserRole};
 use regex::Regex;
 use rustrict::CensorStr;
 use serde::Deserialize;
@@ -139,7 +139,7 @@ async fn list_users(app: web::Data<AppData>, session: Session) -> Result<HttpRes
         .find(query, None)
         .await
         .map_err(InternalError::DatabaseConnectionError)?;
-    let users: Vec<netsblox_core::User> = cursor
+    let users: Vec<netsblox_api_common::User> = cursor
         .try_collect::<Vec<_>>()
         .await
         .map_err(InternalError::DatabaseConnectionError)?
@@ -494,7 +494,7 @@ async fn view_user(
     };
 
     let query = doc! {"username": username};
-    let user: netsblox_core::User = app
+    let user: netsblox_api_common::User = app
         .users
         .find_one(query, None)
         .await

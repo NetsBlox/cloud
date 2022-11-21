@@ -10,7 +10,7 @@ use log::{info, warn};
 use lru::LruCache;
 use mongodb::bson::{doc, DateTime, Document};
 use mongodb::options::{FindOneAndUpdateOptions, IndexOptions, ReturnDocument};
-use netsblox_core::{oauth, LibraryMetadata, NewUser, ProjectId, PublishState, RoleId, UserRole};
+use netsblox_api_common::{oauth, LibraryMetadata, NewUser, ProjectId, PublishState, RoleId, UserRole};
 use rusoto_core::credential::StaticProvider;
 use rusoto_core::Region;
 use serde::{Deserialize, Serialize};

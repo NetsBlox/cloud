@@ -9,7 +9,7 @@ use derive_more::Display;
 use futures::TryStreamExt;
 use mongodb::bson::doc;
 use mongodb::options::ReturnDocument;
-use netsblox_core::oauth;
+use netsblox_api_common::oauth;
 use passwords::PasswordGenerator;
 use serde::Deserialize;
 use uuid::Uuid;

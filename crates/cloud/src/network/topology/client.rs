@@ -1,7 +1,7 @@
 use actix::prelude::{Message, Recipient};
 use actix_web::rt::time::sleep;
 use lazy_static::lazy_static;
-pub use netsblox_core::ClientId;
+pub use netsblox_api_common::ClientId;
 use serde_json::json;
 use std::{
     collections::HashMap,

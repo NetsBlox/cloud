@@ -7,7 +7,7 @@ use actix_web::{web, HttpResponse};
 use futures::stream::TryStreamExt;
 use mongodb::bson::doc;
 
-use netsblox_core::{CreateGroupData, Group, GroupId, UpdateGroupData, User};
+use netsblox_api_common::{CreateGroupData, Group, GroupId, UpdateGroupData, User};
 use uuid::Uuid;
 
 #[get("/user/{owner}")]
@@ -25,7 +25,7 @@ async fn list_groups(
         .find(query, None)
         .await
         .map_err(InternalError::DatabaseConnectionError)?;
-    let groups: Vec<netsblox_core::Group> = cursor
+    let groups: Vec<netsblox_api_common::Group> = cursor
         .try_collect::<Vec<_>>()
         .await
         .map_err(InternalError::DatabaseConnectionError)?
@@ -55,7 +55,7 @@ async fn view_group(
         doc! {"id": id, "owner": username}
     };
 
-    let group: netsblox_core::Group = app
+    let group: netsblox_api_common::Group = app
         .groups
         .find_one(query, None)
         .await

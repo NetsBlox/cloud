@@ -9,7 +9,7 @@ use actix::{Actor, AsyncContext, Context, Handler};
 use lazy_static::lazy_static;
 use log::warn;
 use mongodb::bson::doc;
-use netsblox_core::{ClientId, ExternalClient, ProjectId, RoomState};
+use netsblox_api_common::{ClientId, ExternalClient, ProjectId, RoomState};
 use serde_json::Value;
 use std::sync::Arc;
 use tokio::sync::RwLock;
@@ -36,8 +36,8 @@ pub enum ClientCommand {
     Close,
 }
 
-impl From<netsblox_core::SendMessage> for ClientCommand {
-    fn from(msg: netsblox_core::SendMessage) -> ClientCommand {
+impl From<netsblox_api_common::SendMessage> for ClientCommand {
+    fn from(msg: netsblox_api_common::SendMessage) -> ClientCommand {
         ClientCommand::SendMessage(msg.content)
     }
 }
@@ -264,7 +264,7 @@ impl Handler<SendOccupantInvite> for TopologyActor {
 #[derive(Message)]
 #[rtype(result = "()")]
 pub struct SendMessageFromServices {
-    pub message: netsblox_core::SendMessage,
+    pub message: netsblox_api_common::SendMessage,
 }
 
 impl Handler<SendMessageFromServices> for TopologyActor {

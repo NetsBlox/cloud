@@ -8,8 +8,8 @@ use mongodb::{
     bson::{doc, DateTime},
     options::UpdateOptions,
 };
-pub use netsblox_core::Credentials;
-use netsblox_core::{LinkedAccount, UserRole};
+pub use netsblox_api_common::Credentials;
+use netsblox_api_common::{LinkedAccount, UserRole};
 use reqwest::{Method, Response};
 use serde::Deserialize;
 

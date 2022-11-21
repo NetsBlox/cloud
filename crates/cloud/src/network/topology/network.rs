@@ -3,8 +3,8 @@ use lazy_static::lazy_static;
 use log::warn;
 use lru::LruCache;
 use mongodb::bson::{doc, DateTime};
-pub use netsblox_core::{AppId, BrowserClientState, ClientState, ExternalClientState};
-use netsblox_core::{ExternalClient, OccupantState, RoleId, RoleState, RoomState};
+pub use netsblox_api_common::{AppId, BrowserClientState, ClientState, ExternalClientState};
+use netsblox_api_common::{ExternalClient, OccupantState, RoleId, RoleState, RoomState};
 use serde_json::json;
 use std::collections::{HashMap, HashSet};
 use std::str::FromStr;
@@ -668,16 +668,16 @@ impl Topology {
         });
     }
 
-    pub async fn send_msg_from_services(&self, msg: netsblox_core::SendMessage) {
+    pub async fn send_msg_from_services(&self, msg: netsblox_api_common::SendMessage) {
         let recipients = match msg.target {
-            netsblox_core::SendMessageTarget::Address { address } => {
+            netsblox_api_common::SendMessageTarget::Address { address } => {
                 if let Ok(address) = ClientAddress::from_str(&address) {
                     self.get_clients_at(address).await
                 } else {
                     Vec::new()
                 }
             }
-            netsblox_core::SendMessageTarget::Client {
+            netsblox_api_common::SendMessageTarget::Client {
                 project_id,
                 role_id,
                 client_id,
@@ -699,7 +699,7 @@ impl Topology {
                 }
                 clients
             }
-            netsblox_core::SendMessageTarget::Role {
+            netsblox_api_common::SendMessageTarget::Role {
                 project_id,
                 role_id,
             } => self
@@ -713,7 +713,7 @@ impl Topology {
                     })
                 })
                 .unwrap_or_default(),
-            netsblox_core::SendMessageTarget::Room { project_id } => self
+            netsblox_api_common::SendMessageTarget::Room { project_id } => self
                 .rooms
                 .get(&project_id)
                 .map(|room| {

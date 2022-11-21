@@ -1875,13 +1875,24 @@ version = "0.1.0"
 dependencies = [
  "derive_more",
  "futures-util",
- "netsblox_core",
+ "netsblox-api-common",
  "reqwest",
  "serde 1.0.136",
  "serde_json",
  "tokio",
  "tokio-tungstenite",
  "tungstenite",
+]
+
+[[package]]
+name = "netsblox-api-common"
+version = "0.1.0"
+dependencies = [
+ "bson",
+ "derive_more",
+ "serde 1.0.136",
+ "serde_json",
+ "uuid 1.0.0-alpha.1",
 ]
 
 [[package]]
@@ -1922,7 +1933,7 @@ dependencies = [
  "log",
  "lru",
  "mongodb",
- "netsblox_core",
+ "netsblox-api-common",
  "passwords",
  "regex",
  "reqwest",
@@ -1934,17 +1945,6 @@ dependencies = [
  "serde_json",
  "sha2 0.10.1",
  "tokio",
- "uuid 1.0.0-alpha.1",
-]
-
-[[package]]
-name = "netsblox_core"
-version = "0.1.0"
-dependencies = [
- "bson",
- "derive_more",
- "serde 1.0.136",
- "serde_json",
  "uuid 1.0.0-alpha.1",
 ]
 

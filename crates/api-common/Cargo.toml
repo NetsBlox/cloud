@@ -1,5 +1,5 @@
 [package]
-name = "netsblox_core"
+name = "netsblox-api-common"
 version = "0.1.0"
 edition = "2021"
 

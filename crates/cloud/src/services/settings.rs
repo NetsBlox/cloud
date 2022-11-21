@@ -103,7 +103,7 @@ async fn get_all_settings(
         .map(|pos| groups.swap_remove(pos))
         .and_then(|group| group.service_settings.get(&host).map(|s| s.to_owned()));
 
-    let all_settings = netsblox_core::ServiceSettings {
+    let all_settings = netsblox_api_common::ServiceSettings {
         user: user.service_settings.get(&host).cloned(),
         member: member_settings,
         groups: groups

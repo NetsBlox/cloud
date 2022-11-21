@@ -17,7 +17,7 @@ use actix_web_actors::ws::{self, CloseCode};
 use futures::TryStreamExt;
 use mongodb::bson::{doc, DateTime};
 use mongodb::options::{FindOneAndUpdateOptions, ReturnDocument};
-use netsblox_core::{
+use netsblox_api_common::{
     BrowserClientState, ClientId, ClientStateData, OccupantInviteData, ProjectId, SaveState,
 };
 use serde::Deserialize;
@@ -389,7 +389,7 @@ async fn delete_network_trace(
 #[post("/messages/")]
 async fn send_message(
     app: web::Data<AppData>,
-    message: web::Json<netsblox_core::SendMessage>,
+    message: web::Json<netsblox_api_common::SendMessage>,
     req: HttpRequest,
 ) -> Result<HttpResponse, UserError> {
     // TODO: Should this be used to send messages from the CLI?
@@ -418,7 +418,7 @@ async fn get_client_state(
     let username = topology::get_client_username(&client_id).await;
     let state = topology::get_client_state(&client_id).await;
 
-    Ok(HttpResponse::Ok().json(netsblox_core::ClientInfo { username, state }))
+    Ok(HttpResponse::Ok().json(netsblox_api_common::ClientInfo { username, state }))
 }
 
 pub fn config(cfg: &mut web::ServiceConfig) {

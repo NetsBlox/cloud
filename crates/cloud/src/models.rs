@@ -1,9 +1,9 @@
 use mongodb::bson::{self, doc, Bson, DateTime};
-use netsblox_core::{
+use netsblox_api_common::{
     oauth, ClientState, LibraryMetadata, NewUser, OccupantInviteData, PublishState, RoleId,
     UserRole,
 };
-pub use netsblox_core::{
+pub use netsblox_api_common::{
     CreateGroupData, FriendInvite, FriendLinkState, GroupId, InvitationState, LinkedAccount,
     ProjectId, RoleData, SaveState, ServiceHost,
 };
@@ -48,9 +48,9 @@ impl From<User> for Bson {
     }
 }
 
-impl From<User> for netsblox_core::User {
-    fn from(user: User) -> netsblox_core::User {
-        netsblox_core::User {
+impl From<User> for netsblox_api_common::User {
+    fn from(user: User) -> netsblox_api_common::User {
+        netsblox_api_common::User {
             username: user.username,
             email: user.email,
             group_id: user.group_id,
@@ -122,9 +122,9 @@ pub struct Group {
     pub service_settings: HashMap<String, String>,
 }
 
-impl From<Group> for netsblox_core::Group {
-    fn from(group: Group) -> netsblox_core::Group {
-        netsblox_core::Group {
+impl From<Group> for netsblox_api_common::Group {
+    fn from(group: Group) -> netsblox_api_common::Group {
+        netsblox_api_common::Group {
             id: group.id,
             owner: group.owner,
             name: group.name,
@@ -170,9 +170,9 @@ impl From<CollaborationInvite> for Bson {
     }
 }
 
-impl From<CollaborationInvite> for netsblox_core::CollaborationInvite {
-    fn from(user: CollaborationInvite) -> netsblox_core::CollaborationInvite {
-        netsblox_core::CollaborationInvite {
+impl From<CollaborationInvite> for netsblox_api_common::CollaborationInvite {
+    fn from(user: CollaborationInvite) -> netsblox_api_common::CollaborationInvite {
+        netsblox_api_common::CollaborationInvite {
             id: user.id,
             sender: user.sender,
             receiver: user.receiver,
@@ -311,9 +311,9 @@ impl ProjectMetadata {
     }
 }
 
-impl From<ProjectMetadata> for netsblox_core::ProjectMetadata {
-    fn from(metadata: ProjectMetadata) -> netsblox_core::ProjectMetadata {
-        netsblox_core::ProjectMetadata {
+impl From<ProjectMetadata> for netsblox_api_common::ProjectMetadata {
+    fn from(metadata: ProjectMetadata) -> netsblox_api_common::ProjectMetadata {
+        netsblox_api_common::ProjectMetadata {
             id: metadata.id,
             owner: metadata.owner,
             name: metadata.name,
@@ -345,9 +345,9 @@ pub struct Project {
     pub roles: HashMap<RoleId, RoleData>,
 }
 
-impl From<Project> for netsblox_core::Project {
-    fn from(project: Project) -> netsblox_core::Project {
-        netsblox_core::Project {
+impl From<Project> for netsblox_api_common::Project {
+    fn from(project: Project) -> netsblox_api_common::Project {
+        netsblox_api_common::Project {
             id: project.id,
             owner: project.owner,
             name: project.name,
@@ -370,9 +370,9 @@ pub struct RoleMetadata {
     pub updated: DateTime,
 }
 
-impl From<RoleMetadata> for netsblox_core::RoleMetadata {
-    fn from(metadata: RoleMetadata) -> netsblox_core::RoleMetadata {
-        netsblox_core::RoleMetadata {
+impl From<RoleMetadata> for netsblox_api_common::RoleMetadata {
+    fn from(metadata: RoleMetadata) -> netsblox_api_common::RoleMetadata {
+        netsblox_api_common::RoleMetadata {
             name: metadata.name,
             code: metadata.code,
             media: metadata.media,
@@ -503,15 +503,15 @@ impl From<AuthorizedServiceHost> for Bson {
     }
 }
 
-impl From<netsblox_core::AuthorizedServiceHost> for AuthorizedServiceHost {
-    fn from(data: netsblox_core::AuthorizedServiceHost) -> AuthorizedServiceHost {
+impl From<netsblox_api_common::AuthorizedServiceHost> for AuthorizedServiceHost {
+    fn from(data: netsblox_api_common::AuthorizedServiceHost) -> AuthorizedServiceHost {
         AuthorizedServiceHost::new(data.url, data.id, data.public)
     }
 }
 
-impl From<AuthorizedServiceHost> for netsblox_core::AuthorizedServiceHost {
-    fn from(host: AuthorizedServiceHost) -> netsblox_core::AuthorizedServiceHost {
-        netsblox_core::AuthorizedServiceHost {
+impl From<AuthorizedServiceHost> for netsblox_api_common::AuthorizedServiceHost {
+    fn from(host: AuthorizedServiceHost) -> netsblox_api_common::AuthorizedServiceHost {
+        netsblox_api_common::AuthorizedServiceHost {
             id: host.id,
             url: host.url,
             public: host.public,
@@ -519,9 +519,9 @@ impl From<AuthorizedServiceHost> for netsblox_core::AuthorizedServiceHost {
     }
 }
 
-impl From<AuthorizedServiceHost> for netsblox_core::ServiceHost {
-    fn from(host: AuthorizedServiceHost) -> netsblox_core::ServiceHost {
-        netsblox_core::ServiceHost {
+impl From<AuthorizedServiceHost> for netsblox_api_common::ServiceHost {
+    fn from(host: AuthorizedServiceHost) -> netsblox_api_common::ServiceHost {
+        netsblox_api_common::ServiceHost {
             url: host.url,
             categories: Vec::new(),
         }

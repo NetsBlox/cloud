@@ -9,7 +9,7 @@ use actix_web::{web, HttpResponse};
 use futures::TryStreamExt;
 use mongodb::bson::doc;
 use mongodb::options::UpdateOptions;
-use netsblox_core::{FriendInvite, FriendLinkState, UserRole};
+use netsblox_api_common::{FriendInvite, FriendLinkState, UserRole};
 
 #[get("/{owner}/")]
 async fn list_friends(

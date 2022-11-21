@@ -9,7 +9,7 @@ use futures::TryStreamExt;
 use lazy_static::lazy_static;
 use mongodb::bson::doc;
 use mongodb::options::UpdateOptions;
-use netsblox_core::{GroupId, ServiceHost};
+use netsblox_api_common::{GroupId, ServiceHost};
 use regex::Regex;
 
 #[get("/group/{id}")]
@@ -181,7 +181,7 @@ async fn get_authorized_hosts(
         .await
         .map_err(InternalError::DatabaseConnectionError)?;
 
-    let hosts: Vec<netsblox_core::AuthorizedServiceHost> = cursor
+    let hosts: Vec<netsblox_api_common::AuthorizedServiceHost> = cursor
         .try_collect::<Vec<_>>()
         .await
         .map_err(InternalError::DatabaseConnectionError)?
@@ -195,7 +195,7 @@ async fn get_authorized_hosts(
 #[post("/authorized/")]
 async fn authorize_host(
     app: web::Data<AppData>,
-    host_data: web::Json<netsblox_core::AuthorizedServiceHost>,
+    host_data: web::Json<netsblox_api_common::AuthorizedServiceHost>,
     session: Session,
 ) -> Result<HttpResponse, UserError> {
     ensure_valid_service_id(&host_data.id)?;

@@ -1,4 +1,4 @@
-pub use netsblox_core::{
+pub use netsblox_api_common::{
     oauth, AppId, AuthorizedServiceHost, ClientConfig, ClientId, ClientInfo, ClientState,
     ClientStateData, CollaborationInvite, CreateLibraryData, CreateProjectData, Credentials,
     ExternalClient, ExternalClientState, Group, InvitationId, InvitationState, LibraryMetadata,
@@ -6,4 +6,6 @@ pub use netsblox_core::{
     RoomState, SaveState, ServiceHost, ServiceSettings, UpdateProjectData, UpdateRoleData,
     UserRole,
 };
-pub use netsblox_core::{FriendInvite, FriendLinkState, InvitationResponse, ProjectMetadata, User};
+pub use netsblox_api_common::{
+    FriendInvite, FriendLinkState, InvitationResponse, ProjectMetadata, User,
+};

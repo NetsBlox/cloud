@@ -1,9 +1,9 @@
-pub mod core;
+pub mod common;
 pub mod error;
 
-use crate::core::*;
+use crate::common::*;
 use futures_util::SinkExt;
-use netsblox_core::{CreateGroupData, UpdateGroupData};
+use netsblox_api_common::{CreateGroupData, UpdateGroupData};
 use reqwest::{self, Method, RequestBuilder, Response};
 use serde::{Deserialize, Serialize};
 pub use serde_json;
@@ -182,7 +182,7 @@ impl Client {
     pub async fn link_account(
         &self,
         username: &str,
-        credentials: &core::Credentials,
+        credentials: &Credentials,
     ) -> Result<(), error::Error> {
         let response = self
             .request(Method::POST, &format!("/users/{}/link/", username))
