@@ -3,6 +3,7 @@ use actix_web::{delete, get, post, web, HttpRequest, HttpResponse};
 use futures::TryStreamExt;
 use mongodb::bson::doc;
 
+use crate::common::api;
 use crate::{
     app_data::AppData,
     errors::{InternalError, UserError},
@@ -103,7 +104,7 @@ async fn get_all_settings(
         .map(|pos| groups.swap_remove(pos))
         .and_then(|group| group.service_settings.get(&host).map(|s| s.to_owned()));
 
-    let all_settings = netsblox_api_common::ServiceSettings {
+    let all_settings = api::ServiceSettings {
         user: user.service_settings.get(&host).cloned(),
         member: member_settings,
         groups: groups

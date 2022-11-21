@@ -1,20 +1,20 @@
 use mongodb::bson::{self, doc, Bson, DateTime};
+pub use netsblox_api_common as api;
 use netsblox_api_common::{
     oauth, ClientState, LibraryMetadata, NewUser, OccupantInviteData, PublishState, RoleId,
     UserRole,
 };
-pub use netsblox_api_common::{
-    CreateGroupData, FriendInvite, FriendLinkState, GroupId, InvitationState, LinkedAccount,
-    ProjectId, RoleData, SaveState, ServiceHost,
+use netsblox_api_common::{
+    FriendInvite, FriendLinkState, GroupId, InvitationState, LinkedAccount, ProjectId, RoleData,
+    SaveState, ServiceHost,
 };
 use serde::{Deserialize, Serialize};
+use sha2::{Digest, Sha512};
 use std::{
     collections::HashMap,
     time::{Duration, SystemTime},
 };
 use uuid::Uuid;
-
-use crate::users::sha512;
 
 #[derive(Serialize, Deserialize, Clone)]
 #[serde(rename_all = "camelCase")]
@@ -551,7 +551,7 @@ impl From<Library> for LibraryMetadata {
 
 #[derive(Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
-pub(crate) struct OAuthClient {
+pub struct OAuthClient {
     pub id: oauth::ClientId,
     pub name: String,
     created_at: DateTime,
@@ -560,7 +560,7 @@ pub(crate) struct OAuthClient {
 }
 
 impl OAuthClient {
-    pub(crate) fn new(name: String, password: String) -> Self {
+    pub fn new(name: String, password: String) -> Self {
         let salt = passwords::PasswordGenerator::new()
             .length(8)
             .exclude_similar_characters(true)
@@ -603,11 +603,11 @@ impl From<OAuthClient> for oauth::Client {
 
 #[derive(Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
-pub(crate) struct OAuthToken {
-    pub(crate) id: oauth::TokenId,
-    pub(crate) client_id: oauth::ClientId,
-    pub(crate) username: String,
-    pub(crate) created_at: DateTime,
+pub struct OAuthToken {
+    pub id: oauth::TokenId,
+    pub client_id: oauth::ClientId,
+    pub username: String,
+    pub created_at: DateTime,
 }
 
 impl OAuthToken {
@@ -646,9 +646,15 @@ impl From<OAuthToken> for Bson {
     }
 }
 
+pub(crate) fn sha512(text: &str) -> String {
+    let mut hasher = Sha512::new();
+    hasher.update(text);
+    let hash = hasher.finalize();
+    hex::encode(hash)
+}
+
 #[cfg(test)]
 mod tests {
-
     #[actix_web::test]
     async fn test_uuid_ser() {}
 }

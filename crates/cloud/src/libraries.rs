@@ -1,4 +1,5 @@
 use crate::app_data::AppData;
+use crate::common::api::{CreateLibraryData, LibraryMetadata, PublishState};
 use crate::errors::{InternalError, UserError};
 use crate::users::{can_edit_user, ensure_is_moderator, is_moderator};
 use actix_session::Session;
@@ -8,7 +9,6 @@ use futures::stream::TryStreamExt;
 use lazy_static::lazy_static;
 use mongodb::bson::doc;
 use mongodb::options::{FindOneAndUpdateOptions, FindOptions};
-use netsblox_api_common::{CreateLibraryData, LibraryMetadata, PublishState};
 use regex::Regex;
 use rustrict::CensorStr;
 

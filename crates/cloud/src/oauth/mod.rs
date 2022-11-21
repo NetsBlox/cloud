@@ -1,7 +1,5 @@
 mod html_template;
 
-use std::time::SystemTime;
-
 use actix_session::Session;
 use actix_web::http::header;
 use actix_web::{delete, get, post, web, HttpResponse};
@@ -9,14 +7,15 @@ use derive_more::Display;
 use futures::TryStreamExt;
 use mongodb::bson::doc;
 use mongodb::options::ReturnDocument;
-use netsblox_api_common::oauth;
 use passwords::PasswordGenerator;
 use serde::Deserialize;
+use std::time::SystemTime;
 use uuid::Uuid;
 
 use crate::app_data::AppData;
+use crate::common::api::oauth;
+use crate::common::{OAuthClient, OAuthToken};
 use crate::errors::{InternalError, OAuthFlowError, UserError};
-use crate::models::{OAuthClient, OAuthToken};
 use crate::users::{ensure_can_edit_user, ensure_is_super_user, sha512};
 
 #[derive(Deserialize)]

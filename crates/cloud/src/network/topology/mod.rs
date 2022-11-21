@@ -3,13 +3,13 @@ mod client;
 mod network;
 
 use crate::app_data::AppData;
-use crate::models::{OccupantInvite, ProjectMetadata, RoleData};
+use crate::common::api::{ClientId, ExternalClient, ProjectId, RoleData, RoomState};
+use crate::common::{api, OccupantInvite, ProjectMetadata};
 use actix::prelude::*;
 use actix::{Actor, AsyncContext, Context, Handler};
 use lazy_static::lazy_static;
 use log::warn;
 use mongodb::bson::doc;
-use netsblox_api_common::{ClientId, ExternalClient, ProjectId, RoomState};
 use serde_json::Value;
 use std::sync::Arc;
 use tokio::sync::RwLock;
@@ -17,7 +17,8 @@ use uuid::Uuid;
 
 use self::client::{RoleDataResponseState, RoleRequest, RESPONSE_BUFFER};
 use self::network::Topology;
-pub use self::network::{BrowserClientState, ClientState, ExternalClientState, DEFAULT_APP_ID};
+pub use self::network::DEFAULT_APP_ID;
+use crate::common::api::{BrowserClientState, ClientState};
 
 lazy_static! {
     static ref TOPOLOGY: Arc<RwLock<Topology>> = Arc::new(RwLock::new(Topology::new()));
@@ -36,8 +37,8 @@ pub enum ClientCommand {
     Close,
 }
 
-impl From<netsblox_api_common::SendMessage> for ClientCommand {
-    fn from(msg: netsblox_api_common::SendMessage) -> ClientCommand {
+impl From<api::SendMessage> for ClientCommand {
+    fn from(msg: api::SendMessage) -> ClientCommand {
         ClientCommand::SendMessage(msg.content)
     }
 }
@@ -264,7 +265,7 @@ impl Handler<SendOccupantInvite> for TopologyActor {
 #[derive(Message)]
 #[rtype(result = "()")]
 pub struct SendMessageFromServices {
-    pub message: netsblox_api_common::SendMessage,
+    pub message: api::SendMessage,
 }
 
 impl Handler<SendMessageFromServices> for TopologyActor {

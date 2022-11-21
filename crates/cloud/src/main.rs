@@ -1,17 +1,18 @@
 mod app_data;
 mod collaboration_invites;
+mod common;
 mod config;
 mod errors;
 mod friends;
 mod groups;
 mod libraries;
-mod models;
 mod network;
 mod oauth;
 mod projects;
 mod services;
 mod users;
 
+use crate::common::api;
 use crate::config::Settings;
 use crate::errors::UserError;
 use crate::{app_data::AppData, errors::InternalError};
@@ -29,7 +30,6 @@ use futures::TryStreamExt;
 use log::error;
 use mongodb::bson::doc;
 use mongodb::Client;
-use netsblox_api_common::ClientConfig;
 use uuid::Uuid;
 
 #[get("/configuration")]
@@ -38,7 +38,7 @@ async fn get_client_config(
     session: Session,
 ) -> Result<HttpResponse, UserError> {
     let query = doc! {"public": true};
-    let default_hosts: Vec<netsblox_api_common::ServiceHost> = app
+    let default_hosts: Vec<api::ServiceHost> = app
         .authorized_services
         .find(query, None)
         .await
@@ -50,7 +50,7 @@ async fn get_client_config(
         .map(|host| host.into())
         .collect();
 
-    let config = ClientConfig {
+    let config = api::ClientConfig {
         client_id: format!("_netsblox{}", Uuid::new_v4()),
         username: session.get::<String>("username").unwrap_or(None),
         services_hosts: default_hosts,

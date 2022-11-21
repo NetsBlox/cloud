@@ -1,6 +1,7 @@
 use crate::app_data::AppData;
+use crate::common::api::{FriendInvite, FriendLinkState, UserRole};
+use crate::common::{FriendLink, User};
 use crate::errors::{InternalError, UserError};
-use crate::models::{FriendLink, User};
 use crate::network::topology;
 use crate::users::{ensure_can_edit_user, get_user_role};
 use actix_session::Session;
@@ -9,7 +10,6 @@ use actix_web::{web, HttpResponse};
 use futures::TryStreamExt;
 use mongodb::bson::doc;
 use mongodb::options::UpdateOptions;
-use netsblox_api_common::{FriendInvite, FriendLinkState, UserRole};
 
 #[get("/{owner}/")]
 async fn list_friends(

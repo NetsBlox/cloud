@@ -1,7 +1,7 @@
+pub use crate::common::api::ClientId;
 use actix::prelude::{Message, Recipient};
 use actix_web::rt::time::sleep;
 use lazy_static::lazy_static;
-pub use netsblox_api_common::ClientId;
 use serde_json::json;
 use std::{
     collections::HashMap,
@@ -11,7 +11,7 @@ use std::{
 use uuid::Uuid;
 
 use super::ClientCommand;
-use crate::{errors::InternalError, models::RoleData};
+use crate::{common::api::RoleData, errors::InternalError};
 
 lazy_static! {
     pub static ref RESPONSE_BUFFER: Arc<RwLock<HashMap<Uuid, RoleDataResponseState>>> =

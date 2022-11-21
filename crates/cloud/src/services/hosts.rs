@@ -1,6 +1,8 @@
 use crate::app_data::AppData;
+use crate::common::api;
+use crate::common::api::{GroupId, ServiceHost};
+use crate::common::AuthorizedServiceHost;
 use crate::errors::{InternalError, UserError};
-use crate::models::AuthorizedServiceHost;
 use crate::users::{ensure_can_edit_user, ensure_is_super_user, is_super_user};
 use actix_session::Session;
 use actix_web::{delete, get, post, HttpRequest};
@@ -9,7 +11,6 @@ use futures::TryStreamExt;
 use lazy_static::lazy_static;
 use mongodb::bson::doc;
 use mongodb::options::UpdateOptions;
-use netsblox_api_common::{GroupId, ServiceHost};
 use regex::Regex;
 
 #[get("/group/{id}")]
@@ -181,7 +182,7 @@ async fn get_authorized_hosts(
         .await
         .map_err(InternalError::DatabaseConnectionError)?;
 
-    let hosts: Vec<netsblox_api_common::AuthorizedServiceHost> = cursor
+    let hosts: Vec<api::AuthorizedServiceHost> = cursor
         .try_collect::<Vec<_>>()
         .await
         .map_err(InternalError::DatabaseConnectionError)?
@@ -195,7 +196,7 @@ async fn get_authorized_hosts(
 #[post("/authorized/")]
 async fn authorize_host(
     app: web::Data<AppData>,
-    host_data: web::Json<netsblox_api_common::AuthorizedServiceHost>,
+    host_data: web::Json<api::AuthorizedServiceHost>,
     session: Session,
 ) -> Result<HttpResponse, UserError> {
     ensure_valid_service_id(&host_data.id)?;

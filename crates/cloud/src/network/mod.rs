@@ -3,9 +3,14 @@ pub mod topology;
 use std::time::SystemTime;
 
 use crate::app_data::AppData;
+use crate::common::api::{
+    BrowserClientState, ClientId, ClientState, ClientStateData, OccupantInviteData, ProjectId,
+    SaveState,
+};
+use crate::common::{
+    api, api::ExternalClientState, NetworkTraceMetadata, OccupantInvite, SentMessage,
+};
 use crate::errors::{InternalError, UserError};
-use crate::models::{NetworkTraceMetadata, OccupantInvite, SentMessage};
-use crate::network::topology::{ClientState, ExternalClientState};
 use crate::projects::{ensure_can_edit_project, ensure_can_view_project};
 use crate::services::ensure_is_authorized_host;
 use crate::users::{ensure_can_edit_user, ensure_is_super_user};
@@ -17,9 +22,6 @@ use actix_web_actors::ws::{self, CloseCode};
 use futures::TryStreamExt;
 use mongodb::bson::{doc, DateTime};
 use mongodb::options::{FindOneAndUpdateOptions, ReturnDocument};
-use netsblox_api_common::{
-    BrowserClientState, ClientId, ClientStateData, OccupantInviteData, ProjectId, SaveState,
-};
 use serde::Deserialize;
 use serde_json::{json, Value};
 use topology::ClientCommand;
@@ -389,7 +391,7 @@ async fn delete_network_trace(
 #[post("/messages/")]
 async fn send_message(
     app: web::Data<AppData>,
-    message: web::Json<netsblox_api_common::SendMessage>,
+    message: web::Json<api::SendMessage>,
     req: HttpRequest,
 ) -> Result<HttpResponse, UserError> {
     // TODO: Should this be used to send messages from the CLI?
@@ -418,7 +420,7 @@ async fn get_client_state(
     let username = topology::get_client_username(&client_id).await;
     let state = topology::get_client_state(&client_id).await;
 
-    Ok(HttpResponse::Ok().json(netsblox_api_common::ClientInfo { username, state }))
+    Ok(HttpResponse::Ok().json(api::ClientInfo { username, state }))
 }
 
 pub fn config(cfg: &mut web::ServiceConfig) {

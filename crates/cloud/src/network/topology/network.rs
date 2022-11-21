@@ -1,10 +1,13 @@
+use crate::common::api;
+use crate::common::api::{
+    AppId, BrowserClientState, ClientState, ExternalClient, OccupantState, RoleId, RoleState,
+    RoomState,
+};
 use futures::future::join_all;
 use lazy_static::lazy_static;
 use log::warn;
 use lru::LruCache;
 use mongodb::bson::{doc, DateTime};
-pub use netsblox_api_common::{AppId, BrowserClientState, ClientState, ExternalClientState};
-use netsblox_api_common::{ExternalClient, OccupantState, RoleId, RoleState, RoomState};
 use serde_json::json;
 use std::collections::{HashMap, HashSet};
 use std::str::FromStr;
@@ -12,8 +15,9 @@ use std::sync::{Arc, RwLock};
 use std::time::{Duration, SystemTime};
 
 use crate::app_data::AppData;
+use crate::common::api::{ProjectId, SaveState};
+use crate::common::{ProjectMetadata, SentMessage};
 use crate::errors::InternalError;
-use crate::models::{ProjectId, ProjectMetadata, SaveState, SentMessage};
 use crate::network::topology::address::ClientAddress;
 
 pub use super::address::DEFAULT_APP_ID;
@@ -668,16 +672,16 @@ impl Topology {
         });
     }
 
-    pub async fn send_msg_from_services(&self, msg: netsblox_api_common::SendMessage) {
+    pub async fn send_msg_from_services(&self, msg: api::SendMessage) {
         let recipients = match msg.target {
-            netsblox_api_common::SendMessageTarget::Address { address } => {
+            api::SendMessageTarget::Address { address } => {
                 if let Ok(address) = ClientAddress::from_str(&address) {
                     self.get_clients_at(address).await
                 } else {
                     Vec::new()
                 }
             }
-            netsblox_api_common::SendMessageTarget::Client {
+            api::SendMessageTarget::Client {
                 project_id,
                 role_id,
                 client_id,
@@ -699,7 +703,7 @@ impl Topology {
                 }
                 clients
             }
-            netsblox_api_common::SendMessageTarget::Role {
+            api::SendMessageTarget::Role {
                 project_id,
                 role_id,
             } => self
@@ -713,7 +717,7 @@ impl Topology {
                     })
                 })
                 .unwrap_or_default(),
-            netsblox_api_common::SendMessageTarget::Room { project_id } => self
+            api::SendMessageTarget::Room { project_id } => self
                 .rooms
                 .get(&project_id)
                 .map(|room| {

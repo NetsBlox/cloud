@@ -2,9 +2,11 @@ mod html_template;
 mod strategies;
 
 use crate::app_data::AppData;
+use crate::common::api;
+use crate::common::api::UserRole;
+use crate::common::{BannedAccount, SetPasswordToken, User};
 use crate::errors::{InternalError, UserError};
 use crate::groups::ensure_can_edit_group;
-use crate::models::{BannedAccount, SetPasswordToken, User};
 use crate::services::ensure_is_authorized_host;
 use actix_session::Session;
 use actix_web::{get, patch, post, HttpRequest};
@@ -14,7 +16,6 @@ use lazy_static::lazy_static;
 use lettre::Address;
 use mongodb::bson::doc;
 use mongodb::options::ReturnDocument;
-use netsblox_api_common::{LinkedAccount, LoginRequest, NewUser, UserRole};
 use regex::Regex;
 use rustrict::CensorStr;
 use serde::Deserialize;
@@ -139,7 +140,7 @@ async fn list_users(app: web::Data<AppData>, session: Session) -> Result<HttpRes
         .find(query, None)
         .await
         .map_err(InternalError::DatabaseConnectionError)?;
-    let users: Vec<netsblox_api_common::User> = cursor
+    let users: Vec<api::User> = cursor
         .try_collect::<Vec<_>>()
         .await
         .map_err(InternalError::DatabaseConnectionError)?
@@ -153,7 +154,7 @@ async fn list_users(app: web::Data<AppData>, session: Session) -> Result<HttpRes
 async fn create_user(
     app: web::Data<AppData>,
     req: HttpRequest,
-    user_data: web::Json<NewUser>,
+    user_data: web::Json<api::NewUser>,
     session: Session,
 ) -> Result<HttpResponse, UserError> {
     app.ensure_not_tor_ip(req).await?;
@@ -237,7 +238,7 @@ fn is_valid_username(name: &str) -> bool {
 async fn login(
     req: HttpRequest,
     app: web::Data<AppData>,
-    request: web::Json<LoginRequest>,
+    request: web::Json<api::LoginRequest>,
     session: Session,
 ) -> Result<HttpResponse, UserError> {
     // TODO: record login IPs?
@@ -494,7 +495,7 @@ async fn view_user(
     };
 
     let query = doc! {"username": username};
-    let user: netsblox_api_common::User = app
+    let user: api::User = app
         .users
         .find_one(query, None)
         .await
@@ -522,7 +523,7 @@ async fn link_account(
 
     strategies::authenticate(&creds).await?;
 
-    let account: LinkedAccount = creds.into();
+    let account: api::LinkedAccount = creds.into();
     let query = doc! {"linkedAccounts": {"$elemMatch": &account}};
     let existing = app
         .users
@@ -553,7 +554,7 @@ async fn link_account(
 async fn unlink_account(
     app: web::Data<AppData>,
     path: web::Path<(String,)>,
-    account: web::Json<LinkedAccount>,
+    account: web::Json<api::LinkedAccount>,
     session: Session,
 ) -> Result<HttpResponse, UserError> {
     let (username,) = path.into_inner();

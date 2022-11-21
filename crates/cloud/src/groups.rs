@@ -7,7 +7,7 @@ use actix_web::{web, HttpResponse};
 use futures::stream::TryStreamExt;
 use mongodb::bson::doc;
 
-use netsblox_api_common::{CreateGroupData, Group, GroupId, UpdateGroupData, User};
+use crate::common::api;
 use uuid::Uuid;
 
 #[get("/user/{owner}")]
@@ -25,7 +25,7 @@ async fn list_groups(
         .find(query, None)
         .await
         .map_err(InternalError::DatabaseConnectionError)?;
-    let groups: Vec<netsblox_api_common::Group> = cursor
+    let groups: Vec<api::Group> = cursor
         .try_collect::<Vec<_>>()
         .await
         .map_err(InternalError::DatabaseConnectionError)?
@@ -39,7 +39,7 @@ async fn list_groups(
 #[get("/id/{id}")]
 async fn view_group(
     app: web::Data<AppData>,
-    path: web::Path<(GroupId,)>,
+    path: web::Path<(api::GroupId,)>,
     session: Session,
 ) -> Result<HttpResponse, UserError> {
     let (id,) = path.into_inner();
@@ -55,7 +55,7 @@ async fn view_group(
         doc! {"id": id, "owner": username}
     };
 
-    let group: netsblox_api_common::Group = app
+    let group: api::Group = app
         .groups
         .find_one(query, None)
         .await
@@ -69,7 +69,7 @@ async fn view_group(
 #[get("/id/{id}/members")]
 async fn list_members(
     app: web::Data<AppData>,
-    path: web::Path<(GroupId,)>,
+    path: web::Path<(api::GroupId,)>,
     session: Session,
 ) -> Result<HttpResponse, UserError> {
     let (id,) = path.into_inner();
@@ -81,7 +81,7 @@ async fn list_members(
         .find(query, None)
         .await
         .map_err(InternalError::DatabaseConnectionError)?;
-    let members: Vec<User> = cursor
+    let members: Vec<api::User> = cursor
         .try_collect::<Vec<_>>()
         .await
         .map_err(InternalError::DatabaseConnectionError)?
@@ -95,7 +95,7 @@ async fn list_members(
 pub async fn ensure_can_edit_group(
     app: &AppData,
     session: &Session,
-    group_id: &GroupId,
+    group_id: &api::GroupId,
 ) -> Result<(), UserError> {
     let query = doc! {"id": group_id};
     match app
@@ -115,12 +115,12 @@ async fn create_group(
     app: web::Data<AppData>,
     path: web::Path<(String,)>,
     session: Session,
-    body: web::Json<CreateGroupData>,
+    body: web::Json<api::CreateGroupData>,
 ) -> Result<HttpResponse, UserError> {
     let (owner,) = path.into_inner();
     ensure_can_edit_user(&app, &session, &owner).await?;
 
-    let group = Group {
+    let group = api::Group {
         id: Uuid::new_v4().to_string(),
         name: body.name.to_owned(),
         owner: owner.to_owned(),
@@ -147,8 +147,8 @@ async fn create_group(
 #[patch("/id/{id}")]
 async fn update_group(
     app: web::Data<AppData>,
-    path: web::Path<(GroupId,)>,
-    data: web::Json<UpdateGroupData>,
+    path: web::Path<(api::GroupId,)>,
+    data: web::Json<api::UpdateGroupData>,
     session: Session,
 ) -> Result<HttpResponse, UserError> {
     let (id,) = path.into_inner();
@@ -181,7 +181,7 @@ async fn update_group(
 #[delete("/id/{id}")]
 async fn delete_group(
     app: web::Data<AppData>,
-    path: web::Path<(GroupId,)>,
+    path: web::Path<(api::GroupId,)>,
     session: Session,
 ) -> Result<HttpResponse, UserError> {
     let (id,) = path.into_inner();

@@ -3,20 +3,20 @@ use std::{
     time::SystemTime,
 };
 
+pub(crate) use crate::common::api::Credentials;
+use crate::common::api::{self, UserRole};
 use futures::TryStreamExt;
 use mongodb::{
     bson::{doc, DateTime},
     options::UpdateOptions,
 };
-pub use netsblox_api_common::Credentials;
-use netsblox_api_common::{LinkedAccount, UserRole};
 use reqwest::{Method, Response};
 use serde::Deserialize;
 
 use crate::{
     app_data::AppData,
+    common::User,
     errors::{InternalError, UserError},
-    models::User,
 };
 
 use super::sha512;
@@ -62,7 +62,7 @@ pub async fn login(app: &AppData, credentials: Credentials) -> Result<User, User
                 .await?
                 .ok_or(UserError::SnapConnectionError)?;
 
-            let account = LinkedAccount {
+            let account = api::LinkedAccount {
                 username: username.to_lowercase(),
                 strategy: "snap".to_owned(),
             };
@@ -122,7 +122,7 @@ pub async fn login(app: &AppData, credentials: Credentials) -> Result<User, User
 async fn create_account(
     app: &AppData,
     email: String,
-    account: &LinkedAccount,
+    account: &api::LinkedAccount,
 ) -> Result<User, UserError> {
     let username = username_from(app, account).await?;
     let query = doc! {"username": &username};
@@ -159,7 +159,10 @@ async fn create_account(
     Ok(user)
 }
 
-async fn username_from(app: &AppData, credentials: &LinkedAccount) -> Result<String, UserError> {
+async fn username_from(
+    app: &AppData,
+    credentials: &api::LinkedAccount,
+) -> Result<String, UserError> {
     let basename = credentials.username.to_owned();
     let starts_with_name = mongodb::bson::Regex {
         pattern: format!("^{}", &basename),

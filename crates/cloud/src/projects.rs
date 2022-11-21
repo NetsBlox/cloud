@@ -2,10 +2,15 @@ use std::collections::HashMap;
 use std::io::BufWriter;
 
 use crate::app_data::AppData;
+use crate::common::api;
+use crate::common::api::{
+    BrowserClientState, ClientId, CreateProjectData, Project, ProjectId, PublishState, RoleData,
+    RoleId, SaveState, UpdateProjectData, UpdateRoleData,
+};
+use crate::common::ProjectMetadata;
 use crate::errors::{InternalError, UserError};
 use crate::libraries;
-use crate::models::{ProjectMetadata, RoleData};
-use crate::network::topology::{self, BrowserClientState};
+use crate::network::topology;
 use crate::users::{can_edit_user, ensure_can_edit_user};
 use actix_session::Session;
 use actix_web::{delete, get, patch, post};
@@ -18,10 +23,6 @@ use image::{
 use mongodb::bson::doc;
 use mongodb::options::{FindOneAndUpdateOptions, ReturnDocument};
 use mongodb::Cursor;
-use netsblox_api_common::{
-    ClientId, CreateProjectData, Project, ProjectId, PublishState, RoleId, SaveState,
-    UpdateProjectData, UpdateRoleData,
-};
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
@@ -76,7 +77,7 @@ async fn get_visible_projects(
     session: &Session,
     owner: &str,
     cursor: Cursor<ProjectMetadata>,
-) -> Vec<netsblox_api_common::ProjectMetadata> {
+) -> Vec<api::ProjectMetadata> {
     let projects = if can_edit_user(app, session, owner).await.unwrap_or(false) {
         cursor.try_collect::<Vec<_>>().await.unwrap()
     } else {
@@ -150,7 +151,7 @@ async fn get_project_metadata(
 
     ensure_can_view_project_metadata(&app, &session, None, &metadata).await?;
 
-    let metadata: netsblox_api_common::ProjectMetadata = metadata.into();
+    let metadata: api::ProjectMetadata = metadata.into();
     Ok(HttpResponse::Ok().json(metadata))
 }
 
@@ -163,7 +164,7 @@ async fn get_project_id_metadata(
     let (project_id,) = path.into_inner();
     let metadata = ensure_can_view_project(&app, &session, None, &project_id).await?;
 
-    let metadata: netsblox_api_common::ProjectMetadata = metadata.into();
+    let metadata: api::ProjectMetadata = metadata.into();
     Ok(HttpResponse::Ok().json(metadata))
 }
 
@@ -275,7 +276,7 @@ async fn get_project(
     let (project_id,) = path.into_inner();
     let metadata = ensure_can_view_project(&app, &session, None, &project_id).await?;
 
-    let project: netsblox_api_common::Project = app.fetch_project(&metadata).await?.into();
+    let project: api::Project = app.fetch_project(&metadata).await?.into();
     Ok(HttpResponse::Ok().json(project)) // TODO: Update this to a responder?
 }
 
