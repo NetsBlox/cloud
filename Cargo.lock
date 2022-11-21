@@ -1933,7 +1933,7 @@ dependencies = [
  "log",
  "lru",
  "mongodb",
- "netsblox-api-common",
+ "netsblox-cloud-common",
  "passwords",
  "regex",
  "reqwest",
@@ -1945,6 +1945,20 @@ dependencies = [
  "serde_json",
  "sha2 0.10.1",
  "tokio",
+ "uuid 1.0.0-alpha.1",
+]
+
+[[package]]
+name = "netsblox-cloud-common"
+version = "0.1.0"
+dependencies = [
+ "hex",
+ "mongodb",
+ "netsblox-api-common",
+ "passwords",
+ "serde 1.0.136",
+ "serde_json",
+ "sha2 0.10.1",
  "uuid 1.0.0-alpha.1",
 ]
 
