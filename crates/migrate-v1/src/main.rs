@@ -1,5 +1,4 @@
 use futures::stream::StreamExt;
-use futures::TryStreamExt;
 use mongodb::{bson::doc, Client, Database};
 use netsblox_cloud_common as cloud;
 
@@ -8,9 +7,8 @@ mod origin;
 #[tokio::main]
 async fn main() {
     // TODO: Add CLI args?
-    // TODO: Create the database models from JS version
-    let src_db = connect_db(&"mongodb:://127.0.0.1:27017/admin").await;
-    let dst_db = connect_db(&"mongodb:://127.0.0.1:27017/netsblox_v2").await;
+    let src_db = connect_db("mongodb:://127.0.0.1:27017/admin").await;
+    let dst_db = connect_db("mongodb:://127.0.0.1:27017/netsblox_v2").await;
 
     // Convert users
     let src_users = src_db.collection::<origin::User>("users");
@@ -67,7 +65,7 @@ async fn main() {
     drop(src_groups);
     drop(dst_groups);
 
-    // TODO: Convert libraries
+    // Convert libraries
     let src_libraries = src_db.collection::<origin::Library>("libraries");
     let dst_libraries = dst_db.collection::<cloud::Library>("libraries");
     let query = doc! {};
@@ -112,12 +110,4 @@ async fn connect_db(mongo_uri: &str) -> Database {
         .expect("Could not connect to mongodb.")
         .default_database()
         .expect("Could not connect to default source database")
-}
-
-fn migrate<S, D>(src_db: &Database, dst_db: &Database, src_name: &str, dst_name: &str) {
-    let src = src_db.collection::<S>(src_name);
-    let dst = dst_db.collection::<D>(dst_name);
-
-    // TODO: migrate all the given types...
-    todo!();
 }
