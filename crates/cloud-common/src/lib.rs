@@ -70,7 +70,7 @@ impl From<NewUser> for User {
             .numbers(true)
             .spaces(false)
             .generate_one()
-            .unwrap_or("salt".to_owned());
+            .unwrap_or_else(|_err| "salt".to_owned());
 
         let hash: String = if let Some(pwd) = user_data.password {
             sha512(&(pwd + &salt))
