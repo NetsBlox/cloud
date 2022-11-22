@@ -1729,6 +1729,18 @@ dependencies = [
 ]
 
 [[package]]
+name = "migrate-v1"
+version = "0.1.0"
+dependencies = [
+ "mongodb",
+ "netsblox-cloud-common",
+ "passwords",
+ "serde 1.0.136",
+ "serde_json",
+ "tokio",
+]
+
+[[package]]
 name = "mime"
 version = "0.3.16"
 source = "registry+https://github.com/rust-lang/crates.io-index"
