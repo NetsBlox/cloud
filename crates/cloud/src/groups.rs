@@ -121,7 +121,7 @@ async fn create_group(
     ensure_can_edit_user(&app, &session, &owner).await?;
 
     let group = api::Group {
-        id: Uuid::new_v4().to_string(),
+        id: api::GroupId::new(Uuid::new_v4().to_string()),
         name: body.name.to_owned(),
         owner: owner.to_owned(),
         services_hosts: body.into_inner().services_hosts,

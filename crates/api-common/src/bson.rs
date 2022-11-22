@@ -1,6 +1,6 @@
 use crate::{
-    oauth, FriendInvite, FriendLinkState, Group, InvitationState, LinkedAccount, ProjectId,
-    PublishState, RoleMetadata, SaveState, ServiceHost, UserRole,
+    oauth, FriendInvite, FriendLinkState, Group, GroupId, InvitationState, LinkedAccount,
+    ProjectId, PublishState, RoleMetadata, SaveState, ServiceHost, UserRole,
 };
 use bson::{doc, Bson, DateTime};
 
@@ -85,6 +85,12 @@ impl From<PublishState> for Bson {
             PublishState::ApprovalDenied => Bson::String("ApprovalDenied".into()),
             PublishState::Public => Bson::String("Public".into()),
         }
+    }
+}
+
+impl From<GroupId> for Bson {
+    fn from(id: GroupId) -> Bson {
+        Bson::String(id.as_str().to_owned())
     }
 }
 

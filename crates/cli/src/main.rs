@@ -660,7 +660,7 @@ async fn do_command(mut cfg: Config, args: Cli) -> Result<(), netsblox_api::erro
                         username,
                         email,
                         password.as_deref(),
-                        group_id.as_deref(),
+                        group_id.as_ref(),
                         role.to_owned(),
                     )
                     .await?;

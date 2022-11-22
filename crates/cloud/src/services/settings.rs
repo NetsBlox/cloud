@@ -172,7 +172,7 @@ async fn delete_user_settings(
 #[get("/group/{group_id}/")]
 async fn list_group_hosts_with_settings(
     app: web::Data<AppData>,
-    path: web::Path<(String,)>,
+    path: web::Path<(api::GroupId,)>,
     session: Session,
 ) -> Result<HttpResponse, UserError> {
     let (group_id,) = path.into_inner();
@@ -193,7 +193,7 @@ async fn list_group_hosts_with_settings(
 #[get("/group/{group_id}/{host}")]
 async fn get_group_settings(
     app: web::Data<AppData>,
-    path: web::Path<(String, String)>,
+    path: web::Path<(api::GroupId, String)>,
     session: Session,
 ) -> Result<HttpResponse, UserError> {
     let (group_id, host) = path.into_inner();
@@ -219,7 +219,7 @@ async fn get_group_settings(
 #[post("/group/{group_id}/{host}")]
 async fn set_group_settings(
     app: web::Data<AppData>,
-    path: web::Path<(String, String)>,
+    path: web::Path<(api::GroupId, String)>,
     session: Session,
 ) -> Result<HttpResponse, UserError> {
     let (group_id, host) = path.into_inner();
@@ -244,7 +244,7 @@ async fn set_group_settings(
 #[delete("/group/{group_id}/{host}")]
 async fn delete_group_settings(
     app: web::Data<AppData>,
-    path: web::Path<(String, String)>,
+    path: web::Path<(api::GroupId, String)>,
     session: Session,
 ) -> Result<HttpResponse, UserError> {
     let (group_id, host) = path.into_inner();

@@ -78,7 +78,7 @@ struct UserData<'a> {
     username: &'a str,
     email: &'a str,
     role: &'a UserRole,
-    group_id: Option<&'a str>,
+    group_id: Option<&'a GroupId>,
     password: Option<&'a str>,
 }
 
@@ -107,7 +107,7 @@ impl Client {
         name: &str,
         email: &str,
         password: Option<&str>, // TODO: Make these CreateUserOptions
-        group_id: Option<&str>,
+        group_id: Option<&GroupId>,
         role: UserRole,
     ) -> Result<(), error::Error> {
         let user_data = NewUser {
@@ -773,7 +773,7 @@ impl Client {
         Ok(())
     }
 
-    pub async fn delete_group(&self, id: &str) -> Result<(), error::Error> {
+    pub async fn delete_group(&self, id: &GroupId) -> Result<(), error::Error> {
         let path = format!("/groups/id/{}", id);
         let response = self
             .request(Method::DELETE, &path)
@@ -785,7 +785,7 @@ impl Client {
         Ok(())
     }
 
-    pub async fn list_members(&self, id: &str) -> Result<Vec<User>, error::Error> {
+    pub async fn list_members(&self, id: &GroupId) -> Result<Vec<User>, error::Error> {
         let path = format!("/groups/id/{}/members", id);
         let response = self
             .request(Method::GET, &path)
@@ -797,7 +797,7 @@ impl Client {
         Ok(response.json::<Vec<User>>().await.unwrap())
     }
 
-    pub async fn rename_group(&self, id: &str, name: &str) -> Result<(), error::Error> {
+    pub async fn rename_group(&self, id: &GroupId, name: &str) -> Result<(), error::Error> {
         let path = format!("/groups/id/{}", id);
         let response = self
             .request(Method::PATCH, &path)
@@ -812,7 +812,7 @@ impl Client {
         Ok(())
     }
 
-    pub async fn view_group(&self, id: &str) -> Result<Group, error::Error> {
+    pub async fn view_group(&self, id: &GroupId) -> Result<Group, error::Error> {
         let path = format!("/groups/id/{}", id);
         let response = self
             .request(Method::GET, &path)
@@ -838,7 +838,10 @@ impl Client {
         Ok(response.json::<Vec<ServiceHost>>().await.unwrap())
     }
 
-    pub async fn list_group_hosts(&self, group_id: &str) -> Result<Vec<ServiceHost>, error::Error> {
+    pub async fn list_group_hosts(
+        &self,
+        group_id: &GroupId,
+    ) -> Result<Vec<ServiceHost>, error::Error> {
         let response = self
             .request(Method::GET, &format!("/services/hosts/group/{}", group_id))
             .send()
@@ -880,7 +883,7 @@ impl Client {
 
     pub async fn set_group_hosts(
         &self,
-        group_id: &str,
+        group_id: &GroupId,
         hosts: Vec<ServiceHost>,
     ) -> Result<(), error::Error> {
         let response = self
@@ -942,7 +945,10 @@ impl Client {
     }
 
     // Service settings management
-    pub async fn list_group_settings(&self, group_id: &str) -> Result<Vec<String>, error::Error> {
+    pub async fn list_group_settings(
+        &self,
+        group_id: &GroupId,
+    ) -> Result<Vec<String>, error::Error> {
         let response = self
             .request(
                 Method::GET,
@@ -990,7 +996,7 @@ impl Client {
 
     pub async fn get_group_settings(
         &self,
-        group_id: &str,
+        group_id: &GroupId,
         service_id: &str,
     ) -> Result<String, error::Error> {
         let response = self
@@ -1046,7 +1052,7 @@ impl Client {
 
     pub async fn set_group_settings(
         &self,
-        group_id: &str,
+        group_id: &GroupId,
         service_id: &str,
         settings: String,
     ) -> Result<String, error::Error> {
@@ -1084,7 +1090,7 @@ impl Client {
 
     pub async fn delete_group_settings(
         &self,
-        group_id: &str,
+        group_id: &GroupId,
         service_id: &str,
     ) -> Result<String, error::Error> {
         let response = self

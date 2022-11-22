@@ -3,7 +3,7 @@ mod bson;
 pub mod oauth;
 
 use core::fmt;
-use derive_more::{Display, Error};
+use derive_more::{Display, Error, FromStr};
 use serde::{
     de::{self, Visitor},
     Deserialize, Deserializer, Serialize,
@@ -28,7 +28,6 @@ pub struct InvitationResponse {
     pub response: FriendLinkState,
 }
 
-pub type GroupId = String;
 #[derive(Serialize, Deserialize, Clone, Debug)]
 #[serde(rename_all = "camelCase")]
 pub struct User {
@@ -46,7 +45,7 @@ pub struct NewUser {
     pub username: String,
     pub email: String,
     pub password: Option<String>,
-    pub group_id: Option<String>,
+    pub group_id: Option<GroupId>,
     pub role: Option<UserRole>,
 }
 
@@ -376,6 +375,19 @@ impl LibraryMetadata {
 pub struct CreateGroupData {
     pub name: String,
     pub services_hosts: Option<Vec<ServiceHost>>,
+}
+
+#[derive(Deserialize, Serialize, Clone, Debug, PartialEq, Eq, Display, Hash, FromStr)]
+pub struct GroupId(String);
+
+impl GroupId {
+    pub fn new(name: String) -> Self {
+        Self(name)
+    }
+
+    pub fn as_str(&self) -> &str {
+        &self.0
+    }
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug)]
