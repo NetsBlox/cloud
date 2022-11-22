@@ -44,9 +44,13 @@ impl From<User> for cloud::User {
             hash: "None".to_owned(), // Password needs to be reset
             linked_accounts: user
                 .linked_accounts
-                .into_iter()
-                .map(|acct| acct.into())
-                .collect::<Vec<_>>(),
+                .map(|accounts| {
+                    accounts
+                        .into_iter()
+                        .map(|acct| acct.into())
+                        .collect::<Vec<_>>()
+                })
+                .unwrap_or_else(Vec::new),
             services_hosts: user.services_hosts.map(|hosts| {
                 hosts
                     .into_iter()
@@ -174,18 +178,30 @@ pub(crate) struct OAuthToken {
 #[derive(Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub(crate) struct Group {
-    _id: String,
+    pub(crate) _id: String,
     name: String,
     owner: String,
 
-    members: Option<Vec<String>>,
+    pub(crate) members: Option<Vec<String>>,
+}
+
+impl From<Group> for cloud::Group {
+    fn from(group: Group) -> cloud::Group {
+        cloud::Group {
+            id: cloud::api::GroupId::new(group._id),
+            name: group.name,
+            owner: group.owner,
+            service_settings: HashMap::new(),
+            services_hosts: None,
+        }
+    }
 }
 
 #[derive(Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub(crate) struct BannedAccount {
-    username: String,
-    email: String,
+    pub username: String,
+    pub email: String,
     hash: String,
 
     last_login_at: Option<u32>,

@@ -94,17 +94,6 @@ impl From<GroupId> for Bson {
     }
 }
 
-impl From<Group> for Bson {
-    fn from(group: Group) -> Bson {
-        Bson::Document(doc! {
-            "id": group.id,
-            "name": group.name,
-            "owner": group.owner,
-            "servicesHosts": group.services_hosts,
-        })
-    }
-}
-
 impl From<InvitationState> for Bson {
     fn from(state: InvitationState) -> Bson {
         match state {

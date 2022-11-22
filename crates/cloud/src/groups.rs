@@ -7,7 +7,7 @@ use actix_web::{web, HttpResponse};
 use futures::stream::TryStreamExt;
 use mongodb::bson::doc;
 
-use crate::common::api;
+use crate::common::{self, api};
 use uuid::Uuid;
 
 #[get("/user/{owner}")]
@@ -120,12 +120,7 @@ async fn create_group(
     let (owner,) = path.into_inner();
     ensure_can_edit_user(&app, &session, &owner).await?;
 
-    let group = api::Group {
-        id: api::GroupId::new(Uuid::new_v4().to_string()),
-        name: body.name.to_owned(),
-        owner: owner.to_owned(),
-        services_hosts: body.into_inner().services_hosts,
-    };
+    let group = common::Group::new(owner.to_owned(), body.name.to_owned());
     let query = doc! {"name": &group.name, "owner": &group.owner};
     let update = doc! {"$setOnInsert": group};
     let options = mongodb::options::UpdateOptions::builder()

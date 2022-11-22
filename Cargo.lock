@@ -1732,6 +1732,7 @@ dependencies = [
 name = "migrate-v1"
 version = "0.1.0"
 dependencies = [
+ "futures",
  "mongodb",
  "netsblox-cloud-common",
  "passwords",
