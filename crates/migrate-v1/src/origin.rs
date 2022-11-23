@@ -128,29 +128,30 @@ impl From<Library> for cloud::Library {
 }
 
 #[derive(Deserialize)]
-pub(crate) struct Project {
-    name: String,
-    owner: String,
-    collaborators: Vec<String>,
-    roles: HashMap<String, RoleData>,
+pub(crate) struct ProjectMetadata {
+    pub(crate) _id: String,
+    pub(crate) name: String,
+    pub(crate) owner: String,
+    pub(crate) collaborators: Vec<String>,
+    pub(crate) roles: HashMap<String, RoleMetadata>,
 
-    transient: Option<bool>,
+    pub(crate) transient: Option<bool>,
     #[serde(rename = "camelCase")]
-    delete_at: Option<DateTime>,
+    pub(crate) delete_at: Option<DateTime>,
     #[serde(rename = "camelCase")]
-    last_update_at: Option<u32>,
+    pub(crate) last_update_at: Option<u32>,
     #[serde(rename = "camelCase")]
-    last_updated_at: Option<DateTime>,
+    pub(crate) last_updated_at: Option<DateTime>,
     #[serde(rename = "PascalCase")]
-    public: Option<bool>,
+    pub(crate) public: Option<bool>,
 }
 
 #[derive(Deserialize)]
 #[serde(rename_all = "PascalCase")]
-pub(crate) struct RoleData {
-    project_name: String,
-    source_code: String,
-    media: String,
+pub(crate) struct RoleMetadata {
+    pub(crate) project_name: String,
+    pub(crate) source_code: String,
+    pub(crate) media: String,
 
     source_size: Option<u32>,
     media_size: Option<u32>,

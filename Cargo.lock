@@ -1732,10 +1732,13 @@ dependencies = [
 name = "migrate-v1"
 version = "0.1.0"
 dependencies = [
+ "config",
  "futures",
  "mongodb",
  "netsblox-cloud-common",
  "passwords",
+ "rusoto_core",
+ "rusoto_s3",
  "serde 1.0.136",
  "serde_json",
  "tokio",

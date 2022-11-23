@@ -324,7 +324,7 @@ impl ProjectMetadata {
         roles: Vec<RoleMetadata>,
         save_state: SaveState,
     ) -> ProjectMetadata {
-        let origin_time = DateTime::from_system_time(SystemTime::now());
+        let origin_time = DateTime::now();
         let roles = roles
             .into_iter()
             .map(|role| (RoleId::new(Uuid::new_v4().to_string()), role))
@@ -347,6 +347,29 @@ impl ProjectMetadata {
             network_traces: Vec::new(),
             roles,
         }
+    }
+}
+
+impl From<ProjectMetadata> for Bson {
+    fn from(metadata: ProjectMetadata) -> Bson {
+        let mut roles = Document::new();
+        metadata.roles.into_iter().for_each(|(id, md)| {
+            roles.insert(id.as_str(), md);
+        });
+
+        Bson::Document(doc! {
+            "id": metadata.id,
+            "owner": metadata.owner,
+            "name": metadata.name,
+            "updated": metadata.updated,
+            "originTime": metadata.origin_time,
+            "state": metadata.state,
+            "collaborators": metadata.collaborators,
+            "saveState": metadata.save_state,
+            "roles": roles,
+            "deleteAt": metadata.delete_at,
+            "networkTraces": metadata.network_traces,
+        })
     }
 }
 

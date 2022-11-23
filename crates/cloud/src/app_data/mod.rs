@@ -451,7 +451,7 @@ impl AppData {
             name: role.name.to_owned(),
             code: src_path,
             media: media_path,
-            updated: DateTime::from_system_time(SystemTime::now()),
+            updated: DateTime::now(),
         })
     }
 

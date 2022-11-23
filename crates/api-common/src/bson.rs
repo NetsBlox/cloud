@@ -1,6 +1,6 @@
 use crate::{
-    oauth, FriendInvite, FriendLinkState, Group, GroupId, InvitationState, LinkedAccount,
-    ProjectId, PublishState, RoleMetadata, SaveState, ServiceHost, UserRole,
+    oauth, FriendInvite, FriendLinkState, GroupId, InvitationState, LinkedAccount, ProjectId,
+    PublishState, RoleMetadata, SaveState, ServiceHost, UserRole,
 };
 use bson::{doc, Bson, DateTime};
 
