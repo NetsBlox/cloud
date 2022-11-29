@@ -1,4 +1,4 @@
-use mongodb::bson::{self, doc, Bson, DateTime};
+use mongodb::bson::{self, doc, document::Document, Bson, DateTime};
 pub use netsblox_api_common as api;
 use netsblox_api_common::{
     oauth, ClientState, LibraryMetadata, NewUser, OccupantInviteData, PublishState, RoleId,
@@ -93,12 +93,12 @@ impl From<NewUser> for User {
     }
 }
 
-#[derive(Serialize, Deserialize)]
+#[derive(Serialize, Deserialize, Clone)]
 #[serde(rename_all = "camelCase")]
 pub struct BannedAccount {
-    username: String,
-    email: String,
-    banned_at: DateTime,
+    pub username: String,
+    pub email: String,
+    pub banned_at: DateTime,
 }
 
 impl BannedAccount {
@@ -112,6 +112,16 @@ impl BannedAccount {
     }
 }
 
+impl From<BannedAccount> for Bson {
+    fn from(account: BannedAccount) -> Self {
+        Bson::Document(doc! {
+            "username": account.username,
+            "email": account.email,
+            "bannedAt": account.banned_at,
+        })
+    }
+}
+
 #[derive(Serialize, Deserialize, Clone, Debug)]
 #[serde(rename_all = "camelCase")]
 pub struct Group {
@@ -122,6 +132,18 @@ pub struct Group {
     pub service_settings: HashMap<String, String>,
 }
 
+impl Group {
+    pub fn new(owner: String, name: String) -> Self {
+        Self {
+            id: api::GroupId::new(Uuid::new_v4().to_string()),
+            name,
+            owner,
+            service_settings: HashMap::new(),
+            services_hosts: None,
+        }
+    }
+}
+
 impl From<Group> for netsblox_api_common::Group {
     fn from(group: Group) -> netsblox_api_common::Group {
         netsblox_api_common::Group {
@@ -130,6 +152,23 @@ impl From<Group> for netsblox_api_common::Group {
             name: group.name,
             services_hosts: group.services_hosts,
         }
+    }
+}
+
+impl From<Group> for Bson {
+    fn from(group: Group) -> Self {
+        let mut settings = Document::new();
+        group.service_settings.into_iter().for_each(|(k, v)| {
+            settings.insert(k, v);
+        });
+
+        Bson::Document(doc! {
+            "id": group.id,
+            "owner": group.owner,
+            "name": group.name,
+            "serviceSettings": settings,
+            "servicesHosts": group.services_hosts,
+        })
     }
 }
 
@@ -285,7 +324,7 @@ impl ProjectMetadata {
         roles: Vec<RoleMetadata>,
         save_state: SaveState,
     ) -> ProjectMetadata {
-        let origin_time = DateTime::from_system_time(SystemTime::now());
+        let origin_time = DateTime::now();
         let roles = roles
             .into_iter()
             .map(|role| (RoleId::new(Uuid::new_v4().to_string()), role))
@@ -308,6 +347,29 @@ impl ProjectMetadata {
             network_traces: Vec::new(),
             roles,
         }
+    }
+}
+
+impl From<ProjectMetadata> for Bson {
+    fn from(metadata: ProjectMetadata) -> Bson {
+        let mut roles = Document::new();
+        metadata.roles.into_iter().for_each(|(id, md)| {
+            roles.insert(id.as_str(), md);
+        });
+
+        Bson::Document(doc! {
+            "id": metadata.id,
+            "owner": metadata.owner,
+            "name": metadata.name,
+            "updated": metadata.updated,
+            "originTime": metadata.origin_time,
+            "state": metadata.state,
+            "collaborators": metadata.collaborators,
+            "saveState": metadata.save_state,
+            "roles": roles,
+            "deleteAt": metadata.delete_at,
+            "networkTraces": metadata.network_traces,
+        })
     }
 }
 
@@ -528,7 +590,7 @@ impl From<AuthorizedServiceHost> for netsblox_api_common::ServiceHost {
     }
 }
 
-#[derive(Serialize, Deserialize)]
+#[derive(Serialize, Deserialize, Clone)]
 #[serde(rename_all = "camelCase")]
 pub struct Library {
     pub owner: String,
@@ -546,6 +608,18 @@ impl From<Library> for LibraryMetadata {
             library.state,
             Some(library.notes),
         )
+    }
+}
+
+impl From<Library> for Bson {
+    fn from(library: Library) -> Self {
+        Bson::Document(doc! {
+            "owner": library.owner,
+            "name": library.name,
+            "notes": library.notes,
+            "blocks": library.blocks,
+            "state": library.state,
+        })
     }
 }
 

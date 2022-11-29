@@ -1,0 +1,23 @@
+[source.database]
+url = "mongodb://127.0.0.1:27017/admin"
+
+[source.s3]
+bucket = "netsblox"
+endpoint = "http://127.0.0.1:9000"
+region_name = ""
+
+[source.s3.credentials]
+access_key = "KEY"
+secret_key = "MYSECRET"
+
+[target.database]
+url = "mongodb://127.0.0.1:27017/netsblox_v2"
+
+[target.s3]
+bucket = "netsbloxrs"
+endpoint = "http://127.0.0.1:9000"
+region_name = ""
+
+[target.s3.credentials]
+access_key = "KEY"
+secret_key = "MYSECRET"

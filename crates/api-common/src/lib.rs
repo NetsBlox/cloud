@@ -183,6 +183,10 @@ impl RoleId {
     pub fn new(id: String) -> Self {
         RoleId(id)
     }
+
+    pub fn as_str(&self) -> &str {
+        &self.0
+    }
 }
 
 #[derive(Deserialize, Serialize, Clone, Debug)]
