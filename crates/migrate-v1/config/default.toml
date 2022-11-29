@@ -2,7 +2,7 @@
 url = "mongodb://127.0.0.1:27017/admin"
 
 [source.s3]
-bucket = "netsbloxrs"
+bucket = "netsblox"
 endpoint = "http://127.0.0.1:9000"
 region_name = ""
 
