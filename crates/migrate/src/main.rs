@@ -7,8 +7,10 @@ use std::env;
 use crate::config::Config;
 use cloud::api::{PublishState, SaveState};
 use futures::{future::join_all, stream::StreamExt, TryStreamExt};
+use indicatif::ProgressBar;
 use mongodb::{
     bson::{doc, DateTime},
+    options::UpdateOptions,
     Client, Database,
 };
 use netsblox_cloud_common as cloud;
@@ -28,6 +30,12 @@ async fn main() {
     // Convert users
     let src_users = src_db.collection::<origin::User>("users");
     let dst_users = dst_db.collection::<cloud::User>("users");
+    let count = src_users
+        .estimated_document_count(None)
+        .await
+        .expect("Unable to estimate document count for users");
+    let progress = ProgressBar::new(count);
+    progress.println("Migrating users...");
     let mut cursor = src_users
         .find(None, None)
         .await
@@ -37,17 +45,28 @@ async fn main() {
         let new_user: cloud::User = user.expect("Unable to retrieve user").into();
         let query = doc! {"username": &new_user.username};
         let update = doc! {"$setOnInsert": &new_user};
-        // TODO: add upsert option
+        let opts = UpdateOptions::builder().upsert(true).build();
         dst_users
-            .update_one(query, update, None)
+            .update_one(query, update, opts)
             .await
             .unwrap_or_else(|_err| panic!("Unable to update username: {}", &new_user.username));
+
+        progress.inc(1);
     }
+    progress.println("User migration complete.");
+    progress.finish();
+
     drop(src_users);
 
     // migrate groups
     let src_groups = src_db.collection::<origin::Group>("groups");
     let dst_groups = dst_db.collection::<cloud::Group>("groups");
+    let count = src_groups
+        .estimated_document_count(None)
+        .await
+        .expect("Unable to estimate document count for groups");
+    let progress = ProgressBar::new(count);
+    progress.println("Migrating groups...");
 
     let query = doc! {};
     let mut cursor = src_groups.find(query, None).await.unwrap();
@@ -77,13 +96,24 @@ async fn main() {
             .update_one(query, update, None)
             .await
             .unwrap_or_else(|_err| panic!("Unable to update group: {}", &new_group.id));
+        progress.inc(1);
     }
+    progress.println("Group migration complete.");
+    progress.finish();
+
     drop(src_groups);
     drop(dst_groups);
 
     // Convert libraries
     let src_libraries = src_db.collection::<origin::Library>("libraries");
     let dst_libraries = dst_db.collection::<cloud::Library>("libraries");
+
+    let count = src_libraries
+        .estimated_document_count(None)
+        .await
+        .expect("Unable to estimate document count for libraries");
+    let progress = ProgressBar::new(count);
+    progress.println("Migrating libraries...");
     let query = doc! {};
     let mut cursor = src_libraries.find(query, None).await.unwrap();
 
@@ -96,7 +126,10 @@ async fn main() {
         };
         let update = doc! {"$setOnInsert": &new_lib};
         dst_libraries.update_one(query, update, None).await.unwrap();
+        progress.inc(1);
     }
+    progress.println("Library migration complete.");
+    progress.finish();
 
     drop(src_libraries);
     drop(dst_libraries);
@@ -104,6 +137,13 @@ async fn main() {
     // Convert banned accounts
     let src_bans = src_db.collection::<origin::BannedAccount>("bannedAccounts");
     let dst_bans = dst_db.collection::<cloud::BannedAccount>("bannedAccounts");
+
+    let count = src_bans
+        .estimated_document_count(None)
+        .await
+        .expect("Unable to estimate document count for banned accounts");
+    let progress = ProgressBar::new(count);
+    progress.println("Migrating banned accounts...");
     let query = doc! {};
     let mut cursor = src_bans.find(query, None).await.unwrap();
 
@@ -115,7 +155,12 @@ async fn main() {
         };
         let update = doc! {"$setOnInsert": &new_acct};
         dst_bans.update_one(query, update, None).await.unwrap();
+
+        progress.inc(1);
     }
+    progress.println("Banned account migration complete.");
+    progress.finish();
+
     drop(src_bans);
     drop(dst_bans);
 
@@ -124,7 +169,15 @@ async fn main() {
     let dst_projects = src_db.collection::<cloud::ProjectMetadata>("projects");
     let src_s3 = get_s3_client(&config.source.s3);
     let dst_s3 = get_s3_client(&config.target.s3);
+
     let query = doc! {"transient": false}; // FIXME: what if transient isn't set
+    let count = src_projects
+        .count_documents(query.clone(), None)
+        .await
+        .expect("Unable to estimate document count for banned accounts");
+    let progress = ProgressBar::new(count);
+    progress.println("Migrating projects...");
+
     let mut cursor = src_projects.find(query, None).await.unwrap();
 
     while let Some(metadata) = cursor.next().await {
@@ -136,7 +189,10 @@ async fn main() {
             let metadata = upload(&dst_s3, &config.target.s3.bucket, project).await;
             dst_projects.insert_one(&metadata, None).await.unwrap();
         }
+        progress.inc(1);
     }
+    progress.println("Project migration complete.");
+    progress.finish();
     drop(src_s3);
     drop(src_projects);
     drop(dst_s3);

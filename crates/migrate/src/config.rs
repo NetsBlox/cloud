@@ -1,5 +1,3 @@
-use std::env;
-
 use config::{ConfigError, File};
 use serde::Deserialize;
 
