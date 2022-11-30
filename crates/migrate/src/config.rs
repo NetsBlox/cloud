@@ -35,12 +35,10 @@ pub struct Config {
 }
 
 impl Config {
-    pub fn new() -> Result<Self, ConfigError> {
-        let run_mode = env::var("RUN_MODE").unwrap_or_else(|_| "development".to_owned());
+    pub fn load(config_path: &str) -> Result<Self, ConfigError> {
         let mut c = config::Config::new();
 
-        c.merge(File::with_name("config/default"))?;
-        c.merge(File::with_name(&format!("config/{}", run_mode)).required(false))?;
+        c.merge(File::with_name(config_path))?;
 
         c.try_into()
     }

@@ -2,6 +2,7 @@ mod config;
 mod origin;
 
 use std::collections::HashMap;
+use std::env;
 
 use crate::config::Config;
 use cloud::api::{PublishState, SaveState};
@@ -16,7 +17,10 @@ use rusoto_s3::{GetObjectRequest, PutObjectRequest, S3Client, S3};
 
 #[tokio::main]
 async fn main() {
-    let config = Config::new().unwrap();
+    let config_path = env::args()
+        .nth(1)
+        .expect("Usage: netsblox-migrate <config>");
+    let config = Config::load(&config_path).unwrap();
 
     let src_db = connect_db(&config.source.database.url).await;
     let dst_db = connect_db(&config.target.database.url).await;
