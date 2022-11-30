@@ -19,9 +19,10 @@ use rusoto_s3::{GetObjectRequest, PutObjectRequest, S3Client, S3};
 
 #[tokio::main]
 async fn main() {
-    let config_path = env::args()
-        .nth(1)
-        .expect("Usage: netsblox-migrate <config>");
+    let mut args: Vec<_> = env::args().collect();
+    let usage_msg = format!("Usage: {} <config>", &args[0]);
+    assert!(args.len() == 2, "{}", &usage_msg);
+    let config_path = args.pop().unwrap();
     let config = Config::load(&config_path).unwrap();
 
     let src_db = connect_db(&config.source.database.url).await;
