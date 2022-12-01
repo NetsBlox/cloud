@@ -18,7 +18,7 @@ use rusoto_core::Region;
 use serde::{Deserialize, Serialize};
 use std::collections::{HashMap, HashSet};
 use std::sync::{Arc, RwLock};
-use std::time::{Duration, SystemTime};
+use std::time::Duration;
 use uuid::Uuid;
 
 use crate::common::api::{RoleData, SaveState};

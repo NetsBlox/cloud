@@ -8,7 +8,6 @@ use futures::stream::TryStreamExt;
 use mongodb::bson::doc;
 
 use crate::common::{self, api};
-use uuid::Uuid;
 
 #[get("/user/{owner}")]
 async fn list_groups(
