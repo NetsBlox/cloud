@@ -41,6 +41,6 @@ This crate contains netsblox-cli, a command line interface to netsblox-api.
 ### `crates/cloud`
 This crate contains the netsblox-cloud crate (ie, the netsblox server).
 
-### `crates/migrate-v1`
+### `crates/migrate`
 This crate contains a program for migrating from NetsBlox v1.50.0 (in JS) to this NetsBlox cloud.
 
