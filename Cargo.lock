@@ -1933,9 +1933,11 @@ version = "0.1.0"
 dependencies = [
  "clap",
  "confy",
+ "derive_more",
  "exitcode",
  "futures-util",
  "inquire",
+ "lazy_static",
  "netsblox-api",
  "reqwest",
  "serde 1.0.136",
