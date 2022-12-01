@@ -50,7 +50,7 @@ async fn check_response(response: Response) -> Result<Response, error::Error> {
 }
 
 pub type Token = String;
-pub async fn login(cfg: &mut Config, credentials: &LoginRequest) -> Result<(), error::Error> {
+pub async fn login(mut cfg: Config, credentials: &LoginRequest) -> Result<Config, error::Error> {
     let client = reqwest::Client::new();
     let response = client
         .post(format!("{}/users/login", cfg.url))
@@ -70,7 +70,7 @@ pub async fn login(cfg: &mut Config, credentials: &LoginRequest) -> Result<(), e
 
     cfg.username = Some(response.text().await.unwrap());
     cfg.token = Some(token);
-    Ok(())
+    Ok(cfg)
 }
 
 #[derive(Serialize)]
