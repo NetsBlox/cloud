@@ -167,7 +167,7 @@ async fn main() {
 
     // Convert projects
     let src_projects = src_db.collection::<origin::ProjectMetadata>("projects");
-    let dst_projects = src_db.collection::<cloud::ProjectMetadata>("projects");
+    let dst_projects = dst_db.collection::<cloud::ProjectMetadata>("projects");
     let src_s3 = get_s3_client(&config.source.s3);
     let dst_s3 = get_s3_client(&config.target.s3);
 
