@@ -34,7 +34,15 @@ pub(crate) struct Config {
 impl Default for Config {
     fn default() -> Self {
         let current_host = String::from("cloud");
-        let hosts = HashMap::from([(current_host.clone(), HostConfig::default())]);
+        let dev_host = HostConfig {
+            url: String::from("http://localhost:7777"),
+            username: None,
+            token: None,
+        };
+        let hosts = HashMap::from([
+            (current_host.clone(), HostConfig::default()),
+            (String::from("dev"), dev_host),
+        ]);
 
         Self {
             current_host,
