@@ -16,6 +16,7 @@ use netsblox_api::{self, serde_json, Client};
 use std::path::Path;
 use xmlparser::{Token, Tokenizer};
 
+/// Manage & moderate user accounts
 #[derive(Subcommand, Debug)]
 enum Users {
     /// Create a new NetsBlox user
@@ -207,16 +208,23 @@ enum ServiceHosts {
         #[clap(short, long)]
         user: Option<String>,
     },
+    /// Register a new services host for a given user or group
     Register {
+        /// Publicly accessible URL to host
         url: String,
+        /// Categories to nest the services under in the "call RPC" block
         categories: String, // TODO: Should this be optional?
+        /// Register the host for an entire group (eg, class or camp)
         #[clap(short, long)]
         group: Option<String>,
         #[clap(short, long)]
         user: Option<String>,
     },
+    /// Remove a registered services host from a given user or group
     Unregister {
+        /// Services host URL
         url: String,
+        /// Remove host registered with the given group
         #[clap(short, long)]
         group: Option<String>,
         #[clap(short, long)]
@@ -234,6 +242,7 @@ enum ServiceHosts {
     Unauthorize { url: String },
 }
 
+/// Manage settings for services (eg, API keys) for different service hosts
 #[derive(Subcommand, Debug)]
 enum ServiceSettings {
     /// List hosts that have custom settings for the given user/group
@@ -410,32 +419,39 @@ enum Network {
     },
 }
 
+/// Manage sandboxed groups for classes or camps
 #[derive(Subcommand, Debug)]
 enum Groups {
+    /// Create a group that new users can be added to.
     Create {
         name: String,
         #[clap(short, long)]
         user: Option<String>,
     },
+    /// List existing groups
     List {
         #[clap(short, long)]
         user: Option<String>,
     },
+    /// View a given group
     View {
         group: String,
         #[clap(short, long)]
         user: Option<String>,
     },
+    /// Delete a given group
     Delete {
         group: String,
         #[clap(short, long)]
         user: Option<String>,
     },
+    /// View members of a given group
     Members {
         group: String,
         #[clap(short, long)]
         user: Option<String>,
     },
+    /// Rename an existing group
     Rename {
         group: String,
         new_name: String,
@@ -444,38 +460,46 @@ enum Groups {
     },
 }
 
+/// Manage friends and friend invitations
 #[derive(Subcommand, Debug)]
 enum Friends {
+    /// List friends
     List {
         #[clap(short, long)]
         online: bool,
         #[clap(short, long)]
         user: Option<String>,
     },
+    /// Remove user from friends list
     Remove {
         username: String,
         #[clap(short, long)]
         user: Option<String>,
     },
+    /// Block a user (disallow new friend invites)
     Block {
         username: String,
         #[clap(short, long)]
         user: Option<String>,
     },
+    /// Unblock a user (re-allow new friend invites)
     Unblock {
         username: String,
         #[clap(short, long)]
         user: Option<String>,
     },
+    /// List pending friend invites
     ListInvites {
         #[clap(short, long)]
         user: Option<String>,
     },
+    /// Send friend invite to a given user
     SendInvite {
         username: String,
         #[clap(short, long)]
         user: Option<String>,
     },
+    /// Respond to a pending friend invite
     AcceptInvite {
         sender: String,
         #[clap(long)]
@@ -560,7 +584,9 @@ struct HostCommand {
 
 #[derive(Parser, Debug)]
 enum Command {
+    /// Authenticate with NetsBlox cloud
     Login,
+    /// Logout of current cloud account
     Logout,
     Users(UserCommand),
     Projects(ProjectCommand),
