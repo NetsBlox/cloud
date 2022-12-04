@@ -28,7 +28,7 @@ jobs:
           RUSTTARGET: ${{ matrix.target }}
           ARCHIVE_TYPES: ${{ matrix.archive }}
           SRC_DIR: crates/cli
-          ARCHIVE_NAME: netsblox_${{ github.event.release.name }}_${{ matrix.target }}
+          ARCHIVE_NAME: netsblox_cli_${{ github.event.release.name }}_${{ matrix.target }}
       - name: Build NetsBlox Cloud
         uses: rust-build/rust-build.action@v1.4.0
         env:
@@ -37,3 +37,4 @@ jobs:
           RUSTTARGET: ${{ matrix.target }}
           ARCHIVE_TYPES: ${{ matrix.archive }}
           SRC_DIR: crates/cloud
+          ARCHIVE_NAME: netsblox_cloud_${{ github.event.release.name }}_${{ matrix.target }}
