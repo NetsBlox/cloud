@@ -38,3 +38,11 @@ jobs:
           ARCHIVE_TYPES: ${{ matrix.archive }}
           SRC_DIR: crates/cloud
           ARCHIVE_NAME: netsblox_cloud_${{ github.event.release.name }}_${{ matrix.target }}
+      - name: Publish (to crates.io)
+        uses: rust-build/rust-build.action@v1.4.0
+        run: |
+          cargo publish -p netsblox-api-common
+          cargo publish -p netsblox-api
+          cargo publish -p netsblox-cli
+          cargo publish -p netsblox-cloud-common
+          cargo publish -p netsblox-cloud
