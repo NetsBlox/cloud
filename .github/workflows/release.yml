@@ -40,6 +40,8 @@ jobs:
           ARCHIVE_NAME: netsblox_cloud_${{ github.event.release.name }}_${{ matrix.target }}
       - name: Publish (to crates.io)
         uses: rust-build/rust-build.action@v1.4.0
+        env:
+          CARGO_REGISTRY_TOKEN: ${{ secrets.CARGO_REGISTRY_TOKEN }}
         run: |
           cargo publish -p netsblox-api-common
           cargo publish -p netsblox-api
