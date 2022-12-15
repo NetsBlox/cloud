@@ -43,6 +43,7 @@ async fn list_friends(
 }
 
 async fn get_friends(app: &AppData, owner: &str) -> Result<Vec<String>, UserError> {
+    // TODO: for group members, return all other members + friends
     let query = doc! {"$or": [{"sender": &owner, "state": FriendLinkState::APPROVED}, {"recipient": &owner, "state": FriendLinkState::APPROVED}]};
     let cursor = app
         .friends
