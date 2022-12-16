@@ -2,6 +2,10 @@
 name = "netsblox-api-common"
 version = "0.1.0-alpha.5"
 edition = "2021"
+license = "MIT"
+description = """
+A crate containing the types used by the NetsBlox cloud API
+"""
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 

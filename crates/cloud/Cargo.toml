@@ -2,6 +2,10 @@
 name = "netsblox-cloud"
 version = "0.1.0-alpha.5"
 edition = "2021"
+license = "MIT"
+description = """
+A cloud server for the NetsBlox programming environment. Provides user/project management and the network overlay for message passing.
+"""
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
