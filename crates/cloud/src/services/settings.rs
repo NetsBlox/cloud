@@ -67,10 +67,9 @@ async fn get_all_settings(
     session: Session,
 ) -> Result<HttpResponse, UserError> {
     let (username, host) = path.into_inner();
-    match ensure_is_authorized_host(&app, &req).await {
-        Err(_) => ensure_can_edit_user(&app, &session, &username).await?,
-        _ => {}
-    };
+    if ensure_is_authorized_host(&app, &req).await.is_err() {
+        ensure_can_edit_user(&app, &session, &username).await?;
+    }
 
     let query = doc! {"username": &username};
     let user = app
