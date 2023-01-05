@@ -187,14 +187,17 @@ async fn main() {
 
     while let Some(metadata) = cursor.next().await {
         let metadata = metadata.unwrap();
-        let query = doc! {"id": &metadata.id};
+        let query = doc! {
+            "owner": &metadata.owner,
+            "name": &metadata.name,
+        };
         let exists = dst_projects.find_one(query, None).await.unwrap().is_some();
         if !exists {
             let project = download(&src_s3, &config.source.s3.bucket, metadata).await;
             let metadata = upload(&dst_s3, &config.target.s3.bucket, project).await;
             dst_projects.insert_one(&metadata, None).await.unwrap();
             // throttle to about 2k req/sec to avoid 503 errors from AWS
-            thread::sleep(Duration::from_millis(1));
+            thread::sleep(Duration::from_millis(10));
         }
         progress.inc(1);
     }
