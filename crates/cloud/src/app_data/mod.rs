@@ -12,7 +12,9 @@ use lettre::{Address, Message, SmtpTransport, Transport};
 use log::{info, warn};
 use lru::LruCache;
 use mongodb::bson::{doc, DateTime, Document};
-use mongodb::options::{FindOneAndUpdateOptions, IndexOptions, ReturnDocument};
+use mongodb::options::{
+    Collation, CollationStrength, FindOneAndUpdateOptions, IndexOptions, ReturnDocument,
+};
 use rusoto_core::credential::StaticProvider;
 use rusoto_core::Region;
 use serde::{Deserialize, Serialize};
@@ -52,7 +54,7 @@ pub struct AppData {
     pub(crate) settings: Settings,
     pub(crate) network: Addr<TopologyActor>,
     pub(crate) groups: Collection<Group>,
-    pub(crate) users: Collection<User>,
+    users: Collection<User>,
     pub(crate) banned_accounts: Collection<BannedAccount>,
     pub(crate) friends: Collection<FriendLink>,
     pub(crate) project_metadata: Collection<ProjectMetadata>,
@@ -208,6 +210,23 @@ impl AppData {
             .build();
         self.password_tokens
             .create_index(token_index, None)
+            .await
+            .map_err(InternalError::DatabaseConnectionError)?;
+
+        let case_insensitive_col = Collation::builder()
+            .locale("en_US")
+            .strength(CollationStrength::Primary)
+            .build();
+        let user_index = IndexModel::builder()
+            .keys(doc! {"username": 1})
+            .options(
+                IndexOptions::builder()
+                    .collation(case_insensitive_col)
+                    .build(),
+            )
+            .build();
+        self.users
+            .create_index(user_index, None)
             .await
             .map_err(InternalError::DatabaseConnectionError)?;
 

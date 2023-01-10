@@ -15,7 +15,7 @@ use futures::TryStreamExt;
 use lazy_static::lazy_static;
 use lettre::Address;
 use mongodb::bson::doc;
-use mongodb::options::ReturnDocument;
+use mongodb::options::{Collation, CollationStrength, ReturnDocument};
 use regex::Regex;
 use rustrict::CensorStr;
 use serde::Deserialize;
@@ -190,6 +190,12 @@ async fn create_user(
     let options = mongodb::options::FindOneAndUpdateOptions::builder()
         .return_document(ReturnDocument::Before)
         .upsert(true)
+        .collation(
+            Collation::builder()
+                .locale("en_US")
+                .strength(CollationStrength::Primary)
+                .build(),
+        )
         .build();
     let existing_user = app
         .users
@@ -225,7 +231,7 @@ fn is_valid_username(name: &str) -> bool {
     let min_len = 3;
     let char_count = name.chars().count();
     lazy_static! {
-        static ref USERNAME_REGEX: Regex = Regex::new(r"^[a-z][a-z0-9_\-]+$").unwrap();
+        static ref USERNAME_REGEX: Regex = Regex::new(r"^[a-zA-Z][A-Za-z0-9_\-]+$").unwrap();
     }
 
     char_count > min_len

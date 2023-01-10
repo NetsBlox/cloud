@@ -94,15 +94,13 @@ pub async fn login(app: &AppData, credentials: Credentials) -> Result<User, User
                     .await
                     .map_err(|_err| UserError::SnapConnectionError)?;
 
-                // TODO: ensure email isn't banned?
-
                 create_account(app, user_data.email, &account).await?
             };
 
             Ok(user)
         }
         Credentials::NetsBlox { username, password } => {
-            let query = doc! {"username": &username.to_lowercase()};
+            let query = doc! {"username": &username};
             let user = app
                 .users
                 .find_one(query, None)
