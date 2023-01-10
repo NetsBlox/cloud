@@ -86,12 +86,9 @@ async fn list_user_hosts(
 
     ensure_can_edit_user(&app, &session, &username).await?;
 
-    let query = doc! {"username": username};
     let user = app
-        .users
-        .find_one(query, None)
-        .await
-        .map_err(InternalError::DatabaseConnectionError)?
+        .find_user(&username)
+        .await?
         .ok_or(UserError::UserNotFoundError)?;
 
     Ok(HttpResponse::Ok().json(user.services_hosts.unwrap_or_default()))
@@ -109,18 +106,11 @@ async fn set_user_hosts(
 
     let service_hosts: Vec<ServiceHost> = hosts.into_inner();
     let update = doc! {"$set": {"servicesHosts": &service_hosts }};
-    let filter = doc! {"username": username};
-    let result = app
-        .users
-        .update_one(filter, update, None)
-        .await
-        .map_err(InternalError::DatabaseConnectionError)?;
+    app.update_user(&username, update)
+        .await?
+        .ok_or(UserError::UserNotFoundError)?;
 
-    if result.modified_count == 1 {
-        Ok(HttpResponse::Ok().finish())
-    } else {
-        Ok(HttpResponse::NotFound().finish())
-    }
+    Ok(HttpResponse::Ok().finish())
 }
 
 #[get("/all/{username}")]
@@ -132,12 +122,9 @@ async fn list_all_hosts(
     let (username,) = path.into_inner();
     ensure_can_edit_user(&app, &session, &username).await?;
 
-    let query = doc! {"username": &username};
     let user = app
-        .users
-        .find_one(query, None)
-        .await
-        .map_err(InternalError::DatabaseConnectionError)?
+        .find_user(&username)
+        .await?
         .ok_or(UserError::UserNotFoundError)?;
 
     let mut groups = app

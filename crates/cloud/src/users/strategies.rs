@@ -1,23 +1,12 @@
-use std::{
-    collections::{HashMap, HashSet},
-    time::SystemTime,
-};
+use std::{collections::HashMap, time::SystemTime};
 
 pub(crate) use crate::common::api::Credentials;
 use crate::common::api::{self, UserRole};
-use futures::TryStreamExt;
-use mongodb::{
-    bson::{doc, DateTime},
-    options::UpdateOptions,
-};
+use mongodb::bson::{doc, DateTime};
 use reqwest::{Method, Response};
 use serde::Deserialize;
 
-use crate::{
-    app_data::AppData,
-    common::User,
-    errors::{InternalError, UserError},
-};
+use crate::{app_data::AppData, common::User, errors::UserError};
 
 use super::sha512;
 
@@ -68,11 +57,7 @@ pub async fn login(app: &AppData, credentials: Credentials) -> Result<User, User
             };
 
             let query = doc! {"linkedAccounts": {"$elemMatch": &account}};
-            let user_opt = app
-                .users
-                .find_one(query, None)
-                .await
-                .map_err(InternalError::DatabaseConnectionError)?;
+            let user_opt = app.find_user_where(query).await?;
 
             let user = if let Some(user) = user_opt {
                 user
@@ -94,20 +79,15 @@ pub async fn login(app: &AppData, credentials: Credentials) -> Result<User, User
                     .await
                     .map_err(|_err| UserError::SnapConnectionError)?;
 
-                // TODO: ensure email isn't banned?
-
                 create_account(app, user_data.email, &account).await?
             };
 
             Ok(user)
         }
         Credentials::NetsBlox { username, password } => {
-            let query = doc! {"username": &username.to_lowercase()};
             let user = app
-                .users
-                .find_one(query, None)
-                .await
-                .map_err(InternalError::DatabaseConnectionError)?
+                .find_user(&username)
+                .await?
                 .ok_or(UserError::UserNotFoundError)?;
 
             let hash = sha512(&(password + &user.salt));
@@ -125,7 +105,6 @@ async fn create_account(
     account: &api::LinkedAccount,
 ) -> Result<User, UserError> {
     let username = username_from(app, account).await?;
-    let query = doc! {"username": &username};
     let salt = passwords::PasswordGenerator::new()
         .length(8)
         .exclude_similar_characters(true)
@@ -149,13 +128,7 @@ async fn create_account(
         service_settings: HashMap::new(),
     };
 
-    let update = doc!("$setOnInsert": &user);
-    let options = UpdateOptions::builder().upsert(true).build();
-    app.users
-        .update_one(query, update, options)
-        .await
-        .map_err(InternalError::DatabaseConnectionError)?;
-
+    app.create_user(user.clone()).await?;
     Ok(user)
 }
 
@@ -163,26 +136,9 @@ async fn username_from(
     app: &AppData,
     credentials: &api::LinkedAccount,
 ) -> Result<String, UserError> {
-    let basename = credentials.username.to_owned();
-    let starts_with_name = mongodb::bson::Regex {
-        pattern: format!("^{}", &basename),
-        options: String::new(),
-    };
-    let query = doc! {"username": {"$regex": starts_with_name}};
-    // TODO: this could be optimized to map on the stream...
-    let existing_names = app
-        .users
-        .find(query, None)
-        .await
-        .map_err(InternalError::DatabaseConnectionError)?
-        .try_collect::<Vec<_>>()
-        .await
-        .map_err(InternalError::DatabaseConnectionError)?
-        .into_iter()
-        .map(|user| user.username)
-        .collect::<HashSet<String>>();
-
-    if existing_names.contains(&basename) {
+    let basename = &credentials.username;
+    let existing_names = app.usernames_with_prefix(basename).await?;
+    if existing_names.contains(basename) {
         let strategy: String = credentials
             .strategy
             .to_ascii_lowercase()
@@ -198,6 +154,6 @@ async fn username_from(
         }
         Ok(username)
     } else {
-        Ok(basename)
+        Ok(basename.to_owned())
     }
 }

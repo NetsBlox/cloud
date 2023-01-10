@@ -79,13 +79,13 @@ impl From<NewUser> for User {
         };
 
         User {
-            username: user_data.username.to_lowercase(),
+            username: user_data.username,
             hash,
             salt,
             email: user_data.email,
             group_id: user_data.group_id,
             created_at: DateTime::from_system_time(SystemTime::now()),
-            linked_accounts: std::vec::Vec::new(),
+            linked_accounts: Vec::new(),
             role: user_data.role.unwrap_or(UserRole::User),
             services_hosts: None,
             service_settings: HashMap::new(),
