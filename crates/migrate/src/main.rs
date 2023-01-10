@@ -83,7 +83,7 @@ async fn main() {
                 let query = doc! {"username": &name};
                 let update = doc! {
                     "$set": {
-                        "groupId": &group.id
+                        "groupId": &group.id.to_string()
                     }
                 };
 
