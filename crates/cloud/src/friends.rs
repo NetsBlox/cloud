@@ -24,10 +24,8 @@ async fn list_friends(
     let is_universal_friend = matches!(get_user_role(&app, &owner).await?, UserRole::Admin);
 
     let friend_names = if is_universal_friend {
-        app.users
-            .find(doc! {}, None)
-            .await
-            .map_err(InternalError::DatabaseConnectionError)?
+        app.all_users()
+            .await?
             .try_collect::<Vec<User>>()
             .await
             .map_err(InternalError::DatabaseConnectionError)?

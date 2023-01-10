@@ -75,11 +75,7 @@ async fn list_members(
 
     ensure_can_edit_group(&app, &session, &id).await?;
     let query = doc! {"groupId": id};
-    let cursor = app
-        .users
-        .find(query, None)
-        .await
-        .map_err(InternalError::DatabaseConnectionError)?;
+    let cursor = app.find_users_where(query).await?;
     let members: Vec<api::User> = cursor
         .try_collect::<Vec<_>>()
         .await

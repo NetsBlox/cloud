@@ -13,7 +13,8 @@ use log::{info, warn};
 use lru::LruCache;
 use mongodb::bson::{doc, DateTime, Document};
 use mongodb::options::{
-    Collation, CollationStrength, FindOneAndUpdateOptions, IndexOptions, ReturnDocument,
+    Collation, CollationStrength, FindOneAndDeleteOptions, FindOneAndUpdateOptions, FindOneOptions,
+    IndexOptions, ReturnDocument,
 };
 use rusoto_core::credential::StaticProvider;
 use rusoto_core::Region;
@@ -35,7 +36,7 @@ use crate::libraries;
 use crate::network::topology::{self, SetStorage, TopologyActor};
 use actix::{Actor, Addr};
 use futures::TryStreamExt;
-use mongodb::{Client, Collection, IndexModel};
+use mongodb::{Client, Collection, Cursor, IndexModel};
 use rusoto_s3::{
     CreateBucketRequest, DeleteObjectRequest, GetObjectRequest, PutObjectOutput, PutObjectRequest,
     S3Client, S3,
@@ -311,6 +312,151 @@ impl AppData {
                 interval.tick().await;
             }
         });
+    }
+
+    pub async fn create_user(&self, user: User) -> Result<(), UserError> {
+        let query = doc! {"email": &user.email};
+        if let Some(_account) = self
+            .banned_accounts
+            .find_one(query, None)
+            .await
+            .map_err(InternalError::DatabaseConnectionError)?
+        {
+            return Err(UserError::InvalidEmailAddress);
+        }
+
+        let query = doc! {"username": &user.username};
+        let update = doc! {"$setOnInsert": &user};
+        let options = mongodb::options::FindOneAndUpdateOptions::builder()
+            .return_document(ReturnDocument::Before)
+            .upsert(true)
+            .collation(
+                Collation::builder()
+                    .locale("en_US")
+                    .strength(CollationStrength::Primary)
+                    .build(),
+            )
+            .build();
+        let existing_user = self
+            .users
+            .find_one_and_update(query, update, options)
+            .await
+            .map_err(InternalError::DatabaseConnectionError)?;
+
+        if existing_user.is_some() {
+            Err(UserError::UserExistsError)
+        } else {
+            Ok(())
+        }
+    }
+
+    pub async fn update_user(
+        &self,
+        username: &str,
+        update: Document,
+    ) -> Result<Option<User>, InternalError> {
+        let query = doc! {"username": username};
+        let collation = Collation::builder()
+            .locale("en_US")
+            .strength(CollationStrength::Primary)
+            .build();
+
+        let options = FindOneAndUpdateOptions::builder()
+            .return_document(ReturnDocument::Before)
+            .upsert(true)
+            .collation(collation)
+            .build();
+
+        let updated_user = self
+            .users
+            .find_one_and_update(query, update, options)
+            .await
+            .map_err(InternalError::DatabaseConnectionError)?;
+
+        Ok(updated_user)
+    }
+
+    pub async fn find_user(&self, username: &str) -> Result<Option<User>, InternalError> {
+        let query = doc! {"username": &username};
+        let collation = Collation::builder()
+            .locale("en_US")
+            .strength(CollationStrength::Primary)
+            .build();
+        let options = FindOneOptions::builder().collation(collation).build();
+        self.users
+            .find_one(query, Some(options))
+            .await
+            .map_err(InternalError::DatabaseConnectionError)
+    }
+
+    pub async fn delete_user(&self, username: &str) -> Result<Option<User>, UserError> {
+        let query = doc! {"username": &username};
+        let collation = Collation::builder()
+            .locale("en_US")
+            .strength(CollationStrength::Primary)
+            .build();
+        let options = FindOneAndDeleteOptions::builder()
+            .collation(collation)
+            .build();
+        let deleted_user = self
+            .users
+            .find_one_and_delete(query, Some(options))
+            .await
+            .map_err(InternalError::DatabaseConnectionError)?;
+
+        Ok(deleted_user)
+    }
+
+    /// Find users using an arbitrary query. Do not use this for username-based lookups!
+    pub async fn find_users_where(&self, query: Document) -> Result<Cursor<User>, InternalError> {
+        let cursor = self
+            .users
+            .find(query, None)
+            .await
+            .map_err(InternalError::DatabaseConnectionError)?;
+
+        Ok(cursor)
+    }
+
+    pub async fn all_users(&self) -> Result<Cursor<User>, InternalError> {
+        let query = doc! {};
+        self.find_users_where(query).await
+    }
+
+    /// Look up a user using a custom query (such as by a linked account).
+    ///
+    /// Do not use this to look up a user by username! Usernames are case-insensitive
+    /// and require specific collation options (handled by `find_user` and `update_user`).
+    pub async fn find_user_where(&self, query: Document) -> Result<Option<User>, InternalError> {
+        self.users
+            .find_one(query, None)
+            .await
+            .map_err(InternalError::DatabaseConnectionError)
+    }
+
+    pub async fn usernames_with_prefix(
+        &self,
+        prefix: &str,
+    ) -> Result<HashSet<String>, InternalError> {
+        let prefix_query = mongodb::bson::Regex {
+            pattern: format!("^{}", &prefix),
+            options: String::new(),
+        };
+        let query = doc! {"username": {"$regex": prefix_query}};
+        // TODO: this could be optimized to map on the stream...
+        let names = self
+            .users
+            .find(query, None)
+            .await
+            .map_err(InternalError::DatabaseConnectionError)?
+            .try_collect::<Vec<_>>()
+            .await
+            .map_err(InternalError::DatabaseConnectionError)?
+            .into_iter()
+            .map(|user| user.username)
+            .collect::<HashSet<String>>();
+
+        Ok(names)
     }
 
     pub async fn get_project_metadatum(

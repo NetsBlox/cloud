@@ -21,12 +21,9 @@ async fn list_user_hosts_with_settings(
     let (username,) = path.into_inner();
     ensure_can_edit_user(&app, &session, &username).await?;
 
-    let query = doc! {"username": &username};
     let user = app
-        .users
-        .find_one(query, None)
-        .await
-        .map_err(InternalError::DatabaseConnectionError)?
+        .find_user(&username)
+        .await?
         .ok_or(UserError::UserNotFoundError)?;
 
     let hosts: Vec<_> = user.service_settings.keys().collect();
@@ -42,12 +39,9 @@ async fn get_user_settings(
     let (username, host) = path.into_inner();
     ensure_can_edit_user(&app, &session, &username).await?;
 
-    let query = doc! {"username": &username};
     let user = app
-        .users
-        .find_one(query, None)
-        .await
-        .map_err(InternalError::DatabaseConnectionError)?
+        .find_user(&username)
+        .await?
         .ok_or(UserError::UserNotFoundError)?;
 
     let default_settings = String::from("");
@@ -71,12 +65,9 @@ async fn get_all_settings(
         ensure_can_edit_user(&app, &session, &username).await?;
     }
 
-    let query = doc! {"username": &username};
     let user = app
-        .users
-        .find_one(query, None)
-        .await
-        .map_err(InternalError::DatabaseConnectionError)?
+        .find_user(&username)
+        .await?
         .ok_or(UserError::UserNotFoundError)?;
 
     let query = match user.group_id {
@@ -126,21 +117,13 @@ async fn set_user_settings(
     ensure_can_edit_user(&app, &session, &username).await?;
 
     let settings = std::str::from_utf8(&body).map_err(|_err| UserError::InternalError)?;
-
-    let query = doc! {"username": &username};
     let update = doc! {"$set": {format!("serviceSettings.{}", &host): settings}};
 
-    let result = app
-        .users
-        .update_one(query, update, None)
-        .await
-        .map_err(InternalError::DatabaseConnectionError)?;
+    app.update_user(&username, update)
+        .await?
+        .ok_or(UserError::UserNotFoundError)?;
 
-    if result.matched_count == 0 {
-        Err(UserError::UserNotFoundError)
-    } else {
-        Ok(HttpResponse::Ok().finish())
-    }
+    Ok(HttpResponse::Ok().finish())
 }
 
 #[delete("/user/{username}/{host}")]
@@ -152,20 +135,13 @@ async fn delete_user_settings(
     let (username, host) = path.into_inner();
     ensure_can_edit_user(&app, &session, &username).await?;
 
-    let query = doc! {"username": &username};
     let update = doc! {"$unset": {format!("serviceSettings.{}", &host): true}};
 
-    let result = app
-        .users
-        .update_one(query, update, None)
-        .await
-        .map_err(InternalError::DatabaseConnectionError)?;
+    app.update_user(&username, update)
+        .await?
+        .ok_or(UserError::UserNotFoundError)?;
 
-    if result.matched_count == 0 {
-        Err(UserError::UserNotFoundError)
-    } else {
-        Ok(HttpResponse::Ok().finish())
-    }
+    Ok(HttpResponse::Ok().finish())
 }
 
 #[get("/group/{group_id}/")]

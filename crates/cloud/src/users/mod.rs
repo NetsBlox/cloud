@@ -15,7 +15,7 @@ use futures::TryStreamExt;
 use lazy_static::lazy_static;
 use lettre::Address;
 use mongodb::bson::doc;
-use mongodb::options::{Collation, CollationStrength, ReturnDocument};
+use mongodb::options::ReturnDocument;
 use regex::Regex;
 use rustrict::CensorStr;
 use serde::Deserialize;
@@ -39,12 +39,9 @@ async fn get_session_role(app: &AppData, session: &Session) -> Result<UserRole, 
 }
 
 pub(crate) async fn get_user_role(app: &AppData, username: &str) -> Result<UserRole, UserError> {
-    let query = doc! {"username": username};
     Ok(app
-        .users
-        .find_one(query, None)
-        .await
-        .map_err(InternalError::DatabaseConnectionError)?
+        .find_user(username)
+        .await?
         .map(|user| user.role)
         .unwrap_or(UserRole::User))
 }
@@ -100,13 +97,7 @@ pub async fn can_edit_user(
 }
 
 async fn has_group_containing(app: &AppData, owner: &str, member: &str) -> Result<bool, UserError> {
-    let query = doc! {"username": member};
-    match app
-        .users
-        .find_one(query, None)
-        .await
-        .map_err(InternalError::DatabaseConnectionError)?
-    {
+    match app.find_user(member).await? {
         Some(user) => match user.group_id {
             Some(group_id) => {
                 let query = doc! {"owner": owner};
@@ -134,12 +125,7 @@ async fn has_group_containing(app: &AppData, owner: &str, member: &str) -> Resul
 #[get("/")]
 async fn list_users(app: web::Data<AppData>, session: Session) -> Result<HttpResponse, UserError> {
     ensure_is_super_user(&app, &session).await?;
-    let query = doc! {};
-    let cursor = app
-        .users
-        .find(query, None)
-        .await
-        .map_err(InternalError::DatabaseConnectionError)?;
+    let cursor = app.all_users().await?;
     let users: Vec<api::User> = cursor
         .try_collect::<Vec<_>>()
         .await
@@ -174,40 +160,9 @@ async fn create_user(
 
     let user: User = user_data.into_inner().into();
     ensure_valid_username(&user.username)?;
+    app.create_user(user).await?;
 
-    let query = doc! {"email": &user.email};
-    if let Some(_account) = app
-        .banned_accounts
-        .find_one(query, None)
-        .await
-        .map_err(InternalError::DatabaseConnectionError)?
-    {
-        return Err(UserError::InvalidEmailAddress);
-    }
-
-    let query = doc! {"username": &user.username};
-    let update = doc! {"$setOnInsert": &user};
-    let options = mongodb::options::FindOneAndUpdateOptions::builder()
-        .return_document(ReturnDocument::Before)
-        .upsert(true)
-        .collation(
-            Collation::builder()
-                .locale("en_US")
-                .strength(CollationStrength::Primary)
-                .build(),
-        )
-        .build();
-    let existing_user = app
-        .users
-        .find_one_and_update(query, update, options)
-        .await
-        .map_err(InternalError::DatabaseConnectionError)?;
-
-    if existing_user.is_some() {
-        Err(UserError::UserExistsError)
-    } else {
-        Ok(HttpResponse::Ok().body("User created"))
-    }
+    Ok(HttpResponse::Ok().body("User created"))
 }
 
 fn ensure_valid_email(email: &str) -> Result<(), UserError> {
@@ -334,13 +289,7 @@ async fn ban_user(
     let (username,) = path.into_inner();
     ensure_can_edit_user(&app, &session, &username).await?;
 
-    let query = doc! {"username": username};
-    match app
-        .users
-        .find_one(query, None)
-        .await
-        .map_err(InternalError::DatabaseConnectionError)?
-    {
+    match app.find_user(&username).await? {
         Some(user) => {
             let account = BannedAccount::new(user.username, user.email);
             app.banned_accounts
@@ -362,17 +311,11 @@ async fn delete_user(
     let (username,) = path.into_inner();
     ensure_can_edit_user(&app, &session, &username).await?;
 
-    let query = doc! {"username": username};
-    let result = app
-        .users
-        .delete_one(query, None)
-        .await
-        .map_err(InternalError::DatabaseConnectionError)?;
-    if result.deleted_count > 0 {
-        Ok(HttpResponse::Ok().finish())
-    } else {
-        Ok(HttpResponse::NotFound().finish())
-    }
+    app.delete_user(&username)
+        .await?
+        .ok_or(UserError::UserNotFoundError)?;
+
+    Ok(HttpResponse::Ok().finish())
 }
 
 #[post("/{username}/password")]
@@ -384,10 +327,8 @@ async fn reset_password(
     app.ensure_not_tor_ip(req).await?;
     let (username,) = path.into_inner();
     let user = app
-        .users
-        .find_one(doc! {"username": &username}, None)
-        .await
-        .map_err(InternalError::DatabaseConnectionError)?
+        .find_user(&username)
+        .await?
         .ok_or(UserError::UserNotFoundError)?;
 
     let token = SetPasswordToken::new(username.clone());
@@ -454,12 +395,9 @@ async fn change_password(
 }
 
 async fn set_password(app: &AppData, username: &str, password: String) -> Result<(), UserError> {
-    let query = doc! {"username": username};
     let user = app
-        .users
-        .find_one(query.clone(), None)
-        .await
-        .map_err(InternalError::DatabaseConnectionError)?
+        .find_user(username)
+        .await?
         .ok_or(UserError::UserNotFoundError)?;
 
     let update = doc! {
@@ -467,17 +405,11 @@ async fn set_password(app: &AppData, username: &str, password: String) -> Result
             "hash": sha512(&(password + &user.salt))
         }
     };
-    let result = app
-        .users
-        .update_one(query, update, None)
-        .await
-        .map_err(InternalError::DatabaseConnectionError)?;
+    app.update_user(username, update)
+        .await?
+        .ok_or(UserError::UserNotFoundError)?;
 
-    if result.matched_count == 0 {
-        Err(UserError::UserNotFoundError)
-    } else {
-        Ok(())
-    }
+    Ok(())
 }
 
 pub(crate) fn sha512(text: &str) -> String {
@@ -500,12 +432,9 @@ async fn view_user(
         ensure_can_edit_user(&app, &session, &username).await?
     };
 
-    let query = doc! {"username": username};
     let user: api::User = app
-        .users
-        .find_one(query, None)
-        .await
-        .map_err(InternalError::DatabaseConnectionError)?
+        .find_user(&username)
+        .await?
         .ok_or(UserError::UserNotFoundError)?
         .into();
 
@@ -531,29 +460,18 @@ async fn link_account(
 
     let account: api::LinkedAccount = creds.into();
     let query = doc! {"linkedAccounts": {"$elemMatch": &account}};
-    let existing = app
-        .users
-        .find_one(query, None)
-        .await
-        .map_err(InternalError::DatabaseConnectionError)?;
+    let existing = app.find_user_where(query).await?;
 
     if existing.is_some() {
         return Err(UserError::AccountAlreadyLinkedError);
     }
 
-    let query = doc! {"username": &username};
     let update = doc! {"$push": {"linkedAccounts": &account}};
-    let result = app
-        .users
-        .update_one(query, update, None)
-        .await
-        .map_err(InternalError::DatabaseConnectionError)?;
+    app.update_user(&username, update)
+        .await?
+        .ok_or(UserError::UserNotFoundError)?;
 
-    if result.matched_count == 0 {
-        Ok(HttpResponse::NotFound().finish())
-    } else {
-        Ok(HttpResponse::Ok().finish())
-    }
+    Ok(HttpResponse::Ok().finish())
 }
 
 #[post("/{username}/unlink")]
@@ -565,18 +483,12 @@ async fn unlink_account(
 ) -> Result<HttpResponse, UserError> {
     let (username,) = path.into_inner();
     ensure_can_edit_user(&app, &session, &username).await?;
-    let query = doc! {"username": username};
     let update = doc! {"$pull": {"linkedAccounts": &account.into_inner()}};
-    let result = app
-        .users
-        .update_one(query, update, None)
-        .await
-        .map_err(InternalError::DatabaseConnectionError)?;
-    if result.matched_count == 0 {
-        Ok(HttpResponse::NotFound().finish())
-    } else {
-        Ok(HttpResponse::Ok().finish())
-    }
+    app.update_user(&username, update)
+        .await?
+        .ok_or(UserError::UserNotFoundError)?;
+
+    Ok(HttpResponse::Ok().finish())
 }
 
 pub fn config(cfg: &mut web::ServiceConfig) {
