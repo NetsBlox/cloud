@@ -102,7 +102,7 @@ pub async fn login(app: &AppData, credentials: Credentials) -> Result<User, User
             Ok(user)
         }
         Credentials::NetsBlox { username, password } => {
-            let query = doc! {"username": &username.to_lowercase()};
+            let query = doc! {"username": &username};
             let user = app
                 .users
                 .find_one(query, None)
