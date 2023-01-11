@@ -412,6 +412,61 @@ async fn reset_password(
     Ok(HttpResponse::Ok().finish())
 }
 
+#[get("/{username}/rename")]
+async fn rename_user(
+    app: web::Data<AppData>,
+    req: HttpRequest,
+    path: web::Path<(String,)>,
+    data: web::Json<String>,
+) -> Result<HttpResponse, UserError> {
+    app.ensure_not_tor_ip(req).await?;
+    let (username,) = path.into_inner();
+    let query = doc! {"username": &username};
+
+    let mut user = app
+        .users
+        .find_one(query, None)
+        .await
+        .map_err(InternalError::DatabaseConnectionError)?
+        .ok_or(UserError::UserNotFoundError)?;
+
+    // duplicate the user with the new username
+    let new_name = data.into_inner();
+
+    ensure_valid_username(&new_name)?;
+    user.username = new_name;
+    let query = doc! {"username": &new_name};
+    let update = doc! {"$setOnInsert": &user};
+    let existing_user = app
+        .users
+        .find_one_and_update(query, update, None)
+        .await
+        .map_err(InternalError::DatabaseConnectionError)?;
+
+    if existing_user.is_none() {
+        let query = doc! {"owner": &username};
+        let update = doc! {
+            "$set": {
+                "owner": &new_name
+            }
+        };
+        app.project_metadata
+            .update_many(query, update, None)
+            .await
+            .map_err(InternalError::DatabaseConnectionError)?;
+    } else {
+        Err(UserError::UserExistsError)
+    }
+
+    // TODO: if successful, rename the references to the username
+    //  - project owners
+    //  - project collaborators
+    //  - friends?
+    // TODO: if successful, delete the old user
+
+    Ok(HttpResponse::Ok().finish())
+}
+
 #[derive(Deserialize)]
 struct SetPasswordQueryParams {
     pub token: Option<String>,
@@ -581,6 +636,7 @@ pub fn config(cfg: &mut web::ServiceConfig) {
         .service(delete_user)
         .service(ban_user)
         .service(reset_password)
+        .service(rename_user)
         .service(change_password)
         .service(whoami)
         .service(view_user)
