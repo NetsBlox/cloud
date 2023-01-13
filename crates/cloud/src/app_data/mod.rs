@@ -6,7 +6,7 @@ use actix_web::HttpRequest;
 use futures::future::join_all;
 use futures::join;
 use lazy_static::lazy_static;
-use lettre::message::Mailbox;
+use lettre::message::{Mailbox, MultiPart};
 use lettre::transport::smtp::authentication::Credentials;
 use lettre::{Address, Message, SmtpTransport, Transport};
 use log::{info, warn};
@@ -687,9 +687,8 @@ impl AppData {
         &self,
         to_email: &str,
         subject: &str,
-        body: String,
+        body: MultiPart,
     ) -> Result<(), UserError> {
-        println!("Sending email to {}: {}", to_email, body);
         let email = Message::builder()
             .from(self.sender.clone())
             .to(Mailbox::new(
@@ -700,7 +699,7 @@ impl AppData {
             ))
             .subject(subject.to_string())
             .date_now()
-            .body(body)
+            .multipart(body)
             .map_err(|_err| InternalError::EmailBuildError)?;
 
         self.mailer
