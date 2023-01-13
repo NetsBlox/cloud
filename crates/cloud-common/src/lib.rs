@@ -79,7 +79,7 @@ impl From<NewUser> for User {
         };
 
         User {
-            username: user_data.username.to_lowercase(),
+            username: user_data.username,
             hash,
             salt,
             email: user_data.email,
