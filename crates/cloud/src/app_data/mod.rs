@@ -12,7 +12,8 @@ use lettre::{Address, Message, SmtpTransport, Transport};
 use log::{info, warn};
 use lru::LruCache;
 use mongodb::bson::{doc, DateTime, Document};
-use mongodb::options::{FindOneAndUpdateOptions, IndexOptions, ReturnDocument};
+use mongodb::options::{FindOneAndUpdateOptions, IndexOptions, ReturnDocument, UpdateOptions};
+use netsblox_cloud_common::api::{FriendInvite, FriendLinkState};
 use rusoto_core::credential::StaticProvider;
 use rusoto_core::Region;
 use serde::{Deserialize, Serialize};
@@ -31,6 +32,7 @@ use crate::config::Settings;
 use crate::errors::{InternalError, UserError};
 use crate::libraries;
 use crate::network::topology::{self, SetStorage, TopologyActor};
+use crate::users::get_user_role;
 use actix::{Actor, Addr};
 use futures::TryStreamExt;
 use mongodb::{Client, Collection, IndexModel};
@@ -54,7 +56,7 @@ pub struct AppData {
     pub(crate) groups: Collection<Group>,
     pub(crate) users: Collection<User>,
     pub(crate) banned_accounts: Collection<BannedAccount>,
-    pub(crate) friends: Collection<FriendLink>,
+    friends: Collection<FriendLink>,
     pub(crate) project_metadata: Collection<ProjectMetadata>,
     pub(crate) library_metadata: Collection<LibraryMetadata>,
     pub(crate) libraries: Collection<Library>,
@@ -657,6 +659,201 @@ impl AppData {
 
         self.on_room_changed(updated_metadata.clone());
         Ok(updated_metadata)
+    }
+
+    // Friend-related features
+    pub async fn get_friends(&self, username: &str) -> Result<Vec<String>, UserError> {
+        let is_universal_friend = matches!(get_user_role(&self, username).await?, UserRole::Admin);
+        let friend_names: Vec<_> = if is_universal_friend {
+            self.users
+                .find(doc! {}, None)
+                .await
+                .map_err(InternalError::DatabaseConnectionError)?
+                .try_collect::<Vec<User>>()
+                .await
+                .map_err(InternalError::DatabaseConnectionError)?
+                .into_iter()
+                .map(|user| user.username)
+                .filter(|username| username != username)
+                .collect()
+        } else {
+            let query = doc! {"$or": [
+                {"sender": &username, "state": FriendLinkState::APPROVED},
+                {"recipient": &username, "state": FriendLinkState::APPROVED}
+            ]};
+            let cursor = self
+                .friends
+                .find(query, None)
+                .await
+                .map_err(InternalError::DatabaseConnectionError)?;
+            let links = cursor
+                .try_collect::<Vec<_>>()
+                .await
+                .map_err(InternalError::DatabaseConnectionError)?;
+
+            links
+                .into_iter()
+                .map(|l| {
+                    if l.sender == username {
+                        l.recipient
+                    } else {
+                        l.sender
+                    }
+                })
+                .collect()
+        };
+
+        Ok(friend_names)
+    }
+
+    pub async fn unfriend(&self, owner: &str, friend: &str) -> Result<(), UserError> {
+        let query = doc! {
+            "$or": [
+                {"sender": &owner, "recipient": &friend, "state": FriendLinkState::APPROVED},
+                {"sender": &friend, "recipient": &owner, "state": FriendLinkState::APPROVED}
+            ]
+        };
+        let result = self
+            .friends
+            .delete_one(query, None)
+            .await
+            .map_err(InternalError::DatabaseConnectionError)?;
+
+        if result.deleted_count > 0 {
+            Ok(())
+        } else {
+            Err(UserError::FriendNotFoundError)
+        }
+    }
+
+    pub async fn block_user(&self, owner: &str, other_user: &str) -> Result<(), UserError> {
+        let query = doc! {
+            "$or": [
+                {"sender": &owner, "recipient": &other_user},
+                {"sender": &other_user, "recipient": &owner}
+            ]
+        };
+        // TODO: update this to a single query (update_one with an upsert)
+        self.friends
+            .delete_one(query, None)
+            .await
+            .map_err(InternalError::DatabaseConnectionError)?;
+
+        let link = FriendLink::new(
+            owner.to_owned(),
+            other_user.to_owned(),
+            Some(FriendLinkState::BLOCKED),
+        );
+        self.friends
+            .insert_one(link, None)
+            .await
+            .map_err(InternalError::DatabaseConnectionError)?;
+
+        Ok(())
+    }
+
+    pub async fn unblock_user(&self, owner: &str, other_user: &str) -> Result<(), UserError> {
+        let query = doc! {
+            "sender": &owner,
+            "recipient": &other_user,
+            "state": FriendLinkState::BLOCKED,
+        };
+        let result = self
+            .friends
+            .delete_one(query, None)
+            .await
+            .map_err(InternalError::DatabaseConnectionError)?;
+
+        Ok(())
+    }
+
+    pub async fn list_invites(&self, owner: &str) -> Result<Vec<FriendInvite>, UserError> {
+        let query = doc! {"recipient": &owner, "state": FriendLinkState::PENDING}; // TODO: ensure they are still pending
+        let cursor = self
+            .friends
+            .find(query, None)
+            .await
+            .map_err(InternalError::DatabaseConnectionError)?;
+        let invites: Vec<FriendInvite> = cursor
+            .try_collect::<Vec<_>>()
+            .await
+            .map_err(InternalError::DatabaseConnectionError)?
+            .into_iter()
+            .map(|link| link.into())
+            .collect();
+
+        Ok(invites)
+    }
+
+    pub async fn send_invite(
+        &self,
+        owner: &str,
+        recipient: &str,
+    ) -> Result<FriendLinkState, UserError> {
+        let query = doc! {
+            "sender": &recipient,
+            "recipient": &owner,
+            "state": FriendLinkState::PENDING
+        };
+
+        let update = doc! {"$set": {"state": FriendLinkState::APPROVED}};
+        let approved_existing = self
+            .friends
+            .update_one(query, update, None)
+            .await
+            .map_err(InternalError::DatabaseConnectionError)?
+            .modified_count
+            > 0;
+
+        let state = if approved_existing {
+            FriendLinkState::APPROVED
+        } else {
+            let query = doc! {
+                "$or": [
+                    {"sender": &owner, "recipient": &recipient, "state": FriendLinkState::BLOCKED},
+                    {"sender": &recipient, "recipient": &owner, "state": FriendLinkState::BLOCKED},
+                    {"sender": &owner, "recipient": &recipient, "state": FriendLinkState::APPROVED},
+                    {"sender": &recipient, "recipient": &owner, "state": FriendLinkState::APPROVED},
+                ]
+            };
+
+            let link = FriendLink::new(owner.to_owned(), recipient.to_owned(), None);
+            let update = doc! {"$setOnInsert": link};
+            let options = FindOneAndUpdateOptions::builder().upsert(true).build();
+            let result = self
+                .friends
+                .find_one_and_update(query, update, options)
+                .await
+                .map_err(InternalError::DatabaseConnectionError)?;
+
+            // TODO: Should we allow users to send multiple invitations (ie, after rejection)?
+            result
+                .map(|link| link.state)
+                .unwrap_or(FriendLinkState::PENDING)
+        };
+
+        Ok(state)
+    }
+
+    pub async fn response_to_invite(
+        &self,
+        recipient: &str,
+        sender: &str,
+        resp: FriendLinkState,
+    ) -> Result<(), UserError> {
+        let query = doc! {"recipient": &recipient, "sender": &sender};
+        let update = doc! {"$set": {"state": resp}};
+        let result = self
+            .friends
+            .update_one(query, update, None)
+            .await
+            .map_err(InternalError::DatabaseConnectionError)?;
+
+        if result.matched_count > 0 {
+            Ok(())
+        } else {
+            Err(UserError::InviteNotFoundError)
+        }
     }
 
     // Tor-related restrictions
