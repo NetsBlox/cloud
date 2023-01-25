@@ -1,11 +1,13 @@
 use crate::app_data::AppData;
 use crate::common::api::{FriendLinkState, UserRole};
-use crate::errors::UserError;
+use crate::errors::{InternalError, UserError};
 use crate::network::topology;
 use crate::users::{ensure_can_edit_user, get_user_role};
 use actix_session::Session;
 use actix_web::{get, post};
 use actix_web::{web, HttpResponse};
+use mongodb::bson::doc;
+use mongodb::options::CountOptions;
 
 #[get("/{owner}/")]
 async fn list_friends(
@@ -109,7 +111,24 @@ async fn send_invite(
     let recipient = recipient.into_inner();
     ensure_can_edit_user(&app, &session, &owner).await?;
 
-    // TODO: ensure usernames are valid and not the same
+    // ensure users are valid
+    let options = CountOptions::builder().limit(Some(2)).build();
+    let query = doc! {
+        "$or": [
+            {"username": &owner},
+            {"username": &recipient},
+        ]
+    };
+    let user_count = app
+        .users
+        .count_documents(query, options)
+        .await
+        .map_err(InternalError::DatabaseConnectionError)?;
+
+    if user_count != 2 {
+        return Err(UserError::UserNotFoundError);
+    }
+
     let state = app.send_invite(&owner, &recipient).await?;
 
     match state {
