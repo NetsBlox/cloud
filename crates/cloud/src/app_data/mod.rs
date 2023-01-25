@@ -12,7 +12,7 @@ use lettre::{Address, Message, SmtpTransport, Transport};
 use log::{info, warn};
 use lru::LruCache;
 use mongodb::bson::{doc, DateTime, Document};
-use mongodb::options::{FindOneAndUpdateOptions, IndexOptions, ReturnDocument, UpdateOptions};
+use mongodb::options::{FindOneAndUpdateOptions, IndexOptions, ReturnDocument};
 use netsblox_cloud_common::api::{FriendInvite, FriendLinkState};
 use rusoto_core::credential::StaticProvider;
 use rusoto_core::Region;
@@ -41,9 +41,15 @@ use rusoto_s3::{
     S3Client, S3,
 };
 
+// This is lazy_static to ensure it is shared between threads
+// TODO: it would be nice to be able to configure the cache size from the settings
 lazy_static! {
     static ref PROJECT_CACHE: Arc<RwLock<LruCache<ProjectId, ProjectMetadata>>> =
         Arc::new(RwLock::new(LruCache::new(500)));
+}
+lazy_static! {
+    static ref FRIEND_CACHE: Arc<RwLock<LruCache<String, Vec<String>>>> =
+        Arc::new(RwLock::new(LruCache::new(1000)));
 }
 
 #[derive(Clone)]
@@ -662,8 +668,13 @@ impl AppData {
     }
 
     // Friend-related features
-    pub async fn get_friends(&self, username: &str) -> Result<Vec<String>, UserError> {
-        let is_universal_friend = matches!(get_user_role(&self, username).await?, UserRole::Admin);
+    fn get_cached_friends(&self, username: &str) -> Option<Vec<String>> {
+        let mut cache = FRIEND_CACHE.write().unwrap();
+        cache.get(username).map(|friends| friends.to_owned())
+    }
+
+    async fn lookup_friends(&self, username: &str) -> Result<Vec<String>, UserError> {
+        let is_universal_friend = matches!(get_user_role(self, username).await?, UserRole::Admin);
         let friend_names: Vec<_> = if is_universal_friend {
             self.users
                 .find(doc! {}, None)
@@ -674,7 +685,7 @@ impl AppData {
                 .map_err(InternalError::DatabaseConnectionError)?
                 .into_iter()
                 .map(|user| user.username)
-                .filter(|username| username != username)
+                .filter(|name| name != username)
                 .collect()
         } else {
             let query = doc! {"$or": [
@@ -706,6 +717,19 @@ impl AppData {
         Ok(friend_names)
     }
 
+    pub async fn get_friends(&self, username: &str) -> Result<Vec<String>, UserError> {
+        let friend_names = if let Some(names) = self.get_cached_friends(username) {
+            names
+        } else {
+            let names = self.lookup_friends(username).await?;
+            let mut cache = FRIEND_CACHE.write().unwrap();
+            cache.put(username.to_owned(), names.clone());
+            names
+            // TODO: support friends for group members
+        };
+        Ok(friend_names)
+    }
+
     pub async fn unfriend(&self, owner: &str, friend: &str) -> Result<(), UserError> {
         let query = doc! {
             "$or": [
@@ -720,6 +744,10 @@ impl AppData {
             .map_err(InternalError::DatabaseConnectionError)?;
 
         if result.deleted_count > 0 {
+            // invalidate friend cache
+            let mut cache = FRIEND_CACHE.write().unwrap();
+            cache.pop(owner);
+            cache.pop(friend);
             Ok(())
         } else {
             Err(UserError::FriendNotFoundError)
@@ -733,22 +761,32 @@ impl AppData {
                 {"sender": &other_user, "recipient": &owner}
             ]
         };
-        // TODO: update this to a single query (update_one with an upsert)
-        self.friends
-            .delete_one(query, None)
-            .await
-            .map_err(InternalError::DatabaseConnectionError)?;
-
         let link = FriendLink::new(
             owner.to_owned(),
             other_user.to_owned(),
             Some(FriendLinkState::BLOCKED),
         );
-        self.friends
-            .insert_one(link, None)
+        let update = doc! {
+            "$set": &link,
+            "$setOnInsert": &link
+        };
+        let options = FindOneAndUpdateOptions::builder()
+            .return_document(ReturnDocument::Before)
+            .upsert(true)
+            .build();
+        let original = self
+            .friends
+            .find_one_and_update(query, update, options)
             .await
             .map_err(InternalError::DatabaseConnectionError)?;
 
+        // invalidate friend cache
+        let invalidate_cache = original.is_some();
+        if invalidate_cache {
+            let mut cache = FRIEND_CACHE.write().unwrap();
+            cache.pop(owner);
+            cache.pop(other_user);
+        }
         Ok(())
     }
 
@@ -758,12 +796,12 @@ impl AppData {
             "recipient": &other_user,
             "state": FriendLinkState::BLOCKED,
         };
-        let result = self
-            .friends
+        self.friends
             .delete_one(query, None)
             .await
             .map_err(InternalError::DatabaseConnectionError)?;
 
+        // No need to invalidate cache since it only caches the list of friend names
         Ok(())
     }
 
@@ -806,6 +844,9 @@ impl AppData {
             > 0;
 
         let state = if approved_existing {
+            let mut cache = FRIEND_CACHE.write().unwrap();
+            cache.pop(owner);
+            cache.pop(recipient);
             FriendLinkState::APPROVED
         } else {
             let query = doc! {
@@ -842,14 +883,24 @@ impl AppData {
         resp: FriendLinkState,
     ) -> Result<(), UserError> {
         let query = doc! {"recipient": &recipient, "sender": &sender};
-        let update = doc! {"$set": {"state": resp}};
-        let result = self
+        let update = doc! {"$set": {"state": &resp}};
+        let options = FindOneAndUpdateOptions::builder()
+            .return_document(ReturnDocument::Before)
+            .build();
+        let original = self
             .friends
-            .update_one(query, update, None)
+            .find_one_and_update(query, update, options)
             .await
             .map_err(InternalError::DatabaseConnectionError)?;
 
-        if result.matched_count > 0 {
+        if let Some(original) = original {
+            let invalidate_cache = matches!(resp, FriendLinkState::APPROVED)
+                || matches!(original.state, FriendLinkState::APPROVED);
+            if invalidate_cache {
+                let mut cache = FRIEND_CACHE.write().unwrap();
+                cache.pop(sender);
+                cache.pop(recipient);
+            }
             Ok(())
         } else {
             Err(UserError::InviteNotFoundError)
@@ -957,8 +1008,7 @@ fn is_opera_vpn(addr: &str) -> bool {
     let opera_prefixes = ["77.111.244.", "77.111.245.", "77.111.246.", "77.111.247."];
     opera_prefixes
         .into_iter()
-        .find(|prefix| addr.starts_with(prefix))
-        .is_some()
+        .any(|prefix| addr.starts_with(prefix))
 }
 
 #[cfg(test)]

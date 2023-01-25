@@ -1,15 +1,11 @@
 use crate::app_data::AppData;
-use crate::common::api::{FriendInvite, FriendLinkState, UserRole};
-use crate::common::FriendLink;
-use crate::errors::{InternalError, UserError};
+use crate::common::api::{FriendLinkState, UserRole};
+use crate::errors::UserError;
 use crate::network::topology;
 use crate::users::{ensure_can_edit_user, get_user_role};
 use actix_session::Session;
 use actix_web::{get, post};
 use actix_web::{web, HttpResponse};
-use futures::TryStreamExt;
-use mongodb::bson::doc;
-use mongodb::options::UpdateOptions;
 
 #[get("/{owner}/")]
 async fn list_friends(
