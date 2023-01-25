@@ -1,15 +1,11 @@
 use crate::app_data::AppData;
-use crate::common::api::{FriendInvite, FriendLinkState, UserRole};
-use crate::common::{FriendLink, User};
-use crate::errors::{InternalError, UserError};
+use crate::common::api::{FriendLinkState, UserRole};
+use crate::errors::UserError;
 use crate::network::topology;
 use crate::users::{ensure_can_edit_user, get_user_role};
 use actix_session::Session;
 use actix_web::{get, post};
 use actix_web::{web, HttpResponse};
-use futures::TryStreamExt;
-use mongodb::bson::doc;
-use mongodb::options::UpdateOptions;
 
 #[get("/{owner}/")]
 async fn list_friends(
@@ -21,51 +17,9 @@ async fn list_friends(
     ensure_can_edit_user(&app, &session, &owner).await?;
 
     // Admins are considered a friend to everyone (at least one-way)
-    let is_universal_friend = matches!(get_user_role(&app, &owner).await?, UserRole::Admin);
-
-    let friend_names = if is_universal_friend {
-        app.users
-            .find(doc! {}, None)
-            .await
-            .map_err(InternalError::DatabaseConnectionError)?
-            .try_collect::<Vec<User>>()
-            .await
-            .map_err(InternalError::DatabaseConnectionError)?
-            .into_iter()
-            .map(|user| user.username)
-            .filter(|username| username != &owner)
-            .collect()
-    } else {
-        get_friends(&app, &owner).await?
-    };
+    let friend_names: Vec<_> = app.get_friends(&owner).await?;
 
     Ok(HttpResponse::Ok().json(friend_names))
-}
-
-async fn get_friends(app: &AppData, owner: &str) -> Result<Vec<String>, UserError> {
-    // TODO: for group members, return all other members + friends
-    let query = doc! {"$or": [{"sender": &owner, "state": FriendLinkState::APPROVED}, {"recipient": &owner, "state": FriendLinkState::APPROVED}]};
-    let cursor = app
-        .friends
-        .find(query, None)
-        .await
-        .map_err(InternalError::DatabaseConnectionError)?;
-    let links = cursor
-        .try_collect::<Vec<_>>()
-        .await
-        .map_err(InternalError::DatabaseConnectionError)?;
-    let friend_names: Vec<_> = links
-        .into_iter()
-        .map(|l| {
-            if l.sender == owner {
-                l.recipient
-            } else {
-                l.sender
-            }
-        })
-        .collect();
-
-    Ok(friend_names)
 }
 
 #[get("/{owner}/online")]
@@ -82,7 +36,7 @@ async fn list_online_friends(
     let filter_usernames = if is_universal_friend {
         None
     } else {
-        Some(get_friends(&app, &owner).await?)
+        Some(app.get_friends(&owner).await?)
     };
 
     let online_friends = topology::get_online_users(filter_usernames).await;
@@ -99,23 +53,9 @@ async fn unfriend(
     let (owner, friend) = path.into_inner();
     ensure_can_edit_user(&app, &session, &owner).await?;
 
-    let query = doc! {
-        "$or": [
-            {"sender": &owner, "recipient": &friend, "state": FriendLinkState::APPROVED},
-            {"sender": &friend, "recipient": &owner, "state": FriendLinkState::APPROVED}
-        ]
-    };
-    let result = app
-        .friends
-        .delete_one(query, None)
-        .await
-        .map_err(InternalError::DatabaseConnectionError)?;
+    app.unfriend(&owner, &friend).await?;
 
-    if result.deleted_count > 0 {
-        Ok(HttpResponse::Ok().body("User has been unfriended!"))
-    } else {
-        Ok(HttpResponse::NotFound().body("Not found."))
-    }
+    Ok(HttpResponse::Ok().body("User has been unfriended!"))
 }
 
 #[post("/{owner}/block/{friend}")]
@@ -126,22 +66,8 @@ async fn block_user(
 ) -> Result<HttpResponse, UserError> {
     let (owner, friend) = path.into_inner();
     ensure_can_edit_user(&app, &session, &owner).await?;
-    let query = doc! {
-        "$or": [
-            {"sender": &owner, "recipient": &friend},
-            {"sender": &friend, "recipient": &owner}
-        ]
-    };
-    app.friends
-        .delete_one(query, None)
-        .await
-        .map_err(InternalError::DatabaseConnectionError)?;
+    app.block_user(&owner, &friend).await?;
 
-    let link = FriendLink::new(owner, friend, Some(FriendLinkState::BLOCKED));
-    app.friends
-        .insert_one(link, None)
-        .await
-        .map_err(InternalError::DatabaseConnectionError)?;
     Ok(HttpResponse::Ok().body("User has been blocked."))
 }
 
@@ -153,21 +79,9 @@ async fn unblock_user(
 ) -> Result<HttpResponse, UserError> {
     let (owner, friend) = path.into_inner();
     ensure_can_edit_user(&app, &session, &owner).await?;
-    let query = doc! {
-        "sender": &owner,
-        "recipient": &friend,
-        "state": FriendLinkState::BLOCKED,
-    };
-    let result = app
-        .friends
-        .delete_one(query, None)
-        .await
-        .map_err(InternalError::DatabaseConnectionError)?;
-    if result.deleted_count == 1 {
-        Ok(HttpResponse::Ok().body("User has been unblocked."))
-    } else {
-        Ok(HttpResponse::Conflict().body("Could not unblock user."))
-    }
+    app.unblock_user(&owner, &friend).await?;
+
+    Ok(HttpResponse::Ok().body("User has been unblocked."))
 }
 
 #[get("/{owner}/invites/")]
@@ -179,19 +93,7 @@ async fn list_invites(
     let (owner,) = path.into_inner();
     ensure_can_edit_user(&app, &session, &owner).await?;
 
-    let query = doc! {"recipient": &owner, "state": FriendLinkState::PENDING}; // TODO: ensure they are still pending
-    let cursor = app
-        .friends
-        .find(query, None)
-        .await
-        .map_err(InternalError::DatabaseConnectionError)?;
-    let invites: Vec<FriendInvite> = cursor
-        .try_collect::<Vec<_>>()
-        .await
-        .map_err(InternalError::DatabaseConnectionError)?
-        .into_iter()
-        .map(|link| link.into())
-        .collect();
+    let invites = app.list_invites(&owner).await?;
 
     Ok(HttpResponse::Ok().json(invites))
 }
@@ -208,48 +110,15 @@ async fn send_invite(
     ensure_can_edit_user(&app, &session, &owner).await?;
 
     // TODO: ensure usernames are valid and not the same
-    let query = doc! {
-        "sender": &recipient,
-        "recipient": &owner,
-        "state": FriendLinkState::PENDING
-    };
+    let state = app.send_invite(&owner, &recipient).await?;
 
-    let update = doc! {"$set": {"state": FriendLinkState::APPROVED}};
-    let approved_existing = app
-        .friends
-        .update_one(query, update, None)
-        .await
-        .map_err(InternalError::DatabaseConnectionError)?
-        .modified_count
-        > 0;
-
-    if approved_existing {
-        return Ok(HttpResponse::Ok().body("Approved existing friend request"));
-    }
-
-    let query = doc! {
-        "$or": [
-            {"sender": &owner, "recipient": &recipient, "state": FriendLinkState::BLOCKED},
-            {"sender": &recipient, "recipient": &owner, "state": FriendLinkState::BLOCKED},
-            {"sender": &owner, "recipient": &recipient, "state": FriendLinkState::APPROVED},
-            {"sender": &recipient, "recipient": &owner, "state": FriendLinkState::APPROVED},
-        ]
-    };
-
-    let link = FriendLink::new(owner, recipient, None);
-    let update = doc! {"$setOnInsert": link};
-    let options = UpdateOptions::builder().upsert(true).build();
-    let result = app
-        .friends
-        .update_one(query, update, options)
-        .await
-        .map_err(InternalError::DatabaseConnectionError)?;
-
-    if result.upserted_id.is_some() {
-        Ok(HttpResponse::Ok().body("Invitation sent."))
-    } else {
-        // TODO: Should we allow users to send multiple invitations (ie, after rejection)?
-        Ok(HttpResponse::Conflict().body("Invitation already exists."))
+    match state {
+        FriendLinkState::PENDING => Ok(HttpResponse::Ok().body("Invitation sent.")),
+        FriendLinkState::APPROVED => Ok(HttpResponse::Ok().body("Accepted friend request.")),
+        FriendLinkState::BLOCKED => {
+            Ok(HttpResponse::Conflict().body("Cannot send request when blocked."))
+        }
+        _ => unreachable!(),
     }
 }
 
@@ -263,18 +132,10 @@ async fn respond_to_invite(
     let (recipient, sender) = path.into_inner();
     ensure_can_edit_user(&app, &session, &recipient).await?;
     let new_state = body.into_inner();
-    let query = doc! {"recipient": &recipient, "sender": &sender};
-    let update = doc! {"$set": {"state": new_state}};
-    let result = app
-        .friends
-        .update_one(query, update, None)
-        .await
-        .map_err(InternalError::DatabaseConnectionError)?;
-    if result.matched_count > 0 {
-        Ok(HttpResponse::Ok().body("Responded to invitation."))
-    } else {
-        Ok(HttpResponse::NotFound().body("Invitation not found."))
-    }
+    app.response_to_invite(&recipient, &sender, new_state)
+        .await?;
+
+    Ok(HttpResponse::Ok().body("Responded to invitation."))
 }
 
 pub fn config(cfg: &mut web::ServiceConfig) {
