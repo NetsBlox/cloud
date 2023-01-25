@@ -251,8 +251,8 @@ impl Topology {
                 let role_names = role.map(|name| vec![name.to_owned()]).unwrap_or_else(|| {
                     metadata
                         .roles
-                        .iter()
-                        .map(|(_, role)| role.name.to_owned())
+                        .values()
+                        .map(|role| role.name.to_owned())
                         .collect()
                 });
 
