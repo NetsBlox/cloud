@@ -1,8 +1,9 @@
 mod config;
 mod origin;
 
-use std::collections::HashMap;
 use std::env;
+use std::time::Duration;
+use std::{collections::HashMap, thread};
 
 use crate::config::Config;
 use cloud::api::{PublishState, SaveState};
@@ -70,16 +71,19 @@ async fn main() {
     progress.println("Migrating groups...");
 
     let query = doc! {};
-    let mut cursor = src_groups.find(query, None).await.unwrap();
+    let mut cursor = src_groups
+        .find(query, None)
+        .await
+        .expect("Unable to fetch groups");
 
     while let Some(group) = cursor.next().await {
-        let group = group.unwrap();
+        let group = group.expect("Unable to retrieve group");
         if let Some(usernames) = group.members.clone() {
             for name in usernames {
                 let query = doc! {"username": &name};
                 let update = doc! {
                     "$set": {
-                        "groupId": &group._id
+                        "groupId": &group.id.to_string()
                     }
                 };
 
@@ -183,12 +187,17 @@ async fn main() {
 
     while let Some(metadata) = cursor.next().await {
         let metadata = metadata.unwrap();
-        let query = doc! {"id": &metadata._id};
+        let query = doc! {
+            "owner": &metadata.owner,
+            "name": &metadata.name,
+        };
         let exists = dst_projects.find_one(query, None).await.unwrap().is_some();
         if !exists {
             let project = download(&src_s3, &config.source.s3.bucket, metadata).await;
             let metadata = upload(&dst_s3, &config.target.s3.bucket, project).await;
             dst_projects.insert_one(&metadata, None).await.unwrap();
+            // throttle to about 2k req/sec to avoid 503 errors from AWS
+            thread::sleep(Duration::from_millis(10));
         }
         progress.inc(1);
     }
@@ -246,21 +255,27 @@ async fn download(
         })
         .unwrap_or(PublishState::Private);
 
+    let project_id = cloud::api::ProjectId::new(metadata.id.to_string());
+    let owner = metadata.owner;
+    let name = metadata.name;
+    let collaborators = metadata.collaborators;
     let roles: HashMap<_, _> = join_all(
         metadata
             .roles
-            .iter()
+            .into_iter()
             .map(|(id, role)| download_role(client, bucket, id, role)),
     )
     .await
     .into_iter()
+    .flatten()
     .collect();
 
+    assert!(!roles.is_empty(), "{:?} has no roles!", project_id);
     cloud::Project {
-        id: cloud::api::ProjectId::new(metadata._id),
-        owner: metadata.owner,
-        name: metadata.name,
-        collaborators: metadata.collaborators,
+        id: project_id,
+        owner,
+        name,
+        collaborators,
         updated,
         state,
         origin_time: updated,
@@ -272,20 +287,26 @@ async fn download(
 async fn download_role(
     client: &S3Client,
     bucket: &str,
-    id: &str,
-    role_md: &origin::RoleMetadata,
-) -> (cloud::api::RoleId, cloud::api::RoleData) {
-    let code = download_s3(client, bucket, &role_md.source_code).await;
-    let media = download_s3(client, bucket, &role_md.media).await;
+    id: String,
+    role_md: origin::RoleMetadata,
+) -> Option<(cloud::api::RoleId, cloud::api::RoleData)> {
+    if let (Some(code), Some(media), Some(name)) =
+        (role_md.source_code, role_md.media, role_md.project_name)
+    {
+        let code = download_s3(client, bucket, &code).await;
+        let media = download_s3(client, bucket, &media).await;
 
-    let role = cloud::api::RoleData {
-        name: role_md.project_name.to_owned(),
-        code,
-        media,
-    };
-    let role_id = cloud::api::RoleId::new(id.to_owned());
+        let role = cloud::api::RoleData {
+            name: name.to_owned(),
+            code,
+            media,
+        };
+        let role_id = cloud::api::RoleId::new(id.to_owned());
 
-    (role_id, role)
+        Some((role_id, role))
+    } else {
+        None
+    }
 }
 
 async fn upload(

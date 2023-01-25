@@ -10,8 +10,8 @@ pub enum Error {
     PermissionsError(String),
     #[display(fmt = "{}", _0)]
     NotFoundError(String),
-    #[display(fmt = "{}", _0)]
-    InternalServerError(String),
+    #[display(fmt = "Internal server error occurred")]
+    InternalServerError,
     RequestError(reqwest::Error),
     WebSocketSendError(tokio_tungstenite::tungstenite::Error),
 }

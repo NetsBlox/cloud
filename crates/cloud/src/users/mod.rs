@@ -1,3 +1,4 @@
+mod email_template;
 mod html_template;
 mod strategies;
 
@@ -9,6 +10,7 @@ use crate::errors::{InternalError, UserError};
 use crate::groups::ensure_can_edit_group;
 use crate::services::ensure_is_authorized_host;
 use actix_session::Session;
+use actix_web::http::header;
 use actix_web::{get, patch, post, HttpRequest};
 use actix_web::{web, HttpResponse};
 use futures::TryStreamExt;
@@ -407,7 +409,7 @@ async fn reset_password(
         "{}/users/{}/password?token={}",
         app.settings.public_url, &username, &token.secret
     );
-    let message = html_template::set_password_email(&username, &url);
+    let message = email_template::set_password_email(&username, &url);
     app.send_email(&user.email, subject, message).await?;
     Ok(HttpResponse::Ok().finish())
 }
@@ -415,6 +417,18 @@ async fn reset_password(
 #[derive(Deserialize)]
 struct SetPasswordQueryParams {
     pub token: Option<String>,
+}
+
+#[get("/{username}/password")]
+async fn change_password_page(
+    path: web::Path<(String,)>,
+    _params: web::Query<SetPasswordQueryParams>,
+) -> Result<HttpResponse, UserError> {
+    let (username,) = path.into_inner();
+    let html = html_template::set_password_page(&username);
+    Ok(HttpResponse::Ok()
+        .content_type(header::ContentType::html())
+        .body(html))
 }
 
 #[patch("/{username}/password")]
@@ -581,6 +595,7 @@ pub fn config(cfg: &mut web::ServiceConfig) {
         .service(delete_user)
         .service(ban_user)
         .service(reset_password)
+        .service(change_password_page)
         .service(change_password)
         .service(whoami)
         .service(view_user)

@@ -16,6 +16,7 @@ use netsblox_api::{self, serde_json, Client};
 use std::path::Path;
 use xmlparser::{Token, Tokenizer};
 
+/// Manage & moderate user accounts
 #[derive(Subcommand, Debug)]
 enum Users {
     /// Create a new NetsBlox user
@@ -28,7 +29,7 @@ enum Users {
         /// Make the new user a member of the given group
         #[clap(short, long)]
         group: Option<String>,
-        /// Perform the operation as this user
+        /// Perform this action on behalf of this user
         #[clap(short, long)]
         user: Option<String>,
         /// Set the user role (eg, admin, moderator)
@@ -44,14 +45,14 @@ enum Users {
     },
     /// View the current user
     View {
-        /// Perform the operation as this user
+        /// Perform this action on behalf of this user
         #[clap(short, long)]
         user: Option<String>,
     },
     /// Change the current user's password
     SetPassword {
         password: String,
-        /// Perform the operation as this user
+        /// Perform this action on behalf of this user
         #[clap(short, long)]
         user: Option<String>,
     },
@@ -70,7 +71,7 @@ enum Users {
         password: String,
         // #[clap(short, long, default_value = "Snap")]
         // strategy: String,
-        /// Perform the operation as this user
+        /// Perform this action on behalf of this user
         #[clap(short, long)]
         user: Option<String>,
     },
@@ -80,7 +81,7 @@ enum Users {
         username: String,
         // #[clap(short, long, default_value = "Snap!")]
         // strategy: String,
-        /// Perform the operation as this user
+        /// Perform this action on behalf of this user
         #[clap(short, long)]
         user: Option<String>,
     },
@@ -96,6 +97,7 @@ enum Projects {
         /// Project name (default is the filename)
         #[clap(short, long)]
         name: Option<String>,
+        /// Perform this action on behalf of this user
         #[clap(short, long)]
         user: Option<String>,
     },
@@ -109,6 +111,7 @@ enum Projects {
         /// Include unsaved changes (from opened projects)
         #[clap(short, long)]
         latest: bool,
+        /// Perform this action on behalf of this user
         #[clap(short, long)]
         user: Option<String>,
     },
@@ -117,6 +120,7 @@ enum Projects {
         /// List the projects shared with the current user
         #[clap(short, long)]
         shared: bool,
+        /// Perform this action on behalf of this user
         #[clap(short, long)]
         user: Option<String>,
     },
@@ -124,6 +128,7 @@ enum Projects {
     Publish {
         /// Name of project to publish
         project: String,
+        /// Perform this action on behalf of this user
         #[clap(short, long)]
         user: Option<String>,
     },
@@ -131,6 +136,7 @@ enum Projects {
     Unpublish {
         /// Name of project to unpublish
         project: String,
+        /// Perform this action on behalf of this user
         #[clap(short, long)]
         user: Option<String>,
     },
@@ -139,6 +145,7 @@ enum Projects {
         project: String,
         #[clap(short, long)]
         role: Option<String>,
+        /// Perform this action on behalf of this user
         #[clap(short, long)]
         user: Option<String>,
     },
@@ -148,6 +155,7 @@ enum Projects {
         new_name: String,
         #[clap(short, long)]
         role: Option<String>,
+        /// Perform this action on behalf of this user
         #[clap(short, long)]
         user: Option<String>,
     },
@@ -155,11 +163,13 @@ enum Projects {
     InviteCollaborator {
         project: String,
         username: String,
+        /// Perform this action on behalf of this user
         #[clap(short, long)]
         user: Option<String>,
     },
     /// List collaboration invitations
     ListInvites {
+        /// Perform this action on behalf of this user
         #[clap(short, long)]
         user: Option<String>,
     },
@@ -171,12 +181,14 @@ enum Projects {
         #[clap(long)]
         reject: bool,
 
+        /// Perform this action on behalf of this user
         #[clap(short, long)]
         user: Option<String>,
     },
     /// List all collaborators on a given project
     ListCollaborators {
         project: String,
+        /// Perform this action on behalf of this user
         #[clap(short, long)]
         user: Option<String>,
     },
@@ -184,6 +196,7 @@ enum Projects {
     RemoveCollaborator {
         project: String,
         username: String,
+        /// Perform this action on behalf of this user
         #[clap(short, long)]
         user: Option<String>,
     },
@@ -203,22 +216,31 @@ enum ServiceHosts {
         /// List service hosts registered to the given group
         #[clap(short, long)]
         group: Option<String>,
-        /// Perform this action on behalf of another user
+        /// Perform this action on behalf of this user
         #[clap(short, long)]
         user: Option<String>,
     },
+    /// Register a new services host for a given user or group
     Register {
+        /// Publicly accessible URL to host
         url: String,
+        /// Categories to nest the services under in the "call RPC" block
         categories: String, // TODO: Should this be optional?
+        /// Register the host for an entire group (eg, class or camp)
         #[clap(short, long)]
         group: Option<String>,
+        /// Perform this action on behalf of this user
         #[clap(short, long)]
         user: Option<String>,
     },
+    /// Remove a registered services host from a given user or group
     Unregister {
+        /// Services host URL
         url: String,
+        /// Remove host registered with the given group
         #[clap(short, long)]
         group: Option<String>,
+        /// Perform this action on behalf of this user
         #[clap(short, long)]
         user: Option<String>,
     },
@@ -234,6 +256,7 @@ enum ServiceHosts {
     Unauthorize { url: String },
 }
 
+/// Manage settings for services (eg, API keys) for different service hosts
 #[derive(Subcommand, Debug)]
 enum ServiceSettings {
     /// List hosts that have custom settings for the given user/group
@@ -241,7 +264,7 @@ enum ServiceSettings {
         /// List hosts that have custom settings for the given group
         #[clap(short, long)]
         group: Option<String>,
-        /// Perform this action on behalf of another user
+        /// Perform this action on behalf of this user
         #[clap(short, long)]
         user: Option<String>,
     },
@@ -255,7 +278,7 @@ enum ServiceSettings {
         /// List all the available settings (user, member, groups) for the user
         #[clap(short, long)]
         all: bool,
-        /// Perform this action on behalf of another user
+        /// Perform this action on behalf of this user
         #[clap(short, long)]
         user: Option<String>,
     },
@@ -266,7 +289,7 @@ enum ServiceSettings {
         /// Delete settings for the given group
         #[clap(short, long)]
         group: Option<String>,
-        /// Perform this action on behalf of another user
+        /// Perform this action on behalf of this user
         #[clap(short, long)]
         user: Option<String>,
     },
@@ -279,7 +302,7 @@ enum ServiceSettings {
         /// Set settings for the given group
         #[clap(short, long)]
         group: Option<String>,
-        /// Perform this action on behalf of another user
+        /// Perform this action on behalf of this user
         #[clap(short, long)]
         user: Option<String>,
     },
@@ -317,24 +340,28 @@ enum Libraries {
     /// Download a library from the cloud
     Export {
         library: String,
+        /// Perform this action on behalf of this user
         #[clap(short, long)]
         user: Option<String>,
     },
     /// Delete a library from the cloud
     Delete {
         library: String,
+        /// Perform this action on behalf of this user
         #[clap(short, long)]
         user: Option<String>,
     },
     /// Make library publicly available
     Publish {
         library: String,
+        /// Perform this action on behalf of this user
         #[clap(short, long)]
         user: Option<String>,
     },
     /// Make a public library private again
     Unpublish {
         library: String,
+        /// Perform this action on behalf of this user
         #[clap(short, long)]
         user: Option<String>,
     },
@@ -343,6 +370,7 @@ enum Libraries {
         library: String,
         #[clap(long)]
         reject: bool,
+        /// Perform this action on behalf of this user
         #[clap(short, long)]
         user: Option<String>,
     },
@@ -385,6 +413,7 @@ enum Network {
         /// Interpret <project> argument as a project ID rather than name
         #[clap(short, long)]
         as_id: bool,
+        /// Perform this action on behalf of this user
         #[clap(short, long)]
         user: Option<String>,
     },
@@ -410,76 +439,104 @@ enum Network {
     },
 }
 
+/// Manage sandboxed groups for classes or camps
 #[derive(Subcommand, Debug)]
 enum Groups {
+    /// Create a group that new users can be added to.
     Create {
         name: String,
+        /// Perform this action on behalf of this user
         #[clap(short, long)]
         user: Option<String>,
     },
+    /// List existing groups
     List {
+        /// Perform this action on behalf of this user
         #[clap(short, long)]
         user: Option<String>,
     },
+    /// View a given group
     View {
         group: String,
+        /// Perform this action on behalf of this user
         #[clap(short, long)]
         user: Option<String>,
     },
+    /// Delete a given group
     Delete {
         group: String,
+        /// Perform this action on behalf of this user
         #[clap(short, long)]
         user: Option<String>,
     },
+    /// View members of a given group
     Members {
         group: String,
+        /// Perform this action on behalf of this user
         #[clap(short, long)]
         user: Option<String>,
     },
+    /// Rename an existing group
     Rename {
         group: String,
         new_name: String,
+        /// Perform this action on behalf of this user
         #[clap(short, long)]
         user: Option<String>,
     },
 }
 
+/// Manage friends and friend invitations
 #[derive(Subcommand, Debug)]
 enum Friends {
+    /// List friends
     List {
         #[clap(short, long)]
         online: bool,
+        /// Perform this action on behalf of this user
         #[clap(short, long)]
         user: Option<String>,
     },
+    /// Remove user from friends list
     Remove {
         username: String,
+        /// Perform this action on behalf of this user
         #[clap(short, long)]
         user: Option<String>,
     },
+    /// Block a user (disallow new friend invites)
     Block {
         username: String,
+        /// Perform this action on behalf of this user
         #[clap(short, long)]
         user: Option<String>,
     },
+    /// Unblock a user (re-allow new friend invites)
     Unblock {
         username: String,
+        /// Perform this action on behalf of this user
         #[clap(short, long)]
         user: Option<String>,
     },
+    /// List pending friend invites
     ListInvites {
+        /// Perform this action on behalf of this user
         #[clap(short, long)]
         user: Option<String>,
     },
+    /// Send friend invite to a given user
     SendInvite {
         username: String,
+        /// Perform this action on behalf of this user
         #[clap(short, long)]
         user: Option<String>,
     },
+    /// Respond to a pending friend invite
     AcceptInvite {
         sender: String,
         #[clap(long)]
         reject: bool,
+        /// Perform this action on behalf of this user
         #[clap(short, long)]
         user: Option<String>,
     },
@@ -560,7 +617,9 @@ struct HostCommand {
 
 #[derive(Parser, Debug)]
 enum Command {
+    /// Authenticate with NetsBlox cloud
     Login,
+    /// Logout of current cloud account
     Logout,
     Users(UserCommand),
     Projects(ProjectCommand),

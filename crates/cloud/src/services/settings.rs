@@ -67,10 +67,9 @@ async fn get_all_settings(
     session: Session,
 ) -> Result<HttpResponse, UserError> {
     let (username, host) = path.into_inner();
-    match ensure_is_authorized_host(&app, &req).await {
-        Err(_) => ensure_can_edit_user(&app, &session, &username).await?,
-        _ => {}
-    };
+    if ensure_is_authorized_host(&app, &req).await.is_err() {
+        ensure_can_edit_user(&app, &session, &username).await?;
+    }
 
     let query = doc! {"username": &username};
     let user = app
@@ -254,13 +253,13 @@ async fn delete_group_settings(
     let update = doc! {"$unset": {format!("serviceSettings.{}", &host): true}};
 
     let result = app
-        .users
+        .groups
         .update_one(query, update, None)
         .await
         .map_err(InternalError::DatabaseConnectionError)?;
 
     if result.matched_count == 0 {
-        Err(UserError::UserNotFoundError)
+        Err(UserError::GroupNotFoundError)
     } else {
         Ok(HttpResponse::Ok().finish())
     }
