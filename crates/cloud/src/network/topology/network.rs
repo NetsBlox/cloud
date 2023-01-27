@@ -276,7 +276,6 @@ impl Topology {
 
     pub async fn send_msg(&self, msg: SendMessage) {
         let message = ClientCommand::SendMessage(msg.content.clone());
-        // TODO: block the messages for clients who are not friends/share a group
         let recipients = join_all(
             msg.addresses
                 .iter()
@@ -287,6 +286,7 @@ impl Topology {
         .into_iter()
         .flatten();
 
+        // TODO: if the recipient is in a group, ensure the sender is a friend
         recipients.clone().for_each(|client| {
             client.addr.do_send(message.clone()).unwrap();
         });
@@ -315,7 +315,7 @@ impl Topology {
                     metadata
                         .network_traces
                         .iter()
-                        .any(|trace| trace.end_time == None)
+                        .any(|trace| trace.end_time.is_none())
                 })
                 .map(|metadata| metadata.id.to_owned());
 
