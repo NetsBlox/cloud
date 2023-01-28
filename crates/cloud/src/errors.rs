@@ -41,6 +41,8 @@ pub enum UserError {
     GroupNotFoundError,
     #[display(fmt = "User not found.")]
     UserNotFoundError,
+    #[display(fmt = "Friend not found.")]
+    FriendNotFoundError,
     #[display(fmt = "Invitation not found.")]
     InviteNotFoundError,
     #[display(fmt = "Service host not found.")]
@@ -161,6 +163,7 @@ impl error::ResponseError for UserError {
             | Self::RoleNotFoundError
             | Self::InviteNotFoundError
             | Self::UserNotFoundError
+            | Self::FriendNotFoundError
             | Self::OAuthClientNotFoundError
             | Self::OAuthTokenNotFoundError
             | Self::GroupNotFoundError => StatusCode::NOT_FOUND,

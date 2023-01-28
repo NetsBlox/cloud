@@ -12,10 +12,10 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          - target: x86_64-pc-windows-gnu
-            archive: zip
           - target: x86_64-unknown-linux-musl
             archive: tar.gz tar.xz
+          - target: x86_64-pc-windows-gnu
+            archive: zip
           - target: x86_64-apple-darwin
             archive: zip
     steps:
@@ -39,6 +39,7 @@ jobs:
           SRC_DIR: crates/cloud
           ARCHIVE_NAME: netsblox_cloud_${{ github.event.release.name }}_${{ matrix.target }}
       - name: Publish (to crates.io)
+        if: matrix.target == 'x86_64-unknown-linux-musl'
         env:
           CARGO_REGISTRY_TOKEN: ${{ secrets.CARGO_REGISTRY_TOKEN }}
         run: |

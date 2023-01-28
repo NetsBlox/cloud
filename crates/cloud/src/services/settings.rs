@@ -295,13 +295,13 @@ async fn delete_group_settings(
     let update = doc! {"$unset": {format!("serviceSettings.{}", &host): true}};
 
     let result = app
-        .users
+        .groups
         .update_one(query, update, None)
         .await
         .map_err(InternalError::DatabaseConnectionError)?;
 
     if result.matched_count == 0 {
-        Err(UserError::UserNotFoundError)
+        Err(UserError::GroupNotFoundError)
     } else {
         Ok(HttpResponse::Ok().finish())
     }

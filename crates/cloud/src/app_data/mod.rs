@@ -6,13 +6,14 @@ use actix_web::HttpRequest;
 use futures::future::join_all;
 use futures::join;
 use lazy_static::lazy_static;
-use lettre::message::Mailbox;
+use lettre::message::{Mailbox, MultiPart};
 use lettre::transport::smtp::authentication::Credentials;
 use lettre::{Address, Message, SmtpTransport, Transport};
 use log::{info, warn};
 use lru::LruCache;
 use mongodb::bson::{doc, DateTime, Document};
 use mongodb::options::{FindOneAndUpdateOptions, IndexOptions, ReturnDocument};
+use netsblox_cloud_common::api::{FriendInvite, FriendLinkState};
 use rusoto_core::credential::StaticProvider;
 use rusoto_core::Region;
 use serde::{Deserialize, Serialize};
@@ -31,6 +32,7 @@ use crate::config::Settings;
 use crate::errors::{InternalError, UserError};
 use crate::libraries;
 use crate::network::topology::{self, SetStorage, TopologyActor};
+use crate::users::get_user_role;
 use actix::{Actor, Addr};
 use futures::TryStreamExt;
 use mongodb::{Client, Collection, IndexModel};
@@ -39,9 +41,15 @@ use rusoto_s3::{
     S3Client, S3,
 };
 
+// This is lazy_static to ensure it is shared between threads
+// TODO: it would be nice to be able to configure the cache size from the settings
 lazy_static! {
     static ref PROJECT_CACHE: Arc<RwLock<LruCache<ProjectId, ProjectMetadata>>> =
         Arc::new(RwLock::new(LruCache::new(500)));
+}
+lazy_static! {
+    static ref FRIEND_CACHE: Arc<RwLock<LruCache<String, Vec<String>>>> =
+        Arc::new(RwLock::new(LruCache::new(1000)));
 }
 
 #[derive(Clone)]
@@ -54,7 +62,7 @@ pub struct AppData {
     pub(crate) groups: Collection<Group>,
     pub(crate) users: Collection<User>,
     pub(crate) banned_accounts: Collection<BannedAccount>,
-    pub(crate) friends: Collection<FriendLink>,
+    friends: Collection<FriendLink>,
     pub(crate) project_metadata: Collection<ProjectMetadata>,
     pub(crate) library_metadata: Collection<LibraryMetadata>,
     pub(crate) libraries: Collection<Library>,
@@ -659,6 +667,246 @@ impl AppData {
         Ok(updated_metadata)
     }
 
+    // Friend-related features
+    fn get_cached_friends(&self, username: &str) -> Option<Vec<String>> {
+        let mut cache = FRIEND_CACHE.write().unwrap();
+        cache.get(username).map(|friends| friends.to_owned())
+    }
+
+    async fn lookup_friends(&self, username: &str) -> Result<Vec<String>, UserError> {
+        let is_universal_friend = matches!(get_user_role(self, username).await?, UserRole::Admin);
+        let friend_names: Vec<_> = if is_universal_friend {
+            self.users
+                .find(doc! {}, None)
+                .await
+                .map_err(InternalError::DatabaseConnectionError)?
+                .try_collect::<Vec<User>>()
+                .await
+                .map_err(InternalError::DatabaseConnectionError)?
+                .into_iter()
+                .map(|user| user.username)
+                .filter(|name| name != username)
+                .collect()
+        } else {
+            let query = doc! {"$or": [
+                {"sender": &username, "state": FriendLinkState::APPROVED},
+                {"recipient": &username, "state": FriendLinkState::APPROVED}
+            ]};
+            let cursor = self
+                .friends
+                .find(query, None)
+                .await
+                .map_err(InternalError::DatabaseConnectionError)?;
+            let links = cursor
+                .try_collect::<Vec<_>>()
+                .await
+                .map_err(InternalError::DatabaseConnectionError)?;
+
+            links
+                .into_iter()
+                .map(|l| {
+                    if l.sender == username {
+                        l.recipient
+                    } else {
+                        l.sender
+                    }
+                })
+                .collect()
+        };
+
+        Ok(friend_names)
+    }
+
+    pub async fn get_friends(&self, username: &str) -> Result<Vec<String>, UserError> {
+        let friend_names = if let Some(names) = self.get_cached_friends(username) {
+            names
+        } else {
+            let names = self.lookup_friends(username).await?;
+            let mut cache = FRIEND_CACHE.write().unwrap();
+            cache.put(username.to_owned(), names.clone());
+            names
+            // TODO: support friends for group members
+        };
+        Ok(friend_names)
+    }
+
+    pub async fn unfriend(&self, owner: &str, friend: &str) -> Result<(), UserError> {
+        let query = doc! {
+            "$or": [
+                {"sender": &owner, "recipient": &friend, "state": FriendLinkState::APPROVED},
+                {"sender": &friend, "recipient": &owner, "state": FriendLinkState::APPROVED}
+            ]
+        };
+        let result = self
+            .friends
+            .delete_one(query, None)
+            .await
+            .map_err(InternalError::DatabaseConnectionError)?;
+
+        if result.deleted_count > 0 {
+            // invalidate friend cache
+            let mut cache = FRIEND_CACHE.write().unwrap();
+            cache.pop(owner);
+            cache.pop(friend);
+            Ok(())
+        } else {
+            Err(UserError::FriendNotFoundError)
+        }
+    }
+
+    pub async fn block_user(&self, owner: &str, other_user: &str) -> Result<(), UserError> {
+        let query = doc! {
+            "$or": [
+                {"sender": &owner, "recipient": &other_user},
+                {"sender": &other_user, "recipient": &owner}
+            ]
+        };
+        let link = FriendLink::new(
+            owner.to_owned(),
+            other_user.to_owned(),
+            Some(FriendLinkState::BLOCKED),
+        );
+        let update = doc! {
+            "$set": &link,
+            "$setOnInsert": &link
+        };
+        let options = FindOneAndUpdateOptions::builder()
+            .return_document(ReturnDocument::Before)
+            .upsert(true)
+            .build();
+        let original = self
+            .friends
+            .find_one_and_update(query, update, options)
+            .await
+            .map_err(InternalError::DatabaseConnectionError)?;
+
+        // invalidate friend cache
+        let invalidate_cache = original.is_some();
+        if invalidate_cache {
+            let mut cache = FRIEND_CACHE.write().unwrap();
+            cache.pop(owner);
+            cache.pop(other_user);
+        }
+        Ok(())
+    }
+
+    pub async fn unblock_user(&self, owner: &str, other_user: &str) -> Result<(), UserError> {
+        let query = doc! {
+            "sender": &owner,
+            "recipient": &other_user,
+            "state": FriendLinkState::BLOCKED,
+        };
+        self.friends
+            .delete_one(query, None)
+            .await
+            .map_err(InternalError::DatabaseConnectionError)?;
+
+        // No need to invalidate cache since it only caches the list of friend names
+        Ok(())
+    }
+
+    pub async fn list_invites(&self, owner: &str) -> Result<Vec<FriendInvite>, UserError> {
+        let query = doc! {"recipient": &owner, "state": FriendLinkState::PENDING}; // TODO: ensure they are still pending
+        let cursor = self
+            .friends
+            .find(query, None)
+            .await
+            .map_err(InternalError::DatabaseConnectionError)?;
+        let invites: Vec<FriendInvite> = cursor
+            .try_collect::<Vec<_>>()
+            .await
+            .map_err(InternalError::DatabaseConnectionError)?
+            .into_iter()
+            .map(|link| link.into())
+            .collect();
+
+        Ok(invites)
+    }
+
+    pub async fn send_invite(
+        &self,
+        owner: &str,
+        recipient: &str,
+    ) -> Result<FriendLinkState, UserError> {
+        let query = doc! {
+            "sender": &recipient,
+            "recipient": &owner,
+            "state": FriendLinkState::PENDING
+        };
+
+        let update = doc! {"$set": {"state": FriendLinkState::APPROVED}};
+        let approved_existing = self
+            .friends
+            .update_one(query, update, None)
+            .await
+            .map_err(InternalError::DatabaseConnectionError)?
+            .modified_count
+            > 0;
+
+        let state = if approved_existing {
+            let mut cache = FRIEND_CACHE.write().unwrap();
+            cache.pop(owner);
+            cache.pop(recipient);
+            FriendLinkState::APPROVED
+        } else {
+            let query = doc! {
+                "$or": [
+                    {"sender": &owner, "recipient": &recipient, "state": FriendLinkState::BLOCKED},
+                    {"sender": &recipient, "recipient": &owner, "state": FriendLinkState::BLOCKED},
+                    {"sender": &owner, "recipient": &recipient, "state": FriendLinkState::APPROVED},
+                    {"sender": &recipient, "recipient": &owner, "state": FriendLinkState::APPROVED},
+                ]
+            };
+
+            let link = FriendLink::new(owner.to_owned(), recipient.to_owned(), None);
+            let update = doc! {"$setOnInsert": link};
+            let options = FindOneAndUpdateOptions::builder().upsert(true).build();
+            let result = self
+                .friends
+                .find_one_and_update(query, update, options)
+                .await
+                .map_err(InternalError::DatabaseConnectionError)?;
+
+            // TODO: Should we allow users to send multiple invitations (ie, after rejection)?
+            result
+                .map(|link| link.state)
+                .unwrap_or(FriendLinkState::PENDING)
+        };
+
+        Ok(state)
+    }
+
+    pub async fn response_to_invite(
+        &self,
+        recipient: &str,
+        sender: &str,
+        resp: FriendLinkState,
+    ) -> Result<(), UserError> {
+        let query = doc! {"recipient": &recipient, "sender": &sender};
+        let update = doc! {"$set": {"state": &resp}};
+        let options = FindOneAndUpdateOptions::builder()
+            .return_document(ReturnDocument::Before)
+            .build();
+        let original = self
+            .friends
+            .find_one_and_update(query, update, options)
+            .await
+            .map_err(InternalError::DatabaseConnectionError)?;
+
+        if let Some(original) = original {
+            let invalidate_cache = matches!(resp, FriendLinkState::APPROVED)
+                || matches!(original.state, FriendLinkState::APPROVED);
+            if invalidate_cache {
+                let mut cache = FRIEND_CACHE.write().unwrap();
+                cache.pop(sender);
+                cache.pop(recipient);
+            }
+            Ok(())
+        } else {
+            Err(UserError::InviteNotFoundError)
+        }
+    }
+
     // Tor-related restrictions
     pub async fn ensure_not_tor_ip(&self, req: HttpRequest) -> Result<(), UserError> {
         match req.peer_addr().map(|addr| addr.ip()) {
@@ -687,9 +935,8 @@ impl AppData {
         &self,
         to_email: &str,
         subject: &str,
-        body: String,
+        body: MultiPart,
     ) -> Result<(), UserError> {
-        println!("Sending email to {}: {}", to_email, body);
         let email = Message::builder()
             .from(self.sender.clone())
             .to(Mailbox::new(
@@ -700,7 +947,7 @@ impl AppData {
             ))
             .subject(subject.to_string())
             .date_now()
-            .body(body)
+            .multipart(body)
             .map_err(|_err| InternalError::EmailBuildError)?;
 
         self.mailer
@@ -760,8 +1007,7 @@ fn is_opera_vpn(addr: &str) -> bool {
     let opera_prefixes = ["77.111.244.", "77.111.245.", "77.111.246.", "77.111.247."];
     opera_prefixes
         .into_iter()
-        .find(|prefix| addr.starts_with(prefix))
-        .is_some()
+        .any(|prefix| addr.starts_with(prefix))
 }
 
 #[cfg(test)]

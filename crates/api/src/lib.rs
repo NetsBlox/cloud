@@ -42,7 +42,8 @@ async fn check_response(response: Response) -> Result<Response, error::Error> {
             401 => Err(error::Error::LoginRequiredError),
             403 => Err(error::Error::PermissionsError(msg)),
             404 => Err(error::Error::NotFoundError(msg)),
-            _ => panic!("Unknown status code"), // FIXME: Use error instead?
+            500 => Err(error::Error::InternalServerError),
+            _ => panic!("Unknown status code: {:?}", status_code), // FIXME: Use error instead?
         }
     } else {
         Ok(response)
