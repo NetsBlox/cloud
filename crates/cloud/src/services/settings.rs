@@ -220,13 +220,16 @@ async fn get_group_settings(
 async fn set_group_settings(
     app: web::Data<AppData>,
     path: web::Path<(api::GroupId, String)>,
+    body: web::Bytes,
     session: Session,
 ) -> Result<HttpResponse, UserError> {
     let (group_id, host) = path.into_inner();
+    // TODO: allow services hosts to do this (maybe as another user??)
     ensure_can_edit_group(&app, &session, &group_id).await?;
 
     let query = doc! {"id": &group_id};
-    let update = doc! {"$unset": {format!("serviceSettings.{}", &host): true}};
+    let settings = std::str::from_utf8(&body).map_err(|_err| UserError::InternalError)?;
+    let update = doc! {"$set": {format!("serviceSettings.{}", &host): settings}};
 
     let result = app
         .groups
