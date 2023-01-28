@@ -38,9 +38,15 @@ async fn get_user_settings(
     app: web::Data<AppData>,
     path: web::Path<(String, String)>,
     session: Session,
+    req: HttpRequest,
 ) -> Result<HttpResponse, UserError> {
     let (username, host) = path.into_inner();
-    ensure_can_edit_user(&app, &session, &username).await?;
+    if ensure_is_authorized_host(&app, &req, Some(&host))
+        .await
+        .is_err()
+    {
+        ensure_can_edit_user(&app, &session, &username).await?;
+    }
 
     let query = doc! {"username": &username};
     let user = app
@@ -67,10 +73,12 @@ async fn get_all_settings(
     session: Session,
 ) -> Result<HttpResponse, UserError> {
     let (username, host) = path.into_inner();
-    match ensure_is_authorized_host(&app, &req).await {
-        Err(_) => ensure_can_edit_user(&app, &session, &username).await?,
-        _ => {}
-    };
+    if ensure_is_authorized_host(&app, &req, Some(&host))
+        .await
+        .is_err()
+    {
+        ensure_can_edit_user(&app, &session, &username).await?;
+    }
 
     let query = doc! {"username": &username};
     let user = app
@@ -122,9 +130,15 @@ async fn set_user_settings(
     path: web::Path<(String, String)>,
     body: web::Bytes,
     session: Session,
+    req: HttpRequest,
 ) -> Result<HttpResponse, UserError> {
     let (username, host) = path.into_inner();
-    ensure_can_edit_user(&app, &session, &username).await?;
+    if ensure_is_authorized_host(&app, &req, Some(&host))
+        .await
+        .is_err()
+    {
+        ensure_can_edit_user(&app, &session, &username).await?;
+    }
 
     let settings = std::str::from_utf8(&body).map_err(|_err| UserError::InternalError)?;
 
@@ -149,9 +163,15 @@ async fn delete_user_settings(
     app: web::Data<AppData>,
     path: web::Path<(String, String)>,
     session: Session,
+    req: HttpRequest,
 ) -> Result<HttpResponse, UserError> {
     let (username, host) = path.into_inner();
-    ensure_can_edit_user(&app, &session, &username).await?;
+    if ensure_is_authorized_host(&app, &req, Some(&host))
+        .await
+        .is_err()
+    {
+        ensure_can_edit_user(&app, &session, &username).await?;
+    }
 
     let query = doc! {"username": &username};
     let update = doc! {"$unset": {format!("serviceSettings.{}", &host): true}};
@@ -195,9 +215,15 @@ async fn get_group_settings(
     app: web::Data<AppData>,
     path: web::Path<(api::GroupId, String)>,
     session: Session,
+    req: HttpRequest,
 ) -> Result<HttpResponse, UserError> {
     let (group_id, host) = path.into_inner();
-    ensure_can_edit_group(&app, &session, &group_id).await?;
+    if ensure_is_authorized_host(&app, &req, Some(&host))
+        .await
+        .is_err()
+    {
+        ensure_can_edit_group(&app, &session, &group_id).await?;
+    }
 
     let query = doc! {"id": &group_id};
     let group = app
@@ -222,10 +248,16 @@ async fn set_group_settings(
     path: web::Path<(api::GroupId, String)>,
     body: web::Bytes,
     session: Session,
+    req: HttpRequest,
 ) -> Result<HttpResponse, UserError> {
     let (group_id, host) = path.into_inner();
-    // TODO: allow services hosts to do this (maybe as another user??)
-    ensure_can_edit_group(&app, &session, &group_id).await?;
+
+    if ensure_is_authorized_host(&app, &req, Some(&host))
+        .await
+        .is_err()
+    {
+        ensure_can_edit_group(&app, &session, &group_id).await?;
+    }
 
     let query = doc! {"id": &group_id};
     let settings = std::str::from_utf8(&body).map_err(|_err| UserError::InternalError)?;
@@ -249,9 +281,15 @@ async fn delete_group_settings(
     app: web::Data<AppData>,
     path: web::Path<(api::GroupId, String)>,
     session: Session,
+    req: HttpRequest,
 ) -> Result<HttpResponse, UserError> {
     let (group_id, host) = path.into_inner();
-    ensure_can_edit_group(&app, &session, &group_id).await?;
+    if ensure_is_authorized_host(&app, &req, Some(&host))
+        .await
+        .is_err()
+    {
+        ensure_can_edit_group(&app, &session, &group_id).await?;
+    }
 
     let query = doc! {"id": &group_id};
     let update = doc! {"$unset": {format!("serviceSettings.{}", &host): true}};

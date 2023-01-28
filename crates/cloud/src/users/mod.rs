@@ -490,9 +490,9 @@ async fn view_user(
 ) -> Result<HttpResponse, UserError> {
     let (username,) = path.into_inner();
 
-    if (ensure_is_authorized_host(&app, &req).await).is_err() {
-        ensure_can_edit_user(&app, &session, &username).await?
-    };
+    if ensure_is_authorized_host(&app, &req, None).await.is_err() {
+        ensure_can_edit_user(&app, &session, &username).await?;
+    }
 
     let query = doc! {"username": username};
     let user: api::User = app

@@ -141,7 +141,7 @@ async fn get_room_state(
 ) -> Result<HttpResponse, UserError> {
     let (project_id,) = path.into_inner();
 
-    let metadata = match ensure_is_authorized_host(&app, &req).await {
+    let metadata = match ensure_is_authorized_host(&app, &req, None).await {
         Err(_) => ensure_can_edit_project(&app, &session, None, &project_id).await?,
         _ => app.get_project_metadatum(&project_id).await?,
     };
@@ -395,7 +395,7 @@ async fn send_message(
     req: HttpRequest,
 ) -> Result<HttpResponse, UserError> {
     // TODO: Should this be used to send messages from the CLI?
-    ensure_is_authorized_host(&app, &req).await?;
+    ensure_is_authorized_host(&app, &req, None).await?;
 
     let message = message.into_inner();
     app.network
@@ -411,7 +411,7 @@ async fn get_client_state(
     session: Session,
     req: HttpRequest,
 ) -> Result<HttpResponse, UserError> {
-    if (ensure_is_authorized_host(&app, &req).await).is_err() {
+    if ensure_is_authorized_host(&app, &req, None).await.is_err() {
         ensure_is_super_user(&app, &session).await?
     };
 

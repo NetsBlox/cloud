@@ -242,7 +242,11 @@ async fn unauthorize_host(
     }
 }
 
-pub async fn ensure_is_authorized_host(app: &AppData, req: &HttpRequest) -> Result<(), UserError> {
+pub async fn ensure_is_authorized_host(
+    app: &AppData,
+    req: &HttpRequest,
+    host_id: Option<&str>,
+) -> Result<AuthorizedServiceHost, UserError> {
     let query = req
         .headers()
         .get("X-Authorization")
@@ -256,13 +260,19 @@ pub async fn ensure_is_authorized_host(app: &AppData, req: &HttpRequest) -> Resu
         .map(|(id, secret)| doc! {"id": id, "secret": secret})
         .ok_or(UserError::PermissionsError)?; // permissions error since there are no credentials
 
-    app.authorized_services
+    let host = app
+        .authorized_services
         .find_one(query, None)
         .await
         .map_err(InternalError::DatabaseConnectionError)?
         .ok_or(UserError::PermissionsError)?;
 
-    Ok(())
+    if let Some(host_id) = host_id {
+        if host_id != host.id {
+            return Err(UserError::PermissionsError);
+        }
+    }
+    Ok(host)
 }
 
 pub fn ensure_valid_service_id(id: &str) -> Result<(), UserError> {
