@@ -166,7 +166,7 @@ async fn create_user(
     match role {
         UserRole::User => {
             if let Some(group_id) = &user_data.group_id {
-                ensure_can_edit_group(&app, &session, group_id).await?
+                ensure_can_edit_group(&app, &session, group_id).await?;
             }
         }
         _ => ensure_is_super_user(&app, &session).await?,

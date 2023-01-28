@@ -1,11 +1,13 @@
 use crate::app_data::AppData;
 use crate::errors::{InternalError, UserError};
+use crate::services::ensure_is_authorized_host;
 use crate::users::{ensure_can_edit_user, is_super_user};
 use actix_session::Session;
-use actix_web::{delete, get, patch, post};
+use actix_web::{delete, get, patch, post, HttpRequest};
 use actix_web::{web, HttpResponse};
 use futures::stream::TryStreamExt;
 use mongodb::bson::doc;
+use netsblox_cloud_common::Group;
 
 use crate::common::{self, api};
 
@@ -40,27 +42,21 @@ async fn view_group(
     app: web::Data<AppData>,
     path: web::Path<(api::GroupId,)>,
     session: Session,
+    req: HttpRequest,
 ) -> Result<HttpResponse, UserError> {
     let (id,) = path.into_inner();
-    let username = session
-        .get::<String>("username")
-        .ok()
-        .flatten()
-        .ok_or(UserError::PermissionsError)?;
-
-    let query = if is_super_user(&app, &session).await.unwrap_or(false) {
-        doc! {"id": id}
+    let group = if ensure_is_authorized_host(&app, &req, None).await.is_err() {
+        ensure_can_edit_group(&app, &session, &id).await?
     } else {
-        doc! {"id": id, "owner": username}
+        let query = doc! {"id": id};
+        app.groups
+            .find_one(query, None)
+            .await
+            .map_err(InternalError::DatabaseConnectionError)?
+            .ok_or(UserError::GroupNotFoundError)?
     };
 
-    let group: api::Group = app
-        .groups
-        .find_one(query, None)
-        .await
-        .map_err(InternalError::DatabaseConnectionError)?
-        .ok_or(UserError::GroupNotFoundError)?
-        .into();
+    let group: api::Group = group.into();
 
     Ok(HttpResponse::Ok().json(group))
 }
@@ -95,17 +91,18 @@ pub async fn ensure_can_edit_group(
     app: &AppData,
     session: &Session,
     group_id: &api::GroupId,
-) -> Result<(), UserError> {
+) -> Result<Group, UserError> {
     let query = doc! {"id": group_id};
-    match app
+    let group = app
         .groups
         .find_one(query, None)
         .await
         .map_err(InternalError::DatabaseConnectionError)?
-    {
-        Some(group) => ensure_can_edit_user(app, session, &group.owner).await,
-        None => Err(UserError::GroupNotFoundError),
-    }
+        .ok_or(UserError::GroupNotFoundError)?;
+
+    ensure_can_edit_user(app, session, &group.owner).await?;
+
+    Ok(group)
 }
 
 // TODO: Should this send the data, too?
