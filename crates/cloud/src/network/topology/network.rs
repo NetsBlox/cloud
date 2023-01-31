@@ -362,20 +362,12 @@ impl Topology {
         recipients: Vec<&'a Client>,
     ) -> Vec<&'a Client> {
         let sender = self.usernames.get(sender);
-
-        // TODO: for each recipient,
-        //   - if he/she is a member, allow if the sender is a friend
-        //   - else, allow
         let recipient_names: HashSet<_> = recipients
             .iter()
             .filter_map(|rcp| self.usernames.get(&rcp.id))
             .cloned()
             .collect();
-        let members = app
-            // TODO: remove dupes from recipient list
-            .keep_members(recipient_names)
-            .await
-            .unwrap_or_default();
+        let members = app.keep_members(recipient_names).await.unwrap_or_default();
 
         let deny_list: HashSet<_> = if let Some(sender) = sender {
             if app.is_admin(sender).await {
