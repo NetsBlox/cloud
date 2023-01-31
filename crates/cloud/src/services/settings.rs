@@ -117,8 +117,13 @@ async fn get_all_settings(
         member: member_settings,
         groups: groups
             .into_iter()
-            .filter_map(|group| group.service_settings.get(&host).map(|s| s.to_owned()))
-            .collect(),
+            .filter_map(|group| {
+                group
+                    .service_settings
+                    .get(&host)
+                    .map(|s| (group.id, s.to_owned()))
+            })
+            .collect::<HashMap<_, _>>(), // TODO: shouldn't this have the group id, too?
     };
 
     Ok(HttpResponse::Ok().json(all_settings))

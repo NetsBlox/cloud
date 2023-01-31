@@ -553,7 +553,7 @@ pub struct ServiceSettings {
     /// Service settings owned by a group in which the user is a member
     pub member: Option<String>,
     /// Service settings owned by a groups created by the user
-    pub groups: Vec<String>,
+    pub groups: HashMap<GroupId, String>,
 }
 
 /// Send message request (for authorized services)
