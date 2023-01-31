@@ -12,8 +12,12 @@ use lettre::{Address, Message, SmtpTransport, Transport};
 use log::{info, warn};
 use lru::LruCache;
 use mongodb::bson::{doc, DateTime, Document};
+<<<<<<< Updated upstream
 use mongodb::options::{FindOneAndUpdateOptions, IndexOptions, ReturnDocument};
 use netsblox_cloud_common::api::{FriendInvite, FriendLinkState};
+=======
+use mongodb::options::{FindOneAndUpdateOptions, FindOptions, IndexOptions, ReturnDocument};
+>>>>>>> Stashed changes
 use rusoto_core::credential::StaticProvider;
 use rusoto_core::Region;
 use serde::{Deserialize, Serialize};
@@ -43,6 +47,11 @@ use rusoto_s3::{
 
 // This is lazy_static to ensure it is shared between threads
 // TODO: it would be nice to be able to configure the cache size from the settings
+lazy_static! {
+    static ref MEMBERSHIP_CACHE: Arc<RwLock<LruCache<String, bool>>> =
+        Arc::new(RwLock::new(LruCache::new(1000)));
+}
+
 lazy_static! {
     static ref PROJECT_CACHE: Arc<RwLock<LruCache<ProjectId, ProjectMetadata>>> =
         Arc::new(RwLock::new(LruCache::new(500)));
@@ -665,6 +674,51 @@ impl AppData {
 
         self.on_room_changed(updated_metadata.clone());
         Ok(updated_metadata)
+    }
+    // Membership queries (cached)
+    pub async fn keep_members(
+        &self,
+        usernames: impl Iterator<Item = Option<&String>>,
+    ) -> Result<impl Iterator<Item = &String>, UserError> {
+        let mut cache = MEMBERSHIP_CACHE.write().unwrap();
+        let unknown_users: Vec<_> = usernames
+            .filter(|name_opt| name_opt.map(|name| !cache.contains(name)).unwrap_or(false))
+            .collect();
+        drop(cache); // don't hold the lock over the upcoming async boundary
+
+        let unknown_count = unknown_users.len() as i64;
+        let opts = FindOptions::builder().limit(Some(unknown_count)).build();
+        let query = doc! {"$or":
+            unknown_users.into_iter().map(|name| doc!{"username": name}).collect::<Vec<_>>()
+        };
+        let users = self
+            .users
+            .find(query, opts)
+            .await
+            .map_err(InternalError::DatabaseConnectionError)?
+            .try_collect::<Vec<_>>()
+            .await
+            .map_err(InternalError::DatabaseConnectionError)?;
+
+        let mut cache = MEMBERSHIP_CACHE.write().unwrap();
+        users.into_iter().for_each(|usr| {
+            cache.put(usr.username, usr.group_id.is_some());
+        });
+        // TODO: check the cache?
+        // TODO: check membership
+        // TODO: I think the logic ahead is a little problematic and needs to be checked out...
+        usernames.filter(|name_opt| {
+            name_opt
+                .map(|name| {
+                    // Althought unlikely, it's possible that the entries
+                    // have been invalidated from the cache while looking up
+                    // the unknown users. In this case, we will be conservative
+                    // and just assume they are members.
+                    let is_member = cache.get(name).unwrap_or(&true);
+                    *is_member
+                })
+                .unwrap_or(true)
+        })
     }
 
     // Friend-related features

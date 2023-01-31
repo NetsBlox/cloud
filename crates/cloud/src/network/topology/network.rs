@@ -286,15 +286,29 @@ impl Topology {
         .into_iter()
         .flatten();
 
+<<<<<<< Updated upstream
         // TODO: if the recipient is in a group, ensure the sender is a friend
         recipients.clone().for_each(|client| {
             client.addr.do_send(message.clone()).unwrap();
         });
 
         // maybe record the message
+=======
+>>>>>>> Stashed changes
         if let Some(app) = &self.app_data {
+            // check if the message is allowed
+            // TODO: get user membership
+            // TODO: get user membership
+            let recipients = self.valid_recipients(&app, &msg.sender, recipients).await;
+            // TODO: make method for getting all the cached users?
+
+            recipients.iter().for_each(|client| {
+                client.addr.do_send(message.clone()).unwrap();
+            });
+
+            // maybe record the message
             let project_ids: Vec<_> = recipients
-                .clone()
+                .iter()
                 .map(|client| &client.id)
                 .chain(std::iter::once(&msg.sender))
                 .filter_map(|client_id| match self.get_client_state(client_id) {
@@ -321,6 +335,7 @@ impl Topology {
 
             let source = self.get_client_state(&msg.sender).unwrap();
             let recipients = recipients
+                .into_iter()
                 .filter_map(|client| self.get_client_state(&client.id))
                 .map(|state| state.to_owned())
                 .collect::<Vec<_>>();
@@ -345,6 +360,19 @@ impl Topology {
                     .unwrap();
             }
         }
+    }
+
+    async fn valid_recipients(
+        &self,
+        app: &AppData,
+        sender: &ClientId,
+        recipients: impl Iterator<Item = &Client>,
+    ) -> Vec<&Client> {
+        let usernames = recipients.map(|rcp| self.usernames.get(&rcp.id));
+        let sender = self.usernames.get(sender);
+        // TODO: check if the recipients are group members
+        // TODO: if so, check that the sender is a friend
+        todo!()
     }
 
     fn has_client(&self, id: &ClientId) -> bool {
