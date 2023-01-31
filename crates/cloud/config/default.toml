@@ -2,10 +2,10 @@ address = "0.0.0.0:7777"
 public_url = "http://127.0.0.1:7777"
 #login_url = "https://login.netsblox.org"
 
-[admin]
-username = "admin"
-password = "somePassword"
-email = "admin@netsblox.org"
+# [admin]
+# username = "admin"
+# password = "somePassword"
+# email = "admin@netsblox.org"
 
 [database]
 url = "mongodb://127.0.0.1:27017/"
