@@ -1,6 +1,6 @@
 [package]
 name = "netsblox-cli"
-version = "0.1.0-alpha.7"
+version = "0.1.0"
 edition = "2021"
 license = "MIT"
 description = """
@@ -20,7 +20,7 @@ confy = "0.4.0"
 serde = { version = "1.0.130", features = ["derive"] }
 inquire = "0.3.0-alpha.1"
 reqwest = {version = "0.11.9", features = ["json", "cookies"]}
-netsblox-api = { path = "../api", version = "0.1.0-alpha.7" }
+netsblox-api = { path = "../api", version = "0.1.0" }
 futures-util = "0.3.19"
 exitcode = "1.1.2"
 xmlparser = "0.13.5"
