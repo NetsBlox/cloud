@@ -1,3 +1,5 @@
+use std::collections::HashMap;
+
 use actix_session::Session;
 use actix_web::{delete, get, post, web, HttpRequest, HttpResponse};
 use futures::TryStreamExt;
@@ -123,7 +125,7 @@ async fn get_all_settings(
                     .get(&host)
                     .map(|s| (group.id, s.to_owned()))
             })
-            .collect::<HashMap<_, _>>(), // TODO: shouldn't this have the group id, too?
+            .collect::<HashMap<_, _>>(),
     };
 
     Ok(HttpResponse::Ok().json(all_settings))
