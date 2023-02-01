@@ -381,7 +381,7 @@ impl Topology {
                 }))
                 .await
                 .into_iter()
-                .filter_map(|(rec_name, is_friend)| if is_friend { Some(rec_name) } else { None })
+                .filter_map(|(rec_name, is_friend)| if !is_friend { Some(rec_name) } else { None })
                 .collect()
             }
         } else {
