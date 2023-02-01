@@ -202,6 +202,9 @@ async fn create_user(
     if existing_user.is_some() {
         Err(UserError::UserExistsError)
     } else {
+        if let Some(group_id) = user.group_id {
+            app.group_members_updated(&group_id).await;
+        }
         Ok(HttpResponse::Ok().body("User created"))
     }
 }
@@ -359,16 +362,18 @@ async fn delete_user(
     ensure_can_edit_user(&app, &session, &username).await?;
 
     let query = doc! {"username": username};
-    let result = app
+    let user = app
         .users
-        .delete_one(query, None)
+        .find_one_and_delete(query, None)
         .await
-        .map_err(InternalError::DatabaseConnectionError)?;
-    if result.deleted_count > 0 {
-        Ok(HttpResponse::Ok().finish())
-    } else {
-        Ok(HttpResponse::NotFound().finish())
+        .map_err(InternalError::DatabaseConnectionError)?
+        .ok_or(UserError::UserNotFoundError)?;
+
+    if let Some(group_id) = user.group_id {
+        app.group_members_updated(&group_id).await;
     }
+
+    Ok(HttpResponse::Ok().finish())
 }
 
 #[post("/{username}/password")]

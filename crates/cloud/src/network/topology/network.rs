@@ -8,6 +8,7 @@ use lazy_static::lazy_static;
 use log::warn;
 use lru::LruCache;
 use mongodb::bson::{doc, DateTime};
+use netsblox_cloud_common::SentMessage;
 use serde_json::json;
 use std::collections::{HashMap, HashSet};
 use std::str::FromStr;
@@ -16,7 +17,7 @@ use std::time::{Duration, SystemTime};
 
 use crate::app_data::AppData;
 use crate::common::api::{ProjectId, SaveState};
-use crate::common::{ProjectMetadata, SentMessage};
+use crate::common::ProjectMetadata;
 use crate::errors::InternalError;
 use crate::network::topology::address::ClientAddress;
 
@@ -286,15 +287,19 @@ impl Topology {
         .into_iter()
         .flatten();
 
-        // TODO: if the recipient is in a group, ensure the sender is a friend
-        recipients.clone().for_each(|client| {
-            client.addr.do_send(message.clone()).unwrap();
-        });
-
-        // maybe record the message
         if let Some(app) = &self.app_data {
+            // check if the message is allowed
+            let recipients = self
+                .allowed_recipients(app, &msg.sender, recipients.collect())
+                .await;
+
+            recipients.iter().for_each(|client| {
+                client.addr.do_send(message.clone()).unwrap();
+            });
+
+            // maybe record the message
             let project_ids: Vec<_> = recipients
-                .clone()
+                .iter()
                 .map(|client| &client.id)
                 .chain(std::iter::once(&msg.sender))
                 .filter_map(|client_id| match self.get_client_state(client_id) {
@@ -321,6 +326,7 @@ impl Topology {
 
             let source = self.get_client_state(&msg.sender).unwrap();
             let recipients = recipients
+                .into_iter()
                 .filter_map(|client| self.get_client_state(&client.id))
                 .map(|state| state.to_owned())
                 .collect::<Vec<_>>();
@@ -345,6 +351,53 @@ impl Topology {
                     .unwrap();
             }
         }
+    }
+
+    /// Get the allowed recipients of a message. If the recipient is a
+    /// member of a group, ensure that the sender can message that group.
+    async fn allowed_recipients<'a>(
+        &self,
+        app: &AppData,
+        sender: &ClientId,
+        recipients: Vec<&'a Client>,
+    ) -> Vec<&'a Client> {
+        let sender = self.usernames.get(sender);
+        let recipient_names: HashSet<_> = recipients
+            .iter()
+            .filter_map(|rcp| self.usernames.get(&rcp.id))
+            .cloned()
+            .collect();
+        let members = app.keep_members(recipient_names).await.unwrap_or_default();
+
+        let deny_list: HashSet<_> = if let Some(sender) = sender {
+            if app.is_admin(sender).await {
+                // allow messages from admins
+                std::iter::empty().collect()
+            } else {
+                // message only allowed from group member/owner
+                join_all(members.into_iter().map(|member| async {
+                    let friends = app.get_friends(&member).await.unwrap_or_default();
+                    (member, friends.contains(sender))
+                }))
+                .await
+                .into_iter()
+                .filter_map(|(rec_name, is_friend)| if !is_friend { Some(rec_name) } else { None })
+                .collect()
+            }
+        } else {
+            // messages to any group member will be blocked
+            members.into_iter().collect()
+        };
+
+        recipients
+            .into_iter()
+            .filter(|rec| {
+                self.usernames
+                    .get(&rec.id)
+                    .map(|username| !deny_list.contains(username))
+                    .unwrap_or(true)
+            })
+            .collect()
     }
 
     fn has_client(&self, id: &ClientId) -> bool {

@@ -9,17 +9,19 @@ use lazy_static::lazy_static;
 use lettre::message::{Mailbox, MultiPart};
 use lettre::transport::smtp::authentication::Credentials;
 use lettre::{Address, Message, SmtpTransport, Transport};
-use log::{info, warn};
+use log::{error, info, warn};
 use lru::LruCache;
 use mongodb::bson::{doc, DateTime, Document};
-use mongodb::options::{FindOneAndUpdateOptions, IndexOptions, ReturnDocument};
-use netsblox_cloud_common::api::{FriendInvite, FriendLinkState};
+use mongodb::options::{FindOneAndUpdateOptions, FindOptions, IndexOptions, ReturnDocument};
+use netsblox_cloud_common::api::{FriendInvite, FriendLinkState, GroupId};
 use rusoto_core::credential::StaticProvider;
 use rusoto_core::Region;
 use serde::{Deserialize, Serialize};
+use std::borrow::Borrow;
 use std::collections::{HashMap, HashSet};
 use std::sync::{Arc, RwLock};
 use std::time::Duration;
+use tokio::sync::RwLock as AsyncRwLock;
 use uuid::Uuid;
 
 use crate::common::api::{RoleData, SaveState};
@@ -32,7 +34,6 @@ use crate::config::Settings;
 use crate::errors::{InternalError, UserError};
 use crate::libraries;
 use crate::network::topology::{self, SetStorage, TopologyActor};
-use crate::users::get_user_role;
 use actix::{Actor, Addr};
 use futures::TryStreamExt;
 use mongodb::{Client, Collection, IndexModel};
@@ -43,6 +44,15 @@ use rusoto_s3::{
 
 // This is lazy_static to ensure it is shared between threads
 // TODO: it would be nice to be able to configure the cache size from the settings
+lazy_static! {
+    static ref MEMBERSHIP_CACHE: Arc<AsyncRwLock<LruCache<String, bool>>> =
+        Arc::new(AsyncRwLock::new(LruCache::new(1000)));
+}
+lazy_static! {
+    static ref ADMIN_CACHE: Arc<AsyncRwLock<LruCache<String, bool>>> =
+        Arc::new(AsyncRwLock::new(LruCache::new(1000)));
+}
+
 lazy_static! {
     static ref PROJECT_CACHE: Arc<RwLock<LruCache<ProjectId, ProjectMetadata>>> =
         Arc::new(RwLock::new(LruCache::new(500)));
@@ -667,6 +677,84 @@ impl AppData {
         Ok(updated_metadata)
     }
 
+    // Membership queries (cached)
+    pub async fn keep_members(&self, usernames: HashSet<String>) -> Result<Vec<String>, UserError> {
+        let cache = MEMBERSHIP_CACHE.write().await;
+        let unknown_users: Vec<_> = usernames
+            .iter()
+            .filter(|name| !cache.contains(*name))
+            .collect();
+        drop(cache); // don't hold the lock over the upcoming async boundary
+
+        let unknown_count = unknown_users.len() as i64;
+        if unknown_count > 0 {
+            let opts = FindOptions::builder().limit(Some(unknown_count)).build();
+            let query = doc! {"$or":
+                unknown_users.into_iter().map(|name| doc!{"username": name}).collect::<Vec<_>>()
+            };
+            let users = self
+                .users
+                .find(query, opts)
+                .await
+                .map_err(InternalError::DatabaseConnectionError)?
+                .try_collect::<Vec<_>>()
+                .await
+                .map_err(InternalError::DatabaseConnectionError)?;
+
+            let mut cache = MEMBERSHIP_CACHE.write().await;
+            users.into_iter().for_each(|usr| {
+                cache.put(usr.username, usr.group_id.is_some());
+            });
+        }
+
+        let mut cache = MEMBERSHIP_CACHE.write().await;
+        let members: Vec<_> = usernames
+            .into_iter()
+            .filter(|name| {
+                // Althought unlikely, it's possible that the entries
+                // have been invalidated from the cache while looking up
+                // the unknown users. In this case, we will be conservative
+                // and just assume they are members.
+                let is_member = cache.get(name).unwrap_or(&true);
+                *is_member
+            })
+            .collect();
+
+        Ok(members)
+    }
+
+    // Cached admin-checking
+    pub async fn is_admin(&self, username: &str) -> bool {
+        let cache = ADMIN_CACHE.write().await;
+        let needs_lookup = !cache.contains(username);
+        drop(cache); // don't hold the lock during the database query
+
+        if needs_lookup {
+            let query = doc! {"username": &username};
+            let is_admin = self
+                .users
+                .find_one(query, None)
+                .await
+                .map_err(|err| {
+                    error!("Database error: {:?}", err);
+                    InternalError::DatabaseConnectionError(err)
+                })
+                .ok()
+                .flatten()
+                .map(|user| matches!(user.role, UserRole::Admin))
+                .unwrap_or(false);
+
+            let mut cache = ADMIN_CACHE.write().await;
+            cache.put(username.to_owned(), is_admin);
+        }
+
+        let mut cache = ADMIN_CACHE.write().await;
+        cache
+            .get(username)
+            .map(|is_admin| is_admin.to_owned())
+            .unwrap_or(false)
+    }
+
     // Friend-related features
     fn get_cached_friends(&self, username: &str) -> Option<Vec<String>> {
         let mut cache = FRIEND_CACHE.write().unwrap();
@@ -674,7 +762,16 @@ impl AppData {
     }
 
     async fn lookup_friends(&self, username: &str) -> Result<Vec<String>, UserError> {
-        let is_universal_friend = matches!(get_user_role(self, username).await?, UserRole::Admin);
+        let query = doc! {"username": &username};
+        let user = self
+            .users
+            .find_one(query, None)
+            .await
+            .map_err(InternalError::DatabaseConnectionError)?
+            .ok_or(UserError::UserNotFoundError)?;
+
+        let is_universal_friend = matches!(user.role, UserRole::Admin);
+
         let friend_names: Vec<_> = if is_universal_friend {
             self.users
                 .find(doc! {}, None)
@@ -687,7 +784,36 @@ impl AppData {
                 .map(|user| user.username)
                 .filter(|name| name != username)
                 .collect()
+        } else if let Some(group_id) = user.group_id {
+            // get owner + all members
+            let query = doc! {"id": &group_id};
+            let group = self
+                .groups
+                .find_one(query, None)
+                .await
+                .map_err(InternalError::DatabaseConnectionError)?
+                .ok_or(UserError::GroupNotFoundError)?;
+            let members = self.lookup_members(std::iter::once(&group_id)).await?;
+
+            std::iter::once(group.owner)
+                .chain(members.into_iter().map(|user| user.username))
+                .collect()
         } else {
+            // look up:
+            //   - members of any group we own
+            //   - accepted friend requests/links
+            let query = doc! {"owner": &username};
+            let groups = self
+                .groups
+                .find(query, None)
+                .await
+                .map_err(InternalError::DatabaseConnectionError)?
+                .try_collect::<Vec<_>>()
+                .await
+                .map_err(InternalError::DatabaseConnectionError)?;
+            let group_ids = groups.into_iter().map(|group| group.id);
+            let members = self.lookup_members(group_ids).await?;
+
             let query = doc! {"$or": [
                 {"sender": &username, "state": FriendLinkState::APPROVED},
                 {"recipient": &username, "state": FriendLinkState::APPROVED}
@@ -711,10 +837,46 @@ impl AppData {
                         l.sender
                     }
                 })
+                .chain(members.into_iter().map(|user| user.username))
                 .collect()
         };
 
         Ok(friend_names)
+    }
+
+    async fn lookup_members<T>(
+        &self,
+        group_ids: impl Iterator<Item = T>,
+    ) -> Result<Vec<User>, UserError>
+    where
+        T: Borrow<GroupId>,
+    {
+        let member_queries: Vec<_> = group_ids.map(|id| doc! {"groupId": id.borrow()}).collect();
+        let query = doc! {"$or": member_queries};
+
+        let members = self
+            .users
+            .find(query, None)
+            .await
+            .map_err(InternalError::DatabaseConnectionError)?
+            .try_collect::<Vec<_>>()
+            .await
+            .map_err(InternalError::DatabaseConnectionError)?;
+
+        Ok(members)
+    }
+
+    /// Invalidate the relevant cached values when a user is added or removed
+    /// from a group
+    pub async fn group_members_updated(&self, group_id: &GroupId) {
+        if let Ok(members) = self.lookup_members(std::iter::once(group_id)).await {
+            let mut cache = FRIEND_CACHE.write().unwrap();
+            members.into_iter().for_each(|user| {
+                cache.pop(&user.username);
+            });
+        } else {
+            error!("Error occurred while retrieving members for {}", group_id);
+        }
     }
 
     pub async fn get_friends(&self, username: &str) -> Result<Vec<String>, UserError> {
