@@ -317,17 +317,13 @@ async fn remove_client(
 
     let (client_id,) = path.into_inner();
     let query = doc! {"id": client_id};
-    let del_result = app
-        .oauth_clients
-        .delete_one(query, None)
+    app.oauth_clients
+        .find_one_and_delete(query, None)
         .await
-        .map_err(InternalError::DatabaseConnectionError)?;
+        .map_err(InternalError::DatabaseConnectionError)?
+        .ok_or(UserError::OAuthClientNotFoundError)?;
 
-    if del_result.deleted_count == 0 {
-        Err(UserError::OAuthClientNotFoundError)
-    } else {
-        Ok(HttpResponse::Ok().finish())
-    }
+    Ok(HttpResponse::Ok().finish())
 }
 
 pub fn config(cfg: &mut web::ServiceConfig) {
