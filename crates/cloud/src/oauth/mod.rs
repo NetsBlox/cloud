@@ -118,9 +118,7 @@ async fn authorize_client(
         return Ok(response);
     }
 
-    // TODO: Check that the client exists
-    // TODO: create a new code for the user
-    // TODO: return the codeId
+    // Check that the client exists
     let hashed_secret = sha512(&params.client_secret);
     let query = doc! {
         "id": &params.client_id,
@@ -139,6 +137,7 @@ async fn authorize_client(
         return Err(UserError::OAuthClientNotFoundError);
     }
 
+    // create a new code for the user
     let code = oauth::Code {
         id: oauth::CodeId::new(Uuid::new_v4().to_string()),
         username: username.to_owned(),
