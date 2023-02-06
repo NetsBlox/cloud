@@ -119,6 +119,7 @@ async fn authorize_client(
     }
 
     // Check that the client exists
+    // FIXME: this needs to use the salt, too!
     let hashed_secret = sha512(&params.client_secret);
     let query = doc! {
         "id": &params.client_id,
@@ -284,12 +285,7 @@ async fn create_client(
 }
 
 #[get("/clients/")]
-async fn list_clients(
-    app: web::Data<AppData>,
-    session: Session,
-) -> Result<HttpResponse, UserError> {
-    ensure_is_super_user(&app, &session).await?;
-
+async fn list_clients(app: web::Data<AppData>) -> Result<HttpResponse, UserError> {
     let cursor = app
         .oauth_clients
         .find(doc! {}, None)
