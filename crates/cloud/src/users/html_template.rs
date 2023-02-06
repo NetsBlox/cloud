@@ -46,7 +46,10 @@ pub(crate) fn set_password_page(username: &str) -> String {
                 const password = document.getElementById('pwd').value;
                 const passwordConfirm = document.getElementById('confirmPwd');
                 if (password !== passwordConfirm.value) {{
-                    return passwordConfirm.setCustomValidity('Passwords do not match');
+                    const errText = 'Passwords do not match';
+                    passwordConfirm.setCustomValidity(errText);
+                    errorMsg.innerHTML = errText;
+                    return;
                 }}
                 passwordConfirm.setCustomValidity('');
                 errorMsg.innerHTML = '';
