@@ -24,7 +24,7 @@ pub struct CreateClientData {
 #[derive(Deserialize, Serialize, Clone, Debug)]
 pub struct CreatedClientData {
     pub id: ClientId,
-    pub password: String,
+    pub secret: String,
 }
 
 #[derive(Deserialize, Serialize, Clone, Debug)]

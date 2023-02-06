@@ -251,14 +251,14 @@ async fn create_client(
 
     let query = doc! {"name": &params.name};
 
-    let password = PasswordGenerator::new()
+    let secret = PasswordGenerator::new()
         .length(12)
         .spaces(false)
         .exclude_similar_characters(true)
         .generate_one()
         .map_err(|_err| InternalError::PasswordGenerationError)?;
 
-    let client = OAuthClient::new(params.name.clone(), password.clone());
+    let client = OAuthClient::new(params.name.clone(), secret.clone());
     let client_id = client.id.clone();
 
     let update = doc! {"$setOnInsert": client};
@@ -278,7 +278,7 @@ async fn create_client(
     } else {
         Ok(HttpResponse::Ok().json(oauth::CreatedClientData {
             id: client_id,
-            password,
+            secret,
         }))
     }
 }
