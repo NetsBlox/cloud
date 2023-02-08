@@ -852,18 +852,22 @@ impl AppData {
         T: Borrow<GroupId>,
     {
         let member_queries: Vec<_> = group_ids.map(|id| doc! {"groupId": id.borrow()}).collect();
-        let query = doc! {"$or": member_queries};
+        if !member_queries.is_empty() {
+            let query = doc! {"$or": member_queries};
 
-        let members = self
-            .users
-            .find(query, None)
-            .await
-            .map_err(InternalError::DatabaseConnectionError)?
-            .try_collect::<Vec<_>>()
-            .await
-            .map_err(InternalError::DatabaseConnectionError)?;
+            let members = self
+                .users
+                .find(query, None)
+                .await
+                .map_err(InternalError::DatabaseConnectionError)?
+                .try_collect::<Vec<_>>()
+                .await
+                .map_err(InternalError::DatabaseConnectionError)?;
 
-        Ok(members)
+            Ok(members)
+        } else {
+            Ok(Vec::new())
+        }
     }
 
     /// Invalidate the relevant cached values when a user is added or removed
