@@ -1121,6 +1121,17 @@ impl AppData {
             .map_err(InternalError::SendEmailError)?;
         Ok(())
     }
+
+    #[cfg(test)]
+    pub(crate) async fn drop_all_data(&self) {
+        let bucket = &self.settings.s3.bucket;
+        let request = rusoto_s3::DeleteBucketRequest {
+            bucket: bucket.clone(),
+            ..Default::default()
+        };
+        // TODO: uncomment the following
+        //self.s3.delete_bucket(request).await.unwrap();
+    }
 }
 
 async fn update_tor_nodes(tor_exit_nodes: &Collection<TorNode>) -> Result<(), UserError> {

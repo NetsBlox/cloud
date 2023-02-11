@@ -10,6 +10,8 @@ mod network;
 mod oauth;
 mod projects;
 mod services;
+#[cfg(test)]
+mod test_utils;
 mod users;
 
 use crate::common::api;
