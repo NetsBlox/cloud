@@ -732,43 +732,14 @@ mod tests {
 
     #[actix_web::test]
     async fn test_create_member_unauth() {
-        // group member
-        let app_data = init_app_data("create_member_unauth", vec![])
-            .await
-            .expect("Unable to seed database");
-
-        // Run the test
-        let app = App::new()
-            .app_data(web::Data::new(app_data.clone()))
-            .configure(config);
-        let app = test::init_service(
-            App::new()
-                .app_data(web::Data::new(app_data.clone()))
-                .configure(config),
-        )
-        .await;
-
-        let user_data = api::NewUser {
-            username: "someMember".into(),
-            email: "test@gmail.com".into(),
-            password: Some("pwd".into()),
-            group_id: None,
-            role: Some(UserRole::User),
-        };
-        let req = test::TestRequest::post()
-            .uri("/create")
-            .set_json(&user_data)
-            .to_request();
-
-        let response = test::call_service(&app, req).await;
-        assert_eq!(response.status(), http::StatusCode::BAD_REQUEST);
-    }
-
-    #[actix_web::test]
-    async fn test_create_member_nonowner2() {
-        test_utils::setup()
-            // .configure(config)
-            .run(move |app, app_data| {
+        test_utils::setup("member_unauth")
+            .run(|app_data| async {
+                let app = test::init_service(
+                    App::new()
+                        .app_data(web::Data::new(app_data))
+                        .configure(config),
+                )
+                .await;
                 let user_data = api::NewUser {
                     username: "someMember".into(),
                     email: "test@gmail.com".into(),
@@ -781,43 +752,41 @@ mod tests {
                     .set_json(&user_data)
                     .to_request();
 
-                test::call_service(&app, req).and_then(|response: ServiceResponse| {
-                    assert_eq!(response.status(), http::StatusCode::BAD_REQUEST);
-                    future::ok(())
-                })
+                let response = test::call_service(&app, req).await;
+                assert_eq!(response.status(), http::StatusCode::BAD_REQUEST);
             })
             .await;
+
+        // Run the test
     }
 
     #[actix_web::test]
     async fn test_create_member_nonowner() {
-        // group member
-        let app_data = init_app_data("create_member_nonowner", vec![])
-            .await
-            .expect("Unable to seed database");
+        test_utils::setup("member_nonowner")
+            .run(|app_data| async {
+                let user_data = api::NewUser {
+                    username: "someMember".into(),
+                    email: "test@gmail.com".into(),
+                    password: Some("pwd".into()),
+                    group_id: None,
+                    role: Some(UserRole::User),
+                };
+                let req = test::TestRequest::post()
+                    .uri("/create")
+                    .set_json(&user_data)
+                    .to_request();
 
-        // Run the test
-        let app = test::init_service(
-            App::new()
-                .app_data(web::Data::new(app_data.clone()))
-                .configure(config),
-        )
-        .await;
-        //check_type(app);
+                let app = test::init_service(
+                    App::new()
+                        .app_data(web::Data::new(app_data))
+                        .configure(config),
+                )
+                .await;
 
-        let user_data = api::NewUser {
-            username: "someMember".into(),
-            email: "test@gmail.com".into(),
-            password: Some("pwd".into()),
-            group_id: None,
-            role: Some(UserRole::User),
-        };
-        let req = test::TestRequest::post()
-            .uri("/create")
-            .set_json(&user_data)
-            .to_request();
-        let response = test::call_service(&app, req).await;
-        assert_eq!(response.status(), http::StatusCode::BAD_REQUEST);
+                let response = test::call_service(&app, req).await;
+                assert_eq!(response.status(), http::StatusCode::BAD_REQUEST);
+            })
+            .await;
     }
 
     //     #[actix_web::test]

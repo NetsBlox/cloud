@@ -10,9 +10,9 @@ use netsblox_cloud_common::User;
 
 use crate::{app_data::AppData, config::Settings};
 
-pub(crate) fn setup() -> TestSetupBuilder {
+pub(crate) fn setup(prefix: &'static str) -> TestSetupBuilder {
     TestSetupBuilder {
-        prefix: "todo",
+        prefix,
         users: Vec::new(),
     }
 }
@@ -28,17 +28,10 @@ impl TestSetupBuilder {
         self
     }
 
-    // pub(crate) async fn run<Fut, S>(&self, f: impl FnOnce(S, AppData) -> Fut)
-    // where
-    //     Fut: Future<Output = Result<(), ()>>,
-    //     S: Service<TestRequest>,
-    // TODO: what is the type of the test service
-    pub(crate) async fn run<Fut, S>(&self, f: impl FnOnce(&S, &AppData) -> Fut)
+    pub(crate) async fn run<Fut>(&self, f: impl FnOnce(AppData) -> Fut)
     where
-        Fut: Future<Output = Result<(), ()>>,
-        S: Service<TestRequest>,
+        Fut: Future<Output = ()>,
     {
-        // TODO: setup things
         let client = Client::with_uri_str("mongodb://127.0.0.1:27017/")
             .await
             .expect("Unable to connect to database");
@@ -49,13 +42,8 @@ impl TestSetupBuilder {
         settings.s3.bucket = format!("test_{}", settings.s3.bucket);
 
         let app_data = AppData::new(client.clone(), settings, None, Some(self.prefix));
-        let app = test::init_service(
-            App::new().app_data(web::Data::new(app_data.clone())), //.configure(config),
-        )
-        .await;
 
-        // TODO: pass the service, too
-        f(&app, &app_data).await.unwrap();
+        f(app_data.clone()).await;
 
         // cleanup
         client.database(&db_name).drop(None).await.unwrap();
