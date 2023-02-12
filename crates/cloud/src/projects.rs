@@ -800,7 +800,7 @@ mod tests {
     use super::*;
     use crate::test_utils;
     use actix_web::{dev::ServiceResponse, http, test, App};
-    use netsblox_cloud_common::api::UserRole;
+    use netsblox_cloud_common::{api::UserRole, User};
 
     #[actix_web::test]
     #[ignore]
@@ -1295,20 +1295,113 @@ mod tests {
     }
 
     #[actix_web::test]
-    #[ignore]
     async fn test_list_collaborators() {
-        todo!();
+        let username = "user1";
+        let project = test_utils::project::builder()
+            .with_owner(username.to_string())
+            .with_collaborators(&["user2", "user3"])
+            .build();
+
+        test_utils::setup()
+            .with_projects(&[project.clone()])
+            .run(|app_data| async move {
+                let app = test::init_service(
+                    App::new()
+                        .wrap(test_utils::cookie::middleware())
+                        .app_data(web::Data::new(app_data.clone()))
+                        .configure(config),
+                )
+                .await;
+
+                let req = test::TestRequest::get()
+                    .cookie(test_utils::cookie::new(username))
+                    .uri(&format!("/id/{}/collaborators/", &project.id))
+                    .to_request();
+
+                let collaborators: Vec<String> = test::call_and_read_body_json(&app, req).await;
+                collaborators
+                    .into_iter()
+                    .enumerate()
+                    .for_each(|(i, name)| assert_eq!(name, project.collaborators[i]));
+            })
+            .await;
     }
 
     #[actix_web::test]
-    #[ignore]
     async fn test_list_collaborators_403() {
-        todo!();
+        let username = "user1";
+        let project = test_utils::project::builder()
+            .with_owner(username.to_string())
+            .with_collaborators(&["user2", "user3"])
+            .build();
+
+        test_utils::setup()
+            .with_projects(&[project.clone()])
+            .run(|app_data| async move {
+                let app = test::init_service(
+                    App::new()
+                        .app_data(web::Data::new(app_data.clone()))
+                        .configure(config),
+                )
+                .await;
+
+                let req = test::TestRequest::get()
+                    .uri(&format!("/id/{}/collaborators/", &project.id))
+                    .to_request();
+
+                let response = test::call_service(&app, req).await;
+                assert_eq!(response.status(), http::StatusCode::UNAUTHORIZED);
+            })
+            .await;
     }
 
     #[actix_web::test]
-    #[ignore]
     async fn test_list_collaborators_admin() {
-        todo!();
+        let admin: User = api::NewUser {
+            username: "admin".into(),
+            email: "admin@netsblox.org".into(),
+            password: None,
+            group_id: None,
+            role: Some(UserRole::Admin),
+        }
+        .into();
+
+        let owner: User = api::NewUser {
+            username: "owner".into(),
+            email: "admin@netsblox.org".into(),
+            password: None,
+            group_id: None,
+            role: Some(UserRole::Admin),
+        }
+        .into();
+        let project = test_utils::project::builder()
+            .with_owner(owner.username.clone())
+            .with_collaborators(&["user2", "user3"])
+            .build();
+
+        test_utils::setup()
+            .with_projects(&[project.clone()])
+            .with_users(&[admin.clone(), owner])
+            .run(|app_data| async move {
+                let app = test::init_service(
+                    App::new()
+                        .wrap(test_utils::cookie::middleware())
+                        .app_data(web::Data::new(app_data.clone()))
+                        .configure(config),
+                )
+                .await;
+
+                let req = test::TestRequest::get()
+                    .cookie(test_utils::cookie::new(&admin.username))
+                    .uri(&format!("/id/{}/collaborators/", &project.id))
+                    .to_request();
+
+                let collaborators: Vec<String> = test::call_and_read_body_json(&app, req).await;
+                collaborators
+                    .into_iter()
+                    .enumerate()
+                    .for_each(|(i, name)| assert_eq!(name, project.collaborators[i]));
+            })
+            .await;
     }
 }
