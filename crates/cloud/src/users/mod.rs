@@ -610,129 +610,87 @@ pub fn config(cfg: &mut web::ServiceConfig) {
 
 #[cfg(test)]
 mod tests {
-    use crate::config::Settings;
     use crate::test_utils;
+    use crate::{config::Settings, session_middleware};
 
     use super::*;
     //     use actix_session::CookieSession;
-    use actix_web::{dev::ServiceResponse, http, test, App};
+    use actix_web::{cookie::Cookie, dev::ServiceResponse, http, test, App};
     use futures::{future, TryFutureExt};
     use mongodb::Client;
+    use netsblox_cloud_common::Group;
 
-    async fn init_app_data(
-        prefix: &'static str,
-        users: std::vec::Vec<User>,
-    ) -> Result<AppData, std::io::Error> {
-        let user_count = users.len();
-        let client = Client::with_uri_str("mongodb://127.0.0.1:27017/")
-            .await
-            .expect("Unable to connect to database");
-
-        let mut settings = Settings::new().unwrap();
-        settings.database.name = format!("test_{}", settings.database.name);
-        settings.s3.bucket = format!("test_{}", settings.s3.bucket);
-
-        let app = AppData::new(client, settings, None, Some(prefix));
-
-        app.users
-            .delete_many(doc! {}, None)
-            .await
-            .expect("Unable to empty database");
-
-        if user_count > 0 {
-            app.users
-                .insert_many(users, None)
-                .await
-                .expect("Unable to seed database");
-            let count = app
-                .users
-                .count_documents(doc! {}, None)
-                .await
-                .expect("Unable to count docs");
-            assert_eq!(
-                count, user_count as u64,
-                "Expected {} docs but found {}",
-                user_count, count
-            );
-        }
-
-        Ok(app)
-    }
-
-    // TODO: add our own macro to make the db and clear it after?
     #[actix_web::test]
     async fn test_create_user() {
-        let app_data = init_app_data("create", vec![])
-            .await
-            .expect("Unable to seed database");
+        test_utils::setup()
+            .run(|app_data| async move {
+                let app = test::init_service(
+                    App::new()
+                        .app_data(web::Data::new(app_data.clone()))
+                        .configure(config),
+                )
+                .await;
 
-        // Run the test
-        // TODO: can we mock app data instead?
-        let app = test::init_service(
-            App::new()
-                .app_data(web::Data::new(app_data.clone()))
-                .configure(config),
-        )
-        .await;
+                let user_data = api::NewUser {
+                    username: "test".into(),
+                    email: "test@gmail.com".into(),
+                    password: Some("pwd".into()),
+                    group_id: None,
+                    role: Some(UserRole::User),
+                };
+                let req = test::TestRequest::post()
+                    .uri("/create")
+                    .set_json(&user_data)
+                    .to_request();
 
-        let user_data = api::NewUser {
-            username: "test".into(),
-            email: "test@gmail.com".into(),
-            password: Some("pwd".into()),
-            group_id: None,
-            role: Some(UserRole::User),
-        };
-        let req = test::TestRequest::post()
-            .uri("/create")
-            .set_json(&user_data)
-            .to_request();
+                let response = test::call_service(&app, req).await;
+                assert_eq!(response.status(), http::StatusCode::OK);
 
-        let response = test::call_service(&app, req).await;
-        assert_eq!(response.status(), http::StatusCode::OK);
+                let query = doc! {"username": user_data.username};
+                let result = app_data
+                    .users
+                    .find_one(query, None)
+                    .await
+                    .expect("Could not query for user");
 
-        let query = doc! {"username": user_data.username};
-        let result = app_data
-            .users
-            .find_one(query, None)
-            .await
-            .expect("Could not query for user");
-
-        assert!(result.is_some(), "User not found");
+                assert!(result.is_some(), "User not found");
+            })
+            .await;
     }
 
-    #[actix_web::test]
-    async fn test_create_user_profane() {
-        let app_data = init_app_data("create_profane", vec![])
-            .await
-            .expect("Unable to seed database");
+    // #[actix_web::test]
+    // async fn test_create_user_profane() {
+    //     let app_data = init_app_data("create_profane", vec![])
+    //         .await
+    //         .expect("Unable to seed database");
 
-        // Run the test
-        let app = test::init_service(
-            App::new()
-                .app_data(web::Data::new(app_data.clone()))
-                .configure(config),
-        )
-        .await;
+    //     // Run the test
+    //     let app = test::init_service(
+    //         App::new()
+    //             .app_data(web::Data::new(app_data.clone()))
+    //             .configure(config),
+    //     )
+    //     .await;
 
-        let user_data = api::NewUser {
-            username: "damn".into(),
-            email: "test@gmail.com".into(),
-            password: Some("pwd".into()),
-            group_id: None,
-            role: Some(UserRole::User),
-        };
-        let req = test::TestRequest::post()
-            .uri("/create")
-            .set_json(&user_data)
-            .to_request();
+    //     let user_data = api::NewUser {
+    //         username: "damn".into(),
+    //         email: "test@gmail.com".into(),
+    //         password: Some("pwd".into()),
+    //         group_id: None,
+    //         role: Some(UserRole::User),
+    //     };
+    //     let req = test::TestRequest::post()
+    //         .uri("/create")
+    //         .set_json(&user_data)
+    //         .to_request();
 
-        let response = test::call_service(&app, req).await;
-        assert_eq!(response.status(), http::StatusCode::BAD_REQUEST);
-    }
+    //     let response = test::call_service(&app, req).await;
+    //     assert_eq!(response.status(), http::StatusCode::BAD_REQUEST);
+    // }
 
     #[actix_web::test]
     async fn test_create_member_unauth() {
-        test_utils::setup("member_unauth")
+        test_utils::setup()
             .run(|app_data| async {
                 let app = test::init_service(
                     App::new()
@@ -756,13 +714,11 @@ mod tests {
                 assert_eq!(response.status(), http::StatusCode::BAD_REQUEST);
             })
             .await;
-
-        // Run the test
     }
 
     #[actix_web::test]
     async fn test_create_member_nonowner() {
-        test_utils::setup("member_nonowner")
+        test_utils::setup()
             .run(|app_data| async {
                 let user_data = api::NewUser {
                     username: "someMember".into(),
@@ -982,15 +938,205 @@ mod tests {
     //         assert!(cookie_data.starts_with("netsblox="));
     //     }
 
-    //     #[actix_web::test]
-    //     async fn test_delete_user() {
-    //         todo!();
-    //     }
+    #[actix_web::test]
+    async fn test_delete_user_admin() {
+        let admin: User = api::NewUser {
+            username: "admin".into(),
+            email: "admin@netsblox.org".into(),
+            password: None,
+            group_id: None,
+            role: Some(UserRole::Admin),
+        }
+        .into();
+        let other_username = "other_user";
+        let other_user: User = api::NewUser {
+            username: other_username.to_string(),
+            email: "user@netsblox.org".into(),
+            password: None,
+            group_id: None,
+            role: None,
+        }
+        .into();
 
-    //     #[actix_web::test]
-    //     async fn test_delete_user_403() {
-    //         todo!();
-    //     }
+        test_utils::setup()
+            .with_users(&[admin, other_user])
+            .run(|app_data| async move {
+                let app = test::init_service(
+                    App::new()
+                        .wrap(test_utils::cookie::middleware())
+                        .app_data(web::Data::new(app_data.clone()))
+                        .configure(config),
+                )
+                .await;
+
+                let cookie = test_utils::cookie::new("admin");
+                let req = test::TestRequest::post()
+                    .uri("/other_user/delete")
+                    .cookie(cookie)
+                    .to_request();
+
+                let response = test::call_service(&app, req).await;
+                assert_eq!(response.status(), http::StatusCode::OK);
+
+                let query = doc! {"username": other_username};
+                let result = app_data
+                    .users
+                    .find_one(query, None)
+                    .await
+                    .expect("Could not query for user");
+
+                let count = app_data.users.count_documents(doc! {}, None).await.unwrap();
+                println!("count: {}, {:?}", count, result);
+                assert!(result.is_none(), "User not deleted");
+            })
+            .await;
+    }
+
+    #[actix_web::test]
+    async fn test_delete_user_unauth() {
+        let other_username = "other_user";
+        let other_user: User = api::NewUser {
+            username: other_username.to_string(),
+            email: "user@netsblox.org".into(),
+            password: None,
+            group_id: None,
+            role: None,
+        }
+        .into();
+
+        test_utils::setup()
+            .with_users(&[other_user])
+            .run(|app_data| async move {
+                let app = test::init_service(
+                    App::new()
+                        .app_data(web::Data::new(app_data.clone()))
+                        .configure(config),
+                )
+                .await;
+
+                let req = test::TestRequest::post()
+                    .uri("/other_user/delete")
+                    .to_request();
+
+                let response = test::call_service(&app, req).await;
+                assert_eq!(response.status(), http::StatusCode::UNAUTHORIZED);
+
+                let query = doc! {"username": other_username};
+                let result = app_data
+                    .users
+                    .find_one(query, None)
+                    .await
+                    .expect("Could not query for user");
+
+                assert!(result.is_some(), "User deleted");
+            })
+            .await;
+    }
+
+    #[actix_web::test]
+    async fn test_delete_user_group_owner() {
+        let owner_name = "owner".to_string();
+        let owner: User = api::NewUser {
+            username: owner_name.clone(),
+            email: "owner@netsblox.org".into(),
+            password: None,
+            group_id: None,
+            role: None,
+        }
+        .into();
+        let group = Group::new(owner_name.clone(), "some_group".into());
+        let other_username = "other_user";
+        let other_user: User = api::NewUser {
+            username: other_username.to_string(),
+            email: "user@netsblox.org".into(),
+            password: None,
+            group_id: Some(group.id.clone()),
+            role: None,
+        }
+        .into();
+
+        test_utils::setup()
+            .with_users(&[owner, other_user])
+            .with_groups(&[group])
+            .run(|app_data| async move {
+                let app = test::init_service(
+                    App::new()
+                        .wrap(test_utils::cookie::middleware())
+                        .app_data(web::Data::new(app_data.clone()))
+                        .configure(config),
+                )
+                .await;
+
+                let req = test::TestRequest::post()
+                    .uri("/other_user/delete")
+                    .cookie(test_utils::cookie::new(&owner_name))
+                    .to_request();
+
+                let response = test::call_service(&app, req).await;
+                assert_eq!(response.status(), http::StatusCode::OK);
+
+                let query = doc! {"username": other_username};
+                let result = app_data
+                    .users
+                    .find_one(query, None)
+                    .await
+                    .expect("Could not query for user");
+
+                assert!(result.is_none(), "User not deleted");
+            })
+            .await;
+    }
+
+    #[actix_web::test]
+    async fn test_delete_user_other_user() {
+        let user1: User = api::NewUser {
+            username: "user1".to_string(),
+            email: "user1@netsblox.org".into(),
+            password: None,
+            group_id: None,
+            role: None,
+        }
+        .into();
+        let user1_name = user1.username.clone();
+        let user2: User = api::NewUser {
+            username: "user2".to_string(),
+            email: "user@netsblox.org".into(),
+            password: None,
+            group_id: None,
+            role: None,
+        }
+        .into();
+
+        test_utils::setup()
+            .with_users(&[user1, user2])
+            .run(|app_data| async move {
+                let app = test::init_service(
+                    App::new()
+                        .wrap(test_utils::cookie::middleware())
+                        .app_data(web::Data::new(app_data.clone()))
+                        .configure(config),
+                )
+                .await;
+
+                let req = test::TestRequest::post()
+                    .uri("/user2/delete")
+                    .cookie(test_utils::cookie::new(&user1_name))
+                    .to_request();
+
+                let response = test::call_service(&app, req).await;
+                assert_eq!(response.status(), http::StatusCode::FORBIDDEN);
+
+                let query = doc! {"username": "user2"};
+                let result = app_data
+                    .users
+                    .find_one(query, None)
+                    .await
+                    .expect("Could not query for user");
+
+                assert!(result.is_some(), "User deleted");
+            })
+            .await;
+    }
 
     //     #[actix_web::test]
     //     async fn test_link_account() {

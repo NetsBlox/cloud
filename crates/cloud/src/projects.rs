@@ -795,7 +795,12 @@ pub fn config(cfg: &mut web::ServiceConfig) {
         .service(remove_collaborator);
 }
 
+#[cfg(test)]
 mod tests {
+    use super::*;
+    use crate::test_utils;
+    use actix_web::{dev::ServiceResponse, http, test, App};
+
     #[actix_web::test]
     async fn test_create_project() {
         todo!();
@@ -934,8 +939,36 @@ mod tests {
     }
 
     #[actix_web::test]
-    async fn test_rename_project() {
-        todo!();
+    async fn test_rename_project_owner() {
+        // let user = api::NewUser {
+        //     username: "someUser".into(),
+        //     email: "someUser@netsblox.org".into(),
+        //     password: None,
+        //     group_id: None,
+        //     role: Some(UserRole::Admin),
+        // };
+
+        // let project = test_utils::setup("rename_project")
+        //     .with_users(&[user.into()])
+        //     //.with_projects(&[])
+        //     .run(|app_data| async {
+        //         let app = test::init_service(
+        //             App::new()
+        //                 .app_data(web::Data::new(app_data))
+        //                 .configure(config),
+        //         )
+        //         .await;
+        //         // TODO: set the session
+
+        //         let req = test::TestRequest::post()
+        //             .uri("/create")
+        //             .set_json(&user_data)
+        //             .to_request();
+
+        //         let response = test::call_service(&app, req).await;
+        //         assert_eq!(response.status(), http::StatusCode::BAD_REQUEST);
+        //     })
+        //     .await;
     }
 
     #[actix_web::test]
@@ -945,7 +978,38 @@ mod tests {
 
     #[actix_web::test]
     async fn test_rename_project_403() {
-        todo!();
+        let new_name = "some new name";
+        let project_update = UpdateProjectData {
+            name: new_name.into(),
+            client_id: None,
+        };
+        let id = "abc123";
+        let project = test_utils::project::builder()
+            .with_name("old name".into())
+            .with_id(ProjectId::new(id.to_string()))
+            .build();
+
+        test_utils::setup()
+            .with_projects(&[project])
+            .run(|app_data| async {
+                let app = test::init_service(
+                    App::new()
+                        .app_data(web::Data::new(app_data))
+                        .configure(config),
+                )
+                .await;
+
+                println!("{}", format!("/id/{}", &id));
+                let req = test::TestRequest::patch()
+                    .uri(&format!("/id/{}", &id))
+                    .set_json(&project_update)
+                    .to_request();
+
+                let response = test::call_service(&app, req).await;
+                println!("status: {:?}", response.status());
+                assert_eq!(response.status(), http::StatusCode::UNAUTHORIZED);
+            })
+            .await;
     }
 
     #[actix_web::test]
