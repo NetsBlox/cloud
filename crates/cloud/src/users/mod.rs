@@ -658,35 +658,43 @@ mod tests {
             .await;
     }
 
-    // #[actix_web::test]
-    // async fn test_create_user_profane() {
-    //     let app_data = init_app_data("create_profane", vec![])
-    //         .await
-    //         .expect("Unable to seed database");
+    #[actix_web::test]
+    async fn test_create_user_profane() {
+        test_utils::setup()
+            .run(|app_data| async move {
+                let app = test::init_service(
+                    App::new()
+                        .app_data(web::Data::new(app_data.clone()))
+                        .configure(config),
+                )
+                .await;
 
-    //     // Run the test
-    //     let app = test::init_service(
-    //         App::new()
-    //             .app_data(web::Data::new(app_data.clone()))
-    //             .configure(config),
-    //     )
-    //     .await;
+                let user_data = api::NewUser {
+                    username: "damn".into(),
+                    email: "test@gmail.com".into(),
+                    password: Some("pwd".into()),
+                    group_id: None,
+                    role: Some(UserRole::User),
+                };
+                let req = test::TestRequest::post()
+                    .uri("/create")
+                    .set_json(&user_data)
+                    .to_request();
 
-    //     let user_data = api::NewUser {
-    //         username: "damn".into(),
-    //         email: "test@gmail.com".into(),
-    //         password: Some("pwd".into()),
-    //         group_id: None,
-    //         role: Some(UserRole::User),
-    //     };
-    //     let req = test::TestRequest::post()
-    //         .uri("/create")
-    //         .set_json(&user_data)
-    //         .to_request();
+                let response = test::call_service(&app, req).await;
+                assert_eq!(response.status(), http::StatusCode::BAD_REQUEST);
 
-    //     let response = test::call_service(&app, req).await;
-    //     assert_eq!(response.status(), http::StatusCode::BAD_REQUEST);
-    // }
+                let query = doc! {"username": user_data.username};
+                let result = app_data
+                    .users
+                    .find_one(query, None)
+                    .await
+                    .expect("Could not query for user");
+
+                assert!(result.is_some(), "User not found");
+            })
+            .await;
+    }
 
     #[actix_web::test]
     async fn test_create_member_unauth() {
