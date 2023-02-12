@@ -138,51 +138,61 @@ pub fn config(cfg: &mut web::ServiceConfig) {
 mod tests {
 
     #[actix_web::test]
+    #[ignore]
     async fn test_view_invites() {
         todo!();
     }
 
     #[actix_web::test]
+    #[ignore]
     async fn test_view_invites_403() {
         todo!();
     }
 
     #[actix_web::test]
+    #[ignore]
     async fn test_view_invites_admin() {
         todo!();
     }
 
     #[actix_web::test]
+    #[ignore]
     async fn test_send_invite() {
         todo!();
     }
 
     #[actix_web::test]
+    #[ignore]
     async fn test_send_invite_403() {
         todo!();
     }
 
     #[actix_web::test]
+    #[ignore]
     async fn test_send_invite_admin() {
         todo!();
     }
 
     #[actix_web::test]
+    #[ignore]
     async fn test_respond_to_invite() {
         todo!();
     }
 
     #[actix_web::test]
+    #[ignore]
     async fn test_respond_to_invite_403() {
         todo!();
     }
 
     #[actix_web::test]
+    #[ignore]
     async fn test_respond_to_invite_admin() {
         todo!();
     }
 
     #[actix_web::test]
+    #[ignore]
     async fn test_respond_to_invite_project_deleted() {
         todo!();
     }

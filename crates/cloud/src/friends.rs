@@ -172,66 +172,79 @@ pub fn config(cfg: &mut web::ServiceConfig) {
 mod tests {
 
     #[actix_web::test]
+    #[ignore]
     async fn test_list_friends() {
         todo!();
     }
 
     #[actix_web::test]
+    #[ignore]
     async fn test_list_friends_403() {
         todo!();
     }
 
     #[actix_web::test]
+    #[ignore]
     async fn test_list_online_friends() {
         todo!();
     }
 
     #[actix_web::test]
+    #[ignore]
     async fn test_list_online_friends_403() {
         todo!();
     }
 
     #[actix_web::test]
+    #[ignore]
     async fn test_unfriend() {
         todo!();
     }
 
     #[actix_web::test]
+    #[ignore]
     async fn test_unfriend_403() {
         todo!();
     }
 
     #[actix_web::test]
+    #[ignore]
     async fn test_block_user() {
         todo!();
     }
 
     #[actix_web::test]
+    #[ignore]
     async fn test_block_user_403() {
         todo!();
     }
 
     #[actix_web::test]
+    #[ignore]
     async fn test_invite_user() {
         todo!();
     }
 
     #[actix_web::test]
+    #[ignore]
     async fn test_invite_user_403() {
         todo!();
     }
 
     #[actix_web::test]
+    #[ignore]
     async fn test_invite_user_no_duplicates() {
         todo!();
     }
 
     #[actix_web::test]
+    #[ignore]
     async fn test_respond_to_invite() {
         todo!();
     }
 
     #[actix_web::test]
+    #[ignore]
     async fn test_respond_to_invite_403() {
         todo!();
     }

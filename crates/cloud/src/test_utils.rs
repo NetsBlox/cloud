@@ -8,7 +8,7 @@ use actix_web::{
 };
 use futures::{future::join_all, Future};
 use lazy_static::lazy_static;
-use mongodb::Client;
+use mongodb::{bson::doc, Client};
 use netsblox_cloud_common::{Group, Project, User};
 
 use crate::{app_data::AppData, config::Settings};
@@ -69,8 +69,9 @@ impl TestSetupBuilder {
 
         // create the test fixtures (users, projects)
         client.database(&db_name).drop(None).await.unwrap();
-        join_all(self.projects.iter().map(|proj| {
+        join_all(self.projects.iter().map(|proj| async {
             let Project {
+                id,
                 owner,
                 name,
                 roles,
@@ -78,7 +79,17 @@ impl TestSetupBuilder {
                 ..
             } = proj;
             let roles: Vec<_> = roles.values().map(|r| r.to_owned()).collect();
-            app_data.import_project(owner, name, Some(roles), Some(save_state.clone()))
+            let metadata = app_data
+                .import_project(owner, name, Some(roles), Some(save_state.clone()))
+                .await
+                .unwrap();
+
+            let query = doc! {"id": metadata.id};
+            let update = doc! {"$set": {"id": id}};
+            app_data
+                .project_metadata
+                .update_one(query, update, None)
+                .await
         }))
         .await;
         if !self.users.is_empty() {

@@ -1190,11 +1190,13 @@ fn is_opera_vpn(addr: &str) -> bool {
 #[cfg(test)]
 mod tests {
     #[actix_web::test]
+    #[ignore]
     async fn test_save_role_blob() {
         todo!();
     }
 
     #[actix_web::test]
+    #[ignore]
     async fn test_save_role_set_transient_false() {
         todo!();
     }

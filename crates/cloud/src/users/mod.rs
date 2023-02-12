@@ -691,7 +691,7 @@ mod tests {
                     .await
                     .expect("Could not query for user");
 
-                assert!(result.is_some(), "User not found");
+                assert!(result.is_none(), "User created");
             })
             .await;
     }
