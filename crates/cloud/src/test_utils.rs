@@ -61,11 +61,11 @@ impl TestSetupBuilder {
             .expect("Unable to connect to database");
 
         let mut settings = Settings::new().unwrap();
-        let db_name = format!("test_{}", settings.database.name);
+        let db_name = format!("{}_{}", &self.prefix, settings.database.name);
         settings.database.name = db_name.clone();
-        settings.s3.bucket = format!("test_{}", settings.s3.bucket);
+        settings.s3.bucket = format!("{}_{}", &self.prefix, settings.s3.bucket);
 
-        let app_data = AppData::new(client.clone(), settings, None, Some(self.prefix));
+        let app_data = AppData::new(client.clone(), settings, None, None);
 
         // create the test fixtures (users, projects)
         client.database(&db_name).drop(None).await.unwrap();
