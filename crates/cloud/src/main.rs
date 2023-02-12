@@ -10,6 +10,8 @@ mod network;
 mod oauth;
 mod projects;
 mod services;
+#[cfg(test)]
+mod test_utils;
 mod users;
 
 use crate::common::api;
@@ -124,7 +126,7 @@ async fn main() -> std::io::Result<()> {
     .await
 }
 
-fn session_middleware(config: &Settings) -> SessionMiddleware<CookieSessionStore> {
+pub(crate) fn session_middleware(config: &Settings) -> SessionMiddleware<CookieSessionStore> {
     let secret_key = Key::from(config.cookie.key.as_bytes());
     let secs_in_week: i64 = 60 * 60 * 24 * 7;
 

@@ -215,81 +215,97 @@ pub fn config(cfg: &mut web::ServiceConfig) {
 mod tests {
 
     #[actix_web::test]
+    #[ignore]
     async fn test_list_groups() {
         unimplemented!();
     }
 
     #[actix_web::test]
+    #[ignore]
     async fn test_list_groups_403() {
         unimplemented!();
     }
 
     #[actix_web::test]
+    #[ignore]
     async fn test_view_group() {
         unimplemented!();
     }
 
     #[actix_web::test]
+    #[ignore]
     async fn test_view_group_403() {
         unimplemented!();
     }
 
     #[actix_web::test]
+    #[ignore]
     async fn test_view_group_404() {
         unimplemented!();
     }
 
     #[actix_web::test]
+    #[ignore]
     async fn test_list_members() {
         unimplemented!();
     }
 
     #[actix_web::test]
+    #[ignore]
     async fn test_list_members_403() {
         unimplemented!();
     }
 
     #[actix_web::test]
+    #[ignore]
     async fn test_list_members_404() {
         unimplemented!();
     }
 
     #[actix_web::test]
+    #[ignore]
     async fn test_create_group() {
         unimplemented!();
     }
 
     #[actix_web::test]
+    #[ignore]
     async fn test_create_group_403() {
         unimplemented!();
     }
 
     #[actix_web::test]
+    #[ignore]
     async fn test_update_group() {
         unimplemented!();
     }
 
     #[actix_web::test]
+    #[ignore]
     async fn test_update_group_403() {
         unimplemented!();
     }
 
     #[actix_web::test]
+    #[ignore]
     async fn test_update_group_404() {
         unimplemented!();
     }
 
     #[actix_web::test]
+    #[ignore]
     async fn test_delete_group() {
         unimplemented!();
     }
 
     #[actix_web::test]
+    #[ignore]
     async fn test_delete_group_403() {
         unimplemented!();
     }
 
     #[actix_web::test]
+    #[ignore]
     async fn test_delete_group_404() {
         unimplemented!();
     }

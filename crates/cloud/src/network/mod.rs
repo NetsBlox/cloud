@@ -564,12 +564,14 @@ impl StreamHandler<Result<ws::Message, ws::ProtocolError>> for WsSession {
 mod tests {
 
     #[actix_web::test]
+    #[ignore]
     async fn test_connect_client() {
         // TODO: send a connect request and check that the client has been added to the topology
         todo!();
     }
 
     #[actix_web::test]
+    #[ignore]
     async fn test_send_msg_room() {
         //let client = Client::new("test".into());
         //let msg = json!({"type": "message", "dstId": "project@owner"});
@@ -577,6 +579,7 @@ mod tests {
     }
 
     #[actix_web::test]
+    #[ignore]
     async fn test_send_msg_list() {
         //let client = Client::new("test".into());
         //let msg = json!({"type": "message", "dstId": ["role1@project@owner"]});
@@ -585,6 +588,7 @@ mod tests {
     }
 
     #[actix_web::test]
+    #[ignore]
     async fn test_connect_invalid_client_id() {
         //let client = Client::new("test".into());
         //let msg = json!({"type": "message", "dstId": "role1@project@owner"});

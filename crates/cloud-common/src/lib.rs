@@ -16,7 +16,7 @@ use std::{
 };
 use uuid::Uuid;
 
-#[derive(Serialize, Deserialize, Clone)]
+#[derive(Serialize, Deserialize, Clone, Debug)]
 #[serde(rename_all = "camelCase")]
 pub struct User {
     pub username: String,
@@ -393,7 +393,7 @@ impl From<ProjectMetadata> for netsblox_api_common::ProjectMetadata {
     }
 }
 
-#[derive(Deserialize, Serialize)]
+#[derive(Deserialize, Serialize, Clone)]
 #[serde(rename_all = "camelCase")]
 pub struct Project {
     pub id: ProjectId,
@@ -729,6 +729,6 @@ pub(crate) fn sha512(text: &str) -> String {
 
 #[cfg(test)]
 mod tests {
-    #[actix_web::test]
-    async fn test_uuid_ser() {}
+    #[test]
+    fn test_uuid_ser() {}
 }

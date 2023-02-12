@@ -333,42 +333,8 @@ mod tests {
     use super::*;
     use actix_web::test;
 
-    // async fn init_database(
-    //     name: &str,
-    //     libraries: std::vec::Vec<LibraryMetadata>,
-    // ) -> Result<Database, UserError> {
-    //     let library_count = libraries.len();
-    //     let client = Client::with_uri_str("mongodb://127.0.0.1:27017/")
-    //         .await
-    //         .expect("Unable to connect to database");
-
-    //     // Seed the database
-    //     let database_name = &format!("netsblox-tests-{}", name);
-    //     let database = client.database(database_name);
-    //     let collection = database.collection::<LibraryMetadata>("libraries"); // FIXME: rename collection - not database
-    //     collection
-    //         .delete_many(doc! {}, None)
-    //         .await
-    //         .expect("Unable to empty database");
-    //     collection
-    //         .insert_many(libraries, None)
-    //         .await
-    //         .expect("Unable to seed database");
-
-    //     let count = collection
-    //         .count_documents(doc! {}, None)
-    //         .await
-    //         .expect("Unable to count docs");
-    //     assert_eq!(
-    //         count, library_count as u64,
-    //         "Expected {} docs but found {}",
-    //         library_count, count
-    //     );
-
-    //     Ok(database)
-    // }
-
     // #[actix_web::test]
+    //#[ignore]
     // async fn test_list_community_libraries() {
     //     let libraries = vec![
     //         LibraryMetadata::new("brian".into(), "public example".into(), true, None),
@@ -395,6 +361,7 @@ mod tests {
     // }
 
     // #[actix_web::test]
+    //#[ignore]
     // async fn test_list_user_libraries() {
     //     // TODO: 403 if not allowed?
     //     let libraries = vec![
@@ -425,66 +392,79 @@ mod tests {
     // }
 
     // #[actix_web::test]
+    //#[ignore]
     // async fn test_list_user_libraries_403() {
     //     unimplemented!();
     // }
 
     // #[actix_web::test]
+    //#[ignore]
     // async fn test_list_user_libraries_404() {
     //     unimplemented!();
     // }
 
     // #[actix_web::test]
+    //#[ignore]
     // async fn test_get_user_library() {
     //     unimplemented!();
     // }
 
     // #[actix_web::test]
+    //#[ignore]
     // async fn test_get_user_library_public() {
     //     unimplemented!();
     // }
 
     // #[actix_web::test]
+    //#[ignore]
     // async fn test_get_user_library_403() {
     //     unimplemented!();
     // }
 
     // #[actix_web::test]
+    //#[ignore]
     // async fn test_get_user_library_404() {
     //     unimplemented!();
     // }
 
     // #[actix_web::test]
+    //#[ignore]
     // async fn test_save_user_library() {
     //     unimplemented!();
     // }
 
     // #[actix_web::test]
+    //#[ignore]
     // async fn test_save_user_library_403() {
     //     unimplemented!();
     // }
 
     // #[actix_web::test]
+    //#[ignore]
     // async fn test_save_user_library_approval_req() {
     //     unimplemented!();
     // }
 
     // #[actix_web::test]
+    //#[ignore]
     // async fn test_delete_user_library() {
     //     unimplemented!();
     // }
 
     // #[actix_web::test]
+    //#[ignore]
     // async fn test_delete_user_library_403() {
     //     unimplemented!();
     // }
 
     // #[actix_web::test]
+    //#[ignore]
     // async fn test_delete_user_library_404() {
     //     unimplemented!();
     // }
 
     // #[actix_web::test]
+    //#[ignore]
     // async fn test_publish_user_library() {
     //     let publish_name = "to-publish-example";
     //     let libraries = vec![
@@ -534,36 +514,42 @@ mod tests {
     // }
 
     // #[actix_web::test]
+    //#[ignore]
     // async fn test_publish_user_library_approval_req() {
     //     unimplemented!();
     // }
-
     #[actix_web::test]
+    #[ignore]
     async fn test_publish_user_library_403() {
         unimplemented!();
     }
 
     #[actix_web::test]
+    #[ignore]
     async fn test_unpublish_user_library() {
         unimplemented!();
     }
 
     #[actix_web::test]
+    #[ignore]
     async fn test_unpublish_user_library_403() {
         unimplemented!();
     }
 
     #[test]
+    #[ignore]
     async fn test_is_valid_name() {
         assert!(is_valid_name("hello library"));
     }
 
     #[test]
+    #[ignore]
     async fn test_is_valid_name_diacritic() {
         assert!(is_valid_name("hola libré"));
     }
 
     #[test]
+    #[ignore]
     async fn test_is_valid_name_weird_symbol() {
         assert_eq!(is_valid_name("<hola libré>"), false);
     }

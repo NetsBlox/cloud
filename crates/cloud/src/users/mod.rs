@@ -608,403 +608,581 @@ pub fn config(cfg: &mut web::ServiceConfig) {
         .service(unlink_account);
 }
 
-// #[cfg(test)]
-// mod tests {
-//     use super::*;
-//     use actix_session::CookieSession;
-//     use actix_web::{http, test, App};
-//     use mongodb::{Client, Collection};
+#[cfg(test)]
+mod tests {
+    use crate::test_utils;
+    use crate::{config::Settings, session_middleware};
 
-//     impl NewUser {
-//         fn new(
-//             username: String,
-//             password: String,
-//             email: String,
-//             group_id: Option<ObjectId>,
-//         ) -> NewUser {
-//             NewUser {
-//                 username,
-//                 password: Some(password),
-//                 email,
-//                 group_id,
-//             }
-//         }
-//     }
+    use super::*;
+    //     use actix_session::CookieSession;
+    use actix_web::{cookie::Cookie, dev::ServiceResponse, http, test, App};
+    use futures::{future, TryFutureExt};
+    use mongodb::Client;
+    use netsblox_cloud_common::Group;
 
-//     async fn init_app_data(
-//         prefix: &'static str,
-//         users: std::vec::Vec<User>,
-//     ) -> Result<(AppData, Collection<User>), std::io::Error> {
-//         let user_count = users.len();
-//         let client = Client::with_uri_str("mongodb://127.0.0.1:27017/")
-//             .await
-//             .expect("Unable to connect to database");
+    #[actix_web::test]
+    async fn test_create_user() {
+        test_utils::setup()
+            .run(|app_data| async move {
+                let app = test::init_service(
+                    App::new()
+                        .app_data(web::Data::new(app_data.clone()))
+                        .configure(config),
+                )
+                .await;
 
-//         let database = client.database("netsblox-tests");
-//         // TODO: update
-//         let app = AppData::new(database, None, Some(prefix));
+                let user_data = api::NewUser {
+                    username: "test".into(),
+                    email: "test@gmail.com".into(),
+                    password: Some("pwd".into()),
+                    group_id: None,
+                    role: Some(UserRole::User),
+                };
+                let req = test::TestRequest::post()
+                    .uri("/create")
+                    .set_json(&user_data)
+                    .to_request();
 
-//         // settings: Settings,
-//         // db: Database,
-//         // s3: S3Client,
-//         // bucket: String,
-//         // network: Option<Addr<TopologyActor>>,
-//         // prefix: Option<&'static str>,
+                let response = test::call_service(&app, req).await;
+                assert_eq!(response.status(), http::StatusCode::OK);
 
-//         let collection = app.collection::<User>("users");
-//         collection
-//             .delete_many(doc! {}, None)
-//             .await
-//             .expect("Unable to empty database");
+                let query = doc! {"username": user_data.username};
+                let result = app_data
+                    .users
+                    .find_one(query, None)
+                    .await
+                    .expect("Could not query for user");
 
-//         if user_count > 0 {
-//             collection
-//                 .insert_many(users, None)
-//                 .await
-//                 .expect("Unable to seed database");
-//             let count = collection
-//                 .count_documents(doc! {}, None)
-//                 .await
-//                 .expect("Unable to count docs");
-//             assert_eq!(
-//                 count, user_count as u64,
-//                 "Expected {} docs but found {}",
-//                 user_count, count
-//             );
-//         }
+                assert!(result.is_some(), "User not found");
+            })
+            .await;
+    }
 
-//         Ok((app, collection))
-//     }
+    #[actix_web::test]
+    async fn test_create_user_profane() {
+        test_utils::setup()
+            .run(|app_data| async move {
+                let app = test::init_service(
+                    App::new()
+                        .app_data(web::Data::new(app_data.clone()))
+                        .configure(config),
+                )
+                .await;
 
-//     #[actix_web::test]
-//     async fn test_create_user() {
-//         let (database, collection) = init_app_data("create", vec![])
-//             .await
-//             .expect("Unable to seed database");
+                let user_data = api::NewUser {
+                    username: "damn".into(),
+                    email: "test@gmail.com".into(),
+                    password: Some("pwd".into()),
+                    group_id: None,
+                    role: Some(UserRole::User),
+                };
+                let req = test::TestRequest::post()
+                    .uri("/create")
+                    .set_json(&user_data)
+                    .to_request();
 
-//         // Run the test
-//         let mut app = test::init_service(
-//             App::new()
-//                 .app_data(web::Data::new(database))
-//                 .configure(config),
-//         )
-//         .await;
+                let response = test::call_service(&app, req).await;
+                assert_eq!(response.status(), http::StatusCode::BAD_REQUEST);
 
-//         let user_data = NewUser::new(
-//             "test".into(),
-//             "pwd_hash".into(),
-//             "test@gmail.com".into(),
-//             None,
-//         );
-//         let req = test::TestRequest::post()
-//             .uri("/create")
-//             .set_json(&user_data)
-//             .to_request();
+                let query = doc! {"username": user_data.username};
+                let result = app_data
+                    .users
+                    .find_one(query, None)
+                    .await
+                    .expect("Could not query for user");
 
-//         let response = test::call_service(&mut app, req).await;
-//         let query = doc! {"username": user_data.username};
-//         let result = collection
-//             .find_one(query, None)
-//             .await
-//             .expect("Could not query for user");
-//         assert!(result.is_some(), "User not found");
-//     }
+                assert!(result.is_none(), "User created");
+            })
+            .await;
+    }
 
-//     #[actix_web::test]
-//     async fn test_create_user_profane() {
-//         let (database, collection) = init_app_data("create_profane", vec![])
-//             .await
-//             .expect("Unable to seed database");
+    #[actix_web::test]
+    async fn test_create_member_unauth() {
+        test_utils::setup()
+            .run(|app_data| async {
+                let app = test::init_service(
+                    App::new()
+                        .app_data(web::Data::new(app_data))
+                        .configure(config),
+                )
+                .await;
+                let user_data = api::NewUser {
+                    username: "someMember".into(),
+                    email: "test@gmail.com".into(),
+                    password: Some("pwd".into()),
+                    group_id: None,
+                    role: Some(UserRole::User),
+                };
+                let req = test::TestRequest::post()
+                    .uri("/create")
+                    .set_json(&user_data)
+                    .to_request();
 
-//         // Run the test
-//         let mut app = test::init_service(
-//             App::new()
-//                 .app_data(web::Data::new(database))
-//                 .configure(config),
-//         )
-//         .await;
+                let response = test::call_service(&app, req).await;
+                assert_eq!(response.status(), http::StatusCode::BAD_REQUEST);
+            })
+            .await;
+    }
 
-//         let user_data = NewUser::new(
-//             "hell".into(),
-//             "pwd_hash".into(),
-//             "test@gmail.com".into(),
-//             None,
-//         );
-//         let req = test::TestRequest::post()
-//             .uri("/create")
-//             .set_json(&user_data)
-//             .to_request();
+    #[actix_web::test]
+    async fn test_create_member_nonowner() {
+        test_utils::setup()
+            .run(|app_data| async {
+                let user_data = api::NewUser {
+                    username: "someMember".into(),
+                    email: "test@gmail.com".into(),
+                    password: Some("pwd".into()),
+                    group_id: None,
+                    role: Some(UserRole::User),
+                };
+                let req = test::TestRequest::post()
+                    .uri("/create")
+                    .set_json(&user_data)
+                    .to_request();
 
-//         let response = test::call_service(&mut app, req).await;
-//         assert_eq!(response.status(), http::StatusCode::BAD_REQUEST);
-//     }
+                let app = test::init_service(
+                    App::new()
+                        .app_data(web::Data::new(app_data))
+                        .configure(config),
+                )
+                .await;
 
-//     //#[actix_web::test]
-//     //async fn test_create_user_403() {  // group member
-//     //let (database, collection) = init_app_data("create_403", vec![]).await.expect("Unable to seed database");
+                let response = test::call_service(&app, req).await;
+                assert_eq!(response.status(), http::StatusCode::BAD_REQUEST);
+            })
+            .await;
+    }
 
-//     //// Run the test
-//     //let mut app = test::init_service(
-//     //App::new()
-//     //.app_data(web::Data::new(database))
-//     //.configure(config)
-//     //).await;
+    //     #[actix_web::test]
+    //     async fn test_login() {
+    //         let user = User::from(NewUser::new(
+    //             "brian".into(),
+    //             "pwd_hash".into(),
+    //             "email".into(),
+    //             None,
+    //         ));
+    //         let (database, _) = init_app_data("login", vec![user])
+    //             .await
+    //             .expect("Unable to seed database");
+    //         // Run the test
+    //         let mut app = test::init_service(
+    //             App::new()
+    //                 .wrap(
+    //                     CookieSession::signed(&[1; 32])
+    //                         .domain("localhost:8080")
+    //                         .name("netsblox")
+    //                         .secure(true),
+    //                 )
+    //                 .app_data(web::Data::new(database))
+    //                 .configure(config),
+    //         )
+    //         .await;
 
-//     //let user_data = NewUser::new(
-//     //"hell".into(),
-//     //"pwd_hash".into(),
-//     //"test@gmail.com".into(),
-//     //None  // TODO: set the group
-//     //);
-//     //let req = test::TestRequest::post()
-//     //.uri("/create")
-//     //.set_json(&user_data)
-//     //.to_request();
+    //         let credentials = LoginCredentials {
+    //             username: "brian".into(),
+    //             password: "pwd_hash".into(),
+    //             client_id: None,
+    //             strategy: None,
+    //         };
+    //         let req = test::TestRequest::post()
+    //             .uri("/login")
+    //             .set_json(&credentials)
+    //             .to_request();
 
-//     //let response = test::call_service(&mut app, req).await;
-//     //assert_eq!(response.status(), http::StatusCode::BAD_REQUEST);
-//     //}
+    //         let response = test::call_service(&mut app, req).await;
+    //         let cookie = response.headers().get(http::header::SET_COOKIE);
+    //         assert!(cookie.is_some());
+    //         let cookie_data = cookie.unwrap().to_str().unwrap();
+    //         assert!(cookie_data.starts_with("netsblox="));
+    //     }
 
-//     #[actix_web::test]
-//     async fn test_login() {
-//         let user = User::from(NewUser::new(
-//             "brian".into(),
-//             "pwd_hash".into(),
-//             "email".into(),
-//             None,
-//         ));
-//         let (database, _) = init_app_data("login", vec![user])
-//             .await
-//             .expect("Unable to seed database");
-//         // Run the test
-//         let mut app = test::init_service(
-//             App::new()
-//                 .wrap(
-//                     CookieSession::signed(&[1; 32])
-//                         .domain("localhost:8080")
-//                         .name("netsblox")
-//                         .secure(true),
-//                 )
-//                 .app_data(web::Data::new(database))
-//                 .configure(config),
-//         )
-//         .await;
+    //     #[actix_web::test]
+    //     async fn test_login_bad_pwd() {
+    //         let user = User::from(NewUser::new(
+    //             "brian".into(),
+    //             "pwd_hash".into(),
+    //             "email".into(),
+    //             None,
+    //         ));
+    //         let (database, _) = init_app_data("login_bad_pwd", vec![user])
+    //             .await
+    //             .expect("Unable to seed database");
+    //         // Run the test
+    //         let mut app = test::init_service(
+    //             App::new()
+    //                 .app_data(web::Data::new(database))
+    //                 .configure(config),
+    //         )
+    //         .await;
 
-//         let credentials = LoginCredentials {
-//             username: "brian".into(),
-//             password: "pwd_hash".into(),
-//             client_id: None,
-//             strategy: None,
-//         };
-//         let req = test::TestRequest::post()
-//             .uri("/login")
-//             .set_json(&credentials)
-//             .to_request();
+    //         let credentials = LoginCredentials {
+    //             username: "brian".into(),
+    //             password: "wrong_hash".into(),
+    //             client_id: None,
+    //             strategy: None,
+    //         };
+    //         let req = test::TestRequest::post()
+    //             .uri("/login")
+    //             .set_json(&credentials)
+    //             .to_request();
 
-//         let response = test::call_service(&mut app, req).await;
-//         let cookie = response.headers().get(http::header::SET_COOKIE);
-//         assert!(cookie.is_some());
-//         let cookie_data = cookie.unwrap().to_str().unwrap();
-//         assert!(cookie_data.starts_with("netsblox="));
-//     }
+    //         let response = test::call_service(&mut app, req).await;
+    //         assert_eq!(response.status(), http::StatusCode::UNAUTHORIZED);
+    //     }
 
-//     #[actix_web::test]
-//     async fn test_login_bad_pwd() {
-//         let user = User::from(NewUser::new(
-//             "brian".into(),
-//             "pwd_hash".into(),
-//             "email".into(),
-//             None,
-//         ));
-//         let (database, _) = init_app_data("login_bad_pwd", vec![user])
-//             .await
-//             .expect("Unable to seed database");
-//         // Run the test
-//         let mut app = test::init_service(
-//             App::new()
-//                 .app_data(web::Data::new(database))
-//                 .configure(config),
-//         )
-//         .await;
+    //     #[actix_web::test]
+    //     async fn test_login_403() {
+    //         let (database, _) = init_app_data("login_bad_user", vec![])
+    //             .await
+    //             .expect("Unable to seed database");
+    //         // Run the test
+    //         let mut app = test::init_service(
+    //             App::new()
+    //                 .app_data(web::Data::new(database))
+    //                 .configure(config),
+    //         )
+    //         .await;
 
-//         let credentials = LoginCredentials {
-//             username: "brian".into(),
-//             password: "wrong_hash".into(),
-//             client_id: None,
-//             strategy: None,
-//         };
-//         let req = test::TestRequest::post()
-//             .uri("/login")
-//             .set_json(&credentials)
-//             .to_request();
+    //         let credentials = LoginCredentials {
+    //             username: "nonExistentUser".into(),
+    //             password: "pwd_hash".into(),
+    //             client_id: None,
+    //             strategy: None,
+    //         };
+    //         let req = test::TestRequest::post()
+    //             .uri("/login")
+    //             .set_json(&credentials)
+    //             .to_request();
 
-//         let response = test::call_service(&mut app, req).await;
-//         assert_eq!(response.status(), http::StatusCode::UNAUTHORIZED);
-//     }
+    //         let response = test::call_service(&mut app, req).await;
+    //         assert_eq!(response.status(), http::StatusCode::UNAUTHORIZED);
+    //     }
 
-//     #[actix_web::test]
-//     async fn test_login_403() {
-//         let (database, _) = init_app_data("login_bad_user", vec![])
-//             .await
-//             .expect("Unable to seed database");
-//         // Run the test
-//         let mut app = test::init_service(
-//             App::new()
-//                 .app_data(web::Data::new(database))
-//                 .configure(config),
-//         )
-//         .await;
+    //     #[actix_web::test]
+    //     async fn test_login_banned() {
+    //         let user = User::from(NewUser::new(
+    //             "brian".into(),
+    //             "pwd_hash".into(),
+    //             "email".into(),
+    //             None,
+    //         ));
+    //         let (app_data, _) = init_app_data("login_bad_pwd", vec![user])
+    //             .await
+    //             .expect("Unable to seed database");
 
-//         let credentials = LoginCredentials {
-//             username: "nonExistentUser".into(),
-//             password: "pwd_hash".into(),
-//             client_id: None,
-//             strategy: None,
-//         };
-//         let req = test::TestRequest::post()
-//             .uri("/login")
-//             .set_json(&credentials)
-//             .to_request();
+    //         // Ban the account (manually)
+    //         let collection = app_data.collection::<BannedAccount>("bannedAccounts");
+    //         let banned_account = BannedAccount::new("brian".into(), "email".into());
+    //         collection
+    //             .insert_one(banned_account, None)
+    //             .await
+    //             .expect("Could not insert banned account");
 
-//         let response = test::call_service(&mut app, req).await;
-//         assert_eq!(response.status(), http::StatusCode::UNAUTHORIZED);
-//     }
+    //         // Run the test
+    //         let mut app = test::init_service(
+    //             App::new()
+    //                 .app_data(web::Data::new(app_data))
+    //                 .configure(config),
+    //         )
+    //         .await;
 
-//     #[actix_web::test]
-//     async fn test_login_banned() {
-//         let user = User::from(NewUser::new(
-//             "brian".into(),
-//             "pwd_hash".into(),
-//             "email".into(),
-//             None,
-//         ));
-//         let (app_data, _) = init_app_data("login_bad_pwd", vec![user])
-//             .await
-//             .expect("Unable to seed database");
+    //         let credentials = LoginCredentials {
+    //             username: "brian".into(),
+    //             password: "pwd_hash".into(),
+    //             client_id: None,
+    //             strategy: None,
+    //         };
 
-//         // Ban the account (manually)
-//         let collection = app_data.collection::<BannedAccount>("bannedAccounts");
-//         let banned_account = BannedAccount::new("brian".into(), "email".into());
-//         collection
-//             .insert_one(banned_account, None)
-//             .await
-//             .expect("Could not insert banned account");
+    //         let req = test::TestRequest::post()
+    //             .uri("/login")
+    //             .set_json(&credentials)
+    //             .to_request();
 
-//         // Run the test
-//         let mut app = test::init_service(
-//             App::new()
-//                 .app_data(web::Data::new(app_data))
-//                 .configure(config),
-//         )
-//         .await;
+    //         let response = test::call_service(&mut app, req).await;
+    //         assert_eq!(response.status(), http::StatusCode::UNAUTHORIZED);
+    //     }
 
-//         let credentials = LoginCredentials {
-//             username: "brian".into(),
-//             password: "pwd_hash".into(),
-//             client_id: None,
-//             strategy: None,
-//         };
+    //     #[actix_web::test]
+    //     async fn test_login_with_strategy() {
+    //         todo!();
+    //     }
 
-//         let req = test::TestRequest::post()
-//             .uri("/login")
-//             .set_json(&credentials)
-//             .to_request();
+    //     #[actix_web::test]
+    //     async fn test_login_with_strategy_403() {
+    //         todo!();
+    //     }
 
-//         let response = test::call_service(&mut app, req).await;
-//         assert_eq!(response.status(), http::StatusCode::UNAUTHORIZED);
-//     }
+    //     #[actix_web::test]
+    //     async fn test_logout() {
+    //         let user = User::from(NewUser::new(
+    //             "brian".into(),
+    //             "pwd_hash".into(),
+    //             "email".into(),
+    //             None,
+    //         ));
+    //         let (database, _) = init_app_data("login", vec![user])
+    //             .await
+    //             .expect("Unable to seed database");
+    //         // Run the test
+    //         let mut app = test::init_service(
+    //             App::new()
+    //                 .wrap(
+    //                     CookieSession::signed(&[0; 32])
+    //                         .domain("localhost:8080")
+    //                         .name("netsblox")
+    //                         .secure(true),
+    //                 )
+    //                 .app_data(web::Data::new(database))
+    //                 .configure(config),
+    //         )
+    //         .await;
 
-//     #[actix_web::test]
-//     async fn test_login_with_strategy() {
-//         todo!();
-//     }
+    //         let req = test::TestRequest::post().uri("/logout").to_request();
 
-//     #[actix_web::test]
-//     async fn test_login_with_strategy_403() {
-//         todo!();
-//     }
+    //         let response = test::call_service(&mut app, req).await;
+    //         let cookie = response.headers().get(http::header::SET_COOKIE);
+    //         assert!(cookie.is_some());
+    //         let cookie_data = cookie.unwrap().to_str().unwrap();
+    //         assert!(cookie_data.starts_with("netsblox="));
+    //     }
 
-//     #[actix_web::test]
-//     async fn test_logout() {
-//         let user = User::from(NewUser::new(
-//             "brian".into(),
-//             "pwd_hash".into(),
-//             "email".into(),
-//             None,
-//         ));
-//         let (database, _) = init_app_data("login", vec![user])
-//             .await
-//             .expect("Unable to seed database");
-//         // Run the test
-//         let mut app = test::init_service(
-//             App::new()
-//                 .wrap(
-//                     CookieSession::signed(&[0; 32])
-//                         .domain("localhost:8080")
-//                         .name("netsblox")
-//                         .secure(true),
-//                 )
-//                 .app_data(web::Data::new(database))
-//                 .configure(config),
-//         )
-//         .await;
+    #[actix_web::test]
+    async fn test_delete_user_admin() {
+        let admin: User = api::NewUser {
+            username: "admin".into(),
+            email: "admin@netsblox.org".into(),
+            password: None,
+            group_id: None,
+            role: Some(UserRole::Admin),
+        }
+        .into();
+        let other_username = "other_user";
+        let other_user: User = api::NewUser {
+            username: other_username.to_string(),
+            email: "user@netsblox.org".into(),
+            password: None,
+            group_id: None,
+            role: None,
+        }
+        .into();
 
-//         let req = test::TestRequest::post().uri("/logout").to_request();
+        test_utils::setup()
+            .with_users(&[admin, other_user])
+            .run(|app_data| async move {
+                let app = test::init_service(
+                    App::new()
+                        .wrap(test_utils::cookie::middleware())
+                        .app_data(web::Data::new(app_data.clone()))
+                        .configure(config),
+                )
+                .await;
 
-//         let response = test::call_service(&mut app, req).await;
-//         let cookie = response.headers().get(http::header::SET_COOKIE);
-//         assert!(cookie.is_some());
-//         let cookie_data = cookie.unwrap().to_str().unwrap();
-//         assert!(cookie_data.starts_with("netsblox="));
-//     }
+                let cookie = test_utils::cookie::new("admin");
+                let req = test::TestRequest::post()
+                    .uri("/other_user/delete")
+                    .cookie(cookie)
+                    .to_request();
 
-//     #[actix_web::test]
-//     async fn test_delete_user() {
-//         todo!();
-//     }
+                let response = test::call_service(&app, req).await;
+                assert_eq!(response.status(), http::StatusCode::OK);
 
-//     #[actix_web::test]
-//     async fn test_delete_user_403() {
-//         todo!();
-//     }
+                let query = doc! {"username": other_username};
+                let result = app_data
+                    .users
+                    .find_one(query, None)
+                    .await
+                    .expect("Could not query for user");
 
-//     #[actix_web::test]
-//     async fn test_link_account() {
-//         todo!();
-//     }
+                let count = app_data.users.count_documents(doc! {}, None).await.unwrap();
+                println!("count: {}, {:?}", count, result);
+                assert!(result.is_none(), "User not deleted");
+            })
+            .await;
+    }
 
-//     #[actix_web::test]
-//     async fn test_link_account_403() {
-//         todo!();
-//     }
+    #[actix_web::test]
+    async fn test_delete_user_unauth() {
+        let other_username = "other_user";
+        let other_user: User = api::NewUser {
+            username: other_username.to_string(),
+            email: "user@netsblox.org".into(),
+            password: None,
+            group_id: None,
+            role: None,
+        }
+        .into();
 
-//     #[actix_web::test]
-//     async fn test_link_account_duplicate() {
-//         todo!();
-//     }
+        test_utils::setup()
+            .with_users(&[other_user])
+            .run(|app_data| async move {
+                let app = test::init_service(
+                    App::new()
+                        .app_data(web::Data::new(app_data.clone()))
+                        .configure(config),
+                )
+                .await;
 
-//     #[test]
-//     async fn test_is_valid_username() {
-//         assert!(super::is_valid_username("hello"));
-//     }
+                let req = test::TestRequest::post()
+                    .uri("/other_user/delete")
+                    .to_request();
 
-//     #[test]
-//     async fn test_is_valid_username_leading_underscore() {
-//         assert_eq!(super::is_valid_username("_hello"), false);
-//     }
+                let response = test::call_service(&app, req).await;
+                assert_eq!(response.status(), http::StatusCode::UNAUTHORIZED);
 
-//     #[test]
-//     async fn test_is_valid_username_leading_dash() {
-//         assert_eq!(super::is_valid_username("-hello"), false);
-//     }
+                let query = doc! {"username": other_username};
+                let result = app_data
+                    .users
+                    .find_one(query, None)
+                    .await
+                    .expect("Could not query for user");
 
-//     #[test]
-//     async fn test_is_valid_username_at_symbol() {
-//         assert_eq!(super::is_valid_username("hello@gmail.com"), false);
-//     }
+                assert!(result.is_some(), "User deleted");
+            })
+            .await;
+    }
 
-//     #[test]
-//     async fn test_is_valid_username_vulgar() {
-//         assert_eq!(super::is_valid_username("hell"), false);
-//     }
-// }
+    #[actix_web::test]
+    async fn test_delete_user_group_owner() {
+        let owner_name = "owner".to_string();
+        let owner: User = api::NewUser {
+            username: owner_name.clone(),
+            email: "owner@netsblox.org".into(),
+            password: None,
+            group_id: None,
+            role: None,
+        }
+        .into();
+        let group = Group::new(owner_name.clone(), "some_group".into());
+        let other_username = "other_user";
+        let other_user: User = api::NewUser {
+            username: other_username.to_string(),
+            email: "user@netsblox.org".into(),
+            password: None,
+            group_id: Some(group.id.clone()),
+            role: None,
+        }
+        .into();
+
+        test_utils::setup()
+            .with_users(&[owner, other_user])
+            .with_groups(&[group])
+            .run(|app_data| async move {
+                let app = test::init_service(
+                    App::new()
+                        .wrap(test_utils::cookie::middleware())
+                        .app_data(web::Data::new(app_data.clone()))
+                        .configure(config),
+                )
+                .await;
+
+                let req = test::TestRequest::post()
+                    .uri("/other_user/delete")
+                    .cookie(test_utils::cookie::new(&owner_name))
+                    .to_request();
+
+                let response = test::call_service(&app, req).await;
+                assert_eq!(response.status(), http::StatusCode::OK);
+
+                let query = doc! {"username": other_username};
+                let result = app_data
+                    .users
+                    .find_one(query, None)
+                    .await
+                    .expect("Could not query for user");
+
+                assert!(result.is_none(), "User not deleted");
+            })
+            .await;
+    }
+
+    #[actix_web::test]
+    async fn test_delete_user_other_user() {
+        let user1: User = api::NewUser {
+            username: "user1".to_string(),
+            email: "user1@netsblox.org".into(),
+            password: None,
+            group_id: None,
+            role: None,
+        }
+        .into();
+        let user1_name = user1.username.clone();
+        let user2: User = api::NewUser {
+            username: "user2".to_string(),
+            email: "user@netsblox.org".into(),
+            password: None,
+            group_id: None,
+            role: None,
+        }
+        .into();
+
+        test_utils::setup()
+            .with_users(&[user1, user2])
+            .run(|app_data| async move {
+                let app = test::init_service(
+                    App::new()
+                        .wrap(test_utils::cookie::middleware())
+                        .app_data(web::Data::new(app_data.clone()))
+                        .configure(config),
+                )
+                .await;
+
+                let req = test::TestRequest::post()
+                    .uri("/user2/delete")
+                    .cookie(test_utils::cookie::new(&user1_name))
+                    .to_request();
+
+                let response = test::call_service(&app, req).await;
+                assert_eq!(response.status(), http::StatusCode::FORBIDDEN);
+
+                let query = doc! {"username": "user2"};
+                let result = app_data
+                    .users
+                    .find_one(query, None)
+                    .await
+                    .expect("Could not query for user");
+
+                assert!(result.is_some(), "User deleted");
+            })
+            .await;
+    }
+
+    //     #[actix_web::test]
+    //     async fn test_link_account() {
+    //         todo!();
+    //     }
+
+    //     #[actix_web::test]
+    //     async fn test_link_account_403() {
+    //         todo!();
+    //     }
+
+    //     #[actix_web::test]
+    //     async fn test_link_account_duplicate() {
+    //         todo!();
+    //     }
+
+    #[actix_web::test]
+    async fn test_is_valid_username() {
+        assert!(super::is_valid_username("hello"));
+    }
+
+    #[actix_web::test]
+    async fn test_is_valid_username_leading_underscore() {
+        assert!(!super::is_valid_username("_hello"));
+    }
+
+    #[actix_web::test]
+    async fn test_is_valid_username_leading_dash() {
+        assert!(!super::is_valid_username("-hello"));
+    }
+
+    #[actix_web::test]
+    async fn test_is_valid_username_at_symbol() {
+        assert!(!super::is_valid_username("hello@gmail.com"));
+    }
+
+    #[actix_web::test]
+    async fn test_is_valid_username_vulgar() {
+        assert!(!super::is_valid_username("shit"));
+    }
+}

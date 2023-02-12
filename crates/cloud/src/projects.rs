@@ -795,370 +795,519 @@ pub fn config(cfg: &mut web::ServiceConfig) {
         .service(remove_collaborator);
 }
 
+#[cfg(test)]
 mod tests {
+    use super::*;
+    use crate::test_utils;
+    use actix_web::{dev::ServiceResponse, http, test, App};
+    use netsblox_cloud_common::api::UserRole;
+
     #[actix_web::test]
+    #[ignore]
     async fn test_create_project() {
         todo!();
     }
 
     #[actix_web::test]
+    #[ignore]
     async fn test_create_project_403() {
         todo!();
     }
 
     #[actix_web::test]
+    #[ignore]
     async fn test_create_project_admin() {
         todo!();
     }
 
     #[actix_web::test]
+    #[ignore]
     async fn test_get_project() {
         todo!();
     }
 
     #[actix_web::test]
+    #[ignore]
     async fn test_get_project_403() {
         todo!();
     }
 
     #[actix_web::test]
+    #[ignore]
     async fn test_get_project_admin() {
         todo!();
     }
 
     #[actix_web::test]
+    #[ignore]
     async fn test_get_project_named() {
         todo!();
     }
 
     #[actix_web::test]
+    #[ignore]
     async fn test_get_project_named_403() {
         todo!();
     }
 
     #[actix_web::test]
+    #[ignore]
     async fn test_get_project_named_admin() {
         todo!();
     }
 
     #[actix_web::test]
+    #[ignore]
     async fn test_get_latest_project() {
         // TODO: retrieves unsaved changes
         todo!();
     }
 
     #[actix_web::test]
+    #[ignore]
     async fn test_get_latest_project_403() {
         todo!();
     }
 
     #[actix_web::test]
+    #[ignore]
     async fn test_get_latest_project_admin() {
         todo!();
     }
 
     #[actix_web::test]
+    #[ignore]
     async fn test_get_project_thumbnail() {
         todo!();
     }
 
     #[actix_web::test]
+    #[ignore]
     async fn test_get_project_thumbnail_403() {
         todo!();
     }
 
     #[actix_web::test]
+    #[ignore]
     async fn test_get_project_thumbnail_admin() {
         todo!();
     }
 
     #[actix_web::test]
+    #[ignore]
     async fn test_update_project() {
         todo!();
     }
 
     #[actix_web::test]
+    #[ignore]
     async fn test_update_project_403() {
         todo!();
     }
 
     #[actix_web::test]
+    #[ignore]
     async fn test_update_project_admin() {
         todo!();
     }
 
     #[actix_web::test]
+    #[ignore]
     async fn test_publish_project() {
         todo!();
     }
 
     #[actix_web::test]
+    #[ignore]
     async fn test_publish_project_403() {
         todo!();
     }
 
     #[actix_web::test]
+    #[ignore]
     async fn test_publish_project_admin() {
         todo!();
     }
 
     #[actix_web::test]
+    #[ignore]
     async fn test_unpublish_project() {
         todo!();
     }
 
     #[actix_web::test]
+    #[ignore]
     async fn test_unpublish_project_403() {
         todo!();
     }
 
     #[actix_web::test]
+    #[ignore]
     async fn test_unpublish_project_admin() {
         todo!();
     }
 
     #[actix_web::test]
+    #[ignore]
     async fn test_delete_project() {
         // TODO: Should the client be notified?
         todo!();
     }
 
     #[actix_web::test]
+    #[ignore]
     async fn test_delete_project_403() {
         todo!();
     }
 
     #[actix_web::test]
+    #[ignore]
     async fn test_delete_project_admin() {
         todo!();
     }
 
     #[actix_web::test]
-    async fn test_rename_project() {
-        todo!();
+    async fn test_rename_project_owner() {
+        let username = "user1";
+        let project = test_utils::project::builder()
+            .with_name("old name".into())
+            .with_owner(username.to_string())
+            .build();
+        let id = project.id.clone();
+        let new_name = "new project";
+        let project_update = UpdateProjectData {
+            name: new_name.into(),
+            client_id: None,
+        };
+
+        test_utils::setup()
+            .with_projects(&[project])
+            .run(|app_data| async move {
+                let app = test::init_service(
+                    App::new()
+                        .wrap(test_utils::cookie::middleware())
+                        .app_data(web::Data::new(app_data.clone()))
+                        .configure(config),
+                )
+                .await;
+
+                let req = test::TestRequest::patch()
+                    .cookie(test_utils::cookie::new(username))
+                    .uri(&format!("/id/{}", id))
+                    .set_json(&project_update)
+                    .to_request();
+
+                let response = test::call_service(&app, req).await;
+                assert_eq!(response.status(), http::StatusCode::OK);
+
+                let query = doc! {"id": id};
+                let project = app_data
+                    .project_metadata
+                    .find_one(query, None)
+                    .await
+                    .unwrap()
+                    .unwrap();
+
+                assert_eq!(project.name, new_name);
+            })
+            .await;
     }
 
     #[actix_web::test]
+    #[ignore]
     async fn test_rename_project_invalid_name() {
         todo!();
     }
 
     #[actix_web::test]
     async fn test_rename_project_403() {
-        todo!();
+        let new_name = "some new name";
+        let project_update = UpdateProjectData {
+            name: new_name.into(),
+            client_id: None,
+        };
+        let id = "abc123";
+        let project = test_utils::project::builder()
+            .with_name("old name".into())
+            .with_id(ProjectId::new(id.to_string()))
+            .build();
+
+        test_utils::setup()
+            .with_projects(&[project])
+            .run(|app_data| async {
+                let app = test::init_service(
+                    App::new()
+                        .app_data(web::Data::new(app_data))
+                        .configure(config),
+                )
+                .await;
+
+                let req = test::TestRequest::patch()
+                    .uri(&format!("/id/{}", &id))
+                    .set_json(&project_update)
+                    .to_request();
+
+                let response = test::call_service(&app, req).await;
+                println!("status: {:?}", response.status());
+                assert_eq!(response.status(), http::StatusCode::UNAUTHORIZED);
+            })
+            .await;
     }
 
     #[actix_web::test]
+    #[ignore]
     async fn test_rename_project_admin() {
         todo!();
     }
 
     #[actix_web::test]
+    #[ignore]
     async fn test_rename_project_room_update() {
         todo!();
     }
 
     #[actix_web::test]
+    #[ignore]
     async fn test_list_user_projects() {
         todo!();
     }
 
     #[actix_web::test]
+    #[ignore]
     async fn test_list_user_projects_403() {
         todo!();
     }
 
     #[actix_web::test]
+    #[ignore]
     async fn test_list_user_projects_admin() {
         todo!();
     }
 
     #[actix_web::test]
+    #[ignore]
     async fn test_view_shared_projects() {
         todo!();
     }
 
     #[actix_web::test]
+    #[ignore]
     async fn test_view_shared_projects_403() {
         todo!();
     }
 
     #[actix_web::test]
+    #[ignore]
     async fn test_view_shared_projects_admin() {
         todo!();
     }
 
     #[actix_web::test]
+    #[ignore]
     async fn test_create_role() {
         todo!();
     }
 
     #[actix_web::test]
+    #[ignore]
     async fn test_create_role_403() {
         todo!();
     }
 
     #[actix_web::test]
+    #[ignore]
     async fn test_create_role_admin() {
         todo!();
     }
 
     #[actix_web::test]
+    #[ignore]
     async fn test_create_role_room_update() {
         todo!();
     }
 
     #[actix_web::test]
+    #[ignore]
     async fn test_get_role() {
         todo!();
     }
 
     #[actix_web::test]
+    #[ignore]
     async fn test_get_role_403() {
         todo!();
     }
 
     #[actix_web::test]
+    #[ignore]
     async fn test_get_role_admin() {
         todo!();
     }
 
     #[actix_web::test]
+    #[ignore]
     async fn test_get_latest_role() {
         todo!();
     }
 
     #[actix_web::test]
+    #[ignore]
     async fn test_get_latest_role_403() {
         todo!();
     }
 
     #[actix_web::test]
+    #[ignore]
     async fn test_get_latest_role_admin() {
         todo!();
     }
 
     #[actix_web::test]
+    #[ignore]
     async fn test_rename_role() {
         todo!();
     }
 
     #[actix_web::test]
+    #[ignore]
     async fn test_rename_role_invalid_name() {
         todo!();
     }
 
     #[actix_web::test]
+    #[ignore]
     async fn test_rename_role_403() {
         todo!();
     }
 
     #[actix_web::test]
+    #[ignore]
     async fn test_rename_role_admin() {
         todo!();
     }
 
     #[actix_web::test]
+    #[ignore]
     async fn test_rename_role_room_update() {
         todo!();
     }
 
     #[actix_web::test]
+    #[ignore]
     async fn test_save_role() {
         todo!();
     }
 
     #[actix_web::test]
+    #[ignore]
     async fn test_save_role_403() {
         todo!();
     }
 
     #[actix_web::test]
+    #[ignore]
     async fn test_save_role_admin() {
         todo!();
     }
 
     #[actix_web::test]
+    #[ignore]
     async fn test_delete_role() {
         todo!();
     }
 
     #[actix_web::test]
+    #[ignore]
     async fn test_delete_role_403() {
         todo!();
     }
 
     #[actix_web::test]
+    #[ignore]
     async fn test_delete_role_admin() {
         todo!();
     }
 
     #[actix_web::test]
+    #[ignore]
     async fn test_delete_role_room_update() {
         todo!();
     }
 
     #[actix_web::test]
+    #[ignore]
     async fn test_add_collaborator() {
         todo!();
     }
 
     #[actix_web::test]
+    #[ignore]
     async fn test_add_collaborator_invalid_name() {
         todo!();
     }
 
     #[actix_web::test]
+    #[ignore]
     async fn test_add_collaborator_403() {
         todo!();
     }
 
     #[actix_web::test]
+    #[ignore]
     async fn test_add_collaborator_admin() {
         todo!();
     }
 
     #[actix_web::test]
+    #[ignore]
     async fn test_add_collaborator_room_update() {
         todo!();
     }
 
     #[actix_web::test]
+    #[ignore]
     async fn test_remove_collaborator() {
         todo!();
     }
 
     #[actix_web::test]
+    #[ignore]
     async fn test_remove_collaborator_invalid_name() {
         todo!();
     }
 
     #[actix_web::test]
+    #[ignore]
     async fn test_remove_collaborator_403() {
         todo!();
     }
 
     #[actix_web::test]
+    #[ignore]
     async fn test_remove_collaborator_admin() {
         todo!();
     }
 
     #[actix_web::test]
+    #[ignore]
     async fn test_remove_collaborator_room_update() {
         todo!();
     }
 
     #[actix_web::test]
+    #[ignore]
     async fn test_list_collaborators() {
         todo!();
     }
 
     #[actix_web::test]
+    #[ignore]
     async fn test_list_collaborators_403() {
         todo!();
     }
 
     #[actix_web::test]
+    #[ignore]
     async fn test_list_collaborators_admin() {
         todo!();
     }

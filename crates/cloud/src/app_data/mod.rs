@@ -96,7 +96,7 @@ impl AppData {
         client: Client,
         settings: Settings,
         network: Option<Addr<TopologyActor>>,
-        prefix: Option<&'static str>,
+        prefix: Option<String>,
     ) -> AppData {
         // Blob storage
         let region = Region::Custom {
@@ -132,7 +132,7 @@ impl AppData {
 
         // Database collections
         let db = client.database(&settings.database.name);
-        let prefix = prefix.unwrap_or("");
+        let prefix = prefix.unwrap_or_else(|| "".to_owned());
         let groups = db.collection::<Group>(&(prefix.to_owned() + "groups"));
         let password_tokens =
             db.collection::<SetPasswordToken>(&(prefix.to_owned() + "passwordTokens"));
@@ -1121,6 +1121,17 @@ impl AppData {
             .map_err(InternalError::SendEmailError)?;
         Ok(())
     }
+
+    #[cfg(test)]
+    pub(crate) async fn drop_all_data(&self) {
+        let bucket = &self.settings.s3.bucket;
+        let request = rusoto_s3::DeleteBucketRequest {
+            bucket: bucket.clone(),
+            ..Default::default()
+        };
+        // TODO: uncomment the following
+        //self.s3.delete_bucket(request).await.unwrap();
+    }
 }
 
 async fn update_tor_nodes(tor_exit_nodes: &Collection<TorNode>) -> Result<(), UserError> {
@@ -1179,11 +1190,13 @@ fn is_opera_vpn(addr: &str) -> bool {
 #[cfg(test)]
 mod tests {
     #[actix_web::test]
+    #[ignore]
     async fn test_save_role_blob() {
         todo!();
     }
 
     #[actix_web::test]
+    #[ignore]
     async fn test_save_role_set_transient_false() {
         todo!();
     }

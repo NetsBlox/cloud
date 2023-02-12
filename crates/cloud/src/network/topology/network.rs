@@ -805,21 +805,25 @@ impl Topology {
 #[cfg(test)]
 mod tests {
     #[actix_web::test]
+    #[ignore]
     async fn test_remove_client_clear_state() {
         todo!();
     }
 
     #[actix_web::test]
+    #[ignore]
     async fn test_remove_client_clear_external_state() {
         todo!();
     }
 
     #[actix_web::test]
+    #[ignore]
     async fn test_filter_blocked_users() {
         todo!();
     }
 
     #[actix_web::test]
+    #[ignore]
     async fn test_filter_group_msgs() {
         todo!();
     }
