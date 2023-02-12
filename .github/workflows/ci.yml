@@ -11,8 +11,8 @@ jobs:
         ports:
           - 9000:9000
         env:
-          - MINIO_ACCESS_KEY=KEY
-          - MINIO_SECRET_KEY=MYSECRET
+          MINIO_ACCESS_KEY: KEY
+          MINIO_SECRET_KEY: MYSECRET
     steps:
       - uses: actions/checkout@master
       - name: Start MongoDB
