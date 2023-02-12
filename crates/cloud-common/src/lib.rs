@@ -729,6 +729,6 @@ pub(crate) fn sha512(text: &str) -> String {
 
 #[cfg(test)]
 mod tests {
-    #[actix_web::test]
-    async fn test_uuid_ser() {}
+    #[test]
+    fn test_uuid_ser() {}
 }
