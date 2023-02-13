@@ -90,10 +90,10 @@ pub async fn can_edit_user(
     username: &str,
 ) -> Result<bool, UserError> {
     if let Some(requestor) = session.get::<String>("username").unwrap_or(None) {
-        println!("Can {} edit {}?", requestor, username);
         let can_edit = requestor == username
             || is_super_user(app, session).await?
             || has_group_containing(app, &requestor, username).await?;
+        println!("Can {} edit {}? {}", requestor, username, can_edit);
         Ok(can_edit)
     } else {
         println!("Could not get username from cookie!");
