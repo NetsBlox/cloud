@@ -1,11 +1,5 @@
 use std::sync::{Arc, Mutex};
 
-use actix_web::{
-    dev::Service,
-    test::{self, TestRequest},
-    web::{self, ServiceConfig},
-    App,
-};
 use futures::{future::join_all, Future};
 use lazy_static::lazy_static;
 use mongodb::{bson::doc, Client};
@@ -107,8 +101,7 @@ impl TestSetupBuilder {
 
         // cleanup
         client.database(&db_name).drop(None).await.unwrap();
-        app_data.drop_all_data().await;
-        // TODO: delete s3 bucket
+        app_data.drop_all_data().await.unwrap();
     }
 }
 
@@ -153,6 +146,7 @@ pub(crate) mod project {
         id: Option<api::ProjectId>,
         owner: Option<String>,
         name: Option<String>,
+        collaborators: Vec<String>,
     }
 
     impl ProjectBuilder {
@@ -170,6 +164,12 @@ pub(crate) mod project {
             self.id = Some(id);
             self
         }
+
+        pub(crate) fn with_collaborators(mut self, names: &[&str]) -> Self {
+            self.collaborators = names.iter().map(|n| n.to_string()).collect::<Vec<String>>();
+            self
+        }
+
         pub(crate) fn build(self) -> Project {
             let roles = HashMap::new(); // FIXME: we should populate with some defaults..
             let id = self
@@ -184,7 +184,7 @@ pub(crate) mod project {
                 name: "old name".into(),
                 updated: DateTime::now(),
                 state: api::PublishState::Private,
-                collaborators: Vec::new(),
+                collaborators: self.collaborators,
                 origin_time: DateTime::now(),
                 save_state: api::SaveState::SAVED,
                 roles,
@@ -197,6 +197,7 @@ pub(crate) mod project {
             id: None,
             owner: None,
             name: None,
+            collaborators: Vec::new(),
         }
     }
 }
