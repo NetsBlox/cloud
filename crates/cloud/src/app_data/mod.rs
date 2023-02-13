@@ -96,7 +96,7 @@ impl AppData {
         client: Client,
         settings: Settings,
         network: Option<Addr<TopologyActor>>,
-        prefix: Option<String>,
+        prefix: Option<&str>,
     ) -> AppData {
         // Blob storage
         let region = Region::Custom {
@@ -132,7 +132,7 @@ impl AppData {
 
         // Database collections
         let db = client.database(&settings.database.name);
-        let prefix = prefix.unwrap_or_else(|| "".to_owned());
+        let prefix = prefix.unwrap_or("");
         let groups = db.collection::<Group>(&(prefix.to_owned() + "groups"));
         let password_tokens =
             db.collection::<SetPasswordToken>(&(prefix.to_owned() + "passwordTokens"));
