@@ -804,6 +804,15 @@ impl Topology {
 
 #[cfg(test)]
 mod tests {
+    use netsblox_cloud_common::{
+        api::{self, AppId, ClientId, ClientState, ExternalClientState},
+        Group, User,
+    };
+
+    use crate::test_utils;
+
+    use super::Topology;
+
     #[actix_web::test]
     #[ignore]
     async fn test_remove_client_clear_state() {
@@ -814,6 +823,71 @@ mod tests {
     #[ignore]
     async fn test_remove_client_clear_external_state() {
         todo!();
+    }
+
+    #[actix_web::test]
+    #[ignore]
+    async fn test_allowed_recipients_for_member() {
+        let outsider: User = api::NewUser {
+            username: "outsider".to_string(),
+            email: "outsider@netsblox.org".into(),
+            password: None,
+            group_id: None,
+            role: None,
+        }
+        .into();
+        let outsider_id = ClientId::new("_outsider".into());
+        let outsider_state = ClientState::External(ExternalClientState {
+            address: String::from("OutsiderAddress"),
+            app_id: AppId::new("TestApp"),
+        });
+
+        let owner: User = api::NewUser {
+            username: "owner".to_string(),
+            email: "owner@netsblox.org".into(),
+            password: None,
+            group_id: None,
+            role: None,
+        }
+        .into();
+        let owner_id = ClientId::new("_owner".into());
+        let group = Group::new(owner.username.clone(), "some_group".into());
+        let member: User = api::NewUser {
+            username: "member".to_string(),
+            email: "member@netsblox.org".into(),
+            password: None,
+            group_id: Some(group.id),
+            role: None,
+        }
+        .into();
+        let member_id = ClientId::new("_member".into());
+
+        test_utils::setup()
+            .with_users(&[owner, member.clone(), outsider.clone()])
+            .run(|app_data| async move {
+                let topology = Topology::new();
+                // topology.set_app_data(app_data);
+
+                // TODO: mock the clients?
+                // TODO: how to create a client
+                // let addr = Addr::recipient();
+                // let owner_client = Client::new(owner_id, addr);
+
+                let recipients = vec![]; // TODO: create `Client`s in the list of recipients
+                let recipients = topology
+                    .allowed_recipients(&app_data, &outsider_id, recipients)
+                    .await;
+
+                assert!(
+                    !recipients.iter().any(|rec| rec.id == member_id),
+                    "Member was allowed recipient for outsider"
+                );
+                assert!(
+                    recipients.iter().any(|rec| rec.id == owner_id),
+                    "Messages blocked from outsider to group owner"
+                );
+            })
+            .await;
     }
 
     #[actix_web::test]

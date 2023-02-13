@@ -799,7 +799,7 @@ pub fn config(cfg: &mut web::ServiceConfig) {
 mod tests {
     use super::*;
     use crate::test_utils;
-    use actix_web::{dev::ServiceResponse, http, test, App};
+    use actix_web::{http, test, App};
     use netsblox_cloud_common::{api::UserRole, User};
 
     #[actix_web::test]

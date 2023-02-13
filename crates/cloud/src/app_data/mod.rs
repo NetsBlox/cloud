@@ -111,7 +111,6 @@ impl AppData {
                 None,
                 None,
             ),
-            //StaticProvider::from(AwsCredentials::default()),
             region,
         );
 
@@ -1123,14 +1122,18 @@ impl AppData {
     }
 
     #[cfg(test)]
-    pub(crate) async fn drop_all_data(&self) {
+    pub(crate) async fn drop_all_data(&self) -> Result<(), InternalError> {
         let bucket = &self.settings.s3.bucket;
         let request = rusoto_s3::DeleteBucketRequest {
             bucket: bucket.clone(),
             ..Default::default()
         };
-        // TODO: uncomment the following
-        //self.s3.delete_bucket(request).await.unwrap();
+
+        if self.s3.delete_bucket(request).await.is_err() {
+            info!("Bucket does not exist");
+        }
+
+        Ok(())
     }
 }
 

@@ -537,20 +537,17 @@ mod tests {
     }
 
     #[test]
-    #[ignore]
     async fn test_is_valid_name() {
         assert!(is_valid_name("hello library"));
     }
 
     #[test]
-    #[ignore]
     async fn test_is_valid_name_diacritic() {
         assert!(is_valid_name("hola libré"));
     }
 
     #[test]
-    #[ignore]
     async fn test_is_valid_name_weird_symbol() {
-        assert_eq!(is_valid_name("<hola libré>"), false);
+        assert!(!is_valid_name("<hola libré>"));
     }
 }

@@ -93,10 +93,8 @@ pub async fn can_edit_user(
         let can_edit = requestor == username
             || is_super_user(app, session).await?
             || has_group_containing(app, &requestor, username).await?;
-        println!("Can {} edit {}? {}", requestor, username, can_edit);
         Ok(can_edit)
     } else {
-        println!("Could not get username from cookie!");
         Err(UserError::LoginRequiredError)
     }
 }
@@ -611,13 +609,9 @@ pub fn config(cfg: &mut web::ServiceConfig) {
 #[cfg(test)]
 mod tests {
     use crate::test_utils;
-    use crate::{config::Settings, session_middleware};
 
     use super::*;
-    //     use actix_session::CookieSession;
-    use actix_web::{cookie::Cookie, dev::ServiceResponse, http, test, App};
-    use futures::{future, TryFutureExt};
-    use mongodb::Client;
+    use actix_web::{http, test, App};
     use netsblox_cloud_common::Group;
 
     #[actix_web::test]
@@ -993,8 +987,6 @@ mod tests {
                     .await
                     .expect("Could not query for user");
 
-                let count = app_data.users.count_documents(doc! {}, None).await.unwrap();
-                println!("count: {}, {:?}", count, result);
                 assert!(result.is_none(), "User not deleted");
             })
             .await;

@@ -101,8 +101,7 @@ impl TestSetupBuilder {
 
         // cleanup
         client.database(&db_name).drop(None).await.unwrap();
-        app_data.drop_all_data().await;
-        // TODO: delete s3 bucket
+        app_data.drop_all_data().await.unwrap();
     }
 }
 
