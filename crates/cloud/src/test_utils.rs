@@ -5,7 +5,11 @@ use lazy_static::lazy_static;
 use mongodb::{bson::doc, Client};
 use netsblox_cloud_common::{Group, Project, User};
 
-use crate::{app_data::AppData, config::Settings};
+use crate::{
+    app_data::AppData,
+    config::Settings,
+    network::topology::{AddClient, SetClientState},
+};
 
 lazy_static! {
     static ref COUNTER: Arc<Mutex<u32>> = Arc::new(Mutex::new(0));
@@ -105,9 +109,9 @@ impl TestSetupBuilder {
         }
 
         // Connect the clients
-        self.clients
-            .iter()
-            .for_each(|_c| todo!("Connect the clients!"));
+        self.clients.into_iter().for_each(|client| {
+            client.add_into(&app_data.network);
+        });
 
         f(app_data.clone()).await;
 
@@ -215,8 +219,11 @@ pub(crate) mod project {
 }
 
 pub(crate) mod network {
+    use actix::{Actor, Addr, Context, Handler};
     use netsblox_cloud_common::api::{ClientId, ClientState};
     use uuid::Uuid;
+
+    use crate::network::topology::{AddClient, ClientCommand, SetClientState, TopologyActor};
 
     #[derive(Clone)]
     pub(crate) struct Client {
@@ -233,6 +240,39 @@ pub(crate) mod network {
                 username,
                 state,
             }
+        }
+        pub(crate) fn add_into(self, network: &Addr<TopologyActor>) {
+            let id = self.id.clone();
+            let username = self.username.clone();
+            let state = self.state.clone();
+            let addr = self.start();
+            let recipient = addr.recipient();
+            let add_client = AddClient {
+                id: id.clone(),
+                addr: recipient,
+            };
+            network.do_send(add_client);
+
+            if let Some(state) = state {
+                let set_state = SetClientState {
+                    id,
+                    state,
+                    username,
+                };
+                network.do_send(set_state);
+            }
+        }
+    }
+
+    impl Actor for Client {
+        type Context = Context<Self>;
+    }
+
+    impl Handler<ClientCommand> for Client {
+        type Result = ();
+        fn handle(&mut self, _msg: ClientCommand, _ctx: &mut Self::Context) {
+            // We don't yet have any tests that require us to check received messages
+            // but the handlers would go run here
         }
     }
 }
