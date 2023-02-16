@@ -20,6 +20,7 @@ pub(crate) fn setup() -> TestSetupBuilder {
         users: Vec::new(),
         projects: Vec::new(),
         groups: Vec::new(),
+        clients: Vec::new(),
     }
 }
 
@@ -28,6 +29,7 @@ pub(crate) struct TestSetupBuilder {
     users: Vec<User>,
     projects: Vec<Project>,
     groups: Vec<Group>,
+    clients: Vec<network::Client>,
 }
 
 impl TestSetupBuilder {
@@ -46,6 +48,11 @@ impl TestSetupBuilder {
         self
     }
 
+    pub(crate) fn with_clients(mut self, clients: &[network::Client]) -> Self {
+        self.clients.extend_from_slice(clients);
+        self
+    }
+
     pub(crate) async fn run<Fut>(self, f: impl FnOnce(AppData) -> Fut)
     where
         Fut: Future<Output = ()>,
@@ -61,7 +68,7 @@ impl TestSetupBuilder {
 
         let app_data = AppData::new(client.clone(), settings, None, None);
 
-        // create the test fixtures (users, projects)
+        // create the test fixtures (users, projects, etc)
         client.database(&db_name).drop(None).await.unwrap();
         join_all(self.projects.iter().map(|proj| async {
             let Project {
@@ -96,6 +103,11 @@ impl TestSetupBuilder {
                 .await
                 .unwrap();
         }
+
+        // Connect the clients
+        self.clients
+            .iter()
+            .for_each(|_c| todo!("Connect the clients!"));
 
         f(app_data.clone()).await;
 
@@ -198,6 +210,29 @@ pub(crate) mod project {
             owner: None,
             name: None,
             collaborators: Vec::new(),
+        }
+    }
+}
+
+pub(crate) mod network {
+    use netsblox_cloud_common::api::{ClientId, ClientState};
+    use uuid::Uuid;
+
+    #[derive(Clone)]
+    pub(crate) struct Client {
+        id: ClientId,
+        state: Option<ClientState>,
+        username: Option<String>,
+    }
+
+    impl Client {
+        pub(crate) fn new(username: Option<String>, state: Option<ClientState>) -> Self {
+            let id = ClientId::new(Uuid::new_v4().to_string());
+            Self {
+                id,
+                username,
+                state,
+            }
         }
     }
 }
