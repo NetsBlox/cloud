@@ -8,6 +8,7 @@ use crate::common::api::UserRole;
 use crate::common::{BannedAccount, SetPasswordToken, User};
 use crate::errors::{InternalError, UserError};
 use crate::groups::ensure_can_edit_group;
+use crate::network::topology;
 use crate::services::ensure_is_authorized_host;
 use actix_session::Session;
 use actix_web::http::header;
@@ -265,51 +266,75 @@ async fn login(
         return Err(UserError::BannedUserError);
     }
 
-    update_ownership(&app, &client_id, &user.username).await?;
+    if let Some(client_id) = client_id {
+        update_ownership(&app, &client_id, &user.username).await?;
+        app.network.do_send(topology::SetClientUsername {
+            id: client_id,
+            username: Some(user.username.clone()),
+        });
+    }
     session.insert("username", &user.username).unwrap();
     Ok(HttpResponse::Ok().body(user.username))
 }
 
 async fn update_ownership(
     app: &AppData,
-    client_id: &Option<String>,
+    client_id: &api::ClientId,
     username: &str,
 ) -> Result<(), UserError> {
     // Update ownership of current project
-    if let Some(client_id) = &client_id {
-        if !client_id.starts_with('_') {
-            return Err(UserError::InvalidClientIdError);
-        }
+    if !client_id.as_str().starts_with('_') {
+        return Err(UserError::InvalidClientIdError);
+    }
 
-        let query = doc! {"owner": client_id};
-        if let Some(metadata) = app
+    let query = doc! {"owner": client_id.as_str()};
+    if let Some(metadata) = app
+        .project_metadata
+        .find_one(query.clone(), None)
+        .await
+        .map_err(InternalError::DatabaseConnectionError)?
+    {
+        // No project will be found for non-NetsBlox clients such as PyBlox
+        let name = app.get_valid_project_name(username, &metadata.name).await?;
+        let update = doc! {"$set": {"owner": username, "name": name}};
+        let options = mongodb::options::FindOneAndUpdateOptions::builder()
+            .return_document(ReturnDocument::After)
+            .build();
+        let new_metadata = app
             .project_metadata
-            .find_one(query.clone(), None)
+            .find_one_and_update(query, update, Some(options))
             .await
             .map_err(InternalError::DatabaseConnectionError)?
-        {
-            // No project will be found for non-NetsBlox clients such as PyBlox
-            let name = app.get_valid_project_name(username, &metadata.name).await?;
-            let update = doc! {"$set": {"owner": username, "name": name}};
-            let options = mongodb::options::FindOneAndUpdateOptions::builder()
-                .return_document(ReturnDocument::After)
-                .build();
-            let new_metadata = app
-                .project_metadata
-                .find_one_and_update(query, update, Some(options))
-                .await
-                .map_err(InternalError::DatabaseConnectionError)?
-                .ok_or(UserError::ProjectNotFoundError)?;
+            .ok_or(UserError::ProjectNotFoundError)?;
 
-            app.on_room_changed(new_metadata);
-        }
+        app.on_room_changed(new_metadata);
     }
     Ok(())
 }
 
+#[derive(Deserialize)]
+struct LogoutQueryParams {
+    pub client_id: Option<api::ClientId>,
+}
+
+// TODO: add a client ID to update the client ID immediately
+// TODO: make sure the username and client ID are already associated
+// TODO: ideally this would make sure there is a client token/secret
 #[post("/logout")]
-async fn logout(session: Session) -> HttpResponse {
+async fn logout(
+    app: web::Data<AppData>,
+    params: web::Query<LogoutQueryParams>,
+    session: Session,
+) -> HttpResponse {
     session.purge();
+
+    if let Some(client_id) = &params.client_id {
+        app.network.do_send(topology::SetClientUsername {
+            id: client_id.clone(),
+            username: None,
+        });
+    }
+
     HttpResponse::Ok().finish()
 }
 

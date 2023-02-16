@@ -84,6 +84,13 @@ pub struct SetClientState {
 
 #[derive(Message)]
 #[rtype(result = "()")]
+pub struct SetClientUsername {
+    pub id: ClientId,
+    pub username: Option<String>,
+}
+
+#[derive(Message)]
+#[rtype(result = "()")]
 pub struct SendMessage {
     // TODO: include sender username
     pub sender: ClientId,
@@ -145,6 +152,18 @@ impl Handler<SetClientState> for TopologyActor {
     }
 }
 
+impl Handler<SetClientUsername> for TopologyActor {
+    type Result = ();
+
+    fn handle(&mut self, msg: SetClientUsername, ctx: &mut Context<Self>) -> Self::Result {
+        let fut = async move {
+            let mut topology = TOPOLOGY.write().await;
+            topology.set_client_username(&msg.id, msg.username);
+        };
+        let fut = actix::fut::wrap_future(fut);
+        ctx.spawn(fut);
+    }
+}
 impl Handler<SendMessage> for TopologyActor {
     type Result = ();
 

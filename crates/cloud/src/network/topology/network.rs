@@ -410,6 +410,13 @@ impl Topology {
         }
     }
 
+    pub fn set_client_username(&mut self, client_id: &ClientId, username: Option<String>) {
+        self.usernames.remove(client_id);
+        if let Some(username) = username {
+            self.usernames.insert(client_id.clone(), username);
+        }
+    }
+
     pub async fn set_client_state(&mut self, msg: SetClientState) {
         if !self.has_client(&msg.id) {
             return;
@@ -420,9 +427,7 @@ impl Topology {
             _ => None,
         };
         self.reset_client_state(&msg.id, new_project_id).await;
-        if let Some(username) = msg.username {
-            self.usernames.insert(msg.id.clone(), username);
-        }
+        self.set_client_username(&msg.id, msg.username);
 
         match &msg.state {
             ClientState::Browser(state) => {
