@@ -5,11 +5,7 @@ use lazy_static::lazy_static;
 use mongodb::{bson::doc, Client};
 use netsblox_cloud_common::{Group, Project, User};
 
-use crate::{
-    app_data::AppData,
-    config::Settings,
-    network::topology::{AddClient, SetClientState},
-};
+use crate::{app_data::AppData, config::Settings};
 
 lazy_static! {
     static ref COUNTER: Arc<Mutex<u32>> = Arc::new(Mutex::new(0));
