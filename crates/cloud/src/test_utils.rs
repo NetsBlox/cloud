@@ -115,9 +115,12 @@ impl TestSetupBuilder {
         }
 
         // Connect the clients
-        self.clients.into_iter().for_each(|client| {
-            client.add_into(&app_data.network);
-        });
+        join_all(
+            self.clients
+                .into_iter()
+                .map(|client| client.add_into(&app_data.network)),
+        )
+        .await;
 
         f(app_data.clone()).await;
 
@@ -249,7 +252,7 @@ pub(crate) mod network {
                 state,
             }
         }
-        pub(crate) fn add_into(self, network: &Addr<TopologyActor>) {
+        pub(crate) async fn add_into(self, network: &Addr<TopologyActor>) {
             let id = self.id.clone();
             let username = self.username.clone();
             let state = self.state.clone();
@@ -259,7 +262,7 @@ pub(crate) mod network {
                 id: id.clone(),
                 addr: recipient,
             };
-            network.do_send(add_client);
+            network.send(add_client).await.unwrap();
 
             if let Some(state) = state {
                 let set_state = SetClientState {
@@ -267,10 +270,10 @@ pub(crate) mod network {
                     state,
                     username,
                 };
-                network.do_send(set_state);
+                network.send(set_state).await.unwrap();
             } else {
                 let set_username = SetClientUsername { id, username };
-                network.do_send(set_username);
+                network.send(set_username).await.unwrap();
             }
         }
     }
