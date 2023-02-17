@@ -7,9 +7,7 @@ use crate::common::api::{ClientId, ExternalClient, ProjectId, RoleData, RoomStat
 use crate::common::{api, OccupantInvite, ProjectMetadata};
 use actix::prelude::*;
 use actix::{Actor, AsyncContext, Context, Handler};
-use lazy_static::lazy_static;
 use log::warn;
-use mongodb::bson::doc;
 use serde_json::Value;
 use std::sync::Arc;
 use tokio::sync::RwLock;
@@ -20,11 +18,16 @@ use self::network::Topology;
 pub use self::network::DEFAULT_APP_ID;
 use crate::common::api::{BrowserClientState, ClientState};
 
-lazy_static! {
-    static ref TOPOLOGY: Arc<RwLock<Topology>> = Arc::new(RwLock::new(Topology::new()));
+pub struct TopologyActor {
+    network: Arc<RwLock<Topology>>,
 }
 
-pub struct TopologyActor {}
+impl TopologyActor {
+    pub(crate) fn new() -> Self {
+        let network = Arc::new(RwLock::new(Topology::new()));
+        Self { network }
+    }
+}
 
 impl Actor for TopologyActor {
     type Context = Context<Self>;
@@ -74,11 +77,18 @@ pub struct RemoveClient {
     pub id: ClientId,
 }
 
-#[derive(Message)]
+#[derive(Message, Debug)]
 #[rtype(result = "()")]
 pub struct SetClientState {
     pub id: ClientId,
     pub state: ClientState,
+    pub username: Option<String>,
+}
+
+#[derive(Message, Debug)]
+#[rtype(result = "()")]
+pub struct SetClientUsername {
+    pub id: ClientId,
     pub username: Option<String>,
 }
 
@@ -95,8 +105,9 @@ impl Handler<AddClient> for TopologyActor {
     type Result = ();
 
     fn handle(&mut self, msg: AddClient, ctx: &mut Context<Self>) -> Self::Result {
-        let fut = async {
-            let mut topology = TOPOLOGY.write().await;
+        let network = self.network.clone();
+        let fut = async move {
+            let mut topology = network.write().await;
             topology.add_client(msg);
         };
         let fut = actix::fut::wrap_future(fut);
@@ -108,8 +119,9 @@ impl Handler<BrokenClient> for TopologyActor {
     type Result = ();
 
     fn handle(&mut self, msg: BrokenClient, ctx: &mut Context<Self>) -> Self::Result {
-        let fut = async {
-            let mut topology = TOPOLOGY.write().await;
+        let network = self.network.clone();
+        let fut = async move {
+            let mut topology = network.write().await;
             if let Err(error) = topology.set_broken_client(msg).await {
                 warn!("Unable to record broken client: {:?}", error);
             }
@@ -123,8 +135,9 @@ impl Handler<RemoveClient> for TopologyActor {
     type Result = ();
 
     fn handle(&mut self, msg: RemoveClient, ctx: &mut Context<Self>) -> Self::Result {
-        let fut = async {
-            let mut topology = TOPOLOGY.write().await;
+        let network = self.network.clone();
+        let fut = async move {
+            let mut topology = network.write().await;
             topology.remove_client(msg).await;
         };
         let fut = actix::fut::wrap_future(fut);
@@ -136,8 +149,9 @@ impl Handler<SetClientState> for TopologyActor {
     type Result = ();
 
     fn handle(&mut self, msg: SetClientState, ctx: &mut Context<Self>) -> Self::Result {
-        let fut = async {
-            let mut topology = TOPOLOGY.write().await;
+        let network = self.network.clone();
+        let fut = async move {
+            let mut topology = network.write().await;
             topology.set_client_state(msg).await;
         };
         let fut = actix::fut::wrap_future(fut);
@@ -145,14 +159,28 @@ impl Handler<SetClientState> for TopologyActor {
     }
 }
 
+impl Handler<SetClientUsername> for TopologyActor {
+    type Result = ();
+
+    fn handle(&mut self, msg: SetClientUsername, ctx: &mut Context<Self>) -> Self::Result {
+        let network = self.network.clone();
+        let fut = async move {
+            let mut topology = network.write().await;
+            topology.set_client_username(&msg.id, msg.username);
+        };
+        let fut = actix::fut::wrap_future(fut);
+        ctx.spawn(fut);
+    }
+}
 impl Handler<SendMessage> for TopologyActor {
     type Result = ();
 
     fn handle(&mut self, msg: SendMessage, ctx: &mut Context<Self>) -> Self::Result {
         // TODO: check if the message should be recorded
         // TODO: should we first check what clients are going to receive it?
-        let fut = async {
-            let topology = TOPOLOGY.read().await;
+        let network = self.network.clone();
+        let fut = async move {
+            let topology = network.read().await;
             topology.send_msg(msg).await;
         };
         let fut = actix::fut::wrap_future(fut);
@@ -164,8 +192,9 @@ impl Handler<SetStorage> for TopologyActor {
     type Result = ();
 
     fn handle(&mut self, msg: SetStorage, ctx: &mut Context<Self>) -> Self::Result {
-        let fut = async {
-            let mut topology = TOPOLOGY.write().await;
+        let network = self.network.clone();
+        let fut = async move {
+            let mut topology = network.write().await;
             topology.set_app_data(msg.app_data);
         };
         let fut = actix::fut::wrap_future(fut);
@@ -177,8 +206,9 @@ impl Handler<SendRoomState> for TopologyActor {
     type Result = ();
 
     fn handle(&mut self, msg: SendRoomState, ctx: &mut Context<Self>) -> Self::Result {
-        let fut = async {
-            let topology = TOPOLOGY.read().await;
+        let network = self.network.clone();
+        let fut = async move {
+            let topology = network.read().await;
             topology.send_room_state(msg);
         };
         let fut = actix::fut::wrap_future(fut);
@@ -212,8 +242,9 @@ impl Handler<EvictOccupant> for TopologyActor {
     type Result = ();
 
     fn handle(&mut self, msg: EvictOccupant, ctx: &mut Context<Self>) -> Self::Result {
-        let fut = async {
-            let mut topology = TOPOLOGY.write().await;
+        let network = self.network.clone();
+        let fut = async move {
+            let mut topology = network.write().await;
             topology.evict_client(msg.client_id).await;
         };
         let fut = actix::fut::wrap_future(fut);
@@ -232,8 +263,9 @@ impl Handler<DisconnectClient> for TopologyActor {
 
     fn handle(&mut self, msg: DisconnectClient, ctx: &mut Context<Self>) -> Self::Result {
         let client_id = msg.client_id;
+        let network = self.network.clone();
         let fut = async move {
-            let topology = TOPOLOGY.read().await;
+            let topology = network.read().await;
             topology.disconnect_client(&client_id);
         };
         let fut = actix::fut::wrap_future(fut);
@@ -253,8 +285,9 @@ impl Handler<SendOccupantInvite> for TopologyActor {
     type Result = ();
 
     fn handle(&mut self, msg: SendOccupantInvite, ctx: &mut Context<Self>) -> Self::Result {
-        let fut = async {
-            let topology = TOPOLOGY.read().await;
+        let network = self.network.clone();
+        let fut = async move {
+            let topology = network.read().await;
             topology.send_occupant_invite(msg);
         };
         let fut = actix::fut::wrap_future(fut);
@@ -276,8 +309,9 @@ impl Handler<SendMessageFromServices> for TopologyActor {
         send_msg_req: SendMessageFromServices,
         ctx: &mut Context<Self>,
     ) -> Self::Result {
-        let fut = async {
-            let topology = TOPOLOGY.read().await;
+        let network = self.network.clone();
+        let fut = async move {
+            let topology = network.read().await;
             topology.send_msg_from_services(send_msg_req.message).await;
         };
         let fut = actix::fut::wrap_future(fut);
@@ -296,8 +330,9 @@ impl Handler<SendIDEMessage> for TopologyActor {
     type Result = ();
 
     fn handle(&mut self, msg: SendIDEMessage, ctx: &mut Context<Self>) -> Self::Result {
-        let fut = async {
-            let topology = TOPOLOGY.read().await;
+        let network = self.network.clone();
+        let fut = async move {
+            let topology = network.read().await;
             topology.send_ide_msg(msg);
         };
         let fut = actix::fut::wrap_future(fut);
@@ -305,42 +340,205 @@ impl Handler<SendIDEMessage> for TopologyActor {
     }
 }
 
-// methods for querying information from the topology
-// TODO: There might be a better name for this. maybe make this an async builder?
-pub(crate) async fn get_role_request(state: BrowserClientState) -> Option<RoleRequest> {
-    let topology = TOPOLOGY.read().await;
-    topology.get_role_request(state)
+#[derive(Message, Clone)]
+#[rtype(result = "GetRoleRequestTask")]
+pub struct GetRoleRequest {
+    pub(crate) state: BrowserClientState,
 }
 
-pub(crate) async fn get_active_rooms() -> Vec<ProjectId> {
-    let topology = TOPOLOGY.read().await;
-    topology.get_active_rooms()
+#[derive(Message, Clone)]
+#[rtype(result = "()")]
+pub struct GetRoleRequestTask {
+    network: Arc<RwLock<Topology>>,
+    state: BrowserClientState,
 }
 
-pub(crate) async fn get_online_users(filter_names: Option<Vec<String>>) -> Vec<String> {
-    let topology = TOPOLOGY.read().await;
-
-    topology.get_online_users(filter_names)
+impl GetRoleRequestTask {
+    pub(crate) async fn run(self) -> Option<RoleRequest> {
+        let topology = self.network.read().await;
+        topology.get_role_request(self.state)
+    }
 }
 
-pub(crate) async fn get_client_username(client_id: &ClientId) -> Option<String> {
-    let topology = TOPOLOGY.read().await;
-    topology
-        .get_client_username(client_id)
-        .map(|state| state.to_owned())
+impl Handler<GetRoleRequest> for TopologyActor {
+    type Result = MessageResult<GetRoleRequest>;
+
+    fn handle(&mut self, msg: GetRoleRequest, _ctx: &mut Context<Self>) -> Self::Result {
+        MessageResult(GetRoleRequestTask {
+            network: self.network.clone(),
+            state: msg.state,
+        })
+    }
 }
 
-pub(crate) async fn get_client_state(client_id: &ClientId) -> Option<ClientState> {
-    let topology = TOPOLOGY.read().await;
-    topology.get_client_state(client_id).cloned()
+#[derive(Message, Clone)]
+#[rtype(result = "GetActiveRoomsTask")]
+pub struct GetActiveRooms;
+
+#[derive(Message, Clone)]
+#[rtype(result = "()")]
+pub struct GetActiveRoomsTask {
+    network: Arc<RwLock<Topology>>,
 }
 
-pub(crate) async fn get_room_state(project: ProjectMetadata) -> Option<RoomState> {
-    let topology = TOPOLOGY.read().await;
-    topology.get_room_state(project)
+impl GetActiveRoomsTask {
+    pub(crate) async fn run(&self) -> Vec<ProjectId> {
+        let topology = self.network.read().await;
+        topology.get_active_rooms()
+    }
 }
 
-pub(crate) async fn get_external_clients() -> Vec<ExternalClient> {
-    let topology = TOPOLOGY.read().await;
-    topology.get_external_clients()
+impl Handler<GetActiveRooms> for TopologyActor {
+    type Result = MessageResult<GetActiveRooms>;
+
+    fn handle(&mut self, _msg: GetActiveRooms, _ctx: &mut Context<Self>) -> Self::Result {
+        MessageResult(GetActiveRoomsTask {
+            network: self.network.clone(),
+        })
+    }
+}
+
+#[derive(Message, Clone)]
+#[rtype(result = "GetOnlineUsersTask")]
+pub(crate) struct GetOnlineUsers(pub Option<Vec<String>>);
+
+#[derive(Message, Clone)]
+#[rtype(result = "()")]
+pub struct GetOnlineUsersTask {
+    network: Arc<RwLock<Topology>>,
+    allow_names: Option<Vec<String>>,
+}
+
+impl GetOnlineUsersTask {
+    pub(crate) async fn run(self) -> Vec<String> {
+        let topology = self.network.read().await;
+        topology.get_online_users(self.allow_names)
+    }
+}
+
+impl Handler<GetOnlineUsers> for TopologyActor {
+    type Result = MessageResult<GetOnlineUsers>;
+
+    fn handle(&mut self, msg: GetOnlineUsers, _ctx: &mut Context<Self>) -> Self::Result {
+        MessageResult(GetOnlineUsersTask {
+            network: self.network.clone(),
+            allow_names: msg.0,
+        })
+    }
+}
+
+#[derive(Message, Clone)]
+#[rtype(result = "GetClientUsernameTask")]
+pub(crate) struct GetClientUsername(pub ClientId);
+
+#[derive(Message, Clone)]
+#[rtype(result = "()")]
+pub struct GetClientUsernameTask {
+    network: Arc<RwLock<Topology>>,
+    client_id: ClientId,
+}
+
+impl GetClientUsernameTask {
+    pub(crate) async fn run(self) -> Option<String> {
+        let topology = self.network.read().await;
+        topology
+            .get_client_username(&self.client_id)
+            .map(|state| state.to_owned())
+    }
+}
+
+impl Handler<GetClientUsername> for TopologyActor {
+    type Result = MessageResult<GetClientUsername>;
+
+    fn handle(&mut self, msg: GetClientUsername, _ctx: &mut Context<Self>) -> Self::Result {
+        MessageResult(GetClientUsernameTask {
+            network: self.network.clone(),
+            client_id: msg.0,
+        })
+    }
+}
+
+#[derive(Message, Clone)]
+#[rtype(result = "GetClientStateTask")]
+pub(crate) struct GetClientState(pub ClientId);
+
+#[derive(Message, Clone)]
+#[rtype(result = "()")]
+pub struct GetClientStateTask {
+    network: Arc<RwLock<Topology>>,
+    client_id: ClientId,
+}
+
+impl GetClientStateTask {
+    pub(crate) async fn run(self) -> Option<ClientState> {
+        let topology = self.network.read().await;
+        topology.get_client_state(&self.client_id).cloned()
+    }
+}
+
+impl Handler<GetClientState> for TopologyActor {
+    type Result = MessageResult<GetClientState>;
+
+    fn handle(&mut self, msg: GetClientState, _ctx: &mut Context<Self>) -> Self::Result {
+        MessageResult(GetClientStateTask {
+            network: self.network.clone(),
+            client_id: msg.0,
+        })
+    }
+}
+
+#[derive(Message, Clone)]
+#[rtype(result = "GetRoomStateTask")]
+pub(crate) struct GetRoomState(pub ProjectMetadata);
+
+#[derive(Message, Clone)]
+#[rtype(result = "()")]
+pub struct GetRoomStateTask {
+    network: Arc<RwLock<Topology>>,
+    project: ProjectMetadata,
+}
+
+impl GetRoomStateTask {
+    pub(crate) async fn run(self) -> Option<RoomState> {
+        let topology = self.network.read().await;
+        topology.get_room_state(self.project)
+    }
+}
+
+impl Handler<GetRoomState> for TopologyActor {
+    type Result = MessageResult<GetRoomState>;
+
+    fn handle(&mut self, msg: GetRoomState, _ctx: &mut Context<Self>) -> Self::Result {
+        MessageResult(GetRoomStateTask {
+            network: self.network.clone(),
+            project: msg.0,
+        })
+    }
+}
+
+#[derive(Message, Clone)]
+#[rtype(result = "GetExternalClientsTask")]
+pub(crate) struct GetExternalClients;
+
+#[derive(Message, Clone)]
+#[rtype(result = "()")]
+pub struct GetExternalClientsTask {
+    network: Arc<RwLock<Topology>>,
+}
+
+impl GetExternalClientsTask {
+    pub(crate) async fn run(self) -> Vec<ExternalClient> {
+        let topology = self.network.read().await;
+        topology.get_external_clients()
+    }
+}
+
+impl Handler<GetExternalClients> for TopologyActor {
+    type Result = MessageResult<GetExternalClients>;
+
+    fn handle(&mut self, _msg: GetExternalClients, _ctx: &mut Context<Self>) -> Self::Result {
+        MessageResult(GetExternalClientsTask {
+            network: self.network.clone(),
+        })
+    }
 }

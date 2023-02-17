@@ -100,7 +100,7 @@ pub struct LinkedAccount {
 #[serde(rename_all = "camelCase")]
 pub struct LoginRequest {
     pub credentials: Credentials,
-    pub client_id: Option<String>, // TODO: add a secret token for the client?
+    pub client_id: Option<ClientId>, // TODO: add a secret token for the client?
 }
 
 #[derive(Deserialize, Serialize, Debug)]

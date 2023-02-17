@@ -146,9 +146,12 @@ async fn get_room_state(
         _ => app.get_project_metadatum(&project_id).await?,
     };
 
-    let state = topology::get_room_state(metadata)
+    let task = app
+        .network
+        .send(topology::GetRoomState(metadata))
         .await
-        .ok_or(UserError::ProjectNotActiveError)?;
+        .map_err(InternalError::ActixMessageError)?;
+    let state = task.run().await.ok_or(UserError::ProjectNotActiveError)?;
 
     Ok(HttpResponse::Ok().json(state))
 }
@@ -157,9 +160,14 @@ async fn get_room_state(
 async fn get_rooms(app: web::Data<AppData>, session: Session) -> Result<HttpResponse, UserError> {
     ensure_is_super_user(&app, &session).await?;
 
-    let state = topology::get_active_rooms().await;
+    let task = app
+        .network
+        .send(topology::GetActiveRooms {})
+        .await
+        .map_err(InternalError::ActixMessageError)?;
+    let rooms = task.run().await;
 
-    Ok(HttpResponse::Ok().json(state))
+    Ok(HttpResponse::Ok().json(rooms))
 }
 
 #[get("/external")]
@@ -169,7 +177,12 @@ async fn get_external_clients(
 ) -> Result<HttpResponse, UserError> {
     ensure_is_super_user(&app, &session).await?;
 
-    let clients = topology::get_external_clients().await;
+    let task = app
+        .network
+        .send(topology::GetExternalClients {})
+        .await
+        .map_err(InternalError::ActixMessageError)?;
+    let clients = task.run().await;
 
     Ok(HttpResponse::Ok().json(clients))
 }
@@ -228,7 +241,12 @@ async fn ensure_can_evict_client(
     session: &Session,
     client_id: &ClientId,
 ) -> Result<(), UserError> {
-    let client_state = topology::get_client_state(&client_id).await;
+    let task = app
+        .network
+        .send(topology::GetClientState(client_id.clone()))
+        .await
+        .map_err(InternalError::ActixMessageError)?;
+    let client_state = task.run().await;
 
     // Client can be evicted by project owners, collaborators
     if let Some(ClientState::Browser(BrowserClientState { project_id, .. })) = client_state {
@@ -239,7 +257,12 @@ async fn ensure_can_evict_client(
     }
 
     // or by anyone who can edit the corresponding user
-    let client_username = topology::get_client_username(&client_id).await;
+    let task = app
+        .network
+        .send(topology::GetClientUsername(client_id.clone()))
+        .await
+        .map_err(InternalError::ActixMessageError)?;
+    let client_username = task.run().await;
 
     match client_username {
         Some(username) => ensure_can_edit_user(app, session, &username).await,
@@ -417,8 +440,18 @@ async fn get_client_state(
 
     let (client_id,) = path.into_inner();
 
-    let username = topology::get_client_username(&client_id).await;
-    let state = topology::get_client_state(&client_id).await;
+    let task = app
+        .network
+        .send(topology::GetClientUsername(client_id.clone()))
+        .await
+        .map_err(InternalError::ActixMessageError)?;
+    let username = task.run().await;
+    let task = app
+        .network
+        .send(topology::GetClientState(client_id.clone()))
+        .await
+        .map_err(InternalError::ActixMessageError)?;
+    let state = task.run().await;
 
     Ok(HttpResponse::Ok().json(api::ClientInfo { username, state }))
 }

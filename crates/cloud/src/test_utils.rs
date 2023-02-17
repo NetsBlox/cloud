@@ -1,11 +1,12 @@
 use std::sync::{Arc, Mutex};
 
+use actix::Addr;
 use futures::{future::join_all, Future};
 use lazy_static::lazy_static;
 use mongodb::{bson::doc, Client};
 use netsblox_cloud_common::{FriendLink, Group, Project, User};
 
-use crate::{app_data::AppData, config::Settings};
+use crate::{app_data::AppData, config::Settings, network::topology::TopologyActor};
 
 lazy_static! {
     static ref COUNTER: Arc<Mutex<u32>> = Arc::new(Mutex::new(0));
@@ -22,6 +23,7 @@ pub(crate) fn setup() -> TestSetupBuilder {
         groups: Vec::new(),
         clients: Vec::new(),
         friends: Vec::new(),
+        network: None,
     }
 }
 
@@ -32,6 +34,7 @@ pub(crate) struct TestSetupBuilder {
     groups: Vec<Group>,
     clients: Vec<network::Client>,
     friends: Vec<FriendLink>,
+    network: Option<Addr<TopologyActor>>,
 }
 
 impl TestSetupBuilder {
@@ -57,6 +60,11 @@ impl TestSetupBuilder {
 
     pub(crate) fn with_friend_links(mut self, friends: &[FriendLink]) -> Self {
         self.friends.extend_from_slice(friends);
+        self
+    }
+
+    pub(crate) fn with_network(mut self, network: Addr<TopologyActor>) -> Self {
+        self.network = Some(network);
         self
     }
 
@@ -115,9 +123,12 @@ impl TestSetupBuilder {
         }
 
         // Connect the clients
-        self.clients.into_iter().for_each(|client| {
-            client.add_into(&app_data.network);
-        });
+        join_all(
+            self.clients
+                .into_iter()
+                .map(|client| client.add_into(&app_data.network)),
+        )
+        .await;
 
         f(app_data.clone()).await;
 
@@ -229,25 +240,27 @@ pub(crate) mod network {
     use netsblox_cloud_common::api::{ClientId, ClientState};
     use uuid::Uuid;
 
-    use crate::network::topology::{AddClient, ClientCommand, SetClientState, TopologyActor};
+    use crate::network::topology::{
+        AddClient, ClientCommand, SetClientState, SetClientUsername, TopologyActor,
+    };
 
     #[derive(Clone)]
     pub(crate) struct Client {
-        id: ClientId,
+        pub(crate) id: ClientId,
         state: Option<ClientState>,
         username: Option<String>,
     }
 
     impl Client {
         pub(crate) fn new(username: Option<String>, state: Option<ClientState>) -> Self {
-            let id = ClientId::new(Uuid::new_v4().to_string());
+            let id = ClientId::new(format!("_{}", Uuid::new_v4()));
             Self {
                 id,
                 username,
                 state,
             }
         }
-        pub(crate) fn add_into(self, network: &Addr<TopologyActor>) {
+        pub(crate) async fn add_into(self, network: &Addr<TopologyActor>) {
             let id = self.id.clone();
             let username = self.username.clone();
             let state = self.state.clone();
@@ -257,7 +270,7 @@ pub(crate) mod network {
                 id: id.clone(),
                 addr: recipient,
             };
-            network.do_send(add_client);
+            network.send(add_client).await.unwrap();
 
             if let Some(state) = state {
                 let set_state = SetClientState {
@@ -265,7 +278,10 @@ pub(crate) mod network {
                     state,
                     username,
                 };
-                network.do_send(set_state);
+                network.send(set_state).await.unwrap();
+            } else {
+                let set_username = SetClientUsername { id, username };
+                network.send(set_username).await.unwrap();
             }
         }
     }

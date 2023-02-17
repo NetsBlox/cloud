@@ -8,6 +8,7 @@ use crate::common::api::UserRole;
 use crate::common::{BannedAccount, SetPasswordToken, User};
 use crate::errors::{InternalError, UserError};
 use crate::groups::ensure_can_edit_group;
+use crate::network::topology;
 use crate::services::ensure_is_authorized_host;
 use actix_session::Session;
 use actix_web::http::header;
@@ -265,51 +266,75 @@ async fn login(
         return Err(UserError::BannedUserError);
     }
 
-    update_ownership(&app, &client_id, &user.username).await?;
+    if let Some(client_id) = client_id {
+        update_ownership(&app, &client_id, &user.username).await?;
+        app.network.do_send(topology::SetClientUsername {
+            id: client_id,
+            username: Some(user.username.clone()),
+        });
+    }
     session.insert("username", &user.username).unwrap();
     Ok(HttpResponse::Ok().body(user.username))
 }
 
 async fn update_ownership(
     app: &AppData,
-    client_id: &Option<String>,
+    client_id: &api::ClientId,
     username: &str,
 ) -> Result<(), UserError> {
     // Update ownership of current project
-    if let Some(client_id) = &client_id {
-        if !client_id.starts_with('_') {
-            return Err(UserError::InvalidClientIdError);
-        }
+    if !client_id.as_str().starts_with('_') {
+        return Err(UserError::InvalidClientIdError);
+    }
 
-        let query = doc! {"owner": client_id};
-        if let Some(metadata) = app
+    let query = doc! {"owner": client_id.as_str()};
+    if let Some(metadata) = app
+        .project_metadata
+        .find_one(query.clone(), None)
+        .await
+        .map_err(InternalError::DatabaseConnectionError)?
+    {
+        // No project will be found for non-NetsBlox clients such as PyBlox
+        let name = app.get_valid_project_name(username, &metadata.name).await?;
+        let update = doc! {"$set": {"owner": username, "name": name}};
+        let options = mongodb::options::FindOneAndUpdateOptions::builder()
+            .return_document(ReturnDocument::After)
+            .build();
+        let new_metadata = app
             .project_metadata
-            .find_one(query.clone(), None)
+            .find_one_and_update(query, update, Some(options))
             .await
             .map_err(InternalError::DatabaseConnectionError)?
-        {
-            // No project will be found for non-NetsBlox clients such as PyBlox
-            let name = app.get_valid_project_name(username, &metadata.name).await?;
-            let update = doc! {"$set": {"owner": username, "name": name}};
-            let options = mongodb::options::FindOneAndUpdateOptions::builder()
-                .return_document(ReturnDocument::After)
-                .build();
-            let new_metadata = app
-                .project_metadata
-                .find_one_and_update(query, update, Some(options))
-                .await
-                .map_err(InternalError::DatabaseConnectionError)?
-                .ok_or(UserError::ProjectNotFoundError)?;
+            .ok_or(UserError::ProjectNotFoundError)?;
 
-            app.on_room_changed(new_metadata);
-        }
+        app.on_room_changed(new_metadata);
     }
     Ok(())
 }
 
+#[derive(Deserialize, Debug)]
+#[serde(rename_all = "camelCase")]
+struct LogoutQueryParams {
+    pub client_id: Option<api::ClientId>,
+}
+
+// TODO: make sure the username and client ID are already associated
+// TODO: ideally this would make sure there is a client token/secret
 #[post("/logout")]
-async fn logout(session: Session) -> HttpResponse {
+async fn logout(
+    app: web::Data<AppData>,
+    params: web::Query<LogoutQueryParams>,
+    session: Session,
+) -> HttpResponse {
     session.purge();
+
+    if let Some(client_id) = &params.client_id {
+        app.network.do_send(topology::SetClientUsername {
+            id: client_id.clone(),
+            username: None,
+        });
+    }
+
     HttpResponse::Ok().finish()
 }
 
@@ -608,6 +633,8 @@ pub fn config(cfg: &mut web::ServiceConfig) {
 
 #[cfg(test)]
 mod tests {
+    use std::time::Duration;
+
     use crate::test_utils;
 
     use super::*;
@@ -863,6 +890,63 @@ mod tests {
             .await;
     }
 
+    #[actix_web::test]
+    async fn test_login_set_client_username() {
+        let username: String = "user".into();
+        let password: String = "password".into();
+        let user: User = api::NewUser {
+            username: username.clone(),
+            email: "user@netsblox.org".into(),
+            password: Some(password.clone()),
+            group_id: None,
+            role: None,
+        }
+        .into();
+        let client = test_utils::network::Client::new(None, None);
+
+        test_utils::setup()
+            .with_users(&[user.clone()])
+            .with_clients(&[client.clone()])
+            .run(|app_data| async move {
+                let app = test::init_service(
+                    App::new()
+                        .wrap(test_utils::cookie::middleware())
+                        .app_data(web::Data::new(app_data.clone()))
+                        .configure(config),
+                )
+                .await;
+                let credentials = api::LoginRequest {
+                    credentials: Credentials::NetsBlox {
+                        username: username.clone(),
+                        password,
+                    },
+                    client_id: Some(client.id),
+                };
+                let req = test::TestRequest::post()
+                    .uri("/login")
+                    .set_json(&credentials)
+                    .to_request();
+
+                let response = test::call_service(&app, req).await;
+                assert_eq!(response.status(), http::StatusCode::OK);
+
+                // Give it a little time for the actix message to be received
+                // (message passing is async)
+                tokio::time::sleep(Duration::from_millis(10)).await;
+
+                let task = app_data
+                    .network
+                    .send(topology::GetOnlineUsers(None))
+                    .await
+                    .map_err(InternalError::ActixMessageError)
+                    .unwrap();
+                let online_friends = task.run().await;
+                assert_eq!(online_friends.len(), 1);
+                assert!(online_friends.contains(&username));
+            })
+            .await;
+    }
+
     //     #[actix_web::test]
     //     async fn test_login_banned() {
     //         let user = User::from(NewUser::new(
@@ -917,39 +1001,93 @@ mod tests {
     //         todo!();
     //     }
 
-    //     #[actix_web::test]
-    //     async fn test_logout() {
-    //         let user = User::from(NewUser::new(
-    //             "brian".into(),
-    //             "pwd_hash".into(),
-    //             "email".into(),
-    //             None,
-    //         ));
-    //         let (database, _) = init_app_data("login", vec![user])
-    //             .await
-    //             .expect("Unable to seed database");
-    //         // Run the test
-    //         let mut app = test::init_service(
-    //             App::new()
-    //                 .wrap(
-    //                     CookieSession::signed(&[0; 32])
-    //                         .domain("localhost:8080")
-    //                         .name("netsblox")
-    //                         .secure(true),
-    //                 )
-    //                 .app_data(web::Data::new(database))
-    //                 .configure(config),
-    //         )
-    //         .await;
+    #[actix_web::test]
+    async fn test_logout() {
+        let username: String = "user".into();
+        let password: String = "password".into();
+        let user: User = api::NewUser {
+            username: username.clone(),
+            email: "user@netsblox.org".into(),
+            password: Some(password.clone()),
+            group_id: None,
+            role: None,
+        }
+        .into();
 
-    //         let req = test::TestRequest::post().uri("/logout").to_request();
+        test_utils::setup()
+            .with_users(&[user.clone()])
+            .run(|app_data| async {
+                let app = test::init_service(
+                    App::new()
+                        .wrap(test_utils::cookie::middleware())
+                        .app_data(web::Data::new(app_data))
+                        .configure(config),
+                )
+                .await;
+                let req = test::TestRequest::post()
+                    .uri("/logout")
+                    .cookie(test_utils::cookie::new(&username))
+                    .to_request();
 
-    //         let response = test::call_service(&mut app, req).await;
-    //         let cookie = response.headers().get(http::header::SET_COOKIE);
-    //         assert!(cookie.is_some());
-    //         let cookie_data = cookie.unwrap().to_str().unwrap();
-    //         assert!(cookie_data.starts_with("netsblox="));
-    //     }
+                let response = test::call_service(&app, req).await;
+                assert_eq!(response.status(), http::StatusCode::OK);
+                let cookie = response.headers().get(http::header::SET_COOKIE);
+                assert!(cookie.is_some());
+                let cookie_data = cookie.unwrap().to_str().unwrap();
+                assert!(cookie_data.starts_with("test_netsblox=;"));
+            })
+            .await;
+    }
+
+    #[actix_web::test]
+    async fn test_logout_set_client_username() {
+        let username: String = "user".into();
+        let password: String = "password".into();
+        let user: User = api::NewUser {
+            username: username.clone(),
+            email: "user@netsblox.org".into(),
+            password: Some(password.clone()),
+            group_id: None,
+            role: None,
+        }
+        .into();
+        let client = test_utils::network::Client::new(Some(username.clone()), None);
+
+        test_utils::setup()
+            .with_users(&[user.clone()])
+            .with_clients(&[client.clone()])
+            .run(|app_data| async move {
+                let app = test::init_service(
+                    App::new()
+                        .wrap(test_utils::cookie::middleware())
+                        .app_data(web::Data::new(app_data.clone()))
+                        .configure(config),
+                )
+                .await;
+                let req = test::TestRequest::post()
+                    .uri(&format!("/logout?clientId={}", client.id.as_str()))
+                    .cookie(test_utils::cookie::new(&username))
+                    .to_request();
+
+                let response = test::call_service(&app, req).await;
+                assert_eq!(response.status(), http::StatusCode::OK);
+
+                // Give it a little time for the actix message to be received
+                // (message passing is async)
+                tokio::time::sleep(Duration::from_millis(10)).await;
+
+                let task = app_data
+                    .network
+                    .send(topology::GetOnlineUsers(None))
+                    .await
+                    .map_err(InternalError::ActixMessageError)
+                    .unwrap();
+                let online_friends = task.run().await;
+
+                assert_eq!(online_friends.len(), 0);
+            })
+            .await;
+    }
 
     #[actix_web::test]
     async fn test_delete_user_admin() {
