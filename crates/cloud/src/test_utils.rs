@@ -3,7 +3,7 @@ use std::sync::{Arc, Mutex};
 use futures::{future::join_all, Future};
 use lazy_static::lazy_static;
 use mongodb::{bson::doc, Client};
-use netsblox_cloud_common::{Group, Project, User};
+use netsblox_cloud_common::{FriendLink, Group, Project, User};
 
 use crate::{app_data::AppData, config::Settings};
 
@@ -20,6 +20,8 @@ pub(crate) fn setup() -> TestSetupBuilder {
         users: Vec::new(),
         projects: Vec::new(),
         groups: Vec::new(),
+        clients: Vec::new(),
+        friends: Vec::new(),
     }
 }
 
@@ -28,6 +30,8 @@ pub(crate) struct TestSetupBuilder {
     users: Vec<User>,
     projects: Vec<Project>,
     groups: Vec<Group>,
+    clients: Vec<network::Client>,
+    friends: Vec<FriendLink>,
 }
 
 impl TestSetupBuilder {
@@ -46,6 +50,16 @@ impl TestSetupBuilder {
         self
     }
 
+    pub(crate) fn with_clients(mut self, clients: &[network::Client]) -> Self {
+        self.clients.extend_from_slice(clients);
+        self
+    }
+
+    pub(crate) fn with_friend_links(mut self, friends: &[FriendLink]) -> Self {
+        self.friends.extend_from_slice(friends);
+        self
+    }
+
     pub(crate) async fn run<Fut>(self, f: impl FnOnce(AppData) -> Fut)
     where
         Fut: Future<Output = ()>,
@@ -61,7 +75,7 @@ impl TestSetupBuilder {
 
         let app_data = AppData::new(client.clone(), settings, None, None);
 
-        // create the test fixtures (users, projects)
+        // create the test fixtures (users, projects, etc)
         client.database(&db_name).drop(None).await.unwrap();
         join_all(self.projects.iter().map(|proj| async {
             let Project {
@@ -89,6 +103,9 @@ impl TestSetupBuilder {
         if !self.users.is_empty() {
             app_data.users.insert_many(self.users, None).await.unwrap();
         }
+        if !self.friends.is_empty() {
+            app_data.insert_friends(&self.friends).await.unwrap();
+        }
         if !self.groups.is_empty() {
             app_data
                 .groups
@@ -96,6 +113,11 @@ impl TestSetupBuilder {
                 .await
                 .unwrap();
         }
+
+        // Connect the clients
+        self.clients.into_iter().for_each(|client| {
+            client.add_into(&app_data.network);
+        });
 
         f(app_data.clone()).await;
 
@@ -198,6 +220,65 @@ pub(crate) mod project {
             owner: None,
             name: None,
             collaborators: Vec::new(),
+        }
+    }
+}
+
+pub(crate) mod network {
+    use actix::{Actor, Addr, Context, Handler};
+    use netsblox_cloud_common::api::{ClientId, ClientState};
+    use uuid::Uuid;
+
+    use crate::network::topology::{AddClient, ClientCommand, SetClientState, TopologyActor};
+
+    #[derive(Clone)]
+    pub(crate) struct Client {
+        id: ClientId,
+        state: Option<ClientState>,
+        username: Option<String>,
+    }
+
+    impl Client {
+        pub(crate) fn new(username: Option<String>, state: Option<ClientState>) -> Self {
+            let id = ClientId::new(Uuid::new_v4().to_string());
+            Self {
+                id,
+                username,
+                state,
+            }
+        }
+        pub(crate) fn add_into(self, network: &Addr<TopologyActor>) {
+            let id = self.id.clone();
+            let username = self.username.clone();
+            let state = self.state.clone();
+            let addr = self.start();
+            let recipient = addr.recipient();
+            let add_client = AddClient {
+                id: id.clone(),
+                addr: recipient,
+            };
+            network.do_send(add_client);
+
+            if let Some(state) = state {
+                let set_state = SetClientState {
+                    id,
+                    state,
+                    username,
+                };
+                network.do_send(set_state);
+            }
+        }
+    }
+
+    impl Actor for Client {
+        type Context = Context<Self>;
+    }
+
+    impl Handler<ClientCommand> for Client {
+        type Result = ();
+        fn handle(&mut self, _msg: ClientCommand, _ctx: &mut Self::Context) {
+            // We don't yet have any tests that require us to check received messages
+            // but the handlers would go run here
         }
     }
 }

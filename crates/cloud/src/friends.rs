@@ -170,6 +170,17 @@ pub fn config(cfg: &mut web::ServiceConfig) {
 
 #[cfg(test)]
 mod tests {
+    use super::*;
+    use actix_web::test;
+    use actix_web::{web, App};
+    use netsblox_cloud_common::api::ClientState;
+    use netsblox_cloud_common::FriendLink;
+    use netsblox_cloud_common::{
+        api::{self, UserRole},
+        User,
+    };
+
+    use crate::test_utils;
 
     #[actix_web::test]
     #[ignore]
@@ -184,9 +195,84 @@ mod tests {
     }
 
     #[actix_web::test]
-    #[ignore]
     async fn test_list_online_friends() {
-        todo!();
+        // Define users
+        let user: User = api::NewUser {
+            username: "user".into(),
+            email: "user@netsblox.org".into(),
+            password: None,
+            group_id: None,
+            role: Some(UserRole::User),
+        }
+        .into();
+        let f1: User = api::NewUser {
+            username: "f1".into(),
+            email: "user@netsblox.org".into(),
+            password: None,
+            group_id: None,
+            role: Some(UserRole::User),
+        }
+        .into();
+        let f2: User = api::NewUser {
+            username: "f2".into(),
+            email: "user@netsblox.org".into(),
+            password: None,
+            group_id: None,
+            role: Some(UserRole::User),
+        }
+        .into();
+        let nonfriend: User = api::NewUser {
+            username: "nonfriend".into(),
+            email: "user@netsblox.org".into(),
+            password: None,
+            group_id: None,
+            role: Some(UserRole::User),
+        }
+        .into();
+
+        // Define the friend relationships
+        let l1 = FriendLink::new(
+            user.username.clone(),
+            f1.username.clone(),
+            Some(FriendLinkState::APPROVED),
+        );
+        let l2 = FriendLink::new(
+            user.username.clone(),
+            f2.username.clone(),
+            Some(FriendLinkState::APPROVED),
+        );
+
+        // Connect f1, nonfriend
+        let state = ClientState::External(api::ExternalClientState {
+            address: "project".into(),
+            app_id: api::AppId::new("PyBlox"),
+        });
+        let c1 = test_utils::network::Client::new(Some(f1.username.clone()), Some(state.clone()));
+        let c2 = test_utils::network::Client::new(Some(nonfriend.username.clone()), Some(state));
+        test_utils::setup()
+            .with_users(&[user.clone(), f1.clone(), f2, nonfriend])
+            .with_friend_links(&[l1, l2])
+            .with_clients(&[c1, c2])
+            .run(|app_data| async move {
+                let app = test::init_service(
+                    App::new()
+                        .wrap(test_utils::cookie::middleware())
+                        .app_data(web::Data::new(app_data.clone()))
+                        .configure(config),
+                )
+                .await;
+
+                let cookie = test_utils::cookie::new(&user.username);
+                let req = test::TestRequest::get()
+                    .uri(&format!("/{}/online", &user.username))
+                    .cookie(cookie)
+                    .to_request();
+
+                let friends: Vec<String> = test::call_and_read_body_json(&app, req).await;
+                assert_eq!(friends.len(), 1);
+                assert_eq!(friends[0], f1.username);
+            })
+            .await;
     }
 
     #[actix_web::test]

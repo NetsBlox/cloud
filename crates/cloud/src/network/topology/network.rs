@@ -842,7 +842,8 @@ mod tests {
         }
         .into();
         let outsider_id = ClientId::new("_outsider".into());
-        let outsider_state = ClientState::External(ExternalClientState {
+        // FIXME: this will be used once the test is finished
+        let _outsider_state = ClientState::External(ExternalClientState {
             address: String::from("OutsiderAddress"),
             app_id: AppId::new("TestApp"),
         });
