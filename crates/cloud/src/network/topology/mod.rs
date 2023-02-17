@@ -74,7 +74,7 @@ pub struct RemoveClient {
     pub id: ClientId,
 }
 
-#[derive(Message)]
+#[derive(Message, Debug)]
 #[rtype(result = "()")]
 pub struct SetClientState {
     pub id: ClientId,
@@ -82,7 +82,7 @@ pub struct SetClientState {
     pub username: Option<String>,
 }
 
-#[derive(Message)]
+#[derive(Message, Debug)]
 #[rtype(result = "()")]
 pub struct SetClientUsername {
     pub id: ClientId,
