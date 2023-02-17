@@ -40,4 +40,4 @@ lru = "0.7.3"
 lettre = {version = "0.10.0-rc.4", features = ["smtp-transport", "builder"]}
 image = "0.24.2"
 base64 = "0.13.0"
-tokio = { version = "1.13.1", features = ["sync"]}
+tokio = { version = "1.13.1", features = ["sync", "time"]}

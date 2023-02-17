@@ -235,14 +235,14 @@ pub(crate) mod network {
 
     #[derive(Clone)]
     pub(crate) struct Client {
-        id: ClientId,
+        pub(crate) id: ClientId,
         state: Option<ClientState>,
         username: Option<String>,
     }
 
     impl Client {
         pub(crate) fn new(username: Option<String>, state: Option<ClientState>) -> Self {
-            let id = ClientId::new(Uuid::new_v4().to_string());
+            let id = ClientId::new(format!("_{}", Uuid::new_v4()));
             Self {
                 id,
                 username,

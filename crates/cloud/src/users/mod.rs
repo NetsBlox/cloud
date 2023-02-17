@@ -633,6 +633,8 @@ pub fn config(cfg: &mut web::ServiceConfig) {
 
 #[cfg(test)]
 mod tests {
+    use std::time::Duration;
+
     use crate::test_utils;
 
     use super::*;
@@ -884,6 +886,58 @@ mod tests {
                 assert_eq!(response.status(), http::StatusCode::NOT_FOUND);
                 let cookie = response.headers().get(http::header::SET_COOKIE);
                 assert!(cookie.is_none());
+            })
+            .await;
+    }
+
+    #[actix_web::test]
+    async fn test_login_set_client_username() {
+        let username: String = "user".into();
+        let password: String = "password".into();
+        let user: User = api::NewUser {
+            username: username.clone(),
+            email: "user@netsblox.org".into(),
+            password: Some(password.clone()),
+            group_id: None,
+            role: None,
+        }
+        .into();
+        let client = test_utils::network::Client::new(None, None);
+
+        test_utils::setup()
+            .with_users(&[user.clone()])
+            .with_clients(&[client.clone()])
+            .run(|app_data| async {
+                let app = test::init_service(
+                    App::new()
+                        .wrap(test_utils::cookie::middleware())
+                        .app_data(web::Data::new(app_data))
+                        .configure(config),
+                )
+                .await;
+                let credentials = api::LoginRequest {
+                    credentials: Credentials::NetsBlox {
+                        username: username.clone(),
+                        password,
+                    },
+                    client_id: Some(client.id),
+                };
+                let req = test::TestRequest::post()
+                    .uri("/login")
+                    .set_json(&credentials)
+                    .to_request();
+
+                let response = test::call_service(&app, req).await;
+                assert_eq!(response.status(), http::StatusCode::OK);
+
+                // Give it a little time for the actix message to be received
+                // (message passing is async)
+                tokio::time::sleep(Duration::from_millis(10)).await;
+
+                let online_friends = topology::get_online_users(None).await;
+                dbg!(&online_friends);
+                assert_eq!(online_friends.len(), 1);
+                assert!(online_friends.contains(&username));
             })
             .await;
     }
