@@ -363,7 +363,7 @@ impl GetRoleRequestTask {
 impl Handler<GetRoleRequest> for TopologyActor {
     type Result = MessageResult<GetRoleRequest>;
 
-    fn handle(&mut self, msg: GetRoleRequest, ctx: &mut Context<Self>) -> Self::Result {
+    fn handle(&mut self, msg: GetRoleRequest, _ctx: &mut Context<Self>) -> Self::Result {
         MessageResult(GetRoleRequestTask {
             network: self.network.clone(),
             state: msg.state,
@@ -391,7 +391,7 @@ impl GetActiveRoomsTask {
 impl Handler<GetActiveRooms> for TopologyActor {
     type Result = MessageResult<GetActiveRooms>;
 
-    fn handle(&mut self, msg: GetActiveRooms, ctx: &mut Context<Self>) -> Self::Result {
+    fn handle(&mut self, _msg: GetActiveRooms, _ctx: &mut Context<Self>) -> Self::Result {
         MessageResult(GetActiveRoomsTask {
             network: self.network.clone(),
         })
@@ -419,7 +419,7 @@ impl GetOnlineUsersTask {
 impl Handler<GetOnlineUsers> for TopologyActor {
     type Result = MessageResult<GetOnlineUsers>;
 
-    fn handle(&mut self, msg: GetOnlineUsers, ctx: &mut Context<Self>) -> Self::Result {
+    fn handle(&mut self, msg: GetOnlineUsers, _ctx: &mut Context<Self>) -> Self::Result {
         MessageResult(GetOnlineUsersTask {
             network: self.network.clone(),
             allow_names: msg.0,
@@ -450,7 +450,7 @@ impl GetClientUsernameTask {
 impl Handler<GetClientUsername> for TopologyActor {
     type Result = MessageResult<GetClientUsername>;
 
-    fn handle(&mut self, msg: GetClientUsername, ctx: &mut Context<Self>) -> Self::Result {
+    fn handle(&mut self, msg: GetClientUsername, _ctx: &mut Context<Self>) -> Self::Result {
         MessageResult(GetClientUsernameTask {
             network: self.network.clone(),
             client_id: msg.0,
@@ -479,7 +479,7 @@ impl GetClientStateTask {
 impl Handler<GetClientState> for TopologyActor {
     type Result = MessageResult<GetClientState>;
 
-    fn handle(&mut self, msg: GetClientState, ctx: &mut Context<Self>) -> Self::Result {
+    fn handle(&mut self, msg: GetClientState, _ctx: &mut Context<Self>) -> Self::Result {
         MessageResult(GetClientStateTask {
             network: self.network.clone(),
             client_id: msg.0,
@@ -508,7 +508,7 @@ impl GetRoomStateTask {
 impl Handler<GetRoomState> for TopologyActor {
     type Result = MessageResult<GetRoomState>;
 
-    fn handle(&mut self, msg: GetRoomState, ctx: &mut Context<Self>) -> Self::Result {
+    fn handle(&mut self, msg: GetRoomState, _ctx: &mut Context<Self>) -> Self::Result {
         MessageResult(GetRoomStateTask {
             network: self.network.clone(),
             project: msg.0,
@@ -536,7 +536,7 @@ impl GetExternalClientsTask {
 impl Handler<GetExternalClients> for TopologyActor {
     type Result = MessageResult<GetExternalClients>;
 
-    fn handle(&mut self, msg: GetExternalClients, ctx: &mut Context<Self>) -> Self::Result {
+    fn handle(&mut self, _msg: GetExternalClients, _ctx: &mut Context<Self>) -> Self::Result {
         MessageResult(GetExternalClientsTask {
             network: self.network.clone(),
         })
