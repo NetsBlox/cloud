@@ -3,7 +3,7 @@ use std::sync::{Arc, Mutex};
 use futures::{future::join_all, Future};
 use lazy_static::lazy_static;
 use mongodb::{bson::doc, Client};
-use netsblox_cloud_common::{Group, Project, User};
+use netsblox_cloud_common::{FriendLink, Group, Project, User};
 
 use crate::{app_data::AppData, config::Settings};
 
@@ -21,6 +21,7 @@ pub(crate) fn setup() -> TestSetupBuilder {
         projects: Vec::new(),
         groups: Vec::new(),
         clients: Vec::new(),
+        friends: Vec::new(),
     }
 }
 
@@ -30,6 +31,7 @@ pub(crate) struct TestSetupBuilder {
     projects: Vec<Project>,
     groups: Vec<Group>,
     clients: Vec<network::Client>,
+    friends: Vec<FriendLink>,
 }
 
 impl TestSetupBuilder {
@@ -50,6 +52,11 @@ impl TestSetupBuilder {
 
     pub(crate) fn with_clients(mut self, clients: &[network::Client]) -> Self {
         self.clients.extend_from_slice(clients);
+        self
+    }
+
+    pub(crate) fn with_friend_links(mut self, friends: &[FriendLink]) -> Self {
+        self.friends.extend_from_slice(friends);
         self
     }
 
@@ -95,6 +102,9 @@ impl TestSetupBuilder {
         .await;
         if !self.users.is_empty() {
             app_data.users.insert_many(self.users, None).await.unwrap();
+        }
+        if !self.friends.is_empty() {
+            app_data.insert_friends(&self.friends).await.unwrap();
         }
         if !self.groups.is_empty() {
             app_data

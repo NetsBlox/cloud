@@ -1122,6 +1122,16 @@ impl AppData {
     }
 
     #[cfg(test)]
+    pub(crate) async fn insert_friends(&self, friends: &[FriendLink]) -> Result<(), InternalError> {
+        self.friends
+            .insert_many(friends, None)
+            .await
+            .map_err(InternalError::DatabaseConnectionError)?;
+
+        Ok(())
+    }
+
+    #[cfg(test)]
     pub(crate) async fn drop_all_data(&self) -> Result<(), InternalError> {
         let bucket = &self.settings.s3.bucket;
         let request = rusoto_s3::DeleteBucketRequest {
