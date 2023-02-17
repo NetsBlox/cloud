@@ -1,7 +1,7 @@
 use crate::app_data::AppData;
 use crate::common::api::{FriendLinkState, UserRole};
 use crate::errors::{InternalError, UserError};
-use crate::network::topology;
+use crate::network::topology::GetOnlineUsers;
 use crate::users::{ensure_can_edit_user, get_user_role};
 use actix_session::Session;
 use actix_web::{get, post};
@@ -41,7 +41,12 @@ async fn list_online_friends(
         Some(app.get_friends(&owner).await?)
     };
 
-    let online_friends = topology::get_online_users(filter_usernames).await;
+    let task = app
+        .network
+        .send(GetOnlineUsers(filter_usernames))
+        .await
+        .map_err(InternalError::ActixMessageError)?;
+    let online_friends = task.run().await;
 
     Ok(HttpResponse::Ok().json(online_friends))
 }

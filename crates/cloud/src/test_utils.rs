@@ -1,11 +1,12 @@
 use std::sync::{Arc, Mutex};
 
+use actix::Addr;
 use futures::{future::join_all, Future};
 use lazy_static::lazy_static;
 use mongodb::{bson::doc, Client};
 use netsblox_cloud_common::{FriendLink, Group, Project, User};
 
-use crate::{app_data::AppData, config::Settings};
+use crate::{app_data::AppData, config::Settings, network::topology::TopologyActor};
 
 lazy_static! {
     static ref COUNTER: Arc<Mutex<u32>> = Arc::new(Mutex::new(0));
@@ -22,6 +23,7 @@ pub(crate) fn setup() -> TestSetupBuilder {
         groups: Vec::new(),
         clients: Vec::new(),
         friends: Vec::new(),
+        network: None,
     }
 }
 
@@ -32,6 +34,7 @@ pub(crate) struct TestSetupBuilder {
     groups: Vec<Group>,
     clients: Vec<network::Client>,
     friends: Vec<FriendLink>,
+    network: Option<Addr<TopologyActor>>,
 }
 
 impl TestSetupBuilder {
@@ -57,6 +60,11 @@ impl TestSetupBuilder {
 
     pub(crate) fn with_friend_links(mut self, friends: &[FriendLink]) -> Self {
         self.friends.extend_from_slice(friends);
+        self
+    }
+
+    pub(crate) fn with_network(mut self, network: Addr<TopologyActor>) -> Self {
+        self.network = Some(network);
         self
     }
 

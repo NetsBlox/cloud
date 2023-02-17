@@ -907,11 +907,11 @@ mod tests {
         test_utils::setup()
             .with_users(&[user.clone()])
             .with_clients(&[client.clone()])
-            .run(|app_data| async {
+            .run(|app_data| async move {
                 let app = test::init_service(
                     App::new()
                         .wrap(test_utils::cookie::middleware())
-                        .app_data(web::Data::new(app_data))
+                        .app_data(web::Data::new(app_data.clone()))
                         .configure(config),
                 )
                 .await;
@@ -934,8 +934,13 @@ mod tests {
                 // (message passing is async)
                 tokio::time::sleep(Duration::from_millis(10)).await;
 
-                let online_friends = topology::get_online_users(None).await;
-                dbg!(&online_friends);
+                let task = app_data
+                    .network
+                    .send(topology::GetOnlineUsers(None))
+                    .await
+                    .map_err(InternalError::ActixMessageError)
+                    .unwrap();
+                let online_friends = task.run().await;
                 assert_eq!(online_friends.len(), 1);
                 assert!(online_friends.contains(&username));
             })
@@ -1051,11 +1056,11 @@ mod tests {
         test_utils::setup()
             .with_users(&[user.clone()])
             .with_clients(&[client.clone()])
-            .run(|app_data| async {
+            .run(|app_data| async move {
                 let app = test::init_service(
                     App::new()
                         .wrap(test_utils::cookie::middleware())
-                        .app_data(web::Data::new(app_data))
+                        .app_data(web::Data::new(app_data.clone()))
                         .configure(config),
                 )
                 .await;
@@ -1071,8 +1076,14 @@ mod tests {
                 // (message passing is async)
                 tokio::time::sleep(Duration::from_millis(10)).await;
 
-                let online_friends = topology::get_online_users(None).await;
-                dbg!(&online_friends);
+                let task = app_data
+                    .network
+                    .send(topology::GetOnlineUsers(None))
+                    .await
+                    .map_err(InternalError::ActixMessageError)
+                    .unwrap();
+                let online_friends = task.run().await;
+
                 assert_eq!(online_friends.len(), 0);
             })
             .await;
