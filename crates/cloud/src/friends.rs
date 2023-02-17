@@ -173,7 +173,6 @@ mod tests {
     use super::*;
     use actix_web::test;
     use actix_web::{web, App};
-    use netsblox_cloud_common::api::ClientState;
     use netsblox_cloud_common::FriendLink;
     use netsblox_cloud_common::{
         api::{self, UserRole},
@@ -243,12 +242,8 @@ mod tests {
         );
 
         // Connect f1, nonfriend
-        let state = ClientState::External(api::ExternalClientState {
-            address: "project".into(),
-            app_id: api::AppId::new("PyBlox"),
-        });
-        let c1 = test_utils::network::Client::new(Some(f1.username.clone()), Some(state.clone()));
-        let c2 = test_utils::network::Client::new(Some(nonfriend.username.clone()), Some(state));
+        let c1 = test_utils::network::Client::new(Some(f1.username.clone()), None);
+        let c2 = test_utils::network::Client::new(Some(nonfriend.username.clone()), None);
         test_utils::setup()
             .with_users(&[user.clone(), f1.clone(), f2, nonfriend])
             .with_friend_links(&[l1, l2])

@@ -229,7 +229,9 @@ pub(crate) mod network {
     use netsblox_cloud_common::api::{ClientId, ClientState};
     use uuid::Uuid;
 
-    use crate::network::topology::{AddClient, ClientCommand, SetClientState, TopologyActor};
+    use crate::network::topology::{
+        AddClient, ClientCommand, SetClientState, SetClientUsername, TopologyActor,
+    };
 
     #[derive(Clone)]
     pub(crate) struct Client {
@@ -266,6 +268,9 @@ pub(crate) mod network {
                     username,
                 };
                 network.do_send(set_state);
+            } else {
+                let set_username = SetClientUsername { id, username };
+                network.do_send(set_username);
             }
         }
     }
