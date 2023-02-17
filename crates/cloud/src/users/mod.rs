@@ -847,10 +847,7 @@ mod tests {
                 )
                 .await;
                 let credentials = api::LoginRequest {
-                    credentials: Credentials::NetsBlox {
-                        username,
-                        password,
-                    },
+                    credentials: Credentials::NetsBlox { username, password },
                     client_id: None,
                 };
                 let req = test::TestRequest::post()
@@ -859,13 +856,12 @@ mod tests {
                     .to_request();
 
                 let response = test::call_service(&app, req).await;
-                assert_eq!(response.status(), http::StatusCode::FORBIDDEN);
+                assert_eq!(response.status(), http::StatusCode::NOT_FOUND);
                 let cookie = response.headers().get(http::header::SET_COOKIE);
                 assert!(cookie.is_none());
             })
             .await;
     }
-        
 
     //     #[actix_web::test]
     //     async fn test_login_banned() {
