@@ -4,7 +4,7 @@ use actix::Addr;
 use futures::{future::join_all, Future};
 use lazy_static::lazy_static;
 use mongodb::{bson::doc, Client};
-use netsblox_cloud_common::{FriendLink, Group, Project, User};
+use netsblox_cloud_common::{BannedAccount, FriendLink, Group, Project, User};
 
 use crate::{app_data::AppData, config::Settings, network::topology::TopologyActor};
 
@@ -19,6 +19,7 @@ pub(crate) fn setup() -> TestSetupBuilder {
     TestSetupBuilder {
         prefix,
         users: Vec::new(),
+        banned_users: Vec::new(),
         projects: Vec::new(),
         groups: Vec::new(),
         clients: Vec::new(),
@@ -34,12 +35,18 @@ pub(crate) struct TestSetupBuilder {
     groups: Vec<Group>,
     clients: Vec<network::Client>,
     friends: Vec<FriendLink>,
+    banned_users: Vec<String>,
     network: Option<Addr<TopologyActor>>,
 }
 
 impl TestSetupBuilder {
     pub(crate) fn with_users(mut self, users: &[User]) -> Self {
         self.users.extend_from_slice(users);
+        self
+    }
+
+    pub(crate) fn with_banned_users(mut self, banned_users: &[String]) -> Self {
+        self.banned_users.extend_from_slice(banned_users);
         self
     }
 
@@ -108,6 +115,23 @@ impl TestSetupBuilder {
                 .await
         }))
         .await;
+        if !self.banned_users.is_empty() {
+            let banned_users = self.banned_users.into_iter().map(|username| {
+                let email = self
+                    .users
+                    .iter()
+                    .find(|user| user.username == username)
+                    .map(|user| user.email.clone())
+                    .unwrap_or_else(|| String::from("none@netsblox.org"));
+
+                BannedAccount::new(username, email)
+            });
+            app_data
+                .banned_accounts
+                .insert_many(banned_users, None)
+                .await
+                .unwrap();
+        }
         if !self.users.is_empty() {
             app_data.users.insert_many(self.users, None).await.unwrap();
         }
