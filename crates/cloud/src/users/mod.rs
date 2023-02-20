@@ -947,49 +947,46 @@ mod tests {
             .await;
     }
 
-    //     #[actix_web::test]
-    //     async fn test_login_banned() {
-    //         let user = User::from(NewUser::new(
-    //             "brian".into(),
-    //             "pwd_hash".into(),
-    //             "email".into(),
-    //             None,
-    //         ));
-    //         let (app_data, _) = init_app_data("login_bad_pwd", vec![user])
-    //             .await
-    //             .expect("Unable to seed database");
+    #[actix_web::test]
+    async fn test_login_banned() {
+        let username: String = "user".into();
+        let password: String = "password".into();
+        let user: User = api::NewUser {
+            username: username.clone(),
+            email: "user@netsblox.org".into(),
+            password: Some(password.clone()),
+            group_id: None,
+            role: None,
+        }
+        .into();
 
-    //         // Ban the account (manually)
-    //         let collection = app_data.collection::<BannedAccount>("bannedAccounts");
-    //         let banned_account = BannedAccount::new("brian".into(), "email".into());
-    //         collection
-    //             .insert_one(banned_account, None)
-    //             .await
-    //             .expect("Could not insert banned account");
+        test_utils::setup()
+            .with_users(&[user])
+            .with_banned_users(&[username.clone()])
+            .run(|app_data| async move {
+                let app = test::init_service(
+                    App::new()
+                        .wrap(test_utils::cookie::middleware())
+                        .app_data(web::Data::new(app_data))
+                        .configure(config),
+                )
+                .await;
+                let credentials = api::LoginRequest {
+                    credentials: Credentials::NetsBlox { username, password },
+                    client_id: None,
+                };
+                let req = test::TestRequest::post()
+                    .uri("/login")
+                    .set_json(&credentials)
+                    .to_request();
 
-    //         // Run the test
-    //         let mut app = test::init_service(
-    //             App::new()
-    //                 .app_data(web::Data::new(app_data))
-    //                 .configure(config),
-    //         )
-    //         .await;
-
-    //         let credentials = LoginCredentials {
-    //             username: "brian".into(),
-    //             password: "pwd_hash".into(),
-    //             client_id: None,
-    //             strategy: None,
-    //         };
-
-    //         let req = test::TestRequest::post()
-    //             .uri("/login")
-    //             .set_json(&credentials)
-    //             .to_request();
-
-    //         let response = test::call_service(&mut app, req).await;
-    //         assert_eq!(response.status(), http::StatusCode::UNAUTHORIZED);
-    //     }
+                let response = test::call_service(&app, req).await;
+                assert_eq!(response.status(), http::StatusCode::FORBIDDEN);
+                let cookie = response.headers().get(http::header::SET_COOKIE);
+                assert!(cookie.is_none());
+            })
+            .await;
+    }
 
     //     #[actix_web::test]
     //     async fn test_login_with_strategy() {
