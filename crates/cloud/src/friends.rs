@@ -405,9 +405,57 @@ mod tests {
     }
 
     #[actix_web::test]
-    #[ignore]
     async fn test_unfriend() {
-        todo!();
+        // Define users
+        let user: User = api::NewUser {
+            username: "user".into(),
+            email: "user@netsblox.org".into(),
+            password: None,
+            group_id: None,
+            role: Some(UserRole::User),
+        }
+        .into();
+        let f1: User = api::NewUser {
+            username: "f1".into(),
+            email: "user@netsblox.org".into(),
+            password: None,
+            group_id: None,
+            role: Some(UserRole::User),
+        }
+        .into();
+
+        // Define the friend relationships
+        let l1 = FriendLink::new(
+            user.username.clone(),
+            f1.username.clone(),
+            Some(FriendLinkState::APPROVED),
+        );
+
+        test_utils::setup()
+            .with_users(&[user.clone(), f1.clone()])
+            .with_friend_links(&[l1])
+            .run(|app_data| async move {
+                let app = test::init_service(
+                    App::new()
+                        .wrap(test_utils::cookie::middleware())
+                        .app_data(web::Data::new(app_data.clone()))
+                        .configure(config),
+                )
+                .await;
+
+                let cookie = test_utils::cookie::new(&user.username);
+                let req = test::TestRequest::get()
+                    .uri(&format!("/{}/unfriend/{}", &user.username, &f1.username))
+                    .cookie(cookie)
+                    .to_request();
+
+                println!("/{}/unfriend/{}", &user.username, &f1.username);
+                let response = test::call_service(&app, req).await;
+                assert_eq!(response.status(), http::StatusCode::OK);
+                let friends = app_data.get_friends(&user.username).await.unwrap();
+                assert_eq!(friends.len(), 0);
+            })
+            .await;
     }
 
     #[actix_web::test]
@@ -417,9 +465,56 @@ mod tests {
     }
 
     #[actix_web::test]
-    #[ignore]
     async fn test_block_user() {
-        todo!();
+        // Define users
+        let user: User = api::NewUser {
+            username: "user".into(),
+            email: "user@netsblox.org".into(),
+            password: None,
+            group_id: None,
+            role: Some(UserRole::User),
+        }
+        .into();
+        let f1: User = api::NewUser {
+            username: "f1".into(),
+            email: "user@netsblox.org".into(),
+            password: None,
+            group_id: None,
+            role: Some(UserRole::User),
+        }
+        .into();
+
+        // Define the friend relationships
+        let l1 = FriendLink::new(
+            user.username.clone(),
+            f1.username.clone(),
+            Some(FriendLinkState::APPROVED),
+        );
+
+        test_utils::setup()
+            .with_users(&[user.clone(), f1.clone()])
+            .with_friend_links(&[l1])
+            .run(|app_data| async move {
+                let app = test::init_service(
+                    App::new()
+                        .wrap(test_utils::cookie::middleware())
+                        .app_data(web::Data::new(app_data.clone()))
+                        .configure(config),
+                )
+                .await;
+
+                let cookie = test_utils::cookie::new(&user.username);
+                let req = test::TestRequest::get()
+                    .uri(&format!("/{}/block/{}", &user.username, &f1.username))
+                    .cookie(cookie)
+                    .to_request();
+
+                let response = test::call_service(&app, req).await;
+                assert_eq!(response.status(), http::StatusCode::OK);
+                let friends = app_data.get_friends(&user.username).await.unwrap();
+                assert_eq!(friends.len(), 0);
+            })
+            .await;
     }
 
     #[actix_web::test]
