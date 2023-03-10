@@ -1,6 +1,6 @@
 [package]
 name = "netsblox-api"
-version = "0.1.0"
+version = "0.2.0"
 edition = "2021"
 license = "MIT"
 description = """
@@ -13,7 +13,7 @@ A client library for the NetsBlox cloud API
 serde = { version = "1.0.130", features = ["derive"] }
 reqwest = {version = "0.11.9", features = ["json", "cookies"]}
 futures-util = "0.3.19"
-netsblox-api-common = { path = "../api-common", version = "0.1.0" }
+netsblox-api-common = { path = "../api-common", version = "0.2.0" }
 tokio-tungstenite = {version = "0.16.1", features = ["native-tls"] }
 tungstenite = "0.16.0"
 tokio = "1.0.0"
