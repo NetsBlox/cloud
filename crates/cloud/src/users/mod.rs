@@ -229,7 +229,7 @@ fn is_valid_username(name: &str) -> bool {
     let min_len = 3;
     let char_count = name.chars().count();
     lazy_static! {
-        static ref USERNAME_REGEX: Regex = Regex::new(r"^[a-z][a-z0-9_\-]+$").unwrap();
+        static ref USERNAME_REGEX: Regex = Regex::new(r"^[a-zA-Z][a-zA-Z0-9_\-]+$").unwrap();
     }
 
     char_count > min_len
@@ -1298,6 +1298,11 @@ mod tests {
     //     async fn test_link_account_duplicate() {
     //         todo!();
     //     }
+
+    #[actix_web::test]
+    async fn test_is_valid_username_caps() {
+        assert!(super::is_valid_username("HelLo"));
+    }
 
     #[actix_web::test]
     async fn test_is_valid_username() {
