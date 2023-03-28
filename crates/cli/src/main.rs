@@ -1239,7 +1239,7 @@ async fn do_command(mut cfg: Config, args: Cli) -> Result<(), error::Error> {
                 let index = service_hosts
                     .iter()
                     .position(|host| host.url == *url)
-                    .unwrap();
+                    .ok_or(error::Error::ServiceHostNotFoundError)?;
 
                 service_hosts.swap_remove(index);
 
