@@ -6,6 +6,8 @@ pub enum Error {
     APIError(netsblox_api::error::Error),
     #[display(fmt = "Host not found.")]
     HostNotFoundError,
+    #[display(fmt = "Service host not found.")]
+    ServiceHostNotFoundError,
 }
 
 impl From<netsblox_api::error::Error> for Error {
