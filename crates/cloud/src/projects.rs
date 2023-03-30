@@ -605,11 +605,11 @@ async fn save_role(
 ) -> Result<HttpResponse, UserError> {
     let (project_id, role_id) = path.into_inner();
     let metadata = ensure_can_edit_project(&app, &session, None, &project_id).await?;
-    let updated_metdata = app
+    let updated_metadata = app
         .save_role(&metadata, &role_id, body.into_inner())
         .await?;
 
-    Ok(HttpResponse::Ok().json(updated_metdata.state))
+    Ok(HttpResponse::Ok().json(updated_metadata.state))
 }
 
 #[patch("/id/{projectID}/{roleID}")]

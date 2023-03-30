@@ -193,7 +193,7 @@ impl From<Group> for cloud::Group {
         cloud::Group {
             id: cloud::api::GroupId::new(group.id.to_string()),
             name: group.name,
-            owner: group.owner.unwrap_or_else(|| String::from("admin")), // old groups are transfered to the admin account
+            owner: group.owner.unwrap_or_else(|| String::from("admin")), // old groups are transferred to the admin account
             service_settings: HashMap::new(),
             services_hosts: None,
         }
