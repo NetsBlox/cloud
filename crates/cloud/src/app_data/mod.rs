@@ -710,7 +710,7 @@ impl AppData {
         let members: Vec<_> = usernames
             .into_iter()
             .filter(|name| {
-                // Althought unlikely, it's possible that the entries
+                // Although unlikely, it's possible that the entries
                 // have been invalidated from the cache while looking up
                 // the unknown users. In this case, we will be conservative
                 // and just assume they are members.
