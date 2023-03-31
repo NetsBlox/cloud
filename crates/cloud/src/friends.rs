@@ -6,8 +6,9 @@ use crate::users::{ensure_can_edit_user, get_user_role};
 use actix_session::Session;
 use actix_web::{get, post};
 use actix_web::{web, HttpResponse};
+use futures::TryStreamExt;
 use mongodb::bson::doc;
-use mongodb::options::CountOptions;
+use mongodb::options::FindOptions;
 
 #[get("/{owner}/")]
 async fn list_friends(
@@ -116,22 +117,31 @@ async fn send_invite(
     let recipient = recipient.into_inner();
     ensure_can_edit_user(&app, &session, &owner).await?;
 
+    // TODO: block requests into group
+
     // ensure users are valid
-    let options = CountOptions::builder().limit(Some(2)).build();
     let query = doc! {
         "$or": [
             {"username": &owner},
             {"username": &recipient},
         ]
     };
-    let user_count = app
+    let options = FindOptions::builder().limit(Some(2)).build();
+    let users = app
         .users
-        .count_documents(query, options)
+        .find(query, options)
+        .await
+        .map_err(InternalError::DatabaseConnectionError)?
+        .try_collect::<Vec<_>>()
         .await
         .map_err(InternalError::DatabaseConnectionError)?;
 
-    if user_count != 2 {
+    if users.len() != 2 {
         return Err(UserError::UserNotFoundError);
+    }
+
+    if users.into_iter().any(|user| user.is_member()) {
+        return Err(UserError::InviteNotAllowedError);
     }
 
     let state = app.send_invite(&owner, &recipient).await?;
@@ -176,13 +186,13 @@ pub fn config(cfg: &mut web::ServiceConfig) {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use actix_web::test;
+    use actix_web::{http, test};
     use actix_web::{web, App};
-    use netsblox_cloud_common::FriendLink;
     use netsblox_cloud_common::{
         api::{self, UserRole},
         User,
     };
+    use netsblox_cloud_common::{FriendLink, Group};
 
     use crate::test_utils;
 
@@ -306,15 +316,211 @@ mod tests {
     }
 
     #[actix_web::test]
-    #[ignore]
     async fn test_invite_user() {
-        todo!();
+        let user: User = api::NewUser {
+            username: "someUser".into(),
+            email: "someUser@netsblox.org".into(),
+            password: None,
+            group_id: None,
+            role: None,
+        }
+        .into();
+        let other_user: User = api::NewUser {
+            username: "otherUser".into(),
+            email: "otherUser@netsblox.org".into(),
+            password: None,
+            group_id: None,
+            role: None,
+        }
+        .into();
+        test_utils::setup()
+            .with_users(&[user.clone(), other_user])
+            .run(|app_data| async {
+                let app = test::init_service(
+                    App::new()
+                        .app_data(web::Data::new(app_data))
+                        .wrap(test_utils::cookie::middleware())
+                        .configure(config),
+                )
+                .await;
+                let cookie = test_utils::cookie::new(&user.username);
+                let req = test::TestRequest::post()
+                    .uri("/someUser/invite/")
+                    .set_json(String::from("otherUser"))
+                    .cookie(cookie)
+                    .to_request();
+
+                let response = test::call_service(&app, req).await;
+                assert_eq!(response.status(), http::StatusCode::OK);
+
+                //let query = doc!{"username": }
+                //app_data.users.find_one(query, None).await.unwrap();
+                // TODO: check that the invite was sent
+            })
+            .await;
     }
 
     #[actix_web::test]
-    #[ignore]
+    async fn test_invite_nonexistent_user() {
+        let user: User = api::NewUser {
+            username: "someUser".into(),
+            email: "someUser@netsblox.org".into(),
+            password: None,
+            group_id: None,
+            role: None,
+        }
+        .into();
+        test_utils::setup()
+            .with_users(&[user])
+            .run(|app_data| async {
+                let app = test::init_service(
+                    App::new()
+                        .app_data(web::Data::new(app_data))
+                        .wrap(test_utils::cookie::middleware())
+                        .configure(config),
+                )
+                .await;
+                let req = test::TestRequest::post()
+                    .uri("/someUser/invite/")
+                    .set_json(String::from("notAUser"))
+                    .to_request();
+
+                let response = test::call_service(&app, req).await;
+                assert_eq!(response.status(), http::StatusCode::NOT_FOUND);
+            })
+            .await;
+    }
+
+    #[actix_web::test]
+    async fn test_invite_user_member() {
+        let user: User = api::NewUser {
+            username: "someUser".into(),
+            email: "someUser@netsblox.org".into(),
+            password: None,
+            group_id: None,
+            role: None,
+        }
+        .into();
+        let group = Group::new(user.username.clone(), "some_group".into());
+        let member: User = api::NewUser {
+            username: "someMember".into(),
+            email: "someMember@netsblox.org".into(),
+            password: None,
+            group_id: Some(group.id.clone()),
+            role: None,
+        }
+        .into();
+        test_utils::setup()
+            .with_users(&[user.clone(), member])
+            .with_groups(&[group])
+            .run(|app_data| async {
+                let app = test::init_service(
+                    App::new()
+                        .app_data(web::Data::new(app_data))
+                        .wrap(test_utils::cookie::middleware())
+                        .configure(config),
+                )
+                .await;
+                let cookie = test_utils::cookie::new(&user.username);
+                let req = test::TestRequest::post()
+                    .uri("/someUser/invite/")
+                    .set_json(String::from("someMember"))
+                    .cookie(cookie)
+                    .to_request();
+
+                let response = test::call_service(&app, req).await;
+                assert_eq!(response.status(), http::StatusCode::BAD_REQUEST);
+            })
+            .await;
+    }
+
+    #[actix_web::test]
+    async fn test_invite_user_unauth() {
+        let user: User = api::NewUser {
+            username: "someUser".into(),
+            email: "someUser@netsblox.org".into(),
+            password: None,
+            group_id: None,
+            role: None,
+        }
+        .into();
+        let other_user: User = api::NewUser {
+            username: "otherUser".into(),
+            email: "otherUser@netsblox.org".into(),
+            password: None,
+            group_id: None,
+            role: None,
+        }
+        .into();
+
+        test_utils::setup()
+            .with_users(&[user, other_user])
+            .run(|app_data| async {
+                let app = test::init_service(
+                    App::new()
+                        .app_data(web::Data::new(app_data))
+                        .wrap(test_utils::cookie::middleware())
+                        .configure(config),
+                )
+                .await;
+                let req = test::TestRequest::post()
+                    .uri("/someUser/invite/")
+                    .set_json(String::from("target"))
+                    .to_request();
+
+                let response = test::call_service(&app, req).await;
+                assert_eq!(response.status(), http::StatusCode::UNAUTHORIZED);
+            })
+            .await;
+    }
+
+    #[actix_web::test]
     async fn test_invite_user_403() {
-        todo!();
+        let user: User = api::NewUser {
+            username: "someUser".into(),
+            email: "someUser@netsblox.org".into(),
+            password: None,
+            group_id: None,
+            role: None,
+        }
+        .into();
+        let other_user: User = api::NewUser {
+            username: "otherUser".into(),
+            email: "otherUser@netsblox.org".into(),
+            password: None,
+            group_id: None,
+            role: None,
+        }
+        .into();
+        let target: User = api::NewUser {
+            username: "target".into(),
+            email: "target@netsblox.org".into(),
+            password: None,
+            group_id: None,
+            role: None,
+        }
+        .into();
+        test_utils::setup()
+            .with_users(&[user, other_user.clone(), target])
+            .run(|app_data| async {
+                let app = test::init_service(
+                    App::new()
+                        .app_data(web::Data::new(app_data))
+                        .wrap(test_utils::cookie::middleware())
+                        .configure(config),
+                )
+                .await;
+                let cookie = test_utils::cookie::new(&other_user.username);
+                let req = test::TestRequest::post()
+                    .uri("/someUser/invite/")
+                    .set_json(String::from("target"))
+                    .cookie(cookie)
+                    .to_request();
+
+                let response = test::call_service(&app, req).await;
+                assert_eq!(response.status(), http::StatusCode::FORBIDDEN);
+            })
+            .await;
     }
 
     #[actix_web::test]

@@ -31,6 +31,12 @@ pub struct User {
     pub service_settings: HashMap<String, String>,
 }
 
+impl User {
+    pub fn is_member(&self) -> bool {
+        self.group_id.is_some()
+    }
+}
+
 impl From<User> for Bson {
     fn from(user: User) -> Bson {
         Bson::Document(doc! {
