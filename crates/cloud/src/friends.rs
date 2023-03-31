@@ -371,7 +371,7 @@ mod tests {
         }
         .into();
         test_utils::setup()
-            .with_users(&[user])
+            .with_users(&[user.clone()])
             .run(|app_data| async {
                 let app = test::init_service(
                     App::new()
@@ -380,9 +380,11 @@ mod tests {
                         .configure(config),
                 )
                 .await;
+                let cookie = test_utils::cookie::new(&user.username);
                 let req = test::TestRequest::post()
                     .uri("/someUser/invite/")
                     .set_json(String::from("notAUser"))
+                    .cookie(cookie)
                     .to_request();
 
                 let response = test::call_service(&app, req).await;
