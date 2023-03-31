@@ -229,7 +229,7 @@ fn is_valid_username(name: &str) -> bool {
     let min_len = 3;
     let char_count = name.chars().count();
     lazy_static! {
-        static ref USERNAME_REGEX: Regex = Regex::new(r"^[a-z][a-z0-9_\-]+$").unwrap();
+        static ref USERNAME_REGEX: Regex = Regex::new(r"^[a-zA-Z][a-zA-Z0-9_\-]+$").unwrap();
     }
 
     char_count > min_len
@@ -719,7 +719,19 @@ mod tests {
 
     #[actix_web::test]
     async fn test_create_member_unauth() {
+        let owner_name = String::from("admin");
+        let owner: User = api::NewUser {
+            username: owner_name.clone(),
+            email: "owner@netsblox.org".into(),
+            password: None,
+            group_id: None,
+            role: None,
+        }
+        .into();
+        let group = Group::new(owner_name, "some_group".into());
         test_utils::setup()
+            .with_users(&[owner])
+            .with_groups(&[group.clone()])
             .run(|app_data| async {
                 let app = test::init_service(
                     App::new()
@@ -731,7 +743,7 @@ mod tests {
                     username: "someMember".into(),
                     email: "test@gmail.com".into(),
                     password: Some("pwd".into()),
-                    group_id: None,
+                    group_id: Some(group.id),
                     role: Some(UserRole::User),
                 };
                 let req = test::TestRequest::post()
@@ -740,36 +752,99 @@ mod tests {
                     .to_request();
 
                 let response = test::call_service(&app, req).await;
-                assert_eq!(response.status(), http::StatusCode::BAD_REQUEST);
+                assert_eq!(response.status(), http::StatusCode::UNAUTHORIZED);
             })
             .await;
     }
 
     #[actix_web::test]
     async fn test_create_member_nonowner() {
+        let owner: User = api::NewUser {
+            username: "owner".into(),
+            email: "owner@netsblox.org".into(),
+            password: None,
+            group_id: None,
+            role: None,
+        }
+        .into();
+        let other_user: User = api::NewUser {
+            username: "otherUser".into(),
+            email: "someUser@netsblox.org".into(),
+            password: None,
+            group_id: None,
+            role: None,
+        }
+        .into();
+        let group = Group::new(owner.username.clone(), "some_group".into());
         test_utils::setup()
+            .with_users(&[owner, other_user.clone()])
+            .with_groups(&[group.clone()])
             .run(|app_data| async {
-                let user_data = api::NewUser {
-                    username: "someMember".into(),
-                    email: "test@gmail.com".into(),
-                    password: Some("pwd".into()),
-                    group_id: None,
-                    role: Some(UserRole::User),
-                };
-                let req = test::TestRequest::post()
-                    .uri("/create")
-                    .set_json(&user_data)
-                    .to_request();
-
                 let app = test::init_service(
                     App::new()
                         .app_data(web::Data::new(app_data))
+                        .wrap(test_utils::cookie::middleware())
                         .configure(config),
                 )
                 .await;
 
+                let user_data = api::NewUser {
+                    username: "someMember".into(),
+                    email: "test@gmail.com".into(),
+                    password: Some("pwd".into()),
+                    group_id: Some(group.id),
+                    role: Some(UserRole::User),
+                };
+                let req = test::TestRequest::post()
+                    .uri("/create")
+                    .cookie(test_utils::cookie::new(&other_user.username))
+                    .set_json(&user_data)
+                    .to_request();
+
                 let response = test::call_service(&app, req).await;
-                assert_eq!(response.status(), http::StatusCode::BAD_REQUEST);
+                assert_eq!(response.status(), http::StatusCode::FORBIDDEN);
+            })
+            .await;
+    }
+
+    #[actix_web::test]
+    async fn test_create_member_owner() {
+        let owner: User = api::NewUser {
+            username: "owner".into(),
+            email: "owner@netsblox.org".into(),
+            password: None,
+            group_id: None,
+            role: None,
+        }
+        .into();
+        let group = Group::new(owner.username.clone(), "some_group".into());
+        test_utils::setup()
+            .with_users(&[owner.clone()])
+            .with_groups(&[group.clone()])
+            .run(|app_data| async {
+                let app = test::init_service(
+                    App::new()
+                        .app_data(web::Data::new(app_data))
+                        .wrap(test_utils::cookie::middleware())
+                        .configure(config),
+                )
+                .await;
+
+                let user_data = api::NewUser {
+                    username: "someMember".into(),
+                    email: "test@gmail.com".into(),
+                    password: Some("pwd".into()),
+                    group_id: Some(group.id),
+                    role: Some(UserRole::User),
+                };
+                let req = test::TestRequest::post()
+                    .uri("/create")
+                    .cookie(test_utils::cookie::new(&owner.username))
+                    .set_json(&user_data)
+                    .to_request();
+
+                let response = test::call_service(&app, req).await;
+                assert_eq!(response.status(), http::StatusCode::OK);
             })
             .await;
     }
@@ -1298,6 +1373,11 @@ mod tests {
     //     async fn test_link_account_duplicate() {
     //         todo!();
     //     }
+
+    #[actix_web::test]
+    async fn test_is_valid_username_caps() {
+        assert!(super::is_valid_username("HelLo"));
+    }
 
     #[actix_web::test]
     async fn test_is_valid_username() {
