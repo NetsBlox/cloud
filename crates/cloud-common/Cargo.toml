@@ -1,6 +1,6 @@
 [package]
 name = "netsblox-cloud-common"
-version = "0.3.0"
+version = "0.4.0"
 edition = "2021"
 license = "MIT"
 description = """
@@ -14,7 +14,7 @@ serde = "1.0.130"
 serde_json = "1.0.59"
 mongodb = "2.1.0"
 passwords = "3.1.8"
-netsblox-api-common = { path = "../api-common", version = "0.3.0", features = ["to_bson"] }
+netsblox-api-common = { path = "../api-common", version = "0.4.0", features = ["to_bson"] }
 uuid = { version = "1.0.0-alpha.1", features = ["v4", "fast-rng"] }
 sha2 = "0.10.0"
 hex = "0.4.3"
