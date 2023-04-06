@@ -1376,7 +1376,7 @@ mod tests {
 
     #[actix_web::test]
     async fn test_is_valid_username_caps() {
-        assert!(super::is_valid_username("HelLo"));
+        assert!(super::is_valid_username("HelloWorld"));
     }
 
     #[actix_web::test]
