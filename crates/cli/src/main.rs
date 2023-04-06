@@ -545,6 +545,8 @@ enum Friends {
 /// Connect to different instances of NetsBlox cloud
 #[derive(Subcommand, Debug)]
 enum Host {
+    /// Print the active host name
+    View,
     /// Use the given host for subsequent commands
     Use { name: String },
     /// List all known cloud instances
@@ -1519,14 +1521,28 @@ async fn do_command(mut cfg: Config, args: Cli) -> Result<(), error::Error> {
             }
         },
         Command::Host(cmd) => match &cmd.subcmd {
+            Host::View => {
+                println!("{}", cfg.current_host);
+            }
             Host::List => {
                 cfg.hosts.into_iter().for_each(|(name, config)| {
-                    println!(
-                        "{}\t{}\t{}",
-                        name,
-                        config.url,
-                        config.username.unwrap_or_default()
-                    );
+                    let is_active = cfg.current_host == name;
+                    let line = if is_active {
+                        format!(
+                            "{}\t{}\t{} (current)",
+                            name,
+                            config.url,
+                            config.username.unwrap_or_default()
+                        )
+                    } else {
+                        format!(
+                            "{}\t{}\t{}",
+                            name,
+                            config.url,
+                            config.username.unwrap_or_default()
+                        )
+                    };
+                    println!("{}", line);
                 });
             }
             Host::Add { name, url } => {
