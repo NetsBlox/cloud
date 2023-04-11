@@ -618,6 +618,7 @@ struct HostCommand {
 }
 
 #[derive(Parser, Debug)]
+#[clap(author, version, about)]
 enum Command {
     /// Authenticate with NetsBlox cloud
     Login,
