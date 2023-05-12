@@ -922,7 +922,7 @@ async fn do_command(mut cfg: Config, args: Cli) -> Result<(), error::Error> {
                 };
 
                 for project in projects {
-                    println!("{:?}", project);
+                    println!("{}", serde_json::to_string(&project).unwrap());
                 }
             }
             Projects::Publish { project, user } => {
@@ -958,7 +958,7 @@ async fn do_command(mut cfg: Config, args: Cli) -> Result<(), error::Error> {
                 let username = user.clone().unwrap_or_else(|| get_current_user(cfg.host()));
                 let invites = client.list_collaboration_invites(&username).await?;
                 for invite in invites {
-                    println!("{:?}", invite);
+                    println!("{}", serde_json::to_string(&invite).unwrap());
                 }
             }
             Projects::AcceptInvite {
@@ -1046,7 +1046,7 @@ async fn do_command(mut cfg: Config, args: Cli) -> Result<(), error::Error> {
             Network::List { external } => {
                 if *external {
                     for client in client.list_external_clients().await? {
-                        println!("{:?}", client);
+                        println!("{}", serde_json::to_string(&client).unwrap());
                     }
                 } else {
                     for project_id in client.list_networks().await? {
@@ -1066,11 +1066,11 @@ async fn do_command(mut cfg: Config, args: Cli) -> Result<(), error::Error> {
                     client.get_project_metadata(&owner, project).await?.id
                 };
                 let state = client.get_room_state(&project_id).await?;
-                println!("{:?}", state);
+                println!("{}", serde_json::to_string(&state).unwrap());
             }
             Network::ViewClient { client_id } => {
                 let state = client.get_client_state(client_id).await?;
-                println!("{:?}", state);
+                println!("{}", serde_json::to_string(&state).unwrap());
             }
             Network::Connect { address } => {
                 let channel = client.connect(address).await?;
@@ -1122,7 +1122,7 @@ async fn do_command(mut cfg: Config, args: Cli) -> Result<(), error::Error> {
             Friends::ListInvites { user } => {
                 let username = user.clone().unwrap_or_else(|| get_current_user(cfg.host()));
                 for invite in client.list_friend_invites(&username).await? {
-                    println!("{:?}", invite);
+                    println!("{}", serde_json::to_string(&invite).unwrap());
                 }
             }
             Friends::Block { username, user } => {
