@@ -327,8 +327,9 @@ async fn migrate_users(src_db: &Database, dst_db: &Database) {
         let new_group: cloud::Group = group.into();
         let query = doc! {"id": &new_group.id};
         let update = doc! {"$setOnInsert": &new_group};
+        let opts = UpdateOptions::builder().upsert(true).build();
         dst_groups
-            .update_one(query, update, None)
+            .update_one(query, update, opts)
             .await
             .unwrap_or_else(|_err| panic!("Unable to update group: {}", &new_group.id));
         progress.inc(1);
@@ -361,7 +362,8 @@ async fn migrate_libraries(src_db: &Database, dst_db: &Database) {
             "name": &new_lib.name
         };
         let update = doc! {"$setOnInsert": &new_lib};
-        dst_libraries.update_one(query, update, None).await.unwrap();
+        let opts = UpdateOptions::builder().upsert(true).build();
+        dst_libraries.update_one(query, update, opts).await.unwrap();
         progress.inc(1);
     }
     progress.println("Library migration complete.");
@@ -391,7 +393,8 @@ async fn migrate_banned_accts(src_db: &Database, dst_db: &Database) {
             "username": &new_acct.username,
         };
         let update = doc! {"$setOnInsert": &new_acct};
-        dst_bans.update_one(query, update, None).await.unwrap();
+        let opts = UpdateOptions::builder().upsert(true).build();
+        dst_bans.update_one(query, update, opts).await.unwrap();
 
         progress.inc(1);
     }
