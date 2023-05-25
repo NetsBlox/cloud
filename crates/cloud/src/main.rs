@@ -71,6 +71,7 @@ async fn main() -> std::io::Result<()> {
         .await
         .expect("Could not connect to mongodb.");
 
+    // TODO: add metrics
     let app_data = AppData::new(client, Settings::new().unwrap(), None, None);
     app_data
         .initialize()
