@@ -462,6 +462,12 @@ impl Topology {
     pub fn add_client(&mut self, msg: AddClient) {
         let client = Client::new(msg.id.clone(), msg.addr);
         self.clients.insert(msg.id, client);
+        // let app_data = self.app_data;
+        // if let Some(app_data) = app_data {
+        //     app_data
+        //         .metrics
+        //         .record_connected_clients(self.clients.len());
+        // }
     }
 
     pub async fn set_broken_client(&mut self, msg: BrokenClient) -> Result<(), InternalError> {

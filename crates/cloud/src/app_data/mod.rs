@@ -5,7 +5,6 @@ use crate::common::api::{
 };
 //pub use self::
 use actix_web::rt::time;
-use actix_web::HttpRequest;
 use futures::future::join_all;
 use futures::join;
 use lazy_static::lazy_static;

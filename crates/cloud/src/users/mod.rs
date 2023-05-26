@@ -208,6 +208,7 @@ async fn create_user(
         if let Some(group_id) = user.group_id {
             app.group_members_updated(&group_id).await;
         }
+        app.metrics.record_signup(&user.username);
         Ok(HttpResponse::Ok().body("User created"))
     }
 }
@@ -280,7 +281,7 @@ async fn login(
         });
     }
     session.insert("username", &user.username).unwrap();
-    app.metrics.record_login(&user.username, req_addr);
+    app.metrics.record_login(&user.username);
     Ok(HttpResponse::Ok().body(user.username))
 }
 
