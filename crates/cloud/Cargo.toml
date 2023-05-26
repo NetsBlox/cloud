@@ -42,3 +42,4 @@ image = "0.24.2"
 base64 = "0.13.0"
 tokio = { version = "1.13.1", features = ["sync", "time"]}
 actix-web-prom = "0.6.0"
+prometheus = "0.13.3"

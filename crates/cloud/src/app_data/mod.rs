@@ -1,6 +1,9 @@
+pub(crate) mod metrics;
+
 use crate::common::api::{
     oauth, LibraryMetadata, NewUser, ProjectId, PublishState, RoleId, UserRole,
 };
+//pub use self::
 use actix_web::rt::time;
 use actix_web::HttpRequest;
 use futures::future::join_all;
@@ -19,6 +22,7 @@ use rusoto_core::Region;
 use serde::{Deserialize, Serialize};
 use std::borrow::Borrow;
 use std::collections::{HashMap, HashSet};
+use std::net::IpAddr;
 use std::sync::{Arc, RwLock};
 use std::time::Duration;
 use tokio::sync::RwLock as AsyncRwLock;
@@ -87,6 +91,7 @@ pub struct AppData {
     pub(crate) oauth_tokens: Collection<OAuthToken>,
     pub(crate) oauth_codes: Collection<oauth::Code>,
 
+    pub(crate) metrics: metrics::Metrics,
     mailer: SmtpTransport,
     sender: Mailbox,
 }
@@ -181,6 +186,8 @@ impl AppData {
             oauth_clients,
             oauth_tokens,
             oauth_codes,
+
+            metrics: metrics::Metrics::new(),
 
             tor_exit_nodes,
             recorded_messages,
@@ -1073,26 +1080,21 @@ impl AppData {
     }
 
     // Tor-related restrictions
-    pub async fn ensure_not_tor_ip(&self, req: HttpRequest) -> Result<(), UserError> {
-        match req.peer_addr().map(|addr| addr.ip()) {
-            Some(addr) => {
-                let addr = addr.to_string();
-                let query = doc! {"addr": &addr};
-                let node = self
-                    .tor_exit_nodes
-                    .find_one(query, None)
-                    .await
-                    .map_err(InternalError::DatabaseConnectionError)?;
+    pub async fn ensure_not_tor_ip(&self, ip_addr: &IpAddr) -> Result<(), UserError> {
+        let ip_addr = ip_addr.to_string();
+        let query = doc! {"addr": &ip_addr};
+        let node = self
+            .tor_exit_nodes
+            .find_one(query, None)
+            .await
+            .map_err(InternalError::DatabaseConnectionError)?;
 
-                if node.is_some() {
-                    Err(UserError::TorAddressError)
-                } else if is_opera_vpn(&addr) {
-                    Err(UserError::OperaVPNError)
-                } else {
-                    Ok(())
-                }
-            }
-            None => Ok(()),
+        if node.is_some() {
+            Err(UserError::TorAddressError)
+        } else if is_opera_vpn(&ip_addr) {
+            Err(UserError::OperaVPNError)
+        } else {
+            Ok(())
         }
     }
 

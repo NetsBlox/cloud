@@ -71,7 +71,6 @@ async fn main() -> std::io::Result<()> {
         .await
         .expect("Could not connect to mongodb.");
 
-    // TODO: add metrics
     let app_data = AppData::new(client, Settings::new().unwrap(), None, None);
     app_data
         .initialize()
@@ -92,6 +91,7 @@ async fn main() -> std::io::Result<()> {
 
         App::new()
             .wrap(cors)
+            .wrap(app_data.metrics.handler())
             .wrap(session_middleware(&config))
             .wrap(middleware::Logger::default())
             .wrap_fn(|req, srv| {
