@@ -208,7 +208,7 @@ async fn create_user(
         if let Some(group_id) = user.group_id {
             app.group_members_updated(&group_id).await;
         }
-        app.metrics.record_signup(&user.username);
+        app.metrics.record_signup();
         Ok(HttpResponse::Ok().body("User created"))
     }
 }
