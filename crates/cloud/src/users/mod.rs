@@ -281,7 +281,7 @@ async fn login(
         });
     }
     session.insert("username", &user.username).unwrap();
-    app.metrics.record_login(&user.username);
+    app.metrics.record_login();
     Ok(HttpResponse::Ok().body(user.username))
 }
 

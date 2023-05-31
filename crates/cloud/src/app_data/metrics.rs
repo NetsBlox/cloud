@@ -1,7 +1,7 @@
 use actix_web_prom::{PrometheusMetrics, PrometheusMetricsBuilder};
 use prometheus::{opts, IntCounter, IntCounterVec, IntGauge};
 
-/// Metrics are used to record various metrics on the server. These include:
+/// This is used to record various server metrics for use with prometheus. Metrics include:
 ///  - logins (username, program?)
 ///  - signups (username)
 ///  - active users (program)
@@ -11,10 +11,10 @@ use prometheus::{opts, IntCounter, IntCounterVec, IntGauge};
 #[derive(Clone)]
 pub(crate) struct Metrics {
     prometheus: PrometheusMetrics,
-    logins: IntCounterVec,
+    logins: IntCounter,
     signups: IntCounter,
     clients: IntGauge,
-    sent_messages: IntCounterVec,
+    sent_messages: IntCounter,
 }
 
 impl Metrics {
@@ -24,8 +24,7 @@ impl Metrics {
             .build()
             .unwrap();
 
-        let login_opts = opts!("netsblox_logins", "logins");
-        let logins = IntCounterVec::new(login_opts, &["username"]).unwrap();
+        let logins = IntCounter::new("netsblox_logins", "NetsBlox logins").unwrap();
         prometheus
             .registry
             .register(Box::new(logins.clone()))
@@ -43,8 +42,8 @@ impl Metrics {
             .register(Box::new(clients.clone()))
             .unwrap();
 
-        let sent_message_opts = opts!("netsblox_sent_messages", "NetsBlox messages sent (by user)");
-        let sent_messages = IntCounterVec::new(sent_message_opts, &["sender"]).unwrap();
+        let sent_messages =
+            IntCounter::new("netsblox_sent_messages", "NetsBlox messages sent").unwrap();
         prometheus
             .registry
             .register(Box::new(sent_messages.clone()))
@@ -65,9 +64,8 @@ impl Metrics {
         self.prometheus.clone()
     }
 
-    // TODO: record failed login attempts?
-    pub(crate) fn record_login(&self, username: &str) {
-        self.logins.with_label_values(&[username]).inc();
+    pub(crate) fn record_login(&self) {
+        self.logins.inc();
     }
 
     pub(crate) fn record_signup(&self) {
@@ -78,8 +76,7 @@ impl Metrics {
         self.clients.set(count as i64);
     }
 
-    pub(crate) fn record_msg_sent(&self, sender: Option<&str>) {
-        let sender_lbl = sender.unwrap_or("_guest");
-        self.sent_messages.with_label_values(&[sender_lbl]).inc();
+    pub(crate) fn record_msg_sent(&self) {
+        self.sent_messages.inc();
     }
 }

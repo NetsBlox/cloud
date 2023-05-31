@@ -351,8 +351,7 @@ impl Topology {
                     .unwrap();
             }
 
-            let sender = self.usernames.get(&msg.sender).map(|s| s.as_str());
-            app.metrics.record_msg_sent(sender);
+            app.metrics.record_msg_sent();
         }
     }
 
