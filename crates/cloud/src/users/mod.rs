@@ -158,7 +158,11 @@ async fn create_user(
     user_data: web::Json<api::NewUser>,
     session: Session,
 ) -> Result<HttpResponse, UserError> {
-    app.ensure_not_tor_ip(req).await?;
+    let req_addr = req.peer_addr().map(|addr| addr.ip());
+    if let Some(addr) = req_addr {
+        app.ensure_not_tor_ip(&addr).await?;
+    }
+
     ensure_valid_email(&user_data.email)?;
     // TODO: record IP? Definitely
     // TODO: add more security features. Maybe activate accounts?
@@ -204,6 +208,7 @@ async fn create_user(
         if let Some(group_id) = user.group_id {
             app.group_members_updated(&group_id).await;
         }
+        app.metrics.record_signup();
         Ok(HttpResponse::Ok().body("User created"))
     }
 }
@@ -245,8 +250,10 @@ async fn login(
     request: web::Json<api::LoginRequest>,
     session: Session,
 ) -> Result<HttpResponse, UserError> {
-    // TODO: record login IPs?
-    app.ensure_not_tor_ip(req).await?;
+    let req_addr = req.peer_addr().map(|addr| addr.ip());
+    if let Some(addr) = req_addr {
+        app.ensure_not_tor_ip(&addr).await?;
+    }
 
     let request = request.into_inner();
     let client_id = request.client_id.clone();
@@ -274,6 +281,7 @@ async fn login(
         });
     }
     session.insert("username", &user.username).unwrap();
+    app.metrics.record_login();
     Ok(HttpResponse::Ok().body(user.username))
 }
 
@@ -405,7 +413,11 @@ async fn reset_password(
     req: HttpRequest,
     path: web::Path<(String,)>,
 ) -> Result<HttpResponse, UserError> {
-    app.ensure_not_tor_ip(req).await?;
+    let req_addr = req.peer_addr().map(|addr| addr.ip());
+    if let Some(addr) = req_addr {
+        app.ensure_not_tor_ip(&addr).await?;
+    }
+
     let (username,) = path.into_inner();
     let user = app
         .users

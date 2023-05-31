@@ -350,6 +350,8 @@ impl Topology {
                     .await
                     .unwrap();
             }
+
+            app.metrics.record_msg_sent();
         }
     }
 
@@ -462,6 +464,12 @@ impl Topology {
     pub fn add_client(&mut self, msg: AddClient) {
         let client = Client::new(msg.id.clone(), msg.addr);
         self.clients.insert(msg.id, client);
+        let app_data = &self.app_data;
+        if let Some(app_data) = app_data {
+            app_data
+                .metrics
+                .record_connected_clients(self.clients.len());
+        }
     }
 
     pub async fn set_broken_client(&mut self, msg: BrokenClient) -> Result<(), InternalError> {
@@ -486,6 +494,13 @@ impl Topology {
     pub async fn remove_client(&mut self, msg: RemoveClient) {
         self.clients.remove(&msg.id);
         self.reset_client_state(&msg.id, None).await;
+
+        let app_data = &self.app_data;
+        if let Some(app_data) = app_data {
+            app_data
+                .metrics
+                .record_connected_clients(self.clients.len());
+        }
     }
 
     async fn reset_client_state(&mut self, id: &ClientId, new_project_id: Option<ProjectId>) {

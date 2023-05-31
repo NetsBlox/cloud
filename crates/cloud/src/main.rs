@@ -91,6 +91,7 @@ async fn main() -> std::io::Result<()> {
 
         App::new()
             .wrap(cors)
+            .wrap(app_data.metrics.handler())
             .wrap(session_middleware(&config))
             .wrap(middleware::Logger::default())
             .wrap_fn(|req, srv| {
