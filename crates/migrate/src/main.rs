@@ -7,7 +7,7 @@ use std::{collections::HashMap, thread};
 
 use crate::config::Config;
 use clap::Parser;
-use cloud::api::{PublishState, SaveState};
+use cloud::api::SaveState;
 use derive_more::{Display, Error};
 use futures::{future::join_all, stream::StreamExt, TryStreamExt};
 use indicatif::ProgressBar;
@@ -113,17 +113,7 @@ async fn download(
         .map(|timestamp| DateTime::from_millis(timestamp as i64))
         .unwrap_or_else(DateTime::now);
 
-    let state = metadata
-        .public
-        .map(|is_public| {
-            if is_public {
-                PublishState::Public
-            } else {
-                PublishState::Private
-            }
-        })
-        .unwrap_or(PublishState::Private);
-
+    let state = metadata.state();
     let project_id = cloud::api::ProjectId::new(metadata.id.to_string());
     let owner = metadata.owner;
     let name = metadata.name;
@@ -191,7 +181,7 @@ async fn upload(
         join_all(role_iter.map(|(_id, data)| upload_role(client, bucket, &owner, &name, data)))
             .await
             .into_iter();
-    let roles: HashMap<_, _> = role_ids.zip(role_data).into_iter().collect();
+    let roles: HashMap<_, _> = role_ids.zip(role_data).collect();
 
     cloud::ProjectMetadata {
         id: project.id,
@@ -424,15 +414,31 @@ async fn migrate_projects(config: &Config, src_db: &Database, dst_db: &Database)
             "owner": &metadata.owner,
             "name": &metadata.name,
         };
-        let exists = dst_projects.find_one(query, None).await.unwrap().is_some();
-        if !exists {
+        let dst_project = dst_projects.find_one(query, None).await.unwrap();
+        let needs_throttle = if let Some(dst_proj) = dst_project {
+            // check the public state
+            let state = metadata.state();
+            if state != dst_proj.state {
+                let query = doc! {"_id": metadata.id};
+                let update = doc! {"$set": {"state": state}};
+                dst_projects.update_one(query, update, None).await.unwrap();
+                true
+            } else {
+                false
+            }
+        } else {
             let project = download(&src_s3, &config.source.s3.bucket, metadata).await;
             let metadata = upload(&dst_s3, &config.target.s3.bucket, project).await;
             dst_projects.insert_one(&metadata, None).await.unwrap();
+            true
+        };
+
+        progress.inc(1);
+
+        if needs_throttle {
             // throttle to about 2k req/sec to avoid 503 errors from AWS
             thread::sleep(Duration::from_millis(10));
         }
-        progress.inc(1);
     }
     progress.println("Project migration complete.");
     progress.finish();

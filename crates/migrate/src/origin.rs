@@ -149,6 +149,20 @@ pub(crate) struct ProjectMetadata {
     pub(crate) public: Option<bool>,
 }
 
+impl ProjectMetadata {
+    pub(crate) fn state(&self) -> PublishState {
+        self.public
+            .map(|is_public| {
+                if is_public {
+                    PublishState::Public
+                } else {
+                    PublishState::Private
+                }
+            })
+            .unwrap_or(PublishState::Private)
+    }
+}
+
 #[derive(Deserialize)]
 #[serde(rename_all = "PascalCase")]
 pub(crate) struct RoleMetadata {
