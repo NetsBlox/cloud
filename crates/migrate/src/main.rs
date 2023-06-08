@@ -414,12 +414,11 @@ async fn migrate_projects(config: &Config, src_db: &Database, dst_db: &Database)
             "owner": &metadata.owner,
             "name": &metadata.name,
         };
-        let dst_project = dst_projects.find_one(query, None).await.unwrap();
+        let dst_project = dst_projects.find_one(query.clone(), None).await.unwrap();
         let needs_throttle = if let Some(dst_proj) = dst_project {
             // check the public state
             let state = metadata.state();
             if state != dst_proj.state {
-                let query = doc! {"_id": metadata.id};
                 let update = doc! {"$set": {"state": state}};
                 dst_projects.update_one(query, update, None).await.unwrap();
                 true
