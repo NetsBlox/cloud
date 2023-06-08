@@ -342,7 +342,7 @@ pub struct CreateLibraryData {
     pub blocks: String,
 }
 
-#[derive(Serialize, Deserialize, Debug, Clone)]
+#[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq)]
 pub enum PublishState {
     Private,
     PendingApproval,
