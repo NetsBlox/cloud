@@ -324,25 +324,29 @@ impl Topology {
                 })
                 .map(|metadata| metadata.id.to_owned());
 
-            let source = self.get_client_state(&msg.sender).unwrap();
-            let recipients = recipients
-                .into_iter()
-                .filter_map(|client| self.get_client_state(&client.id))
-                .map(|state| state.to_owned())
-                .collect::<Vec<_>>();
+            let messages = self
+                .get_client_state(&msg.sender)
+                .map(|source| {
+                    let recipients = recipients
+                        .into_iter()
+                        .filter_map(|client| self.get_client_state(&client.id))
+                        .map(|state| state.to_owned())
+                        .collect::<Vec<_>>();
 
-            // TODO: record the actual recipients
-            let messages: Vec<_> = recording_ids
-                .into_iter()
-                .map(|project_id| {
-                    SentMessage::new(
-                        project_id,
-                        source.to_owned(),
-                        recipients.clone(),
-                        msg.content.clone(),
-                    )
+                    // TODO: record the actual recipients
+                    recording_ids
+                        .into_iter()
+                        .map(|project_id| {
+                            SentMessage::new(
+                                project_id,
+                                source.to_owned(),
+                                recipients.clone(),
+                                msg.content.clone(),
+                            )
+                        })
+                        .collect::<Vec<_>>()
                 })
-                .collect();
+                .unwrap_or_default();
 
             if !messages.is_empty() {
                 app.recorded_messages
@@ -828,8 +832,12 @@ mod tests {
         api::{self, AppId, ClientId, ClientState, ExternalClientState},
         Group, User,
     };
+    use serde_json::json;
 
-    use crate::test_utils;
+    use crate::{
+        network::topology::{SendMessage, SetStorage},
+        test_utils,
+    };
 
     use super::Topology;
 
@@ -922,5 +930,45 @@ mod tests {
     async fn test_filter_group_msgs() {
         todo!();
     }
+
+    #[actix_web::test]
+    async fn test_send_msg_no_state() {
+        let client = test_utils::network::Client::new(None, None);
+
+        test_utils::setup()
+            .with_clients(&[client.clone()])
+            .run(|app_data| async move {
+                app_data
+                    .network
+                    .send(SetStorage {
+                        app_data: app_data.clone(),
+                    })
+                    .await
+                    .unwrap();
+
+                app_data
+                    .network
+                    .send(SendMessage {
+                        sender: client.id.clone(),
+                        addresses: Vec::new(),
+                        content: json!({}),
+                    })
+                    .await
+                    .unwrap();
+
+                // Ensure we can send a second msg and the thread hasn't crashed
+                app_data
+                    .network
+                    .send(SendMessage {
+                        sender: client.id,
+                        addresses: Vec::new(),
+                        content: json!({}),
+                    })
+                    .await
+                    .unwrap();
+            })
+            .await;
+    }
+
     // TODO: Add test for broken connections?
 }
