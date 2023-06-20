@@ -1,5 +1,5 @@
 use actix_web_prom::{PrometheusMetrics, PrometheusMetricsBuilder};
-use prometheus::{opts, IntCounter, IntCounterVec, IntGauge};
+use prometheus::{IntCounter, IntGauge};
 
 /// This is used to record various server metrics for use with prometheus. Metrics include:
 ///  - logins (username, program?)
