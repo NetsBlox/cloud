@@ -896,7 +896,6 @@ impl AppData {
             let mut cache = FRIEND_CACHE.write().unwrap();
             cache.put(username.to_owned(), names.clone());
             names
-            // TODO: support friends for group members
         };
         Ok(friend_names)
     }
