@@ -484,9 +484,6 @@ impl WsSession {
         mut msg: Value,
         ctx: &mut <WsSession as Actor>::Context,
     ) {
-        if msg_type != "ping" {
-            println!("received {} message", msg_type);
-        }
         match msg_type {
             "message" => {
                 let dst_id = msg["dstId"].clone();
