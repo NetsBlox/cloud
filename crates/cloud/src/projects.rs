@@ -327,7 +327,8 @@ async fn unpublish_project(
     let query = doc! {"id": &project_id};
     ensure_can_edit_project(&app, &session, None, &project_id).await?;
 
-    let update = doc! {"$set": {"state": PublishState::Private}};
+    let state = PublishState::Private;
+    let update = doc! {"$set": {"state": &state}};
     let result = app
         .project_metadata
         .update_one(query, update, None)
@@ -335,7 +336,7 @@ async fn unpublish_project(
         .map_err(|_err| UserError::InternalError)?;
 
     if result.matched_count > 0 {
-        Ok(HttpResponse::Ok().body("Project published!"))
+        Ok(HttpResponse::Ok().json(state))
     } else {
         Err(UserError::ProjectNotFoundError)
     }
