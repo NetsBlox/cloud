@@ -7,6 +7,7 @@ use actix_web::{delete, get, patch, post, HttpRequest};
 use actix_web::{web, HttpResponse};
 use futures::stream::TryStreamExt;
 use mongodb::bson::doc;
+use mongodb::options::ReturnDocument;
 use netsblox_cloud_common::Group;
 
 use crate::common::{self, api};
@@ -157,17 +158,18 @@ async fn update_group(
         doc! {"id": id, "owner": username}
     };
     let update = doc! {"$set": {"name": &data.name}};
-    let result = app
-        .groups
-        .update_one(query, update, None)
-        .await
-        .map_err(InternalError::DatabaseConnectionError)?;
+    let options = mongodb::options::FindOneAndUpdateOptions::builder()
+        .return_document(ReturnDocument::After)
+        .build();
 
-    if result.matched_count > 0 {
-        Ok(HttpResponse::Ok().body("Group deleted."))
-    } else {
-        Err(UserError::GroupNotFoundError)
-    }
+    let group = app
+        .groups
+        .find_one_and_update(query, update, options)
+        .await
+        .map_err(InternalError::DatabaseConnectionError)?
+        .ok_or(UserError::GroupNotFoundError)?;
+
+    Ok(HttpResponse::Ok().json(group))
 }
 
 #[delete("/id/{id}")]
@@ -214,6 +216,11 @@ pub fn config(cfg: &mut web::ServiceConfig) {
 
 #[cfg(test)]
 mod tests {
+    use actix_web::{body::MessageBody, http, test, App};
+    use netsblox_cloud_common::{Group, User};
+
+    use super::*;
+    use crate::test_utils;
 
     #[actix_web::test]
     #[ignore]
@@ -276,15 +283,101 @@ mod tests {
     }
 
     #[actix_web::test]
-    #[ignore]
     async fn test_update_group() {
-        unimplemented!();
+        let user: User = api::NewUser {
+            username: "user".into(),
+            email: "user@netsblox.org".into(),
+            password: None,
+            group_id: None,
+            role: None,
+        }
+        .into();
+        let group = Group::new(user.username.clone(), "some_group".into());
+
+        test_utils::setup()
+            .with_users(&[user.clone()])
+            .with_groups(&[group.clone()])
+            .run(|app_data| async move {
+                let app = test::init_service(
+                    App::new()
+                        .app_data(web::Data::new(app_data.clone()))
+                        .wrap(test_utils::cookie::middleware())
+                        .configure(config),
+                )
+                .await;
+
+                let data = api::UpdateGroupData {
+                    name: "new_name".into(),
+                };
+                let req = test::TestRequest::patch()
+                    .uri(&format!("/id/{}", &group.id))
+                    .cookie(test_utils::cookie::new(&user.username))
+                    .set_json(&data)
+                    .to_request();
+
+                let response = test::call_service(&app, req).await;
+
+                // Check that the group is updated in the db
+                let query = doc! {"id": &group.id};
+                let group = app_data
+                    .groups
+                    .find_one(query, None)
+                    .await
+                    .expect("Could not query DB")
+                    .ok_or(UserError::GroupNotFoundError)
+                    .expect("Group not found in db.");
+
+                assert_eq!(group.name, "new_name".to_string());
+
+                // Check response
+                assert_eq!(response.status(), http::StatusCode::OK);
+                let bytes = response.into_body().try_into_bytes().unwrap();
+                let group: api::Group = serde_json::from_slice(&bytes).unwrap();
+
+                assert_eq!(group.name, "new_name".to_string());
+            })
+            .await;
     }
 
     #[actix_web::test]
-    #[ignore]
-    async fn test_update_group_403() {
-        unimplemented!();
+    async fn test_update_group_no_perms() {
+        let user: User = api::NewUser {
+            username: "user".into(),
+            email: "user@netsblox.org".into(),
+            password: None,
+            group_id: None,
+            role: None,
+        }
+        .into();
+        let group = Group::new("other_user".into(), "some_group".into());
+
+        test_utils::setup()
+            .with_users(&[user.clone()])
+            .with_groups(&[group.clone()])
+            .run(|app_data| async move {
+                let app = test::init_service(
+                    App::new()
+                        .app_data(web::Data::new(app_data.clone()))
+                        .wrap(test_utils::cookie::middleware())
+                        .configure(config),
+                )
+                .await;
+
+                let data = api::UpdateGroupData {
+                    name: "new_name".into(),
+                };
+                let req = test::TestRequest::patch()
+                    .uri(&format!("/id/{}", &group.id))
+                    .cookie(test_utils::cookie::new(&user.username))
+                    .set_json(&data)
+                    .to_request();
+
+                let response = test::call_service(&app, req).await;
+
+                // Not found is fine since it is technically more secure
+                assert_eq!(response.status(), http::StatusCode::NOT_FOUND);
+            })
+            .await;
     }
 
     #[actix_web::test]
