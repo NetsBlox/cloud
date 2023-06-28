@@ -10,7 +10,7 @@ use actix_web::{web, HttpResponse};
 use futures::TryStreamExt;
 use lazy_static::lazy_static;
 use mongodb::bson::doc;
-use mongodb::options::UpdateOptions;
+use mongodb::options::{ReturnDocument, UpdateOptions};
 use regex::Regex;
 
 #[get("/group/{id}")]
@@ -64,9 +64,12 @@ async fn set_group_hosts(
     };
 
     let update = doc! {"$set": {"servicesHosts": &hosts.into_inner()}};
+    let options = mongodb::options::FindOneAndUpdateOptions::builder()
+        .return_document(ReturnDocument::After)
+        .build();
     let group = app
         .groups
-        .find_one_and_update(query, update, None)
+        .find_one_and_update(query, update, options)
         .await
         .map_err(InternalError::DatabaseConnectionError)?
         .ok_or(UserError::GroupNotFoundError)?;
@@ -108,9 +111,12 @@ async fn set_user_hosts(
     let service_hosts: Vec<ServiceHost> = hosts.into_inner();
     let update = doc! {"$set": {"servicesHosts": &service_hosts }};
     let query = doc! {"username": username};
+    let options = mongodb::options::FindOneAndUpdateOptions::builder()
+        .return_document(ReturnDocument::After)
+        .build();
     let user: api::User = app
         .users
-        .find_one_and_update(query, update, None)
+        .find_one_and_update(query, update, options)
         .await
         .map_err(InternalError::DatabaseConnectionError)?
         .ok_or(UserError::UserNotFoundError)?
@@ -299,9 +305,10 @@ pub fn config(cfg: &mut web::ServiceConfig) {
         .service(unauthorize_host);
 }
 
+#[cfg(test)]
 mod test {
-    use actix_web::{http, test, App};
-    use netsblox_cloud_common::User;
+    use actix_web::{body::MessageBody, http, test, App};
+    use netsblox_cloud_common::{Group, User};
 
     use super::*;
     use crate::test_utils;
@@ -319,26 +326,122 @@ mod test {
 
         test_utils::setup()
             .with_users(&[user.clone()])
-            .run(|app_data| async {
+            .run(|app_data| async move {
                 let app = test::init_service(
                     App::new()
-                        .app_data(web::Data::new(app_data))
+                        .app_data(web::Data::new(app_data.clone()))
                         .wrap(test_utils::cookie::middleware())
                         .configure(config),
                 )
                 .await;
 
-                // TODO: Make a request to set_user_hosts
+                let cats = vec!["custom".into()];
+                let hosts = vec![
+                    ServiceHost {
+                        url: "http://service1.com".into(),
+                        categories: cats.clone(),
+                    },
+                    ServiceHost {
+                        url: "http://service2.com".into(),
+                        categories: cats.clone(),
+                    },
+                ];
                 let req = test::TestRequest::post()
-                    .uri("/create")
+                    .uri(&format!("/user/{}", &user.username))
                     .cookie(test_utils::cookie::new(&user.username))
-                    .set_json(&user_data)
+                    .set_json(&hosts)
                     .to_request();
 
                 let response = test::call_service(&app, req).await;
 
-                // TODO: Check that the hosts have been set
+                // Check that the hosts have been set in the database
+                let query = doc! {"username": &user.username};
+                let user = app_data
+                    .users
+                    .find_one(query, None)
+                    .await
+                    .expect("Could not query for user")
+                    .ok_or(UserError::UserNotFoundError)
+                    .expect("User not found in db.");
+
+                assert_eq!(user.services_hosts.map(|hosts| hosts.len()).unwrap_or(0), 2);
+
                 assert_eq!(response.status(), http::StatusCode::OK);
+                let bytes = response.into_body().try_into_bytes().unwrap();
+                let user: api::User = serde_json::from_slice(&bytes).unwrap();
+
+                assert_eq!(user.services_hosts.map(|hosts| hosts.len()).unwrap_or(0), 2);
+            })
+            .await;
+    }
+
+    #[actix_web::test]
+    async fn test_set_group_hosts() {
+        let user: User = api::NewUser {
+            username: "user".into(),
+            email: "user@netsblox.org".into(),
+            password: None,
+            group_id: None,
+            role: None,
+        }
+        .into();
+        let group = Group::new(user.username.clone(), "some_group".into());
+
+        test_utils::setup()
+            .with_users(&[user.clone()])
+            .with_groups(&[group.clone()])
+            .run(|app_data| async move {
+                let app = test::init_service(
+                    App::new()
+                        .app_data(web::Data::new(app_data.clone()))
+                        .wrap(test_utils::cookie::middleware())
+                        .configure(config),
+                )
+                .await;
+
+                let cats = vec!["custom".into()];
+                let hosts = vec![
+                    ServiceHost {
+                        url: "http://service1.com".into(),
+                        categories: cats.clone(),
+                    },
+                    ServiceHost {
+                        url: "http://service2.com".into(),
+                        categories: cats.clone(),
+                    },
+                ];
+                let req = test::TestRequest::post()
+                    .uri(&format!("/group/{}", &group.id))
+                    .cookie(test_utils::cookie::new(&user.username))
+                    .set_json(&hosts)
+                    .to_request();
+
+                let response = test::call_service(&app, req).await;
+
+                // Check that the hosts have been set in the database
+                let query = doc! {"id": &group.id};
+                let group = app_data
+                    .groups
+                    .find_one(query, None)
+                    .await
+                    .expect("Could not query for group")
+                    .ok_or(UserError::GroupNotFoundError)
+                    .expect("Group not found in db.");
+
+                assert_eq!(
+                    group.services_hosts.map(|hosts| hosts.len()).unwrap_or(0),
+                    2
+                );
+
+                // Check the hosts are set in the returned group
+                assert_eq!(response.status(), http::StatusCode::OK);
+                let bytes = response.into_body().try_into_bytes().unwrap();
+                let group: api::Group = serde_json::from_slice(&bytes).unwrap();
+
+                assert_eq!(
+                    group.services_hosts.map(|hosts| hosts.len()).unwrap_or(0),
+                    2
+                );
             })
             .await;
     }

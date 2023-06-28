@@ -118,7 +118,7 @@ async fn create_group(
 
     let group = common::Group::new(owner.to_owned(), body.name.to_owned());
     let query = doc! {"name": &group.name, "owner": &group.owner};
-    let update = doc! {"$setOnInsert": group};
+    let update = doc! {"$setOnInsert": &group};
     let options = mongodb::options::UpdateOptions::builder()
         .upsert(true)
         .build();
@@ -131,7 +131,8 @@ async fn create_group(
     if result.matched_count == 1 {
         Err(UserError::GroupExistsError)
     } else {
-        Ok(HttpResponse::Ok().body("Group created."))
+        let group: api::Group = group.into();
+        Ok(HttpResponse::Ok().json(group))
     }
 }
 

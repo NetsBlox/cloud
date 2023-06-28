@@ -205,11 +205,12 @@ async fn create_user(
     if existing_user.is_some() {
         Err(UserError::UserExistsError)
     } else {
-        if let Some(group_id) = user.group_id {
+        if let Some(group_id) = user.group_id.clone() {
             app.group_members_updated(&group_id).await;
         }
         app.metrics.record_signup();
-        Ok(HttpResponse::Ok().body("User created"))
+        let user: api::User = user.into();
+        Ok(HttpResponse::Ok().json(user))
     }
 }
 
@@ -615,16 +616,18 @@ async fn unlink_account(
     ensure_can_edit_user(&app, &session, &username).await?;
     let query = doc! {"username": username};
     let update = doc! {"$pull": {"linkedAccounts": &account.into_inner()}};
-    let result = app
+    let options = mongodb::options::FindOneAndUpdateOptions::builder()
+        .return_document(ReturnDocument::After)
+        .build();
+
+    let user = app
         .users
-        .update_one(query, update, None)
+        .find_one_and_update(query, update, options)
         .await
-        .map_err(InternalError::DatabaseConnectionError)?;
-    if result.matched_count == 0 {
-        Ok(HttpResponse::NotFound().finish())
-    } else {
-        Ok(HttpResponse::Ok().finish())
-    }
+        .map_err(InternalError::DatabaseConnectionError)?
+        .ok_or(UserError::UserNotFoundError)?;
+
+    Ok(HttpResponse::Ok().json(user))
 }
 
 pub fn config(cfg: &mut web::ServiceConfig) {
