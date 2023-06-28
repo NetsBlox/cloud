@@ -545,8 +545,8 @@ async fn create_role(
     let metadata = ensure_can_edit_project(&app, &session, None, &project_id).await?;
 
     let updated_metadata = app.create_role(metadata, body.into_inner().into()).await?;
-    app.on_room_changed(updated_metadata);
-    Ok(HttpResponse::Ok().body("Role created"))
+    app.on_room_changed(updated_metadata.clone());
+    Ok(HttpResponse::Ok().json(updated_metadata))
 }
 
 #[get("/id/{projectID}/{roleID}")]

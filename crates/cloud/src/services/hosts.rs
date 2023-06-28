@@ -64,16 +64,14 @@ async fn set_group_hosts(
     };
 
     let update = doc! {"$set": {"servicesHosts": &hosts.into_inner()}};
-    let result = app
+    let group = app
         .groups
-        .update_one(query, update, None)
+        .find_one_and_update(query, update, None)
         .await
-        .map_err(InternalError::DatabaseConnectionError)?;
-    if result.matched_count > 0 {
-        Ok(HttpResponse::Ok().body("Group updated"))
-    } else {
-        Err(UserError::GroupNotFoundError)
-    }
+        .map_err(InternalError::DatabaseConnectionError)?
+        .ok_or(UserError::GroupNotFoundError)?;
+
+    Ok(HttpResponse::Ok().json(group))
 }
 
 #[get("/user/{username}")]
@@ -109,18 +107,16 @@ async fn set_user_hosts(
 
     let service_hosts: Vec<ServiceHost> = hosts.into_inner();
     let update = doc! {"$set": {"servicesHosts": &service_hosts }};
-    let filter = doc! {"username": username};
-    let result = app
+    let query = doc! {"username": username};
+    let user: api::User = app
         .users
-        .update_one(filter, update, None)
+        .find_one_and_update(query, update, None)
         .await
-        .map_err(InternalError::DatabaseConnectionError)?;
+        .map_err(InternalError::DatabaseConnectionError)?
+        .ok_or(UserError::UserNotFoundError)?
+        .into();
 
-    if result.modified_count == 1 {
-        Ok(HttpResponse::Ok().finish())
-    } else {
-        Ok(HttpResponse::NotFound().finish())
-    }
+    Ok(HttpResponse::Ok().json(user))
 }
 
 #[get("/all/{username}")]
@@ -303,4 +299,47 @@ pub fn config(cfg: &mut web::ServiceConfig) {
         .service(unauthorize_host);
 }
 
-mod test {}
+mod test {
+    use actix_web::{http, test, App};
+    use netsblox_cloud_common::User;
+
+    use super::*;
+    use crate::test_utils;
+
+    #[actix_web::test]
+    async fn test_set_user_hosts() {
+        let user: User = api::NewUser {
+            username: "user".into(),
+            email: "user@netsblox.org".into(),
+            password: None,
+            group_id: None,
+            role: None,
+        }
+        .into();
+
+        test_utils::setup()
+            .with_users(&[user.clone()])
+            .run(|app_data| async {
+                let app = test::init_service(
+                    App::new()
+                        .app_data(web::Data::new(app_data))
+                        .wrap(test_utils::cookie::middleware())
+                        .configure(config),
+                )
+                .await;
+
+                // TODO: Make a request to set_user_hosts
+                let req = test::TestRequest::post()
+                    .uri("/create")
+                    .cookie(test_utils::cookie::new(&user.username))
+                    .set_json(&user_data)
+                    .to_request();
+
+                let response = test::call_service(&app, req).await;
+
+                // TODO: Check that the hosts have been set
+                assert_eq!(response.status(), http::StatusCode::OK);
+            })
+            .await;
+    }
+}
