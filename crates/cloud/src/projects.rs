@@ -610,7 +610,7 @@ async fn save_role(
         .save_role(&metadata, &role_id, body.into_inner())
         .await?;
 
-    Ok(HttpResponse::Ok().json(updated_metadata.state))
+    Ok(HttpResponse::Ok().json(updated_metadata))
 }
 
 #[patch("/id/{projectID}/{roleID}")]
