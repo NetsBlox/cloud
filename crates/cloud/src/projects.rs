@@ -1562,9 +1562,38 @@ mod tests {
     }
 
     #[actix_web::test]
-    #[ignore]
     async fn test_remove_collaborator() {
-        todo!();
+        let username = "user1";
+        let project = test_utils::project::builder()
+            .with_owner(username.to_string())
+            .with_collaborators(&["user2", "user3"])
+            .build();
+
+        test_utils::setup()
+            .with_projects(&[project.clone()])
+            .run(|app_data| async move {
+                let app = test::init_service(
+                    App::new()
+                        .wrap(test_utils::cookie::middleware())
+                        .app_data(web::Data::new(app_data.clone()))
+                        .configure(config),
+                )
+                .await;
+
+                let req = test::TestRequest::delete()
+                    .cookie(test_utils::cookie::new(username))
+                    .uri(&format!("/id/{}/collaborators/user2", &project.id))
+                    .to_request();
+
+                let project: ProjectMetadata = test::call_and_read_body_json(&app, req).await;
+                let expected = ["user3"];
+                project
+                    .collaborators
+                    .into_iter()
+                    .enumerate()
+                    .for_each(|(i, name)| assert_eq!(name, expected[i]));
+            })
+            .await;
     }
 
     #[actix_web::test]

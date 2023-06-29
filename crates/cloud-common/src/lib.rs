@@ -279,7 +279,7 @@ impl From<FriendLink> for Bson {
     }
 }
 
-#[derive(Deserialize, Serialize, Clone)]
+#[derive(Deserialize, Serialize, Clone, Debug)]
 #[serde(rename_all = "camelCase")]
 pub struct NetworkTraceMetadata {
     pub id: String,
@@ -307,7 +307,7 @@ impl From<NetworkTraceMetadata> for Bson {
     }
 }
 
-#[derive(Deserialize, Serialize, Clone)]
+#[derive(Deserialize, Serialize, Clone, Debug)]
 #[serde(rename_all = "camelCase")]
 pub struct ProjectMetadata {
     pub id: ProjectId,
@@ -429,7 +429,7 @@ impl From<Project> for netsblox_api_common::Project {
     }
 }
 
-#[derive(Deserialize, Serialize, Clone)]
+#[derive(Deserialize, Serialize, Clone, Debug)]
 #[serde(rename_all = "camelCase")]
 pub struct RoleMetadata {
     pub name: String,
