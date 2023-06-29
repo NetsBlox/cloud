@@ -640,8 +640,8 @@ async fn rename_role(
             .map_err(InternalError::DatabaseConnectionError)?
             .ok_or(UserError::ProjectNotFoundError)?;
 
-        app.on_room_changed(updated_metadata);
-        Ok(HttpResponse::Ok().body("Role updated"))
+        app.on_room_changed(updated_metadata.clone());
+        Ok(HttpResponse::Ok().json(updated_metadata))
     } else {
         Err(UserError::RoleNotFoundError)
     }
@@ -1280,27 +1280,207 @@ mod tests {
     }
 
     #[actix_web::test]
-    #[ignore]
     async fn test_rename_role() {
-        todo!();
+        let user: User = api::NewUser {
+            username: "owner".to_string(),
+            email: "owner@netsblox.org".into(),
+            password: None,
+            group_id: None,
+            role: None,
+        }
+        .into();
+        let role_id = api::RoleId::new("someRole".into());
+        let role_data = api::RoleData {
+            name: "role".into(),
+            code: "<code/>".into(),
+            media: "<media/>".into(),
+        };
+        let project = test_utils::project::builder()
+            .with_owner(user.username.to_string())
+            .with_roles([(role_id.clone(), role_data)].into_iter().collect())
+            .build();
+
+        test_utils::setup()
+            .with_projects(&[project.clone()])
+            .with_users(&[user.clone()])
+            .run(|app_data| async move {
+                let app = test::init_service(
+                    App::new()
+                        .wrap(test_utils::cookie::middleware())
+                        .app_data(web::Data::new(app_data.clone()))
+                        .configure(config),
+                )
+                .await;
+
+                let data = UpdateRoleData {
+                    name: "new_name".into(),
+                    client_id: None,
+                };
+                let req = test::TestRequest::patch()
+                    .cookie(test_utils::cookie::new(&user.username))
+                    .uri(&format!("/id/{}/{}/", &project.id, &role_id))
+                    .set_json(&data)
+                    .to_request();
+
+                let project: ProjectMetadata = test::call_and_read_body_json(&app, req).await;
+                let role = project.roles.get(&role_id).unwrap();
+                assert_eq!(role.name, data.name);
+
+                let project = app_data.get_project_metadatum(&project.id).await.unwrap();
+                let role = project.roles.get(&role_id).unwrap();
+                assert_eq!(role.name, data.name);
+            })
+            .await;
     }
 
     #[actix_web::test]
     #[ignore]
     async fn test_rename_role_invalid_name() {
-        todo!();
+        let username = "user1";
+        let role_id = api::RoleId::new("someRole".into());
+        let role_data = api::RoleData {
+            name: "role".into(),
+            code: "<code/>".into(),
+            media: "<media/>".into(),
+        };
+        let project = test_utils::project::builder()
+            .with_owner(username.to_string())
+            .with_collaborators(&["user2", "user3"])
+            .with_roles([(role_id.clone(), role_data)].into_iter().collect())
+            .build();
+
+        test_utils::setup()
+            .with_projects(&[project.clone()])
+            .run(|app_data| async move {
+                let app = test::init_service(
+                    App::new()
+                        .wrap(test_utils::cookie::middleware())
+                        .app_data(web::Data::new(app_data.clone()))
+                        .configure(config),
+                )
+                .await;
+
+                let data = UpdateRoleData {
+                    name: "$ .1 damn".into(),
+                    client_id: None,
+                };
+                let req = test::TestRequest::patch()
+                    .cookie(test_utils::cookie::new(username))
+                    .uri(&format!("/id/{}/{}/", &project.id, &role_id))
+                    .set_json(&data)
+                    .to_request();
+
+                let response = test::call_service(&app, req).await;
+                assert_eq!(response.status(), http::StatusCode::BAD_REQUEST);
+
+                let project = app_data.get_project_metadatum(&project.id).await.unwrap();
+                let role = project.roles.get(&role_id).unwrap();
+                assert_eq!(role.name, "role".to_string());
+            })
+            .await;
     }
 
     #[actix_web::test]
     #[ignore]
-    async fn test_rename_role_403() {
-        todo!();
+    async fn test_rename_role_no_perms() {
+        let username = "user1";
+        let role_id = api::RoleId::new("someRole".into());
+        let role_data = api::RoleData {
+            name: "role".into(),
+            code: "<code/>".into(),
+            media: "<media/>".into(),
+        };
+        let project = test_utils::project::builder()
+            .with_owner("owner".to_string())
+            .with_collaborators(&["user2", "user3"])
+            .with_roles([(role_id.clone(), role_data)].into_iter().collect())
+            .build();
+
+        test_utils::setup()
+            .with_projects(&[project.clone()])
+            .run(|app_data| async move {
+                let app = test::init_service(
+                    App::new()
+                        .wrap(test_utils::cookie::middleware())
+                        .app_data(web::Data::new(app_data.clone()))
+                        .configure(config),
+                )
+                .await;
+
+                let data = UpdateRoleData {
+                    name: "$ .1 damn".into(),
+                    client_id: None,
+                };
+                let req = test::TestRequest::patch()
+                    .cookie(test_utils::cookie::new(username))
+                    .uri(&format!("/id/{}/{}/", &project.id, &role_id))
+                    .set_json(&data)
+                    .to_request();
+
+                let response = test::call_service(&app, req).await;
+                assert_eq!(response.status(), http::StatusCode::NOT_FOUND);
+
+                let project = app_data.get_project_metadatum(&project.id).await.unwrap();
+                let role = project.roles.get(&role_id).unwrap();
+                assert_eq!(role.name, "role".to_string());
+            })
+            .await;
     }
 
     #[actix_web::test]
     #[ignore]
     async fn test_rename_role_admin() {
-        todo!();
+        let admin: User = api::NewUser {
+            username: "admin".to_string(),
+            email: "admin@netsblox.org".into(),
+            password: None,
+            group_id: None,
+            role: None,
+        }
+        .into();
+
+        let role_id = api::RoleId::new("someRole".into());
+        let role_data = api::RoleData {
+            name: "role".into(),
+            code: "<code/>".into(),
+            media: "<media/>".into(),
+        };
+        let project = test_utils::project::builder()
+            .with_owner("owner".to_string())
+            .with_roles([(role_id.clone(), role_data)].into_iter().collect())
+            .build();
+
+        test_utils::setup()
+            .with_users(&[admin.clone()])
+            .with_projects(&[project.clone()])
+            .run(|app_data| async move {
+                let app = test::init_service(
+                    App::new()
+                        .wrap(test_utils::cookie::middleware())
+                        .app_data(web::Data::new(app_data.clone()))
+                        .configure(config),
+                )
+                .await;
+
+                let data = UpdateRoleData {
+                    name: "new_name".into(),
+                    client_id: None,
+                };
+                let req = test::TestRequest::patch()
+                    .cookie(test_utils::cookie::new(&admin.username))
+                    .uri(&format!("/id/{}/{}/", &project.id, &role_id))
+                    .set_json(&data)
+                    .to_request();
+
+                let project: ProjectMetadata = test::call_and_read_body_json(&app, req).await;
+                let role = project.roles.get(&role_id).unwrap();
+                assert_eq!(role.name, data.name);
+
+                let project = app_data.get_project_metadatum(&project.id).await.unwrap();
+                let role = project.roles.get(&role_id).unwrap();
+                assert_eq!(role.name, "role".to_string());
+            })
+            .await;
     }
 
     #[actix_web::test]
