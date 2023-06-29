@@ -377,13 +377,14 @@ async fn update_project(
     let body = body.into_inner();
     let metadata = ensure_can_edit_project(&app, &session, body.client_id, &project_id).await?;
 
-    println!("Changing name from {} to {}", &metadata.name, &body.name);
-    let update = doc! {"$set": {"name": &body.name}};
+    let name = app
+        .get_valid_project_name(&metadata.owner, &body.name)
+        .await?;
+    let update = doc! {"$set": {"name": &name}};
     let options = FindOneAndUpdateOptions::builder()
         .return_document(ReturnDocument::After)
         .build();
 
-    // TODO: How do we know there isn't a name collision?
     let updated_metadata = app
         .project_metadata
         .find_one_and_update(query, update, options)
@@ -391,8 +392,8 @@ async fn update_project(
         .map_err(InternalError::DatabaseConnectionError)?
         .ok_or(UserError::ProjectNotFoundError)?;
 
-    app.on_room_changed(updated_metadata);
-    Ok(HttpResponse::Ok().body("Project updated."))
+    app.on_room_changed(updated_metadata.clone());
+    Ok(HttpResponse::Ok().json(updated_metadata))
 }
 
 #[derive(Deserialize)]
@@ -898,9 +899,121 @@ mod tests {
     }
 
     #[actix_web::test]
-    #[ignore]
     async fn test_update_project() {
-        todo!();
+        let admin: User = api::NewUser {
+            username: "admin".into(),
+            email: "admin@netsblox.org".into(),
+            password: None,
+            group_id: None,
+            role: Some(UserRole::Admin),
+        }
+        .into();
+
+        let owner: User = api::NewUser {
+            username: "owner".into(),
+            email: "admin@netsblox.org".into(),
+            password: None,
+            group_id: None,
+            role: Some(UserRole::Admin),
+        }
+        .into();
+        let project = test_utils::project::builder()
+            .with_owner(owner.username.clone())
+            .with_name("initial name".into())
+            .build();
+        let other_project = test_utils::project::builder()
+            .with_owner("admin".into())
+            .with_name("new name".into())
+            .build();
+
+        test_utils::setup()
+            .with_projects(&[project.clone()])
+            .with_users(&[admin.clone(), owner])
+            .run(|app_data| async move {
+                let app = test::init_service(
+                    App::new()
+                        .wrap(test_utils::cookie::middleware())
+                        .app_data(web::Data::new(app_data.clone()))
+                        .configure(config),
+                )
+                .await;
+
+                let update_data = api::UpdateProjectData {
+                    name: "new name".into(),
+                    client_id: None,
+                };
+                let req = test::TestRequest::patch()
+                    .cookie(test_utils::cookie::new(&admin.username))
+                    .uri(&format!("/id/{}", &project.id))
+                    .set_json(&update_data)
+                    .to_request();
+
+                let metadata: ProjectMetadata = test::call_and_read_body_json(&app, req).await;
+                assert_eq!(metadata.name, update_data.name);
+
+                // TODO: check the database is updated, too
+            })
+            .await;
+    }
+
+    #[actix_web::test]
+    async fn test_update_project_collision() {
+        let admin: User = api::NewUser {
+            username: "admin".into(),
+            email: "admin@netsblox.org".into(),
+            password: None,
+            group_id: None,
+            role: Some(UserRole::Admin),
+        }
+        .into();
+
+        let owner: User = api::NewUser {
+            username: "owner".into(),
+            email: "admin@netsblox.org".into(),
+            password: None,
+            group_id: None,
+            role: Some(UserRole::Admin),
+        }
+        .into();
+        let project = test_utils::project::builder()
+            .with_owner(owner.username.clone())
+            .with_name("initial name".into())
+            .build();
+
+        let existing = test_utils::project::builder()
+            .with_owner(owner.username.clone())
+            .with_name("new name".into())
+            .build();
+
+        test_utils::setup()
+            .with_projects(&[project.clone(), existing.clone()])
+            .with_users(&[admin.clone(), owner])
+            .run(|app_data| async move {
+                let app = test::init_service(
+                    App::new()
+                        .wrap(test_utils::cookie::middleware())
+                        .app_data(web::Data::new(app_data.clone()))
+                        .configure(config),
+                )
+                .await;
+
+                let update_data = api::UpdateProjectData {
+                    name: existing.name.clone(),
+                    client_id: None,
+                };
+                let req = test::TestRequest::patch()
+                    .cookie(test_utils::cookie::new(&admin.username))
+                    .uri(&format!("/id/{}", &project.id))
+                    .set_json(&update_data)
+                    .to_request();
+
+                let metadata: ProjectMetadata = test::call_and_read_body_json(&app, req).await;
+                assert_ne!(metadata.name, existing.name);
+                assert!(metadata.name.starts_with(&update_data.name));
+
+                // TODO: check the database is updated, too
+            })
+            .await;
     }
 
     #[actix_web::test]
