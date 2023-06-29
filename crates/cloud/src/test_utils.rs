@@ -234,7 +234,6 @@ pub(crate) mod project {
         }
 
         pub(crate) fn build(self) -> Project {
-            let roles = HashMap::new(); // FIXME: we should populate with some defaults..
             let id = self
                 .id
                 .unwrap_or_else(|| api::ProjectId::new(Uuid::new_v4().to_string()));
@@ -250,7 +249,7 @@ pub(crate) mod project {
                 collaborators: self.collaborators,
                 origin_time: DateTime::now(),
                 save_state: api::SaveState::SAVED,
-                roles,
+                roles: self.roles,
             }
         }
     }
