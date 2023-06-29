@@ -927,7 +927,7 @@ mod tests {
             .build();
 
         test_utils::setup()
-            .with_projects(&[project.clone()])
+            .with_projects(&[project.clone(), other_project])
             .with_users(&[admin.clone(), owner])
             .run(|app_data| async move {
                 let app = test::init_service(
