@@ -204,6 +204,7 @@ pub(crate) mod project {
         owner: Option<String>,
         name: Option<String>,
         collaborators: Vec<String>,
+        roles: HashMap<api::RoleId, api::RoleData>,
     }
 
     impl ProjectBuilder {
@@ -214,6 +215,11 @@ pub(crate) mod project {
 
         pub(crate) fn with_owner(mut self, owner: String) -> Self {
             self.owner = Some(owner);
+            self
+        }
+
+        pub(crate) fn with_roles(mut self, roles: HashMap<api::RoleId, api::RoleData>) -> Self {
+            self.roles = roles;
             self
         }
 
@@ -255,6 +261,7 @@ pub(crate) mod project {
             owner: None,
             name: None,
             collaborators: Vec::new(),
+            roles: HashMap::new(),
         }
     }
 }
