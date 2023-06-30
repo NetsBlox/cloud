@@ -46,8 +46,8 @@ fn is_valid_name(name: &str) -> bool {
         static ref NAME_REGEX: Regex = Regex::new(r"^[a-zA-Z][a-zA-Z0-9_ \-]*$").unwrap();
     }
 
-    char_count > min_len
-        && char_count < max_len
+    char_count >= min_len
+        && char_count <= max_len
         && NAME_REGEX.is_match(name)
         && !name.is_inappropriate()
 }
@@ -100,7 +100,7 @@ async fn list_user_projects(
         .map_err(InternalError::DatabaseConnectionError)?;
 
     let projects = get_visible_projects(&app, &session, &username, cursor).await;
-    println!("Found {} projects for {}", projects.len(), username);
+    info!("Found {} projects for {}", projects.len(), username);
     Ok(HttpResponse::Ok().json(projects))
 }
 
@@ -1484,7 +1484,7 @@ mod tests {
                 .await;
 
                 let data = UpdateRoleData {
-                    name: "$ .1 damn".into(),
+                    name: "X".into(),
                     client_id: None,
                 };
                 let req = test::TestRequest::patch()
@@ -1494,7 +1494,7 @@ mod tests {
                     .to_request();
 
                 let response = test::call_service(&app, req).await;
-                assert_eq!(response.status(), http::StatusCode::NOT_FOUND);
+                assert_eq!(response.status(), http::StatusCode::FORBIDDEN);
 
                 let project = app_data.get_project_metadatum(&project.id).await.unwrap();
                 let role = project.roles.get(&role_id).unwrap();
@@ -1807,6 +1807,25 @@ mod tests {
     }
 
     #[actix_web::test]
-    #[ignore]
-    async fn test_is_valid_name() {}
+    async fn test_x_is_valid_name() {
+        assert!(is_valid_name("X"));
+    }
+
+    #[actix_web::test]
+    async fn test_is_valid_name_spaces() {
+        assert!(is_valid_name("Player 1"));
+    }
+
+    #[actix_web::test]
+    async fn test_is_valid_name_dashes() {
+        assert!(is_valid_name("Player-i"));
+    }
+
+    #[actix_web::test]
+    async fn test_is_valid_name_profanity() {
+        assert!(is_valid_name("shit"));
+        assert!(is_valid_name("fuck"));
+        assert!(is_valid_name("damn"));
+        assert!(is_valid_name("hell"));
+    }
 }
