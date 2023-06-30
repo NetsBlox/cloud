@@ -510,10 +510,10 @@ impl AppData {
             body: Some(String::into_bytes(body).into()),
             ..Default::default()
         };
-        self.s3
-            .put_object(request)
-            .await
-            .map_err(|_err| InternalError::S3Error)
+        self.s3.put_object(request).await.map_err(|err| {
+            warn!("Unable to upload to s3: {}", err);
+            InternalError::S3Error
+        })
     }
 
     async fn download(&self, key: &str) -> Result<String, InternalError> {

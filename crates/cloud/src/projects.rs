@@ -278,7 +278,6 @@ async fn can_edit_project(
     client_id: Option<ClientId>,
     project: &ProjectMetadata,
 ) -> Result<bool, UserError> {
-    println!("Can {:?} edit the project? ({})", client_id, project.owner);
     let is_owner = client_id
         .map(|id| id.as_str() == project.owner)
         .unwrap_or(false);
@@ -1823,9 +1822,9 @@ mod tests {
 
     #[actix_web::test]
     async fn test_is_valid_name_profanity() {
-        assert!(is_valid_name("shit"));
-        assert!(is_valid_name("fuck"));
-        assert!(is_valid_name("damn"));
-        assert!(is_valid_name("hell"));
+        assert!(!is_valid_name("shit"));
+        assert!(!is_valid_name("fuck"));
+        assert!(!is_valid_name("damn"));
+        assert!(!is_valid_name("hell"));
     }
 }
