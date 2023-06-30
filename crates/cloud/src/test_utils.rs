@@ -15,7 +15,7 @@ lazy_static! {
 pub(crate) fn setup() -> TestSetupBuilder {
     let mut counter = COUNTER.lock().unwrap();
     *counter += 1_u32;
-    let prefix = format!("test_{}", counter);
+    let prefix = format!("test-{}", counter);
     TestSetupBuilder {
         prefix,
         users: Vec::new(),
@@ -84,14 +84,18 @@ impl TestSetupBuilder {
             .expect("Unable to connect to database");
 
         let mut settings = Settings::new().unwrap();
-        let db_name = format!("{}_{}", &self.prefix, settings.database.name);
+        let db_name = format!("{}-{}", &self.prefix, settings.database.name);
         settings.database.name = db_name.clone();
-        settings.s3.bucket = format!("{}_{}", &self.prefix, settings.s3.bucket);
+        settings.s3.bucket = format!("{}-{}", &self.prefix, settings.s3.bucket);
 
         let app_data = AppData::new(client.clone(), settings, None, None);
 
         // create the test fixtures (users, projects, etc)
         client.database(&db_name).drop(None).await.unwrap();
+        app_data
+            .initialize()
+            .await
+            .expect("Unable to initialize AppData");
         join_all(self.projects.iter().map(|proj| async {
             let Project {
                 id,
