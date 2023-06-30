@@ -327,14 +327,10 @@ impl ProjectMetadata {
     pub fn new(
         owner: &str,
         name: &str,
-        roles: Vec<RoleMetadata>,
+        roles: HashMap<RoleId, RoleMetadata>,
         save_state: SaveState,
     ) -> ProjectMetadata {
         let origin_time = DateTime::now();
-        let roles = roles
-            .into_iter()
-            .map(|role| (RoleId::new(Uuid::new_v4().to_string()), role))
-            .collect::<HashMap<_, _>>();
 
         let ten_minutes = Duration::new(10 * 60, 0);
         let delete_at =

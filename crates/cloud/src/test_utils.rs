@@ -96,20 +96,20 @@ impl TestSetupBuilder {
             .initialize()
             .await
             .expect("Unable to initialize AppData");
-        join_all(self.projects.iter().map(|proj| async {
+        join_all(self.projects.into_iter().map(|proj| async {
             let Project {
                 id,
                 owner,
                 name,
-                roles,
+                mut roles,
                 save_state,
                 ..
             } = proj;
-            let roles: Vec<_> = roles.values().map(|r| r.to_owned()).collect();
-            let metadata = app_data
-                .import_project(owner, name, Some(roles), Some(save_state.clone()))
-                .await
-                .unwrap();
+            let result = app_data
+                .import_project(&owner, &name, &mut roles, Some(save_state.clone()))
+                .await;
+            dbg!(&result);
+            let metadata = result.unwrap();
 
             let query = doc! {"id": metadata.id};
             let update = doc! {"$set": {"id": id}};

@@ -3,6 +3,7 @@ pub(crate) mod metrics;
 use crate::common::api::{
     oauth, LibraryMetadata, NewUser, ProjectId, PublishState, RoleId, UserRole,
 };
+use crate::projects;
 //pub use self::
 use actix_web::rt::time;
 use futures::future::join_all;
@@ -402,8 +403,9 @@ impl AppData {
         owner: &str,
         basename: &str,
     ) -> Result<String, UserError> {
+        projects::ensure_valid_name(basename)?;
+
         let query = doc! {"owner": &owner};
-        // TODO: validate the project name (no profanity)
         let cursor = self
             .project_metadata
             .find(query, None)
@@ -424,29 +426,37 @@ impl AppData {
         &self,
         owner: &str,
         name: &str,
-        roles: Option<Vec<RoleData>>,
+        roles: &mut HashMap<RoleId, RoleData>,
         save_state: Option<SaveState>,
     ) -> Result<ProjectMetadata, UserError> {
         let unique_name = self.get_valid_project_name(owner, name).await?;
-        let roles = roles.unwrap_or_else(|| {
-            vec![RoleData {
-                name: "myRole".to_owned(),
-                code: "".to_owned(),
-                media: "".to_owned(),
-            }]
-        });
+
+        // Prepare the roles (ensure >=1 exists; upload them)
+        if roles.is_empty() {
+            roles.insert(
+                RoleId::new(Uuid::new_v4().to_string()),
+                RoleData {
+                    name: "myRole".to_owned(),
+                    code: "".to_owned(),
+                    media: "".to_owned(),
+                },
+            );
+        };
 
         let role_mds: Vec<RoleMetadata> = join_all(
             roles
-                .iter()
+                .values()
                 .map(|role| self.upload_role(owner, &unique_name, role)),
         )
         .await
         .into_iter()
         .collect::<Result<Vec<RoleMetadata>, _>>()?;
 
+        let roles: HashMap<RoleId, RoleMetadata> =
+            roles.keys().cloned().zip(role_mds.into_iter()).collect();
+
         let save_state = save_state.unwrap_or(SaveState::CREATED);
-        let metadata = ProjectMetadata::new(owner, &unique_name, role_mds, save_state);
+        let metadata = ProjectMetadata::new(owner, &unique_name, roles, save_state);
         self.project_metadata
             .insert_one(metadata.clone(), None)
             .await

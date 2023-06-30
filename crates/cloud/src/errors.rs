@@ -65,6 +65,8 @@ pub enum UserError {
     GroupExistsError,
     #[display(fmt = "Invalid username.")]
     InvalidUsername,
+    #[display(fmt = "Invalid name.")]
+    InvalidRoleOrProjectName,
     #[display(fmt = "Invalid email address.")]
     InvalidEmailAddress,
     #[display(fmt = "Invalid client ID.")]
@@ -171,6 +173,7 @@ impl error::ResponseError for UserError {
             | Self::GroupNotFoundError => StatusCode::NOT_FOUND,
             Self::InternalError | Self::SnapConnectionError => StatusCode::INTERNAL_SERVER_ERROR,
             Self::InvalidUsername
+            | Self::InvalidRoleOrProjectName
             | Self::InvalidEmailAddress
             | Self::InvalidClientIdError
             | Self::InvalidAppIdError
