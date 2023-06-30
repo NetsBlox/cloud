@@ -201,6 +201,8 @@ impl AppData {
             bucket: bucket.clone(),
             ..Default::default()
         };
+
+        // FIXME: check if bucket exists or invalid bucket name
         if self.s3.create_bucket(request).await.is_err() {
             info!("Using existing s3 bucket.")
         };
