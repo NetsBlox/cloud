@@ -139,14 +139,28 @@ pub(crate) struct ProjectMetadata {
     pub(crate) roles: HashMap<String, RoleMetadata>,
 
     //pub(crate) transient: Option<bool>,
-    //#[serde(rename = "camelCase")]
+    //#[serde(rename = "deleteAt")]
     //pub(crate) delete_at: Option<DateTime>,
-    #[serde(rename = "camelCase")]
+    #[serde(rename = "lastUpdateAt")]
     pub(crate) last_update_at: Option<f32>,
-    //#[serde(rename = "camelCase")]
+    //#[serde(rename = "lastUpdatedAt")]
     //pub(crate) last_updated_at: Option<DateTime>,
-    #[serde(rename = "PascalCase")]
+    #[serde(rename = "Public")]
     pub(crate) public: Option<bool>,
+}
+
+impl ProjectMetadata {
+    pub(crate) fn state(&self) -> PublishState {
+        self.public
+            .map(|is_public| {
+                if is_public {
+                    PublishState::Public
+                } else {
+                    PublishState::Private
+                }
+            })
+            .unwrap_or(PublishState::Private)
+    }
 }
 
 #[derive(Deserialize)]
@@ -193,7 +207,7 @@ impl From<Group> for cloud::Group {
         cloud::Group {
             id: cloud::api::GroupId::new(group.id.to_string()),
             name: group.name,
-            owner: group.owner.unwrap_or_else(|| String::from("admin")), // old groups are transfered to the admin account
+            owner: group.owner.unwrap_or_else(|| String::from("admin")), // old groups are transferred to the admin account
             service_settings: HashMap::new(),
             services_hosts: None,
         }
@@ -234,5 +248,20 @@ mod tests {
         let group_str = "{\"_id\": \"599aed7fc4913219dca051d2\", \"name\": \"test_group\"}";
         let _group: Group = serde_json::from_str(group_str)
             .unwrap_or_else(|_err| panic!("Unable to parse group from {}", group_str));
+    }
+
+    #[test]
+    fn deserialize_project_public() {
+        let proj_str = "{
+            \"_id\": \"599aed7fc4913219dca051d2\",
+            \"owner\": \"brian\",
+            \"name\": \"test_project\",
+            \"collaborators\": [],
+            \"roles\": {},
+            \"Public\": true
+        }";
+        let project: ProjectMetadata = serde_json::from_str(proj_str).unwrap();
+
+        assert!(project.public.unwrap());
     }
 }

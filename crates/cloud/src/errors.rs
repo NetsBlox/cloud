@@ -45,6 +45,8 @@ pub enum UserError {
     FriendNotFoundError,
     #[display(fmt = "Invitation not found.")]
     InviteNotFoundError,
+    #[display(fmt = "Invitation not allowed between members.")]
+    InviteNotAllowedError,
     #[display(fmt = "Service host not found.")]
     ServiceHostNotFoundError,
     #[display(fmt = "Project not active.")]
@@ -183,6 +185,7 @@ impl error::ResponseError for UserError {
             | Self::GroupExistsError
             | Self::CannotDeleteLastRoleError
             | Self::ServiceHostAlreadyAuthorizedError
+            | Self::InviteNotAllowedError
             | Self::OAuthFlowError(..)
             | Self::ProjectNotActiveError => StatusCode::BAD_REQUEST,
         }
