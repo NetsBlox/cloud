@@ -1509,7 +1509,7 @@ mod tests {
             email: "admin@netsblox.org".into(),
             password: None,
             group_id: None,
-            role: None,
+            role: Some(UserRole::Admin),
         }
         .into();
 
@@ -1552,7 +1552,7 @@ mod tests {
 
                 let project = app_data.get_project_metadatum(&project.id).await.unwrap();
                 let role = project.roles.get(&role_id).unwrap();
-                assert_eq!(role.name, "role".to_string());
+                assert_eq!(role.name, "new_name".to_string());
             })
             .await;
     }
