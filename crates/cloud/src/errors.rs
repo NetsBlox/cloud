@@ -67,6 +67,8 @@ pub enum UserError {
     InvalidUsername,
     #[display(fmt = "Invalid name.")]
     InvalidRoleOrProjectName,
+    #[display(fmt = "Invalid library name.")]
+    InvalidLibraryName,
     #[display(fmt = "Invalid email address.")]
     InvalidEmailAddress,
     #[display(fmt = "Invalid client ID.")]
@@ -176,6 +178,7 @@ impl error::ResponseError for UserError {
             | Self::InvalidRoleOrProjectName
             | Self::InvalidEmailAddress
             | Self::InvalidClientIdError
+            | Self::InvalidLibraryName
             | Self::InvalidAppIdError
             | Self::InvalidServiceHostIDError
             | Self::AccountAlreadyLinkedError
