@@ -7,6 +7,7 @@ use mongodb::bson::doc;
 use crate::app_data::AppData;
 use crate::common::{api, api::InvitationState, api::ProjectId, CollaborationInvite};
 use crate::errors::{InternalError, UserError};
+use crate::network;
 use crate::users::ensure_can_edit_user;
 use mongodb::options::{FindOneAndUpdateOptions, ReturnDocument};
 
@@ -77,7 +78,13 @@ async fn send_invite(
     // TODO: send via websocket, too
     if result.matched_count == 1 {
         Ok(HttpResponse::Conflict().body("Invitation already exists."))
-    } else {
+    } else {  // notify the recipient of the new invitation
+    let invitation: api::CollaborationInvite = invitation.into();
+    app.network
+        .send(network::topology::CollabInviteMsg::new(invitation.clone()))
+        .await
+        .map_err(InternalError::ActixMessageError)?;
+
         Ok(HttpResponse::Ok().json(invitation))
     }
 }

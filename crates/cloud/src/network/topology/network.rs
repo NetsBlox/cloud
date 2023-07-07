@@ -9,7 +9,7 @@ use log::warn;
 use lru::LruCache;
 use mongodb::bson::{doc, DateTime};
 use netsblox_cloud_common::SentMessage;
-use serde_json::json;
+use serde_json::{json, Value};
 use std::collections::{HashMap, HashSet};
 use std::str::FromStr;
 use std::sync::{Arc, RwLock};
@@ -822,6 +822,27 @@ impl Topology {
         let message = ClientCommand::SendMessage(msg.content);
         recipients.for_each(|client| {
             client.addr.do_send(message.clone()).unwrap();
+        });
+    }
+
+    pub fn send_to_user(&self, msg: Value, username: &str) {
+    let recipients = self.usernames
+        .iter()
+        .filter_map(|(client_id, name)| {
+        if name == username {
+        Some(client_id)
+            
+        } else {
+        None
+            
+        }
+            
+        })
+        .filter_map(|client_id| self.clients.get(client_id));
+        let message = ClientCommand::SendMessage(msg);
+        recipients.for_each(|client| {
+        client.addr.do_send(message.clone()).unwrap();
+            
         });
     }
 }

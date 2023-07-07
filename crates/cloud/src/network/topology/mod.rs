@@ -8,6 +8,8 @@ use crate::common::{api, OccupantInvite, ProjectMetadata};
 use actix::prelude::*;
 use actix::{Actor, AsyncContext, Context, Handler};
 use log::warn;
+use netsblox_cloud_common::api::CollaborationInvite;
+use serde::Serialize;
 use serde_json::Value;
 use std::sync::Arc;
 use tokio::sync::RwLock;
@@ -267,6 +269,68 @@ impl Handler<DisconnectClient> for TopologyActor {
         let fut = async move {
             let topology = network.read().await;
             topology.disconnect_client(&client_id);
+        };
+        let fut = actix::fut::wrap_future(fut);
+        ctx.spawn(fut);
+    }
+}
+
+#[derive(Message, Serialize)]
+#[rtype(result = "()")]
+pub struct CollabInviteMsg {
+    r#type: &'static str,
+    content: CollaborationInvite,
+}
+
+impl CollabInviteMsg {
+    pub(crate) fn new(content: CollaborationInvite) -> Self {
+    let r#type = "collaboration-invitation";
+
+    Self {r#type, content}
+    }
+}
+
+impl Handler<CollabInviteMsg> for TopologyActor {
+    type Result = ();
+
+    fn handle(&mut self, msg: CollabInviteMsg, ctx: &mut Context<Self>) -> Self::Result {
+        let network = self.network.clone();
+        let fut = async move {
+            let topology = network.read().await;
+            let receiver = msg.content.receiver.clone();
+            let json = serde_json::to_value(msg).unwrap();  // we created the message so it should be infallible
+            topology.send_to_user(json, &receiver);
+        };
+        let fut = actix::fut::wrap_future(fut);
+        ctx.spawn(fut);
+    }
+}
+
+#[derive(Message, Serialize)]
+#[rtype(result = "()")]
+pub struct FriendRequestMsg {
+    r#type: &'static str,
+    content: api::FriendInvite,
+}
+
+impl FriendRequestMsg {
+    pub(crate) fn new(content: api::FriendInvite) -> Self {
+    let r#type = "friend-request";
+
+    Self {r#type, content}
+    }
+}
+
+impl Handler<FriendRequestMsg> for TopologyActor {
+    type Result = ();
+
+    fn handle(&mut self, msg: FriendRequestMsg, ctx: &mut Context<Self>) -> Self::Result {
+        let network = self.network.clone();
+        let fut = async move {
+            let topology = network.read().await;
+            let receiver = msg.content.recipient.clone();
+            let json = serde_json::to_value(msg).unwrap();  // we created the message so it should be infallible
+            topology.send_to_user(json, &receiver);
         };
         let fut = actix::fut::wrap_future(fut);
         ctx.spawn(fut);

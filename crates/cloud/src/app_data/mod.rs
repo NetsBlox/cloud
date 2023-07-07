@@ -3,7 +3,7 @@ pub(crate) mod metrics;
 use crate::common::api::{
     oauth, LibraryMetadata, NewUser, ProjectId, PublishState, RoleId, UserRole,
 };
-use crate::projects;
+use crate::{projects, network};
 //pub use self::
 use actix_web::rt::time;
 use futures::future::join_all;
@@ -1042,7 +1042,7 @@ impl AppData {
             };
 
             let link = FriendLink::new(owner.to_owned(), recipient.to_owned(), None);
-            let update = doc! {"$setOnInsert": link};
+            let update = doc! {"$setOnInsert": &link};
             let options = FindOneAndUpdateOptions::builder().upsert(true).build();
             let result = self
                 .friends
@@ -1050,10 +1050,17 @@ impl AppData {
                 .await
                 .map_err(InternalError::DatabaseConnectionError)?;
 
-            // TODO: Should we allow users to send multiple invitations (ie, after rejection)?
-            result
-                .map(|link| link.state)
-                .unwrap_or(FriendLinkState::PENDING)
+            if let Some(link) = result {  // user is already blocked or approved
+                link.state
+            } else {  // new friend link
+                let request: FriendInvite = link.into();
+                self.network
+                    .send(network::topology::FriendRequestMsg::new(request.clone()))
+                    .await
+                    .map_err(InternalError::ActixMessageError)?;
+
+                FriendLinkState::PENDING
+            }
         };
 
         Ok(state)
