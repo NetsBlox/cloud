@@ -62,7 +62,7 @@ async fn send_invite(
         "projectId": &invitation.project_id
     };
     let update = doc! {
-        "$setOnInsert": invitation
+        "$setOnInsert": &invitation
     };
     let options = mongodb::options::UpdateOptions::builder()
         .upsert(true)
@@ -74,10 +74,11 @@ async fn send_invite(
         .await
         .unwrap();
 
+    // TODO: send via websocket, too
     if result.matched_count == 1 {
         Ok(HttpResponse::Conflict().body("Invitation already exists."))
     } else {
-        Ok(HttpResponse::Ok().body("Invitation sent!"))
+        Ok(HttpResponse::Ok().json(invitation))
     }
 }
 
@@ -136,6 +137,12 @@ pub fn config(cfg: &mut web::ServiceConfig) {
 
 #[cfg(test)]
 mod tests {
+    use super::*;
+    use actix_web::{test, App, web};
+    use netsblox_cloud_common::{User, api};
+
+    use crate::test_utils;
+
 
     #[actix_web::test]
     #[ignore]
@@ -156,9 +163,50 @@ mod tests {
     }
 
     #[actix_web::test]
-    #[ignore]
     async fn test_send_invite() {
-        todo!();
+        let sender: User = api::NewUser {
+            username: "sender".to_string(),
+            email: "sender@netsblox.org".into(),
+            password: None,
+            group_id: None,
+            role: None,
+        }
+        .into();
+        let rcvr: User = api::NewUser {
+            username: "rcvr".to_string(),
+            email: "rcvr@netsblox.org".into(),
+            password: None,
+            group_id: None,
+            role: None,
+        }
+        .into();
+
+        let project = test_utils::project::builder()
+            .with_owner("sender".to_string())
+            .build();
+
+        test_utils::setup()
+            .with_users(&[sender.clone(), rcvr.clone()])
+            .with_projects(&[project.clone()])
+            .run(|app_data| async move {
+                let app = test::init_service(
+                    App::new()
+                        .wrap(test_utils::cookie::middleware())
+                        .app_data(web::Data::new(app_data.clone()))
+                        .configure(config),
+                )
+                .await;
+
+                let req = test::TestRequest::get()
+                    .cookie(test_utils::cookie::new(&sender.username))
+                    .uri(&format!("/{}/invite/{}", &project.id, &rcvr.username))
+                    .to_request();
+
+                // Ensure that the collaboration invite is returned.
+                // This will panic if the response is incorrect so no assert needed.
+                let _invite: api::CollaborationInvite = test::call_and_read_body_json(&app, req).await;
+            })
+            .await;
     }
 
     #[actix_web::test]
