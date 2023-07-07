@@ -3,7 +3,7 @@ pub(crate) mod metrics;
 use crate::common::api::{
     oauth, LibraryMetadata, NewUser, ProjectId, PublishState, RoleId, UserRole,
 };
-use crate::{projects, network};
+use crate::{network, projects};
 //pub use self::
 use actix_web::rt::time;
 use futures::future::join_all;
@@ -1050,12 +1050,17 @@ impl AppData {
                 .await
                 .map_err(InternalError::DatabaseConnectionError)?;
 
-            if let Some(link) = result {  // user is already blocked or approved
+            if let Some(link) = result {
+                // user is already blocked or approved
                 link.state
-            } else {  // new friend link
+            } else {
+                // new friend link
                 let request: FriendInvite = link.into();
                 self.network
-                    .send(network::topology::FriendRequestMsg::new(request.clone()))
+                    .send(network::topology::FriendRequestChangeMsg::new(
+                        network::topology::ChangeType::Add,
+                        request.clone(),
+                    ))
                     .await
                     .map_err(InternalError::ActixMessageError)?;
 
@@ -1091,6 +1096,19 @@ impl AppData {
                 cache.pop(sender);
                 cache.pop(recipient);
             }
+
+            let pending_invites_changed = matches!(original.state, FriendLinkState::PENDING);
+            if pending_invites_changed {
+                let request: FriendInvite = original.into();
+                self.network
+                    .send(network::topology::FriendRequestChangeMsg::new(
+                        network::topology::ChangeType::Remove,
+                        request.clone(),
+                    ))
+                    .await
+                    .map_err(InternalError::ActixMessageError)?;
+            }
+
             Ok(())
         } else {
             Err(UserError::InviteNotFoundError)

@@ -826,23 +826,22 @@ impl Topology {
     }
 
     pub fn send_to_user(&self, msg: Value, username: &str) {
-    let recipients = self.usernames
-        .iter()
-        .filter_map(|(client_id, name)| {
-        if name == username {
-        Some(client_id)
-            
-        } else {
-        None
-            
-        }
-            
-        })
-        .filter_map(|client_id| self.clients.get(client_id));
+        let recipients = self
+            .usernames
+            .iter()
+            .filter_map(|(client_id, name)| {
+                if name == username {
+                    Some(client_id)
+                } else {
+                    None
+                }
+            })
+            .filter_map(|client_id| self.clients.get(client_id));
+
+        dbg!(&self.usernames, &recipients);
         let message = ClientCommand::SendMessage(msg);
         recipients.for_each(|client| {
-        client.addr.do_send(message.clone()).unwrap();
-            
+            client.addr.do_send(message.clone()).unwrap();
         });
     }
 }

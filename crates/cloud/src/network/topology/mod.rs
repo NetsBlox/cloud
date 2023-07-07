@@ -275,30 +275,43 @@ impl Handler<DisconnectClient> for TopologyActor {
     }
 }
 
+#[derive(Serialize)]
+pub(crate) enum ChangeType {
+    Add,
+    Remove,
+}
+
+/// A notification that the collaboration invitations have changed.
+/// Either a new invitation was sent or revoked/answered/etc
 #[derive(Message, Serialize)]
 #[rtype(result = "()")]
-pub struct CollabInviteMsg {
+pub struct CollabInviteChangeMsg {
     r#type: &'static str,
+    change: ChangeType,
     content: CollaborationInvite,
 }
 
-impl CollabInviteMsg {
-    pub(crate) fn new(content: CollaborationInvite) -> Self {
-    let r#type = "collaboration-invitation";
+impl CollabInviteChangeMsg {
+    pub(crate) fn new(change: ChangeType, content: CollaborationInvite) -> Self {
+        let r#type = "collaboration-invitation";
 
-    Self {r#type, content}
+        Self {
+            r#type,
+            change,
+            content,
+        }
     }
 }
 
-impl Handler<CollabInviteMsg> for TopologyActor {
+impl Handler<CollabInviteChangeMsg> for TopologyActor {
     type Result = ();
 
-    fn handle(&mut self, msg: CollabInviteMsg, ctx: &mut Context<Self>) -> Self::Result {
+    fn handle(&mut self, msg: CollabInviteChangeMsg, ctx: &mut Context<Self>) -> Self::Result {
         let network = self.network.clone();
         let fut = async move {
             let topology = network.read().await;
             let receiver = msg.content.receiver.clone();
-            let json = serde_json::to_value(msg).unwrap();  // we created the message so it should be infallible
+            let json = serde_json::to_value(msg).unwrap(); // we created the message so it should be infallible
             topology.send_to_user(json, &receiver);
         };
         let fut = actix::fut::wrap_future(fut);
@@ -306,30 +319,37 @@ impl Handler<CollabInviteMsg> for TopologyActor {
     }
 }
 
+/// A notification that the friend requests have changed.
+/// Either a new invitation was sent or revoked/answered/etc
 #[derive(Message, Serialize)]
 #[rtype(result = "()")]
-pub struct FriendRequestMsg {
+pub struct FriendRequestChangeMsg {
     r#type: &'static str,
+    change: ChangeType,
     content: api::FriendInvite,
 }
 
-impl FriendRequestMsg {
-    pub(crate) fn new(content: api::FriendInvite) -> Self {
-    let r#type = "friend-request";
+impl FriendRequestChangeMsg {
+    pub(crate) fn new(change: ChangeType, content: api::FriendInvite) -> Self {
+        let r#type = "friend-request";
 
-    Self {r#type, content}
+        Self {
+            r#type,
+            change,
+            content,
+        }
     }
 }
 
-impl Handler<FriendRequestMsg> for TopologyActor {
+impl Handler<FriendRequestChangeMsg> for TopologyActor {
     type Result = ();
 
-    fn handle(&mut self, msg: FriendRequestMsg, ctx: &mut Context<Self>) -> Self::Result {
+    fn handle(&mut self, msg: FriendRequestChangeMsg, ctx: &mut Context<Self>) -> Self::Result {
         let network = self.network.clone();
         let fut = async move {
             let topology = network.read().await;
             let receiver = msg.content.recipient.clone();
-            let json = serde_json::to_value(msg).unwrap();  // we created the message so it should be infallible
+            let json = serde_json::to_value(msg).unwrap(); // we created the message so it should be infallible
             topology.send_to_user(json, &receiver);
         };
         let fut = actix::fut::wrap_future(fut);

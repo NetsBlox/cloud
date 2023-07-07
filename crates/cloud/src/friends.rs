@@ -117,8 +117,6 @@ async fn send_invite(
     let recipient = recipient.into_inner();
     ensure_can_edit_user(&app, &session, &owner).await?;
 
-    // TODO: block requests into group
-
     // ensure users are valid
     let query = doc! {
         "$or": [
@@ -140,6 +138,7 @@ async fn send_invite(
         return Err(UserError::UserNotFoundError);
     }
 
+    // block requests into a group
     if users.into_iter().any(|user| user.is_member()) {
         return Err(UserError::InviteNotAllowedError);
     }

@@ -75,15 +75,18 @@ async fn send_invite(
         .await
         .unwrap();
 
-    // TODO: send via websocket, too
     if result.matched_count == 1 {
         Ok(HttpResponse::Conflict().body("Invitation already exists."))
-    } else {  // notify the recipient of the new invitation
-    let invitation: api::CollaborationInvite = invitation.into();
-    app.network
-        .send(network::topology::CollabInviteMsg::new(invitation.clone()))
-        .await
-        .map_err(InternalError::ActixMessageError)?;
+    } else {
+        // notify the recipient of the new invitation
+        let invitation: api::CollaborationInvite = invitation.into();
+        app.network
+            .send(network::topology::CollabInviteChangeMsg::new(
+                network::topology::ChangeType::Add,
+                invitation.clone(),
+            ))
+            .await
+            .map_err(InternalError::ActixMessageError)?;
 
         Ok(HttpResponse::Ok().json(invitation))
     }
@@ -108,32 +111,42 @@ async fn respond_to_invite(
 
     ensure_can_edit_user(&app, &session, &invite.receiver).await?;
 
-    app.collab_invites
-        .delete_one(query, None)
+    let invitation = app.collab_invites
+        .find_one_and_delete(query, None)
         .await
-        .map_err(InternalError::DatabaseConnectionError)?;
+        .map_err(InternalError::DatabaseConnectionError)?
+        .ok_or(UserError::InviteNotFoundError)?;
 
-    println!("state: {:?}", state);
-    match state.into_inner() {
-        InvitationState::ACCEPTED => {
-            let query = doc! {"id": &invite.project_id};
-            let update = doc! {"$addToSet": {"collaborators": &invite.receiver}};
-            let options = FindOneAndUpdateOptions::builder()
-                .return_document(ReturnDocument::After)
-                .build();
+    // Update the project
+    let state = state.into_inner();
+    if matches!(state, InvitationState::ACCEPTED) {
+        let query = doc! {"id": &invite.project_id};
+        let update = doc! {"$addToSet": {"collaborators": &invite.receiver}};
+        let options = FindOneAndUpdateOptions::builder()
+            .return_document(ReturnDocument::After)
+            .build();
 
-            let updated_metadata = app
-                .project_metadata
-                .find_one_and_update(query, update, options)
-                .await
-                .map_err(InternalError::DatabaseConnectionError)?
-                .ok_or(UserError::ProjectNotFoundError)?;
+        let updated_metadata = app
+            .project_metadata
+            .find_one_and_update(query, update, options)
+            .await
+            .map_err(InternalError::DatabaseConnectionError)?
+            .ok_or(UserError::ProjectNotFoundError)?;
 
-            app.on_room_changed(updated_metadata);
-            Ok(HttpResponse::Ok().body("Invitation accepted."))
-        }
-        _ => Ok(HttpResponse::Ok().body("Invitation rejected.")),
+        app.on_room_changed(updated_metadata);
     }
+
+    // Update the project
+    let invitation: api::CollaborationInvite = invitation.into();
+    app.network
+        .send(network::topology::CollabInviteChangeMsg::new(
+            network::topology::ChangeType::Remove,
+            invitation,
+        ))
+        .await
+        .map_err(InternalError::ActixMessageError)?;
+
+    Ok(HttpResponse::Ok().json(state))
 }
 
 pub fn config(cfg: &mut web::ServiceConfig) {
@@ -145,11 +158,10 @@ pub fn config(cfg: &mut web::ServiceConfig) {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use actix_web::{test, App, web};
-    use netsblox_cloud_common::{User, api};
+    use actix_web::{test, web, App};
+    use netsblox_cloud_common::{api, User};
 
     use crate::test_utils;
-
 
     #[actix_web::test]
     #[ignore]
@@ -211,7 +223,8 @@ mod tests {
 
                 // Ensure that the collaboration invite is returned.
                 // This will panic if the response is incorrect so no assert needed.
-                let _invite: api::CollaborationInvite = test::call_and_read_body_json(&app, req).await;
+                let _invite: api::CollaborationInvite =
+                    test::call_and_read_body_json(&app, req).await;
             })
             .await;
     }
