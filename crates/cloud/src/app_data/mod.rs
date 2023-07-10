@@ -1030,6 +1030,9 @@ impl AppData {
             let mut cache = FRIEND_CACHE.write().unwrap();
             cache.pop(owner);
             cache.pop(recipient);
+
+            // TODO: send msg about removing the existing invite
+
             FriendLinkState::APPROVED
         } else {
             let query = doc! {
