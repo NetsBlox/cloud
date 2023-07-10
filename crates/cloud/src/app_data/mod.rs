@@ -1088,10 +1088,10 @@ impl AppData {
         let update = doc! {"$set": {"state": &resp}};
 
         let options = FindOneAndUpdateOptions::builder()
-            .return_document(ReturnDocument::Before)
+            .return_document(ReturnDocument::After)
             .build();
 
-        let request = self
+        let link = self
             .friends
             .find_one_and_update(query, update, options)
             .await
@@ -1106,7 +1106,7 @@ impl AppData {
             cache.pop(recipient);
         }
 
-        let request: FriendInvite = request.into();
+        let request: FriendInvite = link.clone().into();
         self.network
             .send(network::topology::FriendRequestChangeMsg::new(
                 network::topology::ChangeType::Remove,
@@ -1115,7 +1115,7 @@ impl AppData {
             .await
             .map_err(InternalError::ActixMessageError)?;
 
-        Ok(())
+        Ok(link)
     }
 
     // Tor-related restrictions
@@ -1243,6 +1243,11 @@ fn is_opera_vpn(addr: &str) -> bool {
 
 #[cfg(test)]
 mod tests {
+    use netsblox_cloud_common::api;
+
+    use super::*;
+    use crate::test_utils;
+
     #[actix_web::test]
     #[ignore]
     async fn test_save_role_blob() {
@@ -1253,5 +1258,53 @@ mod tests {
     #[ignore]
     async fn test_save_role_set_transient_false() {
         todo!();
+    }
+
+    #[actix_web::test]
+    async fn test_respond_to_request() {
+        let sender: User = api::NewUser {
+            username: "sender".into(),
+            email: "sender@netsblox.org".into(),
+            password: None,
+            group_id: None,
+            role: None,
+        }
+        .into();
+        let rcvr: User = api::NewUser {
+            username: "rcvr".into(),
+            email: "rcvr@netsblox.org".into(),
+            password: None,
+            group_id: None,
+            role: None,
+        }
+        .into();
+        let link = FriendLink::new(sender.username.clone(), rcvr.username.clone(), None);
+
+        test_utils::setup()
+            .with_users(&[sender.clone(), rcvr.clone()])
+            .with_friend_links(&[link])
+            .run(|app_data| async move {
+                let link = app_data
+                    .respond_to_request(&rcvr.username, &sender.username, FriendLinkState::APPROVED)
+                    .await
+                    .unwrap();
+
+                dbg!(&link.state);
+                assert!(matches!(link.state, FriendLinkState::APPROVED));
+            })
+            .await;
+    }
+
+    #[actix_web::test]
+    async fn test_respond_to_request_404() {
+        test_utils::setup()
+            .run(|app_data| async move {
+                let result = app_data
+                    .respond_to_request("rcvr", "sender", FriendLinkState::APPROVED)
+                    .await;
+
+                assert!(matches!(result, Err(UserError::InviteNotFoundError)));
+            })
+            .await;
     }
 }
