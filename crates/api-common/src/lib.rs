@@ -130,7 +130,6 @@ pub enum FriendLinkState {
     PENDING,
     APPROVED,
     REJECTED,
-    DELETED,
     BLOCKED,
 }
 
@@ -151,7 +150,6 @@ impl FromStr for FriendLinkState {
             "pending" => Ok(FriendLinkState::PENDING),
             "approved" => Ok(FriendLinkState::APPROVED),
             "rejected" => Ok(FriendLinkState::REJECTED),
-            "deleted" => Ok(FriendLinkState::DELETED),
             "blocked" => Ok(FriendLinkState::BLOCKED),
             _ => Err(ParseFriendLinkStateError),
         }
