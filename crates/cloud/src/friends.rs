@@ -146,12 +146,10 @@ async fn send_invite(
     let state = app.send_invite(&owner, &recipient).await?;
 
     match state {
-        FriendLinkState::PENDING => Ok(HttpResponse::Ok().body("Invitation sent.")),
-        FriendLinkState::APPROVED => Ok(HttpResponse::Ok().body("Accepted friend request.")),
         FriendLinkState::BLOCKED => {
-            Ok(HttpResponse::Conflict().body("Cannot send request when blocked."))
+            Ok(HttpResponse::Conflict().json(state))
         }
-        _ => unreachable!(),
+        _ => Ok(HttpResponse::Ok().json(state)),
     }
 }
 
@@ -165,10 +163,10 @@ async fn respond_to_invite(
     let (recipient, sender) = path.into_inner();
     ensure_can_edit_user(&app, &session, &recipient).await?;
     let new_state = body.into_inner();
-    app.response_to_invite(&recipient, &sender, new_state)
+    let request = app.respond_to_request(&recipient, &sender, new_state)
         .await?;
 
-    Ok(HttpResponse::Ok().body("Responded to invitation."))
+    Ok(HttpResponse::Ok().json(request))
 }
 
 pub fn config(cfg: &mut web::ServiceConfig) {

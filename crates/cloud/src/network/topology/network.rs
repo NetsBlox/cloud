@@ -838,7 +838,7 @@ impl Topology {
             })
             .filter_map(|client_id| self.clients.get(client_id));
 
-        dbg!(&self.usernames, &recipients);
+        dbg!(&self.usernames, &recipients, &msg);
         let message = ClientCommand::SendMessage(msg);
         recipients.for_each(|client| {
             client.addr.do_send(message.clone()).unwrap();

@@ -1071,48 +1071,48 @@ impl AppData {
         Ok(state)
     }
 
-    pub async fn response_to_invite(
+    pub async fn respond_to_request(
         &self,
         recipient: &str,
         sender: &str,
         resp: FriendLinkState,
-    ) -> Result<(), UserError> {
-        let query = doc! {"recipient": &recipient, "sender": &sender};
+    ) -> Result<FriendLink, UserError> {
+        let query = doc! {
+          "recipient": &recipient,
+          "sender": &sender,
+          "state": FriendLinkState::PENDING
+        };
         let update = doc! {"$set": {"state": &resp}};
+
         let options = FindOneAndUpdateOptions::builder()
             .return_document(ReturnDocument::Before)
             .build();
-        let original = self
+
+        let request = self
             .friends
             .find_one_and_update(query, update, options)
             .await
-            .map_err(InternalError::DatabaseConnectionError)?;
+            .map_err(InternalError::DatabaseConnectionError)?
+            .ok_or(UserError::InviteNotFoundError)?;
 
-        if let Some(original) = original {
-            let invalidate_cache = matches!(resp, FriendLinkState::APPROVED)
-                || matches!(original.state, FriendLinkState::APPROVED);
-            if invalidate_cache {
-                let mut cache = FRIEND_CACHE.write().unwrap();
-                cache.pop(sender);
-                cache.pop(recipient);
-            }
-
-            let pending_invites_changed = matches!(original.state, FriendLinkState::PENDING);
-            if pending_invites_changed {
-                let request: FriendInvite = original.into();
-                self.network
-                    .send(network::topology::FriendRequestChangeMsg::new(
-                        network::topology::ChangeType::Remove,
-                        request.clone(),
-                    ))
-                    .await
-                    .map_err(InternalError::ActixMessageError)?;
-            }
-
-            Ok(())
-        } else {
-            Err(UserError::InviteNotFoundError)
+        let friend_list_changed = matches!(resp, FriendLinkState::APPROVED);
+        if friend_list_changed {
+            // invalidate cache
+            let mut cache = FRIEND_CACHE.write().unwrap();
+            cache.pop(sender);
+            cache.pop(recipient);
         }
+
+        let request: FriendInvite = request.into();
+        self.network
+            .send(network::topology::FriendRequestChangeMsg::new(
+                network::topology::ChangeType::Remove,
+                request.clone(),
+            ))
+            .await
+            .map_err(InternalError::ActixMessageError)?;
+
+        Ok(())
     }
 
     // Tor-related restrictions
