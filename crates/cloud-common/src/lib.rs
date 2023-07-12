@@ -178,7 +178,7 @@ impl From<Group> for Bson {
     }
 }
 
-#[derive(Serialize, Deserialize, Clone)]
+#[derive(Serialize, Deserialize, Clone, Debug)]
 #[serde(rename_all = "camelCase")]
 pub struct CollaborationInvite {
     pub id: String,
