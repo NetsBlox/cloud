@@ -1,12 +1,11 @@
 use std::sync::{Arc, Mutex};
 
-use actix::Addr;
 use futures::{future::join_all, Future};
 use lazy_static::lazy_static;
 use mongodb::{bson::doc, Client};
-use netsblox_cloud_common::{BannedAccount, FriendLink, Group, Project, User};
+use netsblox_cloud_common::{BannedAccount, CollaborationInvite, FriendLink, Group, Project, User};
 
-use crate::{app_data::AppData, config::Settings, network::topology::TopologyActor};
+use crate::{app_data::AppData, config::Settings};
 
 lazy_static! {
     static ref COUNTER: Arc<Mutex<u32>> = Arc::new(Mutex::new(0));
@@ -24,7 +23,8 @@ pub(crate) fn setup() -> TestSetupBuilder {
         groups: Vec::new(),
         clients: Vec::new(),
         friends: Vec::new(),
-        network: None,
+        collab_invites: Vec::new(),
+        // network: None,
     }
 }
 
@@ -36,7 +36,8 @@ pub(crate) struct TestSetupBuilder {
     clients: Vec<network::Client>,
     friends: Vec<FriendLink>,
     banned_users: Vec<String>,
-    network: Option<Addr<TopologyActor>>,
+    collab_invites: Vec<CollaborationInvite>,
+    //network: Option<Addr<TopologyActor>>,
 }
 
 impl TestSetupBuilder {
@@ -50,13 +51,18 @@ impl TestSetupBuilder {
         self
     }
 
+    pub(crate) fn with_groups(mut self, groups: &[Group]) -> Self {
+        self.groups.extend_from_slice(groups);
+        self
+    }
+
     pub(crate) fn with_projects(mut self, projects: &[Project]) -> Self {
         self.projects.extend_from_slice(projects);
         self
     }
 
-    pub(crate) fn with_groups(mut self, groups: &[Group]) -> Self {
-        self.groups.extend_from_slice(groups);
+    pub(crate) fn with_collab_invites(mut self, invites: &[CollaborationInvite]) -> Self {
+        self.collab_invites.extend_from_slice(invites);
         self
     }
 
@@ -70,10 +76,10 @@ impl TestSetupBuilder {
         self
     }
 
-    pub(crate) fn with_network(mut self, network: Addr<TopologyActor>) -> Self {
-        self.network = Some(network);
-        self
-    }
+    // pub(crate) fn with_network(mut self, network: Addr<TopologyActor>) -> Self {
+    //     self.network = Some(network);
+    //     self
+    // }
 
     pub(crate) async fn run<Fut>(self, f: impl FnOnce(AppData) -> Fut)
     where
@@ -105,11 +111,10 @@ impl TestSetupBuilder {
                 save_state,
                 ..
             } = proj;
-            let result = app_data
+            let metadata = app_data
                 .import_project(&owner, &name, &mut roles, Some(save_state.clone()))
-                .await;
-            dbg!(&result);
-            let metadata = result.unwrap();
+                .await
+                .unwrap();
 
             let query = doc! {"id": metadata.id};
             let update = doc! {"$set": {"id": id}};
@@ -146,6 +151,14 @@ impl TestSetupBuilder {
             app_data
                 .groups
                 .insert_many(self.groups, None)
+                .await
+                .unwrap();
+        }
+
+        if !self.collab_invites.is_empty() {
+            app_data
+                .collab_invites
+                .insert_many(self.collab_invites, None)
                 .await
                 .unwrap();
         }
