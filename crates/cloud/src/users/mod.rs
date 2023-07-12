@@ -366,22 +366,20 @@ async fn ban_user(
     ensure_can_edit_user(&app, &session, &username).await?;
 
     let query = doc! {"username": username};
-    match app
+    let user = app
         .users
         .find_one(query, None)
         .await
         .map_err(InternalError::DatabaseConnectionError)?
-    {
-        Some(user) => {
-            let account = BannedAccount::new(user.username, user.email);
-            app.banned_accounts
-                .insert_one(account, None)
-                .await
-                .map_err(InternalError::DatabaseConnectionError)?;
-            Ok(HttpResponse::Ok().body("User has been banned"))
-        }
-        None => Err(UserError::UserNotFoundError),
-    }
+        .ok_or(UserError::UserNotFoundError)?;
+
+    let account = BannedAccount::new(user.username, user.email);
+    app.banned_accounts
+        .insert_one(&account, None)
+        .await
+        .map_err(InternalError::DatabaseConnectionError)?;
+
+    Ok(HttpResponse::Ok().json(account))
 }
 
 #[post("/{username}/delete")]
@@ -1370,6 +1368,108 @@ mod tests {
                     .expect("Could not query for user");
 
                 assert!(result.is_some(), "User deleted");
+            })
+            .await;
+    }
+
+    #[actix_web::test]
+    async fn test_ban_user() {
+        let admin: User = api::NewUser {
+            username: "admin".to_string(),
+            email: "admin@netsblox.org".into(),
+            password: None,
+            group_id: None,
+            role: Some(UserRole::Admin),
+        }
+        .into();
+        let admin_name = admin.username.clone();
+        let some_user: User = api::NewUser {
+            username: "some_user".to_string(),
+            email: "user@netsblox.org".into(),
+            password: None,
+            group_id: None,
+            role: None,
+        }
+        .into();
+
+        test_utils::setup()
+            .with_users(&[admin, some_user])
+            .run(|app_data| async move {
+                let app = test::init_service(
+                    App::new()
+                        .wrap(test_utils::cookie::middleware())
+                        .app_data(web::Data::new(app_data.clone()))
+                        .configure(config),
+                )
+                .await;
+
+                let req = test::TestRequest::post()
+                    .uri("/some_user/ban")
+                    .cookie(test_utils::cookie::new(&admin_name))
+                    .to_request();
+
+                // This will panic if the response isn't a banned account; no assert needed
+                let _account: BannedAccount = test::call_and_read_body_json(&app, req).await;
+
+                let query = doc! {"username": "some_user"};
+                let result = app_data
+                    .banned_accounts
+                    .find_one(query, None)
+                    .await
+                    .expect("Could not query for user");
+
+                assert!(result.is_some(), "User not banned");
+            })
+            .await;
+    }
+
+    #[actix_web::test]
+    async fn test_ban_user_403() {
+        let user: User = api::NewUser {
+            username: "user".to_string(),
+            email: "user@netsblox.org".into(),
+            password: None,
+            group_id: None,
+            role: None,
+        }
+        .into();
+        let user_name = user.username.clone();
+        let some_user: User = api::NewUser {
+            username: "some_user".to_string(),
+            email: "user@netsblox.org".into(),
+            password: None,
+            group_id: None,
+            role: None,
+        }
+        .into();
+
+        test_utils::setup()
+            .with_users(&[user, some_user])
+            .run(|app_data| async move {
+                let app = test::init_service(
+                    App::new()
+                        .wrap(test_utils::cookie::middleware())
+                        .app_data(web::Data::new(app_data.clone()))
+                        .configure(config),
+                )
+                .await;
+
+                let req = test::TestRequest::post()
+                    .uri("/some_user/ban")
+                    .cookie(test_utils::cookie::new(&user_name))
+                    .to_request();
+
+                let response = test::call_service(&app, req).await;
+                assert_eq!(response.status(), http::StatusCode::FORBIDDEN);
+
+                let query = doc! {"username": "some_user"};
+                let result = app_data
+                    .banned_accounts
+                    .find_one(query, None)
+                    .await
+                    .expect("Could not query for user");
+
+                assert!(result.is_none(), "User banned");
             })
             .await;
     }
