@@ -47,6 +47,8 @@ pub enum UserError {
     InviteNotFoundError,
     #[display(fmt = "Invitation not allowed between members.")]
     InviteNotAllowedError,
+    #[display(fmt = "Invitation already exists.")]
+    InviteAlreadyExistsError,
     #[display(fmt = "Service host not found.")]
     ServiceHostNotFoundError,
     #[display(fmt = "Project not active.")]
@@ -194,6 +196,7 @@ impl error::ResponseError for UserError {
             | Self::InviteNotAllowedError
             | Self::OAuthFlowError(..)
             | Self::ProjectNotActiveError => StatusCode::BAD_REQUEST,
+            Self::InviteAlreadyExistsError => StatusCode::CONFLICT,
         }
     }
 }
