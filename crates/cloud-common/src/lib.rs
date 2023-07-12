@@ -267,7 +267,6 @@ impl From<FriendLink> for FriendInvite {
 
 impl From<FriendLink> for Bson {
     fn from(link: FriendLink) -> Bson {
-        println!("from friend link! {:?}", link);
         Bson::Document(doc! {
             "id": link.id,
             "sender": link.sender,
