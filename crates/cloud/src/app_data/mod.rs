@@ -566,30 +566,31 @@ impl AppData {
         })
     }
 
-    pub async fn delete_project(&self, metadata: ProjectMetadata) -> Result<(), UserError> {
+    pub async fn delete_project(
+        &self,
+        metadata: ProjectMetadata,
+    ) -> Result<ProjectMetadata, UserError> {
         let query = doc! {"id": &metadata.id};
-        let result = self
+        let metadata = self
             .project_metadata
             .find_one_and_delete(query, None)
             .await
-            .map_err(InternalError::DatabaseConnectionError)?;
+            .map_err(InternalError::DatabaseConnectionError)?
+            .ok_or(UserError::ProjectNotFoundError)?;
 
-        if let Some(metadata) = result {
-            let paths = metadata
-                .roles
-                .into_values()
-                .flat_map(|role| vec![role.code, role.media]);
+        let paths = metadata
+            .roles
+            .clone()
+            .into_values()
+            .flat_map(|role| vec![role.code, role.media]);
 
-            join_all(paths.map(move |path| self.delete(path)))
-                .await
-                .into_iter()
-                .collect::<Result<Vec<_>, _>>()?;
+        join_all(paths.map(move |path| self.delete(path)))
+            .await
+            .into_iter()
+            .collect::<Result<Vec<_>, _>>()?;
 
-            // TODO: send update to any current occupants
-            Ok(())
-        } else {
-            Err(UserError::ProjectNotFoundError)
-        }
+        // TODO: send update to any current occupants
+        Ok(metadata)
     }
 
     pub async fn fetch_role(&self, metadata: &RoleMetadata) -> Result<RoleData, InternalError> {

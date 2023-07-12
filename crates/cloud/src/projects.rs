@@ -390,8 +390,9 @@ async fn delete_project(
 
     // collaborators cannot delete -> only user/admin/etc
     ensure_can_edit_user(&app, &session, &metadata.owner).await?;
-    app.delete_project(metadata).await?; // TODO:
-    Ok(HttpResponse::Ok().body("Project deleted"))
+    let project = app.delete_project(metadata).await?;
+
+    Ok(HttpResponse::Ok().json(project))
 }
 
 #[patch("/id/{projectID}")]
@@ -625,8 +626,8 @@ async fn delete_role(
         .map_err(InternalError::DatabaseConnectionError)?
         .ok_or(UserError::ProjectNotFoundError)?;
 
-    app.on_room_changed(updated_metadata);
-    Ok(HttpResponse::Ok().body("Deleted!"))
+    app.on_room_changed(updated_metadata.clone());
+    Ok(HttpResponse::Ok().json(updated_metadata))
 }
 
 #[post("/id/{projectID}/{roleID}")]
