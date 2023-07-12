@@ -213,7 +213,10 @@ pub(crate) mod project {
     use std::collections::HashMap;
 
     use mongodb::bson::DateTime;
-    use netsblox_cloud_common::{api, Project};
+    use netsblox_cloud_common::{
+        api::{self, RoleData, RoleId},
+        Project,
+    };
     use uuid::Uuid;
 
     pub(crate) struct ProjectBuilder {
@@ -250,12 +253,23 @@ pub(crate) mod project {
             self
         }
 
-        pub(crate) fn build(self) -> Project {
+        pub(crate) fn build(mut self) -> Project {
             let id = self
                 .id
                 .unwrap_or_else(|| api::ProjectId::new(Uuid::new_v4().to_string()));
 
             let owner = self.owner.unwrap_or_else(|| String::from("admin"));
+
+            if self.roles.is_empty() {
+                self.roles.insert(
+                    RoleId::new(Uuid::new_v4().to_string()),
+                    RoleData {
+                        name: "myRole".to_owned(),
+                        code: "".to_owned(),
+                        media: "".to_owned(),
+                    },
+                );
+            }
 
             Project {
                 id,
