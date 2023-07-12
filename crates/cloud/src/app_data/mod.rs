@@ -914,31 +914,28 @@ impl AppData {
         Ok(friend_names)
     }
 
-    pub async fn unfriend(&self, owner: &str, friend: &str) -> Result<(), UserError> {
+    pub async fn unfriend(&self, owner: &str, friend: &str) -> Result<FriendLink, UserError> {
         let query = doc! {
             "$or": [
                 {"sender": &owner, "recipient": &friend, "state": FriendLinkState::APPROVED},
                 {"sender": &friend, "recipient": &owner, "state": FriendLinkState::APPROVED}
             ]
         };
-        let result = self
+        let link = self
             .friends
-            .delete_one(query, None)
+            .find_one_and_delete(query, None)
             .await
-            .map_err(InternalError::DatabaseConnectionError)?;
+            .map_err(InternalError::DatabaseConnectionError)?
+            .ok_or(UserError::FriendNotFoundError)?;
 
-        if result.deleted_count > 0 {
-            // invalidate friend cache
-            let mut cache = FRIEND_CACHE.write().unwrap();
-            cache.pop(owner);
-            cache.pop(friend);
-            Ok(())
-        } else {
-            Err(UserError::FriendNotFoundError)
-        }
+        // invalidate friend cache
+        let mut cache = FRIEND_CACHE.write().unwrap();
+        cache.pop(owner);
+        cache.pop(friend);
+        Ok(link)
     }
 
-    pub async fn block_user(&self, owner: &str, other_user: &str) -> Result<(), UserError> {
+    pub async fn block_user(&self, owner: &str, other_user: &str) -> Result<FriendLink, UserError> {
         let query = doc! {
             "$or": [
                 {"sender": &owner, "recipient": &other_user},
