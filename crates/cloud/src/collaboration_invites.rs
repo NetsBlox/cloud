@@ -458,12 +458,6 @@ mod tests {
                 )
                 .await;
 
-                let existing = app_data
-                    .collab_invites
-                    .find_one(doc! {}, None)
-                    .await
-                    .unwrap();
-
                 let req = test::TestRequest::post()
                     .cookie(test_utils::cookie::new(&sender.username))
                     .uri(&format!("/{}/invite/{}", &project.id, &rcvr.username))
