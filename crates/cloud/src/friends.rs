@@ -93,7 +93,10 @@ async fn unblock_user(
     ensure_can_edit_user(&app, &session, &owner).await?;
     app.unblock_user(&owner, &friend).await?;
 
-    Ok(HttpResponse::Ok().body("User has been unblocked."))
+    // Send "true" since it was successful but there isn't anything to send
+    // (w/o adding extra overhead by making assumptions like that they want
+    // to see all their friends)
+    Ok(HttpResponse::Ok().json(true))
 }
 
 #[get("/{owner}/invites/")]
@@ -532,8 +535,8 @@ mod tests {
             Some(FriendLinkState::APPROVED),
         );
 
+        // Roll back the creation date to make it obvious that the update time is different
         l1.created_at = DateTime::from_system_time(SystemTime::now() - Duration::from_secs(100));
-        dbg!(&l1.created_at);
 
         test_utils::setup()
             .with_users(&[user.clone(), f1.clone()])
@@ -564,6 +567,54 @@ mod tests {
     #[ignore]
     async fn test_block_user_403() {
         todo!();
+    }
+
+    #[actix_web::test]
+    async fn test_unblock_user() {
+        let user: User = api::NewUser {
+            username: "user".into(),
+            email: "user@netsblox.org".into(),
+            password: None,
+            group_id: None,
+            role: Some(UserRole::User),
+        }
+        .into();
+        let f1: User = api::NewUser {
+            username: "f1".into(),
+            email: "user@netsblox.org".into(),
+            password: None,
+            group_id: None,
+            role: Some(UserRole::User),
+        }
+        .into();
+        let l1 = FriendLink::new(
+            user.username.clone(),
+            f1.username.clone(),
+            Some(FriendLinkState::BLOCKED),
+        );
+
+        test_utils::setup()
+            .with_users(&[user.clone(), f1.clone()])
+            .with_friend_links(&[l1.clone()])
+            .run(|app_data| async move {
+                let app = test::init_service(
+                    App::new()
+                        .wrap(test_utils::cookie::middleware())
+                        .app_data(web::Data::new(app_data.clone()))
+                        .configure(config),
+                )
+                .await;
+
+                let cookie = test_utils::cookie::new(&user.username);
+                let req = test::TestRequest::post()
+                    .uri(&format!("/{}/unblock/{}", &user.username, &f1.username))
+                    .cookie(cookie)
+                    .to_request();
+
+                let response = test::call_service(&app, req).await;
+                assert_eq!(response.status(), http::StatusCode::OK);
+            })
+            .await;
     }
 
     #[actix_web::test]

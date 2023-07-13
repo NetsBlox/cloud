@@ -948,13 +948,19 @@ impl AppData {
             Some(FriendLinkState::BLOCKED),
         );
         let update = doc! {
-            "$set": &link,
-            "$setOnInsert": &link
+            "$set": {
+                "state": &link.state,
+                "updatedAt": &link.updated_at,
+            },
+            "$setOnInsert": {
+                "createdAt": &link.created_at,
+            },
         };
         let options = FindOneAndUpdateOptions::builder()
             .return_document(ReturnDocument::Before)
             .upsert(true)
             .build();
+
         let original = self
             .friends
             .find_one_and_update(query, update, options)
@@ -962,13 +968,18 @@ impl AppData {
             .map_err(InternalError::DatabaseConnectionError)?;
 
         // invalidate friend cache
-        let invalidate_cache = original.is_some();
-        if invalidate_cache {
+        if let Some(mut original) = original {
             let mut cache = FRIEND_CACHE.write().unwrap();
             cache.pop(owner);
             cache.pop(other_user);
+
+            original.state = link.state;
+            original.updated_at = link.updated_at;
+
+            Ok(original)
+        } else {
+            Ok(link)
         }
-        Ok(())
     }
 
     pub async fn unblock_user(&self, owner: &str, other_user: &str) -> Result<(), UserError> {
