@@ -394,7 +394,7 @@ impl From<ProjectMetadata> for netsblox_api_common::ProjectMetadata {
     }
 }
 
-#[derive(Deserialize, Serialize, Clone)]
+#[derive(Deserialize, Serialize, Clone, Debug)]
 #[serde(rename_all = "camelCase")]
 pub struct Project {
     pub id: ProjectId,
