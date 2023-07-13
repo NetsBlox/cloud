@@ -48,6 +48,7 @@ use rusoto_s3::{
 
 // This is lazy_static to ensure it is shared between threads
 // TODO: it would be nice to be able to configure the cache size from the settings
+// TODO: move the cache to something that isn't shared btwn tests...
 lazy_static! {
     static ref MEMBERSHIP_CACHE: Arc<AsyncRwLock<LruCache<String, bool>>> =
         Arc::new(AsyncRwLock::new(LruCache::new(1000)));
@@ -1177,6 +1178,10 @@ impl AppData {
             .insert_many(friends, None)
             .await
             .map_err(InternalError::DatabaseConnectionError)?;
+
+        // clear the friend cache
+        let mut cache = FRIEND_CACHE.write().unwrap();
+        cache.clear();
 
         Ok(())
     }
