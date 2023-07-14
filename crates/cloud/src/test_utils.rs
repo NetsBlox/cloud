@@ -215,7 +215,7 @@ pub(crate) mod project {
     use mongodb::bson::DateTime;
     use netsblox_cloud_common::{
         api::{self, RoleData, RoleId},
-        Project,
+        NetworkTraceMetadata, Project,
     };
     use uuid::Uuid;
 
@@ -225,6 +225,7 @@ pub(crate) mod project {
         name: Option<String>,
         collaborators: Vec<String>,
         roles: HashMap<api::RoleId, api::RoleData>,
+        traces: Vec<NetworkTraceMetadata>,
     }
 
     impl ProjectBuilder {
@@ -240,6 +241,11 @@ pub(crate) mod project {
 
         pub(crate) fn with_roles(mut self, roles: HashMap<api::RoleId, api::RoleData>) -> Self {
             self.roles = roles;
+            self
+        }
+
+        pub(crate) fn with_traces(mut self, traces: &[NetworkTraceMetadata]) -> Self {
+            self.traces.extend_from_slice(traces);
             self
         }
 
