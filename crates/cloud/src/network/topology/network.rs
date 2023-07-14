@@ -145,9 +145,9 @@ pub struct Topology {
 
 #[derive(Debug)]
 enum ProjectCleanup {
-    NONE,
-    IMMEDIATELY,
-    DELAYED,
+    None,
+    Immediately,
+    Delayed,
 }
 
 impl Topology {
@@ -206,11 +206,11 @@ impl Topology {
             .map(|addresses| addresses.to_vec())
     }
 
-    fn cache_address(&self, addr: &ClientAddress, b_addrs: &Vec<BrowserAddress>) {
+    fn cache_address(&self, addr: &ClientAddress, b_addrs: &[BrowserAddress]) {
         ADDRESS_CACHE
             .write()
             .unwrap()
-            .put(addr.clone(), b_addrs.clone());
+            .put(addr.clone(), b_addrs.to_vec());
         // TODO: clear cache on room close?
     }
 
@@ -588,20 +588,20 @@ impl Topology {
                 .map_err(InternalError::DatabaseConnectionError)?
                 .map(|md| match md.save_state {
                     SaveState::CREATED => unreachable!(),
-                    SaveState::TRANSIENT => ProjectCleanup::IMMEDIATELY,
-                    SaveState::BROKEN => ProjectCleanup::DELAYED,
-                    SaveState::SAVED => ProjectCleanup::NONE,
+                    SaveState::TRANSIENT => ProjectCleanup::Immediately,
+                    SaveState::BROKEN => ProjectCleanup::Delayed,
+                    SaveState::SAVED => ProjectCleanup::None,
                 })
-                .unwrap_or(ProjectCleanup::NONE);
+                .unwrap_or(ProjectCleanup::None);
 
             match cleanup {
-                ProjectCleanup::IMMEDIATELY => {
+                ProjectCleanup::Immediately => {
                     app.project_metadata
                         .delete_one(query, None)
                         .await
                         .map_err(InternalError::DatabaseConnectionError)?;
                 }
-                ProjectCleanup::DELAYED => {
+                ProjectCleanup::Delayed => {
                     let ten_minutes = Duration::new(10 * 60, 0);
                     let delete_at = DateTime::from_system_time(
                         SystemTime::now().checked_add(ten_minutes).unwrap(),

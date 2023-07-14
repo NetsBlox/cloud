@@ -456,8 +456,7 @@ async fn get_latest_project(
         .map(|role_id| fetch_role_data(&app, &metadata, role_id.to_owned()))
         .collect::<FuturesUnordered<_>>()
         .try_collect::<HashMap<RoleId, RoleData>>()
-        .await
-        .unwrap(); // TODO: handle errors
+        .await?;
 
     let project = Project {
         id: metadata.id.to_owned(),
