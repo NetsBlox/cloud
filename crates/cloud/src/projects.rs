@@ -392,6 +392,10 @@ async fn delete_project(
     ensure_can_edit_user(&app, &session, &metadata.owner).await?;
     let project = app.delete_project(metadata).await?;
 
+    // Notify clients that the project has been deleted
+    app.network
+        .do_send(topology::ProjectDeleted::new(project.clone()));
+
     Ok(HttpResponse::Ok().json(project))
 }
 

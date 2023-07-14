@@ -357,6 +357,38 @@ impl Handler<FriendRequestChangeMsg> for TopologyActor {
     }
 }
 
+/// A notification that the given project has been deleted.
+#[derive(Message, Serialize)]
+#[rtype(result = "()")]
+pub struct ProjectDeleted {
+    r#type: &'static str,
+    project: ProjectMetadata,
+}
+
+impl ProjectDeleted {
+    pub(crate) fn new(project: ProjectMetadata) -> Self {
+        let r#type = "project-deleted";
+
+        Self { r#type, project }
+    }
+}
+
+impl Handler<ProjectDeleted> for TopologyActor {
+    type Result = ();
+
+    fn handle(&mut self, msg: ProjectDeleted, ctx: &mut Context<Self>) -> Self::Result {
+        let network = self.network.clone();
+        let fut = async move {
+            let topology = network.read().await;
+            let project_id = msg.project.id.clone();
+            let json = serde_json::to_value(msg).unwrap(); // we created the message so it should be infallible
+            topology.send_to_room(json, &project_id);
+        };
+        let fut = actix::fut::wrap_future(fut);
+        ctx.spawn(fut);
+    }
+}
+
 #[derive(Message, Clone)]
 #[rtype(result = "()")]
 pub struct SendOccupantInvite {

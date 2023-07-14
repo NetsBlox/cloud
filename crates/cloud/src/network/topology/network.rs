@@ -852,6 +852,25 @@ impl Topology {
             client.addr.do_send(message.clone()).unwrap();
         });
     }
+
+    pub fn send_to_room(&self, msg: Value, id: &ProjectId) {
+        let recipients = self
+            .rooms
+            .get(id)
+            .map(|room| {
+                room.roles
+                    .values()
+                    .flatten()
+                    .filter_map(|id| self.clients.get(id))
+                    .collect::<Vec<_>>()
+            })
+            .unwrap_or_default();
+
+        let message = ClientCommand::SendMessage(msg);
+        recipients.into_iter().for_each(|client| {
+            client.addr.do_send(message.clone()).unwrap();
+        });
+    }
 }
 
 #[cfg(test)]
