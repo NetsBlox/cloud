@@ -408,7 +408,6 @@ async fn update_project(
 ) -> Result<HttpResponse, UserError> {
     let (project_id,) = path.into_inner();
 
-    // TODO: validate the name. Or make it a type?
     let query = doc! {"id": &project_id};
     let body = body.into_inner();
     let metadata = ensure_can_edit_project(&app, &session, body.client_id, &project_id).await?;
