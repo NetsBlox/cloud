@@ -11,7 +11,7 @@ use crate::common::{
     api, api::ExternalClientState, NetworkTraceMetadata, OccupantInvite, SentMessage,
 };
 use crate::errors::{InternalError, UserError};
-use crate::projects::{ensure_can_edit_project, ensure_can_view_project};
+use crate::projects::{can_edit_project, ensure_can_edit_project, ensure_can_view_project};
 use crate::services::ensure_is_authorized_host;
 use crate::users::{ensure_can_edit_user, ensure_is_super_user};
 use actix::{Actor, Addr, AsyncContext, Handler, StreamHandler};
@@ -22,6 +22,7 @@ use actix_web_actors::ws::{self, CloseCode};
 use futures::TryStreamExt;
 use mongodb::bson::{doc, DateTime};
 use mongodb::options::{FindOneAndUpdateOptions, ReturnDocument};
+use netsblox_cloud_common::ProjectMetadata;
 use serde::Deserialize;
 use serde_json::{json, Value};
 use topology::ClientCommand;
@@ -214,11 +215,11 @@ async fn invite_occupant(
 
     app.network.do_send(topology::SendOccupantInvite {
         inviter,
-        invite,
+        invite: invite.clone(),
         project,
     });
 
-    Ok(HttpResponse::Ok().body("Invitation sent!"))
+    Ok(HttpResponse::Ok().json(invite))
 }
 
 #[post("/clients/{clientID}/evict")]
@@ -229,30 +230,40 @@ async fn evict_occupant(
 ) -> Result<HttpResponse, UserError> {
     let (client_id,) = path.into_inner();
 
-    ensure_can_evict_client(&app, &session, &client_id).await?;
+    let metadata = ensure_can_evict_client(&app, &session, &client_id).await?;
 
-    app.network.do_send(topology::EvictOccupant { client_id });
+    app.network
+        .send(topology::EvictOccupant { client_id })
+        .await
+        .map_err(InternalError::ActixMessageError)?;
 
-    Ok(HttpResponse::Ok().body("Evicted!"))
+    // Fetch the current state of the room
+    let room_state = if let Some(metadata) = metadata {
+        let task = app
+            .network
+            .send(topology::GetRoomState(metadata))
+            .await
+            .map_err(InternalError::ActixMessageError)?;
+
+        task.run().await
+    } else {
+        None
+    };
+
+    Ok(HttpResponse::Ok().json(room_state))
 }
 
 async fn ensure_can_evict_client(
     app: &AppData,
     session: &Session,
     client_id: &ClientId,
-) -> Result<(), UserError> {
-    let task = app
-        .network
-        .send(topology::GetClientState(client_id.clone()))
-        .await
-        .map_err(InternalError::ActixMessageError)?;
-    let client_state = task.run().await;
-
+) -> Result<Option<ProjectMetadata>, UserError> {
     // Client can be evicted by project owners, collaborators
-    if let Some(ClientState::Browser(BrowserClientState { project_id, .. })) = client_state {
-        let can_edit = ensure_can_edit_project(app, session, None, &project_id).await;
-        if can_edit.is_ok() {
-            return Ok(());
+    let metadata = get_project_for_client(app, client_id).await?;
+
+    if let Some(metadata) = metadata.clone() {
+        if can_edit_project(app, session, Some(client_id), &metadata).await? {
+            return Ok(Some(metadata));
         }
     }
 
@@ -262,12 +273,40 @@ async fn ensure_can_evict_client(
         .send(topology::GetClientUsername(client_id.clone()))
         .await
         .map_err(InternalError::ActixMessageError)?;
+
     let client_username = task.run().await;
 
     match client_username {
         Some(username) => ensure_can_edit_user(app, session, &username).await,
         None => Err(UserError::PermissionsError), // TODO: allow guest to evict self?
-    }
+    }?;
+
+    Ok(metadata)
+}
+
+async fn get_project_for_client(
+    app: &AppData,
+    client_id: &ClientId,
+) -> Result<Option<ProjectMetadata>, UserError> {
+    let task = app
+        .network
+        .send(topology::GetClientState(client_id.clone()))
+        .await
+        .map_err(InternalError::ActixMessageError)?;
+
+    let client_state = task.run().await;
+    let project_id = client_state.and_then(|state| match state {
+        ClientState::Browser(BrowserClientState { project_id, .. }) => Some(project_id),
+        _ => None,
+    });
+
+    let metadata = if let Some(id) = project_id {
+        Some(app.get_project_metadatum(&id).await?)
+    } else {
+        None
+    };
+
+    Ok(metadata)
 }
 
 #[post("/id/{project_id}/trace/")]
@@ -293,7 +332,7 @@ async fn start_network_trace(
         .ok_or(UserError::ProjectNotFoundError)?;
 
     app.update_project_cache(metadata);
-    Ok(HttpResponse::Ok().body(new_trace.id))
+    Ok(HttpResponse::Ok().json(new_trace))
 }
 
 #[post("/id/{project_id}/trace/{trace_id}/stop")]
@@ -304,11 +343,16 @@ async fn stop_network_trace(
 ) -> Result<HttpResponse, UserError> {
     let (project_id, trace_id) = path.into_inner();
     let metadata = ensure_can_edit_project(&app, &session, None, &project_id).await?;
+
     let trace = metadata
         .network_traces
         .iter()
         .find(|trace| trace.id == trace_id)
         .ok_or(UserError::NetworkTraceNotFoundError)?;
+
+    // TODO: do we want to remove it like this?
+    // why not just set the end time?
+    // we could even return the network trace metadata
     let query = doc! {"id": project_id};
     let update = doc! {"$pull": {"networkTraces": &trace}};
     let options = FindOneAndUpdateOptions::builder()
@@ -323,10 +367,27 @@ async fn stop_network_trace(
         .ok_or(UserError::ProjectNotFoundError)?;
 
     app.update_project_cache(metadata);
-    Ok(HttpResponse::Ok().body("Stopped"))
+    Ok(HttpResponse::Ok().json(trace))
 }
 
 #[get("/id/{project_id}/trace/{trace_id}")]
+async fn get_network_trace_metadata(
+    app: web::Data<AppData>,
+    session: Session,
+    path: web::Path<(ProjectId, String)>,
+) -> Result<HttpResponse, UserError> {
+    let (project_id, trace_id) = path.into_inner();
+    let metadata = ensure_can_edit_project(&app, &session, None, &project_id).await?;
+    let trace = metadata
+        .network_traces
+        .iter()
+        .find(|trace| trace.id == trace_id)
+        .ok_or(UserError::NetworkTraceNotFoundError)?;
+
+    Ok(HttpResponse::Ok().json(trace))
+}
+
+#[get("/id/{project_id}/trace/{trace_id}/messages")]
 async fn get_network_trace(
     app: web::Data<AppData>,
     session: Session,
@@ -407,8 +468,8 @@ async fn delete_network_trace(
         .await
         .map_err(InternalError::DatabaseConnectionError)?;
 
-    app.update_project_cache(metadata);
-    Ok(HttpResponse::Ok().body("Network trace deleted"))
+    app.update_project_cache(metadata.clone());
+    Ok(HttpResponse::Ok().json(metadata))
 }
 
 #[post("/messages/")]
@@ -469,6 +530,7 @@ pub fn config(cfg: &mut web::ServiceConfig) {
         .service(start_network_trace)
         .service(stop_network_trace)
         .service(get_network_trace)
+        .service(get_network_trace_metadata)
         .service(delete_network_trace);
 }
 
@@ -592,6 +654,11 @@ impl StreamHandler<Result<ws::Message, ws::ProtocolError>> for WsSession {
 }
 #[cfg(test)]
 mod tests {
+    use actix_web::{test, App};
+    use netsblox_cloud_common::User;
+
+    use super::*;
+    use crate::test_utils;
 
     #[actix_web::test]
     #[ignore]
@@ -623,6 +690,131 @@ mod tests {
         //let client = Client::new("test".into());
         //let msg = json!({"type": "message", "dstId": "role1@project@owner"});
 
+        todo!();
+    }
+
+    #[actix_web::test]
+    async fn test_invite_occupant() {
+        let sender: User = api::NewUser {
+            username: "sender".to_string(),
+            email: "sender@netsblox.org".into(),
+            password: None,
+            group_id: None,
+            role: None,
+        }
+        .into();
+        let rcvr: User = api::NewUser {
+            username: "rcvr".to_string(),
+            email: "rcvr@netsblox.org".into(),
+            password: None,
+            group_id: None,
+            role: None,
+        }
+        .into();
+
+        let project = test_utils::project::builder()
+            .with_owner("sender".to_string())
+            .build();
+
+        test_utils::setup()
+            .with_users(&[sender.clone(), rcvr.clone()])
+            .with_projects(&[project.clone()])
+            .run(|app_data| async move {
+                let app = test::init_service(
+                    App::new()
+                        .wrap(test_utils::cookie::middleware())
+                        .app_data(web::Data::new(app_data.clone()))
+                        .configure(config),
+                )
+                .await;
+
+                let role_id = project.roles.keys().next().unwrap().to_owned();
+                let data = api::OccupantInviteData {
+                    username: rcvr.username.clone(),
+                    role_id,
+                };
+                let req = test::TestRequest::post()
+                    .cookie(test_utils::cookie::new(&sender.username))
+                    .uri(&format!("/id/{}/occupants/invite", &project.id))
+                    .set_json(data)
+                    .to_request();
+
+                // Ensure that the collaboration invite is returned.
+                // This will panic if the response is incorrect so no assert needed.
+                let _invite: OccupantInvite = test::call_and_read_body_json(&app, req).await;
+            })
+            .await;
+    }
+
+    #[actix_web::test]
+    async fn test_stop_network_trace() {
+        // TODO: can we still get the network trace?
+        let owner: User = api::NewUser {
+            username: "owner".to_string(),
+            email: "owner@netsblox.org".into(),
+            password: None,
+            group_id: None,
+            role: None,
+        }
+        .into();
+
+        let trace = NetworkTraceMetadata::new();
+        let project = test_utils::project::builder()
+            .with_owner("owner".to_string())
+            .with_traces(&[trace]) // FIXME: how can we make this actually work...
+            .build();
+
+        test_utils::setup()
+            .with_users(&[owner.clone()])
+            .with_projects(&[project.clone()])
+            .run(|app_data| async move {
+                let app = test::init_service(
+                    App::new()
+                        .wrap(test_utils::cookie::middleware())
+                        .app_data(web::Data::new(app_data.clone()))
+                        .configure(config),
+                )
+                .await;
+
+                let role_id = project.roles.keys().next().unwrap().to_owned();
+                let data = api::OccupantInviteData {
+                    username: owner.username.clone(),
+                    role_id,
+                };
+                let req = test::TestRequest::post()
+                    .cookie(test_utils::cookie::new(&owner.username))
+                    .uri(&format!("/id/{}/occupants/invite", &project.id))
+                    .set_json(data)
+                    .to_request();
+
+                // Ensure that the collaboration invite is returned.
+                // This will panic if the response is incorrect so no assert needed.
+                let _invite: OccupantInvite = test::call_and_read_body_json(&app, req).await;
+            })
+            .await;
+    }
+
+    #[actix_web::test]
+    #[ignore]
+    async fn test_delete_network_trace() {
+        todo!();
+    }
+
+    #[actix_web::test]
+    #[ignore]
+    async fn test_evict_occupant_project_owner() {
+        todo!();
+    }
+
+    #[actix_web::test]
+    #[ignore]
+    async fn test_evict_occupant_project_collaborator() {
+        todo!();
+    }
+
+    #[actix_web::test]
+    #[ignore]
+    async fn test_evict_occupant_group_owner() {
         todo!();
     }
 }

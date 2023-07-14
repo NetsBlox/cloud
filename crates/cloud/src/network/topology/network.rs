@@ -507,9 +507,14 @@ impl Topology {
         }
     }
 
-    async fn reset_client_state(&mut self, id: &ClientId, new_project_id: Option<ProjectId>) {
+    async fn reset_client_state(
+        &mut self,
+        id: &ClientId,
+        new_project_id: Option<ProjectId>,
+    ) -> Option<ClientState> {
         self.usernames.remove(id);
-        match self.states.remove(id) {
+        let state = self.states.remove(id);
+        match &state {
             Some(ClientState::Browser(state)) => {
                 let room = self.rooms.get_mut(&state.project_id);
                 let mut empty: Vec<_> = Vec::new();
@@ -563,6 +568,7 @@ impl Topology {
             }
             None => {}
         }
+        state
     }
 
     async fn remove_room(&mut self, project_id: &ProjectId) -> Result<(), InternalError> {
@@ -711,9 +717,9 @@ impl Topology {
             .map(|room| room.get_state(metadata, &self.usernames))
     }
 
-    pub async fn evict_client(&mut self, id: ClientId) {
+    pub async fn evict_client(&mut self, id: ClientId) -> Option<ClientState> {
         let username = self.usernames.remove(&id);
-        self.reset_client_state(&id, None).await;
+        let state = self.reset_client_state(&id, None).await;
         self.clients
             .get(&id)
             .map(|client| client.addr.do_send(EvictionNotice.into()));
@@ -723,6 +729,8 @@ impl Topology {
                 self.usernames.insert(id, username);
             }
         }
+
+        state
     }
 
     pub fn get_client_state(&self, id: &ClientId) -> Option<&ClientState> {

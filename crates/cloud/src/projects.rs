@@ -248,7 +248,7 @@ async fn can_view_project(
                 }
             }
 
-            can_edit_project(app, session, client_id, project).await
+            can_edit_project(app, session, client_id.as_ref(), project).await
         }
         // Allow viewing projects pending approval. Disclaimer should be on client side
         // Client can also disable JS or simply prompt the user if he/she would still like
@@ -265,17 +265,17 @@ pub async fn ensure_can_edit_project(
 ) -> Result<ProjectMetadata, UserError> {
     let metadata = app.get_project_metadatum(project_id).await?;
 
-    if can_edit_project(app, session, client_id, &metadata).await? {
+    if can_edit_project(app, session, client_id.as_ref(), &metadata).await? {
         Ok(metadata)
     } else {
         Err(UserError::PermissionsError)
     }
 }
 
-async fn can_edit_project(
+pub(crate) async fn can_edit_project(
     app: &AppData,
     session: &Session,
-    client_id: Option<ClientId>,
+    client_id: Option<&ClientId>,
     project: &ProjectMetadata,
 ) -> Result<bool, UserError> {
     let is_owner = client_id
