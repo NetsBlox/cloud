@@ -31,7 +31,7 @@ pub(crate) fn setup() -> TestSetupBuilder {
 pub(crate) struct TestSetupBuilder {
     prefix: String,
     users: Vec<User>,
-    projects: Vec<Project>,
+    projects: Vec<project::ProjectFixture>,
     groups: Vec<Group>,
     clients: Vec<network::Client>,
     friends: Vec<FriendLink>,
@@ -56,7 +56,7 @@ impl TestSetupBuilder {
         self
     }
 
-    pub(crate) fn with_projects(mut self, projects: &[Project]) -> Self {
+    pub(crate) fn with_projects(mut self, projects: &[project::ProjectFixture]) -> Self {
         self.projects.extend_from_slice(projects);
         self
     }
@@ -102,7 +102,10 @@ impl TestSetupBuilder {
             .initialize()
             .await
             .expect("Unable to initialize AppData");
-        join_all(self.projects.into_iter().map(|proj| async {
+
+        join_all(self.projects.into_iter().map(|fixture| async {
+            let project::ProjectFixture { project, traces } = fixture;
+
             let Project {
                 id,
                 owner,
@@ -110,7 +113,7 @@ impl TestSetupBuilder {
                 mut roles,
                 save_state,
                 ..
-            } = proj;
+            } = project;
             let metadata = app_data
                 .import_project(&owner, &name, &mut roles, Some(save_state.clone()))
                 .await
@@ -122,8 +125,17 @@ impl TestSetupBuilder {
                 .project_metadata
                 .update_one(query, update, None)
                 .await
+                .unwrap();
+
+            if !traces.is_empty() {
+                let query = doc! {"id": metadata.id};
+                let update = doc! {"$set": {"id": id}};
+            }
         }))
         .await;
+
+        // TODO: enable all the network traces?
+
         if !self.banned_users.is_empty() {
             let banned_users = self.banned_users.into_iter().map(|username| {
                 let email = self
@@ -259,7 +271,7 @@ pub(crate) mod project {
             self
         }
 
-        pub(crate) fn build(mut self) -> Project {
+        pub(crate) fn build(mut self) -> ProjectFixture {
             let id = self
                 .id
                 .unwrap_or_else(|| api::ProjectId::new(Uuid::new_v4().to_string()));
@@ -277,18 +289,31 @@ pub(crate) mod project {
                 );
             }
 
-            Project {
+            // FIXME: add the trace
+            let project = Project {
                 id,
                 owner,
-                name: "old name".into(),
-                updated: DateTime::now(),
-                state: api::PublishState::Private,
+                name: self.name.unwrap_or("my project".into()),
                 collaborators: self.collaborators,
+                roles: self.roles,
+
                 origin_time: DateTime::now(),
                 save_state: api::SaveState::SAVED,
-                roles: self.roles,
+                updated: DateTime::now(),
+                state: api::PublishState::Private,
+            };
+
+            ProjectFixture {
+                project,
+                traces: self.traces,
             }
         }
+    }
+
+    #[derive(Clone, Debug)]
+    pub(crate) struct ProjectFixture {
+        pub(crate) project: Project,
+        pub(crate) traces: Vec<NetworkTraceMetadata>,
     }
 
     pub(crate) fn builder() -> ProjectBuilder {
@@ -298,6 +323,7 @@ pub(crate) mod project {
             name: None,
             collaborators: Vec::new(),
             roles: HashMap::new(),
+            traces: Vec::new(),
         }
     }
 }

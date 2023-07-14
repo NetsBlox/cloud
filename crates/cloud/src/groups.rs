@@ -146,6 +146,7 @@ async fn update_group(
 ) -> Result<HttpResponse, UserError> {
     let (id,) = path.into_inner();
 
+    // TODO: Better permissions logic
     let username = session
         .get::<String>("username")
         .ok()

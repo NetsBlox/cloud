@@ -203,6 +203,7 @@ pub struct ProjectMetadata {
 
 #[derive(Deserialize, Serialize, Clone, Debug)]
 pub enum SaveState {
+    // TODO: rename these to be Pascal-case
     CREATED,
     TRANSIENT,
     BROKEN,

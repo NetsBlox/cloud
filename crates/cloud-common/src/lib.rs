@@ -228,7 +228,7 @@ impl From<CollaborationInvite> for netsblox_api_common::CollaborationInvite {
     }
 }
 
-type FriendLinkId = String;
+type FriendLinkId = String; // FIXME: switch to newtype
 #[derive(Deserialize, Serialize, Clone, Debug)]
 #[serde(rename_all = "camelCase")]
 pub struct FriendLink {
