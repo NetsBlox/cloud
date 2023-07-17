@@ -267,14 +267,14 @@ pub struct ClientStateData {
     pub state: ClientState,
 }
 
-#[derive(Debug, Deserialize, Serialize, Clone)]
+#[derive(Debug, Deserialize, Serialize, Clone, PartialEq, Eq)]
 #[serde(rename_all = "camelCase")]
 pub enum ClientState {
     Browser(BrowserClientState),
     External(ExternalClientState),
 }
 
-#[derive(Debug, Deserialize, Serialize, Clone)]
+#[derive(Debug, Deserialize, Serialize, Clone, PartialEq, Eq)]
 #[serde(rename_all = "camelCase")]
 pub struct BrowserClientState {
     pub role_id: RoleId,
@@ -327,7 +327,7 @@ impl<'de> Visitor<'de> for AppIdVisitor {
     }
 }
 
-#[derive(Debug, Deserialize, Serialize, Clone)]
+#[derive(Debug, Deserialize, Serialize, Clone, PartialEq, Eq)]
 #[serde(rename_all = "camelCase")]
 pub struct ExternalClientState {
     pub address: String,
