@@ -63,7 +63,10 @@ async fn unfriend(
 
     app.unfriend(&owner, &friend).await?;
 
-    Ok(HttpResponse::Ok().body("User has been unfriended!"))
+    // Send "true" since it was successful but there isn't anything to send
+    // (w/o adding extra overhead by making assumptions like that they want
+    // to see all their friends)
+    Ok(HttpResponse::Ok().json(true))
 }
 
 #[post("/{owner}/block/{friend}")]
@@ -73,10 +76,11 @@ async fn block_user(
     session: Session,
 ) -> Result<HttpResponse, UserError> {
     let (owner, friend) = path.into_inner();
-    ensure_can_edit_user(&app, &session, &owner).await?;
-    app.block_user(&owner, &friend).await?;
 
-    Ok(HttpResponse::Ok().body("User has been blocked."))
+    ensure_can_edit_user(&app, &session, &owner).await?;
+    let link = app.block_user(&owner, &friend).await?;
+
+    Ok(HttpResponse::Ok().json(link))
 }
 
 #[post("/{owner}/unblock/{friend}")]
@@ -89,7 +93,10 @@ async fn unblock_user(
     ensure_can_edit_user(&app, &session, &owner).await?;
     app.unblock_user(&owner, &friend).await?;
 
-    Ok(HttpResponse::Ok().body("User has been unblocked."))
+    // Send "true" since it was successful but there isn't anything to send
+    // (w/o adding extra overhead by making assumptions like that they want
+    // to see all their friends)
+    Ok(HttpResponse::Ok().json(true))
 }
 
 #[get("/{owner}/invites/")]
@@ -117,8 +124,6 @@ async fn send_invite(
     let recipient = recipient.into_inner();
     ensure_can_edit_user(&app, &session, &owner).await?;
 
-    // TODO: block requests into group
-
     // ensure users are valid
     let query = doc! {
         "$or": [
@@ -140,6 +145,7 @@ async fn send_invite(
         return Err(UserError::UserNotFoundError);
     }
 
+    // block requests into a group
     if users.into_iter().any(|user| user.is_member()) {
         return Err(UserError::InviteNotAllowedError);
     }
@@ -147,12 +153,8 @@ async fn send_invite(
     let state = app.send_invite(&owner, &recipient).await?;
 
     match state {
-        FriendLinkState::PENDING => Ok(HttpResponse::Ok().body("Invitation sent.")),
-        FriendLinkState::APPROVED => Ok(HttpResponse::Ok().body("Accepted friend request.")),
-        FriendLinkState::BLOCKED => {
-            Ok(HttpResponse::Conflict().body("Cannot send request when blocked."))
-        }
-        _ => unreachable!(),
+        FriendLinkState::BLOCKED => Ok(HttpResponse::Conflict().json(state)),
+        _ => Ok(HttpResponse::Ok().json(state)),
     }
 }
 
@@ -166,10 +168,11 @@ async fn respond_to_invite(
     let (recipient, sender) = path.into_inner();
     ensure_can_edit_user(&app, &session, &recipient).await?;
     let new_state = body.into_inner();
-    app.response_to_invite(&recipient, &sender, new_state)
+    let request = app
+        .respond_to_request(&recipient, &sender, new_state)
         .await?;
 
-    Ok(HttpResponse::Ok().body("Responded to invitation."))
+    Ok(HttpResponse::Ok().json(request))
 }
 
 pub fn config(cfg: &mut web::ServiceConfig) {
@@ -185,9 +188,12 @@ pub fn config(cfg: &mut web::ServiceConfig) {
 
 #[cfg(test)]
 mod tests {
+    use std::time::{Duration, SystemTime};
+
     use super::*;
     use actix_web::{http, test};
     use actix_web::{web, App};
+    use mongodb::bson::DateTime;
     use netsblox_cloud_common::{
         api::{self, UserRole},
         User,
@@ -292,27 +298,323 @@ mod tests {
     }
 
     #[actix_web::test]
-    #[ignore]
     async fn test_unfriend() {
-        todo!();
+        let user: User = api::NewUser {
+            username: "user".into(),
+            email: "user@netsblox.org".into(),
+            password: None,
+            group_id: None,
+            role: Some(UserRole::User),
+        }
+        .into();
+        let f1: User = api::NewUser {
+            username: "f1".into(),
+            email: "user@netsblox.org".into(),
+            password: None,
+            group_id: None,
+            role: Some(UserRole::User),
+        }
+        .into();
+        let l1 = FriendLink::new(
+            user.username.clone(),
+            f1.username.clone(),
+            Some(FriendLinkState::APPROVED),
+        );
+
+        test_utils::setup()
+            .with_users(&[user.clone(), f1.clone()])
+            .with_friend_links(&[l1])
+            .run(|app_data| async move {
+                let app = test::init_service(
+                    App::new()
+                        .wrap(test_utils::cookie::middleware())
+                        .app_data(web::Data::new(app_data.clone()))
+                        .configure(config),
+                )
+                .await;
+
+                let cookie = test_utils::cookie::new(&user.username);
+                let req = test::TestRequest::post()
+                    .uri(&format!("/{}/unfriend/{}", &user.username, &f1.username))
+                    .cookie(cookie)
+                    .to_request();
+
+                let response = test::call_service(&app, req).await;
+                assert_eq!(response.status(), http::StatusCode::OK);
+
+                let friends = app_data.get_friends(&user.username).await.unwrap();
+                assert_eq!(friends.len(), 0);
+            })
+            .await;
     }
 
     #[actix_web::test]
-    #[ignore]
     async fn test_unfriend_403() {
-        todo!();
+        let user: User = api::NewUser {
+            username: "user".into(),
+            email: "user@netsblox.org".into(),
+            password: None,
+            group_id: None,
+            role: Some(UserRole::User),
+        }
+        .into();
+        let other_user: User = api::NewUser {
+            username: "other_user".into(),
+            email: "other_user@netsblox.org".into(),
+            password: None,
+            group_id: None,
+            role: Some(UserRole::User),
+        }
+        .into();
+        let f1: User = api::NewUser {
+            username: "f1".into(),
+            email: "user@netsblox.org".into(),
+            password: None,
+            group_id: None,
+            role: Some(UserRole::User),
+        }
+        .into();
+        let l1 = FriendLink::new(
+            user.username.clone(),
+            f1.username.clone(),
+            Some(FriendLinkState::APPROVED),
+        );
+
+        test_utils::setup()
+            .with_users(&[user.clone(), f1.clone(), other_user.clone()])
+            .with_friend_links(&[l1])
+            .run(|app_data| async move {
+                let app = test::init_service(
+                    App::new()
+                        .wrap(test_utils::cookie::middleware())
+                        .app_data(web::Data::new(app_data.clone()))
+                        .configure(config),
+                )
+                .await;
+
+                let cookie = test_utils::cookie::new(&other_user.username);
+                let req = test::TestRequest::post()
+                    .uri(&format!("/{}/unfriend/{}", &user.username, &f1.username))
+                    .cookie(cookie)
+                    .to_request();
+
+                let response = test::call_service(&app, req).await;
+                assert_eq!(response.status(), http::StatusCode::FORBIDDEN);
+
+                let friends = app_data.get_friends(&user.username).await.unwrap();
+                assert_eq!(friends.len(), 1);
+            })
+            .await;
     }
 
     #[actix_web::test]
-    #[ignore]
+    async fn test_unfriend_admin() {
+        let user: User = api::NewUser {
+            username: "user".into(),
+            email: "user@netsblox.org".into(),
+            password: None,
+            group_id: None,
+            role: Some(UserRole::User),
+        }
+        .into();
+        let admin: User = api::NewUser {
+            username: "admin".into(),
+            email: "admin@netsblox.org".into(),
+            password: None,
+            group_id: None,
+            role: Some(UserRole::Admin),
+        }
+        .into();
+        let f1: User = api::NewUser {
+            username: "f1".into(),
+            email: "user@netsblox.org".into(),
+            password: None,
+            group_id: None,
+            role: Some(UserRole::User),
+        }
+        .into();
+        let l1 = FriendLink::new(
+            user.username.clone(),
+            f1.username.clone(),
+            Some(FriendLinkState::APPROVED),
+        );
+
+        test_utils::setup()
+            .with_users(&[user.clone(), f1.clone(), admin.clone()])
+            .with_friend_links(&[l1])
+            .run(|app_data| async move {
+                let app = test::init_service(
+                    App::new()
+                        .wrap(test_utils::cookie::middleware())
+                        .app_data(web::Data::new(app_data.clone()))
+                        .configure(config),
+                )
+                .await;
+
+                let cookie = test_utils::cookie::new(&admin.username);
+                let req = test::TestRequest::post()
+                    .uri(&format!("/{}/unfriend/{}", &user.username, &f1.username))
+                    .cookie(cookie)
+                    .to_request();
+
+                let response = test::call_service(&app, req).await;
+                assert_eq!(response.status(), http::StatusCode::OK);
+
+                let friends = app_data.get_friends(&user.username).await.unwrap();
+                assert_eq!(friends.len(), 0);
+            })
+            .await;
+    }
+
+    #[actix_web::test]
     async fn test_block_user() {
-        todo!();
+        let user: User = api::NewUser {
+            username: "user".into(),
+            email: "user@netsblox.org".into(),
+            password: None,
+            group_id: None,
+            role: Some(UserRole::User),
+        }
+        .into();
+        let other_user: User = api::NewUser {
+            username: "other_user".into(),
+            email: "user@netsblox.org".into(),
+            password: None,
+            group_id: None,
+            role: Some(UserRole::User),
+        }
+        .into();
+
+        test_utils::setup()
+            .with_users(&[user.clone(), other_user.clone()])
+            .run(|app_data| async move {
+                let app = test::init_service(
+                    App::new()
+                        .wrap(test_utils::cookie::middleware())
+                        .app_data(web::Data::new(app_data.clone()))
+                        .configure(config),
+                )
+                .await;
+
+                let cookie = test_utils::cookie::new(&user.username);
+                let req = test::TestRequest::post()
+                    .uri(&format!(
+                        "/{}/block/{}",
+                        &user.username, &other_user.username
+                    ))
+                    .cookie(cookie)
+                    .to_request();
+
+                let response = test::call_service(&app, req).await;
+                assert_eq!(response.status(), http::StatusCode::OK);
+            })
+            .await;
+    }
+
+    #[actix_web::test]
+    async fn test_block_user_existing() {
+        let user: User = api::NewUser {
+            username: "user".into(),
+            email: "user@netsblox.org".into(),
+            password: None,
+            group_id: None,
+            role: Some(UserRole::User),
+        }
+        .into();
+        let f1: User = api::NewUser {
+            username: "f1".into(),
+            email: "user@netsblox.org".into(),
+            password: None,
+            group_id: None,
+            role: Some(UserRole::User),
+        }
+        .into();
+        let mut l1 = FriendLink::new(
+            user.username.clone(),
+            f1.username.clone(),
+            Some(FriendLinkState::APPROVED),
+        );
+
+        // Roll back the creation date to make it obvious that the update time is different
+        l1.created_at = DateTime::from_system_time(SystemTime::now() - Duration::from_secs(100));
+
+        test_utils::setup()
+            .with_users(&[user.clone(), f1.clone()])
+            .with_friend_links(&[l1.clone()])
+            .run(|app_data| async move {
+                let app = test::init_service(
+                    App::new()
+                        .wrap(test_utils::cookie::middleware())
+                        .app_data(web::Data::new(app_data.clone()))
+                        .configure(config),
+                )
+                .await;
+
+                let cookie = test_utils::cookie::new(&user.username);
+                let req = test::TestRequest::post()
+                    .uri(&format!("/{}/block/{}", &user.username, &f1.username))
+                    .cookie(cookie)
+                    .to_request();
+
+                let link: FriendLink = test::call_and_read_body_json(&app, req).await;
+                assert!(matches!(link.state, FriendLinkState::BLOCKED));
+                assert_ne!(link.created_at, link.updated_at);
+            })
+            .await;
     }
 
     #[actix_web::test]
     #[ignore]
     async fn test_block_user_403() {
         todo!();
+    }
+
+    #[actix_web::test]
+    async fn test_unblock_user() {
+        let user: User = api::NewUser {
+            username: "user".into(),
+            email: "user@netsblox.org".into(),
+            password: None,
+            group_id: None,
+            role: Some(UserRole::User),
+        }
+        .into();
+        let f1: User = api::NewUser {
+            username: "f1".into(),
+            email: "user@netsblox.org".into(),
+            password: None,
+            group_id: None,
+            role: Some(UserRole::User),
+        }
+        .into();
+        let l1 = FriendLink::new(
+            user.username.clone(),
+            f1.username.clone(),
+            Some(FriendLinkState::BLOCKED),
+        );
+
+        test_utils::setup()
+            .with_users(&[user.clone(), f1.clone()])
+            .with_friend_links(&[l1.clone()])
+            .run(|app_data| async move {
+                let app = test::init_service(
+                    App::new()
+                        .wrap(test_utils::cookie::middleware())
+                        .app_data(web::Data::new(app_data.clone()))
+                        .configure(config),
+                )
+                .await;
+
+                let cookie = test_utils::cookie::new(&user.username);
+                let req = test::TestRequest::post()
+                    .uri(&format!("/{}/unblock/{}", &user.username, &f1.username))
+                    .cookie(cookie)
+                    .to_request();
+
+                let response = test::call_service(&app, req).await;
+                assert_eq!(response.status(), http::StatusCode::OK);
+            })
+            .await;
     }
 
     #[actix_web::test]

@@ -87,9 +87,8 @@ async fn save_user_library(
     session: Session,
 ) -> Result<HttpResponse, UserError> {
     let (owner,) = path.into_inner();
-    if !is_valid_name(&data.name) {
-        return Ok(HttpResponse::BadRequest().body("Invalid library name"));
-    }
+
+    ensure_valid_name(&data.name)?;
     ensure_can_edit_library(&app, &session, &owner).await?;
 
     let query = doc! {"owner": &owner, "name": &data.name};
@@ -131,6 +130,14 @@ async fn save_user_library(
             Ok(HttpResponse::Ok().json(publish_state))
         }
         None => Ok(HttpResponse::Created().json(PublishState::Private)),
+    }
+}
+
+fn ensure_valid_name(name: &str) -> Result<(), UserError> {
+    if is_valid_name(name) {
+        Ok(())
+    } else {
+        Err(UserError::InvalidLibraryName)
     }
 }
 
@@ -549,5 +556,20 @@ mod tests {
     #[test]
     async fn test_is_valid_name_weird_symbol() {
         assert!(!is_valid_name("<hola libré>"));
+    }
+
+    #[test]
+    async fn test_ensure_valid_name() {
+        ensure_valid_name("hello library").unwrap();
+    }
+
+    #[test]
+    async fn test_ensure_valid_name_diacritic() {
+        ensure_valid_name("hola libré").unwrap();
+    }
+
+    #[test]
+    async fn test_ensure_valid_name_weird_symbol() {
+        assert!(ensure_valid_name("<hola libré>").is_err());
     }
 }

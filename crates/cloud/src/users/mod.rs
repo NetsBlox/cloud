@@ -205,11 +205,12 @@ async fn create_user(
     if existing_user.is_some() {
         Err(UserError::UserExistsError)
     } else {
-        if let Some(group_id) = user.group_id {
+        if let Some(group_id) = user.group_id.clone() {
             app.group_members_updated(&group_id).await;
         }
         app.metrics.record_signup();
-        Ok(HttpResponse::Ok().body("User created"))
+        let user: api::User = user.into();
+        Ok(HttpResponse::Ok().json(user))
     }
 }
 
@@ -365,22 +366,20 @@ async fn ban_user(
     ensure_can_edit_user(&app, &session, &username).await?;
 
     let query = doc! {"username": username};
-    match app
+    let user = app
         .users
         .find_one(query, None)
         .await
         .map_err(InternalError::DatabaseConnectionError)?
-    {
-        Some(user) => {
-            let account = BannedAccount::new(user.username, user.email);
-            app.banned_accounts
-                .insert_one(account, None)
-                .await
-                .map_err(InternalError::DatabaseConnectionError)?;
-            Ok(HttpResponse::Ok().body("User has been banned"))
-        }
-        None => Err(UserError::UserNotFoundError),
-    }
+        .ok_or(UserError::UserNotFoundError)?;
+
+    let account = BannedAccount::new(user.username, user.email);
+    app.banned_accounts
+        .insert_one(&account, None)
+        .await
+        .map_err(InternalError::DatabaseConnectionError)?;
+
+    Ok(HttpResponse::Ok().json(account))
 }
 
 #[post("/{username}/delete")]
@@ -615,16 +614,18 @@ async fn unlink_account(
     ensure_can_edit_user(&app, &session, &username).await?;
     let query = doc! {"username": username};
     let update = doc! {"$pull": {"linkedAccounts": &account.into_inner()}};
-    let result = app
+    let options = mongodb::options::FindOneAndUpdateOptions::builder()
+        .return_document(ReturnDocument::After)
+        .build();
+
+    let user = app
         .users
-        .update_one(query, update, None)
+        .find_one_and_update(query, update, options)
         .await
-        .map_err(InternalError::DatabaseConnectionError)?;
-    if result.matched_count == 0 {
-        Ok(HttpResponse::NotFound().finish())
-    } else {
-        Ok(HttpResponse::Ok().finish())
-    }
+        .map_err(InternalError::DatabaseConnectionError)?
+        .ok_or(UserError::UserNotFoundError)?;
+
+    Ok(HttpResponse::Ok().json(user))
 }
 
 pub fn config(cfg: &mut web::ServiceConfig) {
@@ -1367,6 +1368,108 @@ mod tests {
                     .expect("Could not query for user");
 
                 assert!(result.is_some(), "User deleted");
+            })
+            .await;
+    }
+
+    #[actix_web::test]
+    async fn test_ban_user() {
+        let admin: User = api::NewUser {
+            username: "admin".to_string(),
+            email: "admin@netsblox.org".into(),
+            password: None,
+            group_id: None,
+            role: Some(UserRole::Admin),
+        }
+        .into();
+        let admin_name = admin.username.clone();
+        let some_user: User = api::NewUser {
+            username: "some_user".to_string(),
+            email: "user@netsblox.org".into(),
+            password: None,
+            group_id: None,
+            role: None,
+        }
+        .into();
+
+        test_utils::setup()
+            .with_users(&[admin, some_user])
+            .run(|app_data| async move {
+                let app = test::init_service(
+                    App::new()
+                        .wrap(test_utils::cookie::middleware())
+                        .app_data(web::Data::new(app_data.clone()))
+                        .configure(config),
+                )
+                .await;
+
+                let req = test::TestRequest::post()
+                    .uri("/some_user/ban")
+                    .cookie(test_utils::cookie::new(&admin_name))
+                    .to_request();
+
+                // This will panic if the response isn't a banned account; no assert needed
+                let _account: BannedAccount = test::call_and_read_body_json(&app, req).await;
+
+                let query = doc! {"username": "some_user"};
+                let result = app_data
+                    .banned_accounts
+                    .find_one(query, None)
+                    .await
+                    .expect("Could not query for user");
+
+                assert!(result.is_some(), "User not banned");
+            })
+            .await;
+    }
+
+    #[actix_web::test]
+    async fn test_ban_user_403() {
+        let user: User = api::NewUser {
+            username: "user".to_string(),
+            email: "user@netsblox.org".into(),
+            password: None,
+            group_id: None,
+            role: None,
+        }
+        .into();
+        let user_name = user.username.clone();
+        let some_user: User = api::NewUser {
+            username: "some_user".to_string(),
+            email: "user@netsblox.org".into(),
+            password: None,
+            group_id: None,
+            role: None,
+        }
+        .into();
+
+        test_utils::setup()
+            .with_users(&[user, some_user])
+            .run(|app_data| async move {
+                let app = test::init_service(
+                    App::new()
+                        .wrap(test_utils::cookie::middleware())
+                        .app_data(web::Data::new(app_data.clone()))
+                        .configure(config),
+                )
+                .await;
+
+                let req = test::TestRequest::post()
+                    .uri("/some_user/ban")
+                    .cookie(test_utils::cookie::new(&user_name))
+                    .to_request();
+
+                let response = test::call_service(&app, req).await;
+                assert_eq!(response.status(), http::StatusCode::FORBIDDEN);
+
+                let query = doc! {"username": "some_user"};
+                let result = app_data
+                    .banned_accounts
+                    .find_one(query, None)
+                    .await
+                    .expect("Could not query for user");
+
+                assert!(result.is_none(), "User banned");
             })
             .await;
     }

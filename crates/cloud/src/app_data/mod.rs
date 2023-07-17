@@ -3,6 +3,7 @@ pub(crate) mod metrics;
 use crate::common::api::{
     oauth, LibraryMetadata, NewUser, ProjectId, PublishState, RoleId, UserRole,
 };
+use crate::{network, projects};
 //pub use self::
 use actix_web::rt::time;
 use futures::future::join_all;
@@ -47,6 +48,7 @@ use rusoto_s3::{
 
 // This is lazy_static to ensure it is shared between threads
 // TODO: it would be nice to be able to configure the cache size from the settings
+// TODO: move the cache to something that isn't shared btwn tests...
 lazy_static! {
     static ref MEMBERSHIP_CACHE: Arc<AsyncRwLock<LruCache<String, bool>>> =
         Arc::new(AsyncRwLock::new(LruCache::new(1000)));
@@ -200,6 +202,8 @@ impl AppData {
             bucket: bucket.clone(),
             ..Default::default()
         };
+
+        // FIXME: check if bucket exists or invalid bucket name
         if self.s3.create_bucket(request).await.is_err() {
             info!("Using existing s3 bucket.")
         };
@@ -334,7 +338,7 @@ impl AppData {
 
     fn get_cached_project_metadata<'a>(
         &self,
-        ids: &'a [ProjectId],
+        ids: impl Iterator<Item = &'a ProjectId>,
     ) -> (Vec<ProjectMetadata>, Vec<&'a ProjectId>) {
         let mut results = Vec::new();
         let mut missing_projects = Vec::new();
@@ -348,9 +352,9 @@ impl AppData {
         (results, missing_projects)
     }
 
-    pub async fn get_project_metadata(
+    pub async fn get_project_metadata<'a>(
         &self,
-        ids: &[ProjectId],
+        ids: impl Iterator<Item = &'a ProjectId>,
     ) -> Result<Vec<ProjectMetadata>, UserError> {
         let (mut results, missing_projects) = self.get_cached_project_metadata(ids);
 
@@ -402,8 +406,9 @@ impl AppData {
         owner: &str,
         basename: &str,
     ) -> Result<String, UserError> {
+        projects::ensure_valid_name(basename)?;
+
         let query = doc! {"owner": &owner};
-        // TODO: validate the project name (no profanity)
         let cursor = self
             .project_metadata
             .find(query, None)
@@ -424,29 +429,37 @@ impl AppData {
         &self,
         owner: &str,
         name: &str,
-        roles: Option<Vec<RoleData>>,
+        roles: &mut HashMap<RoleId, RoleData>,
         save_state: Option<SaveState>,
     ) -> Result<ProjectMetadata, UserError> {
         let unique_name = self.get_valid_project_name(owner, name).await?;
-        let roles = roles.unwrap_or_else(|| {
-            vec![RoleData {
-                name: "myRole".to_owned(),
-                code: "".to_owned(),
-                media: "".to_owned(),
-            }]
-        });
+
+        // Prepare the roles (ensure >=1 exists; upload them)
+        if roles.is_empty() {
+            roles.insert(
+                RoleId::new(Uuid::new_v4().to_string()),
+                RoleData {
+                    name: "myRole".to_owned(),
+                    code: "".to_owned(),
+                    media: "".to_owned(),
+                },
+            );
+        };
 
         let role_mds: Vec<RoleMetadata> = join_all(
             roles
-                .iter()
+                .values()
                 .map(|role| self.upload_role(owner, &unique_name, role)),
         )
         .await
         .into_iter()
         .collect::<Result<Vec<RoleMetadata>, _>>()?;
 
+        let roles: HashMap<RoleId, RoleMetadata> =
+            roles.keys().cloned().zip(role_mds.into_iter()).collect();
+
         let save_state = save_state.unwrap_or(SaveState::CREATED);
-        let metadata = ProjectMetadata::new(owner, &unique_name, role_mds, save_state);
+        let metadata = ProjectMetadata::new(owner, &unique_name, roles, save_state);
         self.project_metadata
             .insert_one(metadata.clone(), None)
             .await
@@ -500,10 +513,10 @@ impl AppData {
             body: Some(String::into_bytes(body).into()),
             ..Default::default()
         };
-        self.s3
-            .put_object(request)
-            .await
-            .map_err(|_err| InternalError::S3Error)
+        self.s3.put_object(request).await.map_err(|err| {
+            warn!("Unable to upload to s3: {}", err);
+            InternalError::S3Error
+        })
     }
 
     async fn download(&self, key: &str) -> Result<String, InternalError> {
@@ -553,30 +566,31 @@ impl AppData {
         })
     }
 
-    pub async fn delete_project(&self, metadata: ProjectMetadata) -> Result<(), UserError> {
+    pub async fn delete_project(
+        &self,
+        metadata: ProjectMetadata,
+    ) -> Result<ProjectMetadata, UserError> {
         let query = doc! {"id": &metadata.id};
-        let result = self
+        let metadata = self
             .project_metadata
             .find_one_and_delete(query, None)
             .await
-            .map_err(InternalError::DatabaseConnectionError)?;
+            .map_err(InternalError::DatabaseConnectionError)?
+            .ok_or(UserError::ProjectNotFoundError)?;
 
-        if let Some(metadata) = result {
-            let paths = metadata
-                .roles
-                .into_values()
-                .flat_map(|role| vec![role.code, role.media]);
+        let paths = metadata
+            .roles
+            .clone()
+            .into_values()
+            .flat_map(|role| vec![role.code, role.media]);
 
-            join_all(paths.map(move |path| self.delete(path)))
-                .await
-                .into_iter()
-                .collect::<Result<Vec<_>, _>>()?;
+        join_all(paths.map(move |path| self.delete(path)))
+            .await
+            .into_iter()
+            .collect::<Result<Vec<_>, _>>()?;
 
-            // TODO: send update to any current occupants
-            Ok(())
-        } else {
-            Err(UserError::ProjectNotFoundError)
-        }
+        // TODO: send update to any current occupants
+        Ok(metadata)
     }
 
     pub async fn fetch_role(&self, metadata: &RoleMetadata) -> Result<RoleData, InternalError> {
@@ -900,31 +914,28 @@ impl AppData {
         Ok(friend_names)
     }
 
-    pub async fn unfriend(&self, owner: &str, friend: &str) -> Result<(), UserError> {
+    pub async fn unfriend(&self, owner: &str, friend: &str) -> Result<FriendLink, UserError> {
         let query = doc! {
             "$or": [
                 {"sender": &owner, "recipient": &friend, "state": FriendLinkState::APPROVED},
                 {"sender": &friend, "recipient": &owner, "state": FriendLinkState::APPROVED}
             ]
         };
-        let result = self
+        let link = self
             .friends
-            .delete_one(query, None)
+            .find_one_and_delete(query, None)
             .await
-            .map_err(InternalError::DatabaseConnectionError)?;
+            .map_err(InternalError::DatabaseConnectionError)?
+            .ok_or(UserError::FriendNotFoundError)?;
 
-        if result.deleted_count > 0 {
-            // invalidate friend cache
-            let mut cache = FRIEND_CACHE.write().unwrap();
-            cache.pop(owner);
-            cache.pop(friend);
-            Ok(())
-        } else {
-            Err(UserError::FriendNotFoundError)
-        }
+        // invalidate friend cache
+        let mut cache = FRIEND_CACHE.write().unwrap();
+        cache.pop(owner);
+        cache.pop(friend);
+        Ok(link)
     }
 
-    pub async fn block_user(&self, owner: &str, other_user: &str) -> Result<(), UserError> {
+    pub async fn block_user(&self, owner: &str, other_user: &str) -> Result<FriendLink, UserError> {
         let query = doc! {
             "$or": [
                 {"sender": &owner, "recipient": &other_user},
@@ -937,13 +948,19 @@ impl AppData {
             Some(FriendLinkState::BLOCKED),
         );
         let update = doc! {
-            "$set": &link,
-            "$setOnInsert": &link
+            "$set": {
+                "state": &link.state,
+                "updatedAt": &link.updated_at,
+            },
+            "$setOnInsert": {
+                "createdAt": &link.created_at,
+            },
         };
         let options = FindOneAndUpdateOptions::builder()
             .return_document(ReturnDocument::Before)
             .upsert(true)
             .build();
+
         let original = self
             .friends
             .find_one_and_update(query, update, options)
@@ -951,13 +968,18 @@ impl AppData {
             .map_err(InternalError::DatabaseConnectionError)?;
 
         // invalidate friend cache
-        let invalidate_cache = original.is_some();
-        if invalidate_cache {
+        if let Some(mut original) = original {
             let mut cache = FRIEND_CACHE.write().unwrap();
             cache.pop(owner);
             cache.pop(other_user);
+
+            original.state = link.state;
+            original.updated_at = link.updated_at;
+
+            Ok(original)
+        } else {
+            Ok(link)
         }
-        Ok(())
     }
 
     pub async fn unblock_user(&self, owner: &str, other_user: &str) -> Result<(), UserError> {
@@ -1017,6 +1039,9 @@ impl AppData {
             let mut cache = FRIEND_CACHE.write().unwrap();
             cache.pop(owner);
             cache.pop(recipient);
+
+            // TODO: send msg about removing the existing invite
+
             FriendLinkState::APPROVED
         } else {
             let query = doc! {
@@ -1029,7 +1054,7 @@ impl AppData {
             };
 
             let link = FriendLink::new(owner.to_owned(), recipient.to_owned(), None);
-            let update = doc! {"$setOnInsert": link};
+            let update = doc! {"$setOnInsert": &link};
             let options = FindOneAndUpdateOptions::builder().upsert(true).build();
             let result = self
                 .friends
@@ -1037,44 +1062,69 @@ impl AppData {
                 .await
                 .map_err(InternalError::DatabaseConnectionError)?;
 
-            // TODO: Should we allow users to send multiple invitations (ie, after rejection)?
-            result
-                .map(|link| link.state)
-                .unwrap_or(FriendLinkState::PENDING)
+            if let Some(link) = result {
+                // user is already blocked or approved
+                link.state
+            } else {
+                // new friend link
+                let request: FriendInvite = link.into();
+                self.network
+                    .send(network::topology::FriendRequestChangeMsg::new(
+                        network::topology::ChangeType::Add,
+                        request.clone(),
+                    ))
+                    .await
+                    .map_err(InternalError::ActixMessageError)?;
+
+                FriendLinkState::PENDING
+            }
         };
 
         Ok(state)
     }
 
-    pub async fn response_to_invite(
+    pub async fn respond_to_request(
         &self,
         recipient: &str,
         sender: &str,
         resp: FriendLinkState,
-    ) -> Result<(), UserError> {
-        let query = doc! {"recipient": &recipient, "sender": &sender};
+    ) -> Result<FriendLink, UserError> {
+        let query = doc! {
+          "recipient": &recipient,
+          "sender": &sender,
+          "state": FriendLinkState::PENDING
+        };
         let update = doc! {"$set": {"state": &resp}};
+
         let options = FindOneAndUpdateOptions::builder()
-            .return_document(ReturnDocument::Before)
+            .return_document(ReturnDocument::After)
             .build();
-        let original = self
+
+        let link = self
             .friends
             .find_one_and_update(query, update, options)
             .await
-            .map_err(InternalError::DatabaseConnectionError)?;
+            .map_err(InternalError::DatabaseConnectionError)?
+            .ok_or(UserError::InviteNotFoundError)?;
 
-        if let Some(original) = original {
-            let invalidate_cache = matches!(resp, FriendLinkState::APPROVED)
-                || matches!(original.state, FriendLinkState::APPROVED);
-            if invalidate_cache {
-                let mut cache = FRIEND_CACHE.write().unwrap();
-                cache.pop(sender);
-                cache.pop(recipient);
-            }
-            Ok(())
-        } else {
-            Err(UserError::InviteNotFoundError)
+        let friend_list_changed = matches!(resp, FriendLinkState::APPROVED);
+        if friend_list_changed {
+            // invalidate cache
+            let mut cache = FRIEND_CACHE.write().unwrap();
+            cache.pop(sender);
+            cache.pop(recipient);
         }
+
+        let request: FriendInvite = link.clone().into();
+        self.network
+            .send(network::topology::FriendRequestChangeMsg::new(
+                network::topology::ChangeType::Remove,
+                request.clone(),
+            ))
+            .await
+            .map_err(InternalError::ActixMessageError)?;
+
+        Ok(link)
     }
 
     // Tor-related restrictions
@@ -1127,6 +1177,10 @@ impl AppData {
             .insert_many(friends, None)
             .await
             .map_err(InternalError::DatabaseConnectionError)?;
+
+        // clear the friend cache
+        let mut cache = FRIEND_CACHE.write().unwrap();
+        cache.clear();
 
         Ok(())
     }
@@ -1202,6 +1256,11 @@ fn is_opera_vpn(addr: &str) -> bool {
 
 #[cfg(test)]
 mod tests {
+    use netsblox_cloud_common::api;
+
+    use super::*;
+    use crate::test_utils;
+
     #[actix_web::test]
     #[ignore]
     async fn test_save_role_blob() {
@@ -1212,5 +1271,163 @@ mod tests {
     #[ignore]
     async fn test_save_role_set_transient_false() {
         todo!();
+    }
+
+    #[actix_web::test]
+    async fn test_respond_to_request() {
+        let sender: User = api::NewUser {
+            username: "sender".into(),
+            email: "sender@netsblox.org".into(),
+            password: None,
+            group_id: None,
+            role: None,
+        }
+        .into();
+        let rcvr: User = api::NewUser {
+            username: "rcvr".into(),
+            email: "rcvr@netsblox.org".into(),
+            password: None,
+            group_id: None,
+            role: None,
+        }
+        .into();
+        let link = FriendLink::new(sender.username.clone(), rcvr.username.clone(), None);
+
+        test_utils::setup()
+            .with_users(&[sender.clone(), rcvr.clone()])
+            .with_friend_links(&[link])
+            .run(|app_data| async move {
+                let link = app_data
+                    .respond_to_request(&rcvr.username, &sender.username, FriendLinkState::APPROVED)
+                    .await
+                    .unwrap();
+
+                assert!(matches!(link.state, FriendLinkState::APPROVED));
+            })
+            .await;
+    }
+
+    #[actix_web::test]
+    async fn test_respond_to_request_404() {
+        test_utils::setup()
+            .run(|app_data| async move {
+                let result = app_data
+                    .respond_to_request("rcvr", "sender", FriendLinkState::APPROVED)
+                    .await;
+
+                assert!(matches!(result, Err(UserError::InviteNotFoundError)));
+            })
+            .await;
+    }
+
+    #[actix_web::test]
+    async fn test_respond_to_request_rejected() {
+        let sender: User = api::NewUser {
+            username: "sender".into(),
+            email: "sender@netsblox.org".into(),
+            password: None,
+            group_id: None,
+            role: None,
+        }
+        .into();
+        let rcvr: User = api::NewUser {
+            username: "rcvr".into(),
+            email: "rcvr@netsblox.org".into(),
+            password: None,
+            group_id: None,
+            role: None,
+        }
+        .into();
+        let link = FriendLink::new(
+            sender.username.clone(),
+            rcvr.username.clone(),
+            Some(FriendLinkState::REJECTED),
+        );
+
+        test_utils::setup()
+            .with_users(&[sender.clone(), rcvr.clone()])
+            .with_friend_links(&[link])
+            .run(|app_data| async move {
+                let result = app_data
+                    .respond_to_request("rcvr", "sender", FriendLinkState::APPROVED)
+                    .await;
+
+                assert!(matches!(result, Err(UserError::InviteNotFoundError)));
+            })
+            .await;
+    }
+
+    #[actix_web::test]
+    async fn test_respond_to_request_approved() {
+        let sender: User = api::NewUser {
+            username: "sender".into(),
+            email: "sender@netsblox.org".into(),
+            password: None,
+            group_id: None,
+            role: None,
+        }
+        .into();
+        let rcvr: User = api::NewUser {
+            username: "rcvr".into(),
+            email: "rcvr@netsblox.org".into(),
+            password: None,
+            group_id: None,
+            role: None,
+        }
+        .into();
+        let link = FriendLink::new(
+            sender.username.clone(),
+            rcvr.username.clone(),
+            Some(FriendLinkState::APPROVED),
+        );
+
+        test_utils::setup()
+            .with_users(&[sender.clone(), rcvr.clone()])
+            .with_friend_links(&[link])
+            .run(|app_data| async move {
+                let result = app_data
+                    .respond_to_request("rcvr", "sender", FriendLinkState::APPROVED)
+                    .await;
+
+                assert!(matches!(result, Err(UserError::InviteNotFoundError)));
+            })
+            .await;
+    }
+
+    #[actix_web::test]
+    async fn test_respond_to_request_blocked() {
+        let sender: User = api::NewUser {
+            username: "sender".into(),
+            email: "sender@netsblox.org".into(),
+            password: None,
+            group_id: None,
+            role: None,
+        }
+        .into();
+        let rcvr: User = api::NewUser {
+            username: "rcvr".into(),
+            email: "rcvr@netsblox.org".into(),
+            password: None,
+            group_id: None,
+            role: None,
+        }
+        .into();
+        let link = FriendLink::new(
+            sender.username.clone(),
+            rcvr.username.clone(),
+            Some(FriendLinkState::BLOCKED),
+        );
+
+        test_utils::setup()
+            .with_users(&[sender.clone(), rcvr.clone()])
+            .with_friend_links(&[link])
+            .run(|app_data| async move {
+                let result = app_data
+                    .respond_to_request("rcvr", "sender", FriendLinkState::APPROVED)
+                    .await;
+
+                assert!(matches!(result, Err(UserError::InviteNotFoundError)));
+            })
+            .await;
     }
 }

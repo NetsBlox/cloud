@@ -20,11 +20,37 @@ use image::{
     codecs::png::PngEncoder, ColorType, EncodableLayout, GenericImageView, ImageEncoder,
     ImageFormat, RgbaImage,
 };
+use lazy_static::lazy_static;
+use log::info;
 use mongodb::bson::doc;
 use mongodb::options::{FindOneAndUpdateOptions, ReturnDocument};
 use mongodb::Cursor;
+use regex::Regex;
+use rustrict::CensorStr;
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
+
+pub(crate) fn ensure_valid_name(name: &str) -> Result<(), UserError> {
+    if !is_valid_name(name) {
+        Err(UserError::InvalidRoleOrProjectName)
+    } else {
+        Ok(())
+    }
+}
+
+fn is_valid_name(name: &str) -> bool {
+    let max_len = 25;
+    let min_len = 1;
+    let char_count = name.chars().count();
+    lazy_static! {
+        static ref NAME_REGEX: Regex = Regex::new(r"^[a-zA-Z][a-zA-Z0-9_ \(\)\-]*$").unwrap();
+    }
+
+    char_count >= min_len
+        && char_count <= max_len
+        && NAME_REGEX.is_match(name)
+        && !name.is_inappropriate()
+}
 
 #[post("/")]
 async fn create_project(
@@ -45,8 +71,14 @@ async fn create_project(
         .ok_or(UserError::LoginRequiredError)?;
 
     let name = project_data.name.to_owned();
+    let mut roles = project_data
+        .roles
+        .unwrap_or_default()
+        .into_iter()
+        .map(|role| (RoleId::new(Uuid::new_v4().to_string()), role))
+        .collect::<HashMap<_, _>>();
     let metadata = app
-        .import_project(&owner, &name, project_data.roles, project_data.save_state)
+        .import_project(&owner, &name, &mut roles, project_data.save_state)
         .await?;
 
     Ok(HttpResponse::Ok().json(metadata))
@@ -68,7 +100,7 @@ async fn list_user_projects(
         .map_err(InternalError::DatabaseConnectionError)?;
 
     let projects = get_visible_projects(&app, &session, &username, cursor).await;
-    println!("Found {} projects for {}", projects.len(), username);
+    info!("Found {} projects for {}", projects.len(), username);
     Ok(HttpResponse::Ok().json(projects))
 }
 
@@ -216,7 +248,7 @@ async fn can_view_project(
                 }
             }
 
-            can_edit_project(app, session, client_id, project).await
+            can_edit_project(app, session, client_id.as_ref(), project).await
         }
         // Allow viewing projects pending approval. Disclaimer should be on client side
         // Client can also disable JS or simply prompt the user if he/she would still like
@@ -233,20 +265,19 @@ pub async fn ensure_can_edit_project(
 ) -> Result<ProjectMetadata, UserError> {
     let metadata = app.get_project_metadatum(project_id).await?;
 
-    if can_edit_project(app, session, client_id, &metadata).await? {
+    if can_edit_project(app, session, client_id.as_ref(), &metadata).await? {
         Ok(metadata)
     } else {
         Err(UserError::PermissionsError)
     }
 }
 
-async fn can_edit_project(
+pub(crate) async fn can_edit_project(
     app: &AppData,
     session: &Session,
-    client_id: Option<ClientId>,
+    client_id: Option<&ClientId>,
     project: &ProjectMetadata,
 ) -> Result<bool, UserError> {
-    println!("Can {:?} edit the project? ({})", client_id, project.owner);
     let is_owner = client_id
         .map(|id| id.as_str() == project.owner)
         .unwrap_or(false);
@@ -359,8 +390,13 @@ async fn delete_project(
 
     // collaborators cannot delete -> only user/admin/etc
     ensure_can_edit_user(&app, &session, &metadata.owner).await?;
-    app.delete_project(metadata).await?; // TODO:
-    Ok(HttpResponse::Ok().body("Project deleted"))
+    let project = app.delete_project(metadata).await?;
+
+    // Notify clients that the project has been deleted
+    app.network
+        .do_send(topology::ProjectDeleted::new(project.clone()));
+
+    Ok(HttpResponse::Ok().json(project))
 }
 
 #[patch("/id/{projectID}")]
@@ -372,18 +408,18 @@ async fn update_project(
 ) -> Result<HttpResponse, UserError> {
     let (project_id,) = path.into_inner();
 
-    // TODO: validate the name. Or make it a type?
     let query = doc! {"id": &project_id};
     let body = body.into_inner();
     let metadata = ensure_can_edit_project(&app, &session, body.client_id, &project_id).await?;
 
-    println!("Changing name from {} to {}", &metadata.name, &body.name);
-    let update = doc! {"$set": {"name": &body.name}};
+    let name = app
+        .get_valid_project_name(&metadata.owner, &body.name)
+        .await?;
+    let update = doc! {"$set": {"name": &name}};
     let options = FindOneAndUpdateOptions::builder()
         .return_document(ReturnDocument::After)
         .build();
 
-    // TODO: How do we know there isn't a name collision?
     let updated_metadata = app
         .project_metadata
         .find_one_and_update(query, update, options)
@@ -391,8 +427,8 @@ async fn update_project(
         .map_err(InternalError::DatabaseConnectionError)?
         .ok_or(UserError::ProjectNotFoundError)?;
 
-    app.on_room_changed(updated_metadata);
-    Ok(HttpResponse::Ok().body("Project updated."))
+    app.on_room_changed(updated_metadata.clone());
+    Ok(HttpResponse::Ok().json(updated_metadata))
 }
 
 #[derive(Deserialize)]
@@ -419,8 +455,7 @@ async fn get_latest_project(
         .map(|role_id| fetch_role_data(&app, &metadata, role_id.to_owned()))
         .collect::<FuturesUnordered<_>>()
         .try_collect::<HashMap<RoleId, RoleData>>()
-        .await
-        .unwrap(); // TODO: handle errors
+        .await?;
 
     let project = Project {
         id: metadata.id.to_owned(),
@@ -545,8 +580,8 @@ async fn create_role(
     let metadata = ensure_can_edit_project(&app, &session, None, &project_id).await?;
 
     let updated_metadata = app.create_role(metadata, body.into_inner().into()).await?;
-    app.on_room_changed(updated_metadata);
-    Ok(HttpResponse::Ok().body("Role created"))
+    app.on_room_changed(updated_metadata.clone());
+    Ok(HttpResponse::Ok().json(updated_metadata))
 }
 
 #[get("/id/{projectID}/{roleID}")]
@@ -593,8 +628,8 @@ async fn delete_role(
         .map_err(InternalError::DatabaseConnectionError)?
         .ok_or(UserError::ProjectNotFoundError)?;
 
-    app.on_room_changed(updated_metadata);
-    Ok(HttpResponse::Ok().body("Deleted!"))
+    app.on_room_changed(updated_metadata.clone());
+    Ok(HttpResponse::Ok().json(updated_metadata))
 }
 
 #[post("/id/{projectID}/{roleID}")]
@@ -621,12 +656,12 @@ async fn rename_role(
     session: Session,
 ) -> Result<HttpResponse, UserError> {
     let (project_id, role_id) = path.into_inner();
-
-    let query = doc! {"id": &project_id};
     let body = body.into_inner();
+    ensure_valid_name(&body.name)?;
     let metadata = ensure_can_edit_project(&app, &session, body.client_id, &project_id).await?;
 
     if metadata.roles.contains_key(&role_id) {
+        let query = doc! {"id": &project_id};
         let update = doc! {"$set": {format!("roles.{}.name", role_id): &body.name}};
         let options = FindOneAndUpdateOptions::builder()
             .return_document(ReturnDocument::After)
@@ -639,8 +674,8 @@ async fn rename_role(
             .map_err(InternalError::DatabaseConnectionError)?
             .ok_or(UserError::ProjectNotFoundError)?;
 
-        app.on_room_changed(updated_metadata);
-        Ok(HttpResponse::Ok().body("Role updated"))
+        app.on_room_changed(updated_metadata.clone());
+        Ok(HttpResponse::Ok().json(updated_metadata))
     } else {
         Err(UserError::RoleNotFoundError)
     }
@@ -770,8 +805,8 @@ async fn remove_collaborator(
         .map_err(InternalError::DatabaseConnectionError)?
         .ok_or(UserError::ProjectNotFoundError)?;
 
-    app.on_room_changed(metadata);
-    Ok(HttpResponse::Ok().body("Collaborator removed"))
+    app.on_room_changed(metadata.clone());
+    Ok(HttpResponse::Ok().json(metadata))
 }
 
 pub fn config(cfg: &mut web::ServiceConfig) {
@@ -898,9 +933,121 @@ mod tests {
     }
 
     #[actix_web::test]
-    #[ignore]
     async fn test_update_project() {
-        todo!();
+        let admin: User = api::NewUser {
+            username: "admin".into(),
+            email: "admin@netsblox.org".into(),
+            password: None,
+            group_id: None,
+            role: Some(UserRole::Admin),
+        }
+        .into();
+
+        let owner: User = api::NewUser {
+            username: "owner".into(),
+            email: "admin@netsblox.org".into(),
+            password: None,
+            group_id: None,
+            role: Some(UserRole::Admin),
+        }
+        .into();
+        let project = test_utils::project::builder()
+            .with_owner(owner.username.clone())
+            .with_name("initial name".into())
+            .build();
+        let other_project = test_utils::project::builder()
+            .with_owner("admin".into())
+            .with_name("new name".into())
+            .build();
+
+        test_utils::setup()
+            .with_projects(&[project.clone(), other_project])
+            .with_users(&[admin.clone(), owner])
+            .run(|app_data| async move {
+                let app = test::init_service(
+                    App::new()
+                        .wrap(test_utils::cookie::middleware())
+                        .app_data(web::Data::new(app_data.clone()))
+                        .configure(config),
+                )
+                .await;
+
+                let update_data = api::UpdateProjectData {
+                    name: "new name".into(),
+                    client_id: None,
+                };
+                let req = test::TestRequest::patch()
+                    .cookie(test_utils::cookie::new(&admin.username))
+                    .uri(&format!("/id/{}", &project.id))
+                    .set_json(&update_data)
+                    .to_request();
+
+                let metadata: ProjectMetadata = test::call_and_read_body_json(&app, req).await;
+                assert_eq!(metadata.name, update_data.name);
+
+                // TODO: check the database is updated, too
+            })
+            .await;
+    }
+
+    #[actix_web::test]
+    async fn test_update_project_collision() {
+        let admin: User = api::NewUser {
+            username: "admin".into(),
+            email: "admin@netsblox.org".into(),
+            password: None,
+            group_id: None,
+            role: Some(UserRole::Admin),
+        }
+        .into();
+
+        let owner: User = api::NewUser {
+            username: "owner".into(),
+            email: "admin@netsblox.org".into(),
+            password: None,
+            group_id: None,
+            role: Some(UserRole::Admin),
+        }
+        .into();
+        let project = test_utils::project::builder()
+            .with_owner(owner.username.clone())
+            .with_name("initial name".into())
+            .build();
+
+        let existing = test_utils::project::builder()
+            .with_owner(owner.username.clone())
+            .with_name("new name".into())
+            .build();
+
+        test_utils::setup()
+            .with_projects(&[project.clone(), existing.clone()])
+            .with_users(&[admin.clone(), owner])
+            .run(|app_data| async move {
+                let app = test::init_service(
+                    App::new()
+                        .wrap(test_utils::cookie::middleware())
+                        .app_data(web::Data::new(app_data.clone()))
+                        .configure(config),
+                )
+                .await;
+
+                let update_data = api::UpdateProjectData {
+                    name: existing.name.clone(),
+                    client_id: None,
+                };
+                let req = test::TestRequest::patch()
+                    .cookie(test_utils::cookie::new(&admin.username))
+                    .uri(&format!("/id/{}", &project.id))
+                    .set_json(&update_data)
+                    .to_request();
+
+                let metadata: ProjectMetadata = test::call_and_read_body_json(&app, req).await;
+                assert_ne!(metadata.name, existing.name);
+                assert!(metadata.name.starts_with(&update_data.name));
+
+                // TODO: check the database is updated, too
+            })
+            .await;
     }
 
     #[actix_web::test]
@@ -974,7 +1121,7 @@ mod tests {
     async fn test_rename_project_owner() {
         let username = "user1";
         let project = test_utils::project::builder()
-            .with_name("old name".into())
+            .with_name("old_name".into())
             .with_owner(username.to_string())
             .build();
         let id = project.id.clone();
@@ -1018,9 +1165,50 @@ mod tests {
     }
 
     #[actix_web::test]
-    #[ignore]
     async fn test_rename_project_invalid_name() {
-        todo!();
+        let username = "user1";
+        let project = test_utils::project::builder()
+            .with_name("old name".into())
+            .with_owner(username.to_string())
+            .build();
+        let id = project.id.clone();
+        let new_name = "shit";
+        let project_update = UpdateProjectData {
+            name: new_name.into(),
+            client_id: None,
+        };
+
+        test_utils::setup()
+            .with_projects(&[project])
+            .run(|app_data| async move {
+                let app = test::init_service(
+                    App::new()
+                        .wrap(test_utils::cookie::middleware())
+                        .app_data(web::Data::new(app_data.clone()))
+                        .configure(config),
+                )
+                .await;
+
+                let req = test::TestRequest::patch()
+                    .cookie(test_utils::cookie::new(username))
+                    .uri(&format!("/id/{}", id))
+                    .set_json(&project_update)
+                    .to_request();
+
+                let response = test::call_service(&app, req).await;
+                assert_eq!(response.status(), http::StatusCode::BAD_REQUEST);
+
+                let query = doc! {"id": id};
+                let project = app_data
+                    .project_metadata
+                    .find_one(query, None)
+                    .await
+                    .unwrap()
+                    .unwrap();
+
+                assert_eq!(project.name, "old name".to_string());
+            })
+            .await;
     }
 
     #[actix_web::test]
@@ -1032,7 +1220,7 @@ mod tests {
         };
         let id = "abc123";
         let project = test_utils::project::builder()
-            .with_name("old name".into())
+            .with_name("old_name".into())
             .with_id(ProjectId::new(id.to_string()))
             .build();
 
@@ -1167,27 +1355,207 @@ mod tests {
     }
 
     #[actix_web::test]
-    #[ignore]
     async fn test_rename_role() {
-        todo!();
+        let user: User = api::NewUser {
+            username: "owner".to_string(),
+            email: "owner@netsblox.org".into(),
+            password: None,
+            group_id: None,
+            role: None,
+        }
+        .into();
+        let role_id = api::RoleId::new("someRole".into());
+        let role_data = api::RoleData {
+            name: "role".into(),
+            code: "<code/>".into(),
+            media: "<media/>".into(),
+        };
+        let project = test_utils::project::builder()
+            .with_owner(user.username.to_string())
+            .with_roles([(role_id.clone(), role_data)].into_iter().collect())
+            .build();
+
+        test_utils::setup()
+            .with_projects(&[project.clone()])
+            .with_users(&[user.clone()])
+            .run(|app_data| async move {
+                let app = test::init_service(
+                    App::new()
+                        .wrap(test_utils::cookie::middleware())
+                        .app_data(web::Data::new(app_data.clone()))
+                        .configure(config),
+                )
+                .await;
+
+                let data = UpdateRoleData {
+                    name: "new_name".into(),
+                    client_id: None,
+                };
+                println!("/id/{}/{}", &project.id, &role_id);
+                let req = test::TestRequest::patch()
+                    .cookie(test_utils::cookie::new(&user.username))
+                    .uri(&format!("/id/{}/{}", &project.id, &role_id))
+                    .set_json(&data)
+                    .to_request();
+
+                let bytes = test::call_and_read_body(&app, req).await;
+                let body = std::str::from_utf8(&bytes).unwrap();
+                // let project: ProjectMetadata = test::call_and_read_body_json(&app, req).await;
+                // let role = project.roles.get(&role_id).unwrap();
+                // assert_eq!(role.name, data.name);
+
+                let project = app_data.get_project_metadatum(&project.id).await.unwrap();
+                let role = project.roles.get(&role_id).unwrap();
+                assert_eq!(role.name, data.name);
+            })
+            .await;
     }
 
     #[actix_web::test]
-    #[ignore]
     async fn test_rename_role_invalid_name() {
-        todo!();
+        let username = "user1";
+        let role_id = api::RoleId::new("someRole".into());
+        let role_data = api::RoleData {
+            name: "role".into(),
+            code: "<code/>".into(),
+            media: "<media/>".into(),
+        };
+        let project = test_utils::project::builder()
+            .with_owner(username.to_string())
+            .with_collaborators(&["user2", "user3"])
+            .with_roles([(role_id.clone(), role_data)].into_iter().collect())
+            .build();
+
+        test_utils::setup()
+            .with_projects(&[project.clone()])
+            .run(|app_data| async move {
+                let app = test::init_service(
+                    App::new()
+                        .wrap(test_utils::cookie::middleware())
+                        .app_data(web::Data::new(app_data.clone()))
+                        .configure(config),
+                )
+                .await;
+
+                let data = UpdateRoleData {
+                    name: "$ .1 damn".into(),
+                    client_id: None,
+                };
+                let req = test::TestRequest::patch()
+                    .cookie(test_utils::cookie::new(username))
+                    .uri(&format!("/id/{}/{}", &project.id, &role_id))
+                    .set_json(&data)
+                    .to_request();
+
+                let response = test::call_service(&app, req).await;
+                assert_eq!(response.status(), http::StatusCode::BAD_REQUEST);
+
+                let project = app_data.get_project_metadatum(&project.id).await.unwrap();
+                let role = project.roles.get(&role_id).unwrap();
+                assert_eq!(role.name, "role".to_string());
+            })
+            .await;
     }
 
     #[actix_web::test]
-    #[ignore]
-    async fn test_rename_role_403() {
-        todo!();
+    async fn test_rename_role_no_perms() {
+        let username = "user1";
+        let role_id = api::RoleId::new("someRole".into());
+        let role_data = api::RoleData {
+            name: "role".into(),
+            code: "<code/>".into(),
+            media: "<media/>".into(),
+        };
+        let project = test_utils::project::builder()
+            .with_owner("owner".to_string())
+            .with_collaborators(&["user2", "user3"])
+            .with_roles([(role_id.clone(), role_data)].into_iter().collect())
+            .build();
+
+        test_utils::setup()
+            .with_projects(&[project.clone()])
+            .run(|app_data| async move {
+                let app = test::init_service(
+                    App::new()
+                        .wrap(test_utils::cookie::middleware())
+                        .app_data(web::Data::new(app_data.clone()))
+                        .configure(config),
+                )
+                .await;
+
+                let data = UpdateRoleData {
+                    name: "X".into(),
+                    client_id: None,
+                };
+                let req = test::TestRequest::patch()
+                    .cookie(test_utils::cookie::new(username))
+                    .uri(&format!("/id/{}/{}", &project.id, &role_id))
+                    .set_json(&data)
+                    .to_request();
+
+                let response = test::call_service(&app, req).await;
+                assert_eq!(response.status(), http::StatusCode::FORBIDDEN);
+
+                let project = app_data.get_project_metadatum(&project.id).await.unwrap();
+                let role = project.roles.get(&role_id).unwrap();
+                assert_eq!(role.name, "role".to_string());
+            })
+            .await;
     }
 
     #[actix_web::test]
-    #[ignore]
     async fn test_rename_role_admin() {
-        todo!();
+        let admin: User = api::NewUser {
+            username: "admin".to_string(),
+            email: "admin@netsblox.org".into(),
+            password: None,
+            group_id: None,
+            role: Some(UserRole::Admin),
+        }
+        .into();
+
+        let role_id = api::RoleId::new("someRole".into());
+        let role_data = api::RoleData {
+            name: "role".into(),
+            code: "<code/>".into(),
+            media: "<media/>".into(),
+        };
+        let project = test_utils::project::builder()
+            .with_owner("owner".to_string())
+            .with_roles([(role_id.clone(), role_data)].into_iter().collect())
+            .build();
+
+        test_utils::setup()
+            .with_users(&[admin.clone()])
+            .with_projects(&[project.clone()])
+            .run(|app_data| async move {
+                let app = test::init_service(
+                    App::new()
+                        .wrap(test_utils::cookie::middleware())
+                        .app_data(web::Data::new(app_data.clone()))
+                        .configure(config),
+                )
+                .await;
+
+                let data = UpdateRoleData {
+                    name: "new_name".into(),
+                    client_id: None,
+                };
+                let req = test::TestRequest::patch()
+                    .cookie(test_utils::cookie::new(&admin.username))
+                    .uri(&format!("/id/{}/{}", &project.id, &role_id))
+                    .set_json(&data)
+                    .to_request();
+
+                let project: ProjectMetadata = test::call_and_read_body_json(&app, req).await;
+                let role = project.roles.get(&role_id).unwrap();
+                assert_eq!(role.name, data.name);
+
+                let project = app_data.get_project_metadatum(&project.id).await.unwrap();
+                let role = project.roles.get(&role_id).unwrap();
+                assert_eq!(role.name, "new_name".to_string());
+            })
+            .await;
     }
 
     #[actix_web::test]
@@ -1269,9 +1637,38 @@ mod tests {
     }
 
     #[actix_web::test]
-    #[ignore]
     async fn test_remove_collaborator() {
-        todo!();
+        let username = "user1";
+        let project = test_utils::project::builder()
+            .with_owner(username.to_string())
+            .with_collaborators(&["user2", "user3"])
+            .build();
+
+        test_utils::setup()
+            .with_projects(&[project.clone()])
+            .run(|app_data| async move {
+                let app = test::init_service(
+                    App::new()
+                        .wrap(test_utils::cookie::middleware())
+                        .app_data(web::Data::new(app_data.clone()))
+                        .configure(config),
+                )
+                .await;
+
+                let req = test::TestRequest::delete()
+                    .cookie(test_utils::cookie::new(username))
+                    .uri(&format!("/id/{}/collaborators/user2", &project.id))
+                    .to_request();
+
+                let project: ProjectMetadata = test::call_and_read_body_json(&app, req).await;
+                let expected = ["user3"];
+                project
+                    .collaborators
+                    .into_iter()
+                    .enumerate()
+                    .for_each(|(i, name)| assert_eq!(name, expected[i]));
+            })
+            .await;
     }
 
     #[actix_web::test]
@@ -1407,5 +1804,33 @@ mod tests {
                     .for_each(|(i, name)| assert_eq!(name, project.collaborators[i]));
             })
             .await;
+    }
+
+    #[actix_web::test]
+    async fn test_x_is_valid_name() {
+        assert!(is_valid_name("X"));
+    }
+
+    #[actix_web::test]
+    async fn test_is_valid_name_spaces() {
+        assert!(is_valid_name("Player 1"));
+    }
+
+    #[actix_web::test]
+    async fn test_is_valid_name_dashes() {
+        assert!(is_valid_name("Player-i"));
+    }
+
+    #[actix_web::test]
+    async fn test_is_valid_name_parens() {
+        assert!(is_valid_name("untitled (20)"));
+    }
+
+    #[actix_web::test]
+    async fn test_is_valid_name_profanity() {
+        assert!(!is_valid_name("shit"));
+        assert!(!is_valid_name("fuck"));
+        assert!(!is_valid_name("damn"));
+        assert!(!is_valid_name("hell"));
     }
 }

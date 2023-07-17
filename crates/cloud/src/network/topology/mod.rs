@@ -8,6 +8,8 @@ use crate::common::{api, OccupantInvite, ProjectMetadata};
 use actix::prelude::*;
 use actix::{Actor, AsyncContext, Context, Handler};
 use log::warn;
+use netsblox_cloud_common::api::CollaborationInvite;
+use serde::Serialize;
 use serde_json::Value;
 use std::sync::Arc;
 use tokio::sync::RwLock;
@@ -95,7 +97,6 @@ pub struct SetClientUsername {
 #[derive(Message)]
 #[rtype(result = "()")]
 pub struct SendMessage {
-    // TODO: include sender username
     pub sender: ClientId,
     pub addresses: Vec<String>,
     pub content: Value,
@@ -176,8 +177,6 @@ impl Handler<SendMessage> for TopologyActor {
     type Result = ();
 
     fn handle(&mut self, msg: SendMessage, ctx: &mut Context<Self>) -> Self::Result {
-        // TODO: check if the message should be recorded
-        // TODO: should we first check what clients are going to receive it?
         let network = self.network.clone();
         let fut = async move {
             let topology = network.read().await;
@@ -267,6 +266,120 @@ impl Handler<DisconnectClient> for TopologyActor {
         let fut = async move {
             let topology = network.read().await;
             topology.disconnect_client(&client_id);
+        };
+        let fut = actix::fut::wrap_future(fut);
+        ctx.spawn(fut);
+    }
+}
+
+#[derive(Serialize)]
+pub(crate) enum ChangeType {
+    Add,
+    Remove,
+}
+
+/// A notification that the collaboration invitations have changed.
+/// Either a new invitation was sent or revoked/answered/etc
+#[derive(Message, Serialize)]
+#[rtype(result = "()")]
+pub struct CollabInviteChangeMsg {
+    r#type: &'static str,
+    change: ChangeType,
+    content: CollaborationInvite,
+}
+
+impl CollabInviteChangeMsg {
+    pub(crate) fn new(change: ChangeType, content: CollaborationInvite) -> Self {
+        let r#type = "collaboration-invitation";
+
+        Self {
+            r#type,
+            change,
+            content,
+        }
+    }
+}
+
+impl Handler<CollabInviteChangeMsg> for TopologyActor {
+    type Result = ();
+
+    fn handle(&mut self, msg: CollabInviteChangeMsg, ctx: &mut Context<Self>) -> Self::Result {
+        let network = self.network.clone();
+        let fut = async move {
+            let topology = network.read().await;
+            let receiver = msg.content.receiver.clone();
+            let json = serde_json::to_value(msg).unwrap(); // we created the message so it should be infallible
+            topology.send_to_user(json, &receiver);
+        };
+        let fut = actix::fut::wrap_future(fut);
+        ctx.spawn(fut);
+    }
+}
+
+/// A notification that the friend requests have changed.
+/// Either a new invitation was sent or revoked/answered/etc
+#[derive(Message, Serialize)]
+#[rtype(result = "()")]
+pub struct FriendRequestChangeMsg {
+    r#type: &'static str,
+    change: ChangeType,
+    content: api::FriendInvite,
+}
+
+impl FriendRequestChangeMsg {
+    pub(crate) fn new(change: ChangeType, content: api::FriendInvite) -> Self {
+        let r#type = "friend-request";
+
+        Self {
+            r#type,
+            change,
+            content,
+        }
+    }
+}
+
+impl Handler<FriendRequestChangeMsg> for TopologyActor {
+    type Result = ();
+
+    fn handle(&mut self, msg: FriendRequestChangeMsg, ctx: &mut Context<Self>) -> Self::Result {
+        let network = self.network.clone();
+        let fut = async move {
+            let topology = network.read().await;
+            let receiver = msg.content.recipient.clone();
+            let json = serde_json::to_value(msg).unwrap(); // we created the message so it should be infallible
+            topology.send_to_user(json, &receiver);
+        };
+        let fut = actix::fut::wrap_future(fut);
+        ctx.spawn(fut);
+    }
+}
+
+/// A notification that the given project has been deleted.
+#[derive(Message, Serialize)]
+#[rtype(result = "()")]
+pub struct ProjectDeleted {
+    r#type: &'static str,
+    project: ProjectMetadata,
+}
+
+impl ProjectDeleted {
+    pub(crate) fn new(project: ProjectMetadata) -> Self {
+        let r#type = "project-deleted";
+
+        Self { r#type, project }
+    }
+}
+
+impl Handler<ProjectDeleted> for TopologyActor {
+    type Result = ();
+
+    fn handle(&mut self, msg: ProjectDeleted, ctx: &mut Context<Self>) -> Self::Result {
+        let network = self.network.clone();
+        let fut = async move {
+            let topology = network.read().await;
+            let project_id = msg.project.id.clone();
+            let json = serde_json::to_value(msg).unwrap(); // we created the message so it should be infallible
+            topology.send_to_room(json, &project_id);
         };
         let fut = actix::fut::wrap_future(fut);
         ctx.spawn(fut);

@@ -7,6 +7,7 @@ use actix_web::{delete, get, patch, post, HttpRequest};
 use actix_web::{web, HttpResponse};
 use futures::stream::TryStreamExt;
 use mongodb::bson::doc;
+use mongodb::options::ReturnDocument;
 use netsblox_cloud_common::Group;
 
 use crate::common::{self, api};
@@ -118,7 +119,7 @@ async fn create_group(
 
     let group = common::Group::new(owner.to_owned(), body.name.to_owned());
     let query = doc! {"name": &group.name, "owner": &group.owner};
-    let update = doc! {"$setOnInsert": group};
+    let update = doc! {"$setOnInsert": &group};
     let options = mongodb::options::UpdateOptions::builder()
         .upsert(true)
         .build();
@@ -131,7 +132,8 @@ async fn create_group(
     if result.matched_count == 1 {
         Err(UserError::GroupExistsError)
     } else {
-        Ok(HttpResponse::Ok().body("Group created."))
+        let group: api::Group = group.into();
+        Ok(HttpResponse::Ok().json(group))
     }
 }
 
@@ -144,6 +146,7 @@ async fn update_group(
 ) -> Result<HttpResponse, UserError> {
     let (id,) = path.into_inner();
 
+    // TODO: Better permissions logic
     let username = session
         .get::<String>("username")
         .ok()
@@ -156,17 +159,18 @@ async fn update_group(
         doc! {"id": id, "owner": username}
     };
     let update = doc! {"$set": {"name": &data.name}};
-    let result = app
-        .groups
-        .update_one(query, update, None)
-        .await
-        .map_err(InternalError::DatabaseConnectionError)?;
+    let options = mongodb::options::FindOneAndUpdateOptions::builder()
+        .return_document(ReturnDocument::After)
+        .build();
 
-    if result.matched_count > 0 {
-        Ok(HttpResponse::Ok().body("Group deleted."))
-    } else {
-        Err(UserError::GroupNotFoundError)
-    }
+    let group = app
+        .groups
+        .find_one_and_update(query, update, options)
+        .await
+        .map_err(InternalError::DatabaseConnectionError)?
+        .ok_or(UserError::GroupNotFoundError)?;
+
+    Ok(HttpResponse::Ok().json(group))
 }
 
 #[delete("/id/{id}")]
@@ -189,17 +193,15 @@ async fn delete_group(
         doc! {"id": id, "owner": username}
     };
 
-    let result = app
+    let group: api::Group = app
         .groups
-        .delete_one(query, None)
+        .find_one_and_delete(query, None)
         .await
-        .map_err(InternalError::DatabaseConnectionError)?;
+        .map_err(InternalError::DatabaseConnectionError)?
+        .ok_or(UserError::GroupNotFoundError)?
+        .into();
 
-    if result.deleted_count > 0 {
-        Ok(HttpResponse::Ok().body("Group deleted."))
-    } else {
-        Err(UserError::GroupNotFoundError)
-    }
+    Ok(HttpResponse::Ok().json(group))
 }
 
 pub fn config(cfg: &mut web::ServiceConfig) {
@@ -213,6 +215,11 @@ pub fn config(cfg: &mut web::ServiceConfig) {
 
 #[cfg(test)]
 mod tests {
+    use actix_web::{body::MessageBody, http, test, App};
+    use netsblox_cloud_common::{Group, User};
+
+    use super::*;
+    use crate::test_utils;
 
     #[actix_web::test]
     #[ignore]
@@ -275,15 +282,101 @@ mod tests {
     }
 
     #[actix_web::test]
-    #[ignore]
     async fn test_update_group() {
-        unimplemented!();
+        let user: User = api::NewUser {
+            username: "user".into(),
+            email: "user@netsblox.org".into(),
+            password: None,
+            group_id: None,
+            role: None,
+        }
+        .into();
+        let group = Group::new(user.username.clone(), "some_group".into());
+
+        test_utils::setup()
+            .with_users(&[user.clone()])
+            .with_groups(&[group.clone()])
+            .run(|app_data| async move {
+                let app = test::init_service(
+                    App::new()
+                        .app_data(web::Data::new(app_data.clone()))
+                        .wrap(test_utils::cookie::middleware())
+                        .configure(config),
+                )
+                .await;
+
+                let data = api::UpdateGroupData {
+                    name: "new_name".into(),
+                };
+                let req = test::TestRequest::patch()
+                    .uri(&format!("/id/{}", &group.id))
+                    .cookie(test_utils::cookie::new(&user.username))
+                    .set_json(&data)
+                    .to_request();
+
+                let response = test::call_service(&app, req).await;
+
+                // Check that the group is updated in the db
+                let query = doc! {"id": &group.id};
+                let group = app_data
+                    .groups
+                    .find_one(query, None)
+                    .await
+                    .expect("Could not query DB")
+                    .ok_or(UserError::GroupNotFoundError)
+                    .expect("Group not found in db.");
+
+                assert_eq!(group.name, "new_name".to_string());
+
+                // Check response
+                assert_eq!(response.status(), http::StatusCode::OK);
+                let bytes = response.into_body().try_into_bytes().unwrap();
+                let group: api::Group = serde_json::from_slice(&bytes).unwrap();
+
+                assert_eq!(group.name, "new_name".to_string());
+            })
+            .await;
     }
 
     #[actix_web::test]
-    #[ignore]
-    async fn test_update_group_403() {
-        unimplemented!();
+    async fn test_update_group_no_perms() {
+        let user: User = api::NewUser {
+            username: "user".into(),
+            email: "user@netsblox.org".into(),
+            password: None,
+            group_id: None,
+            role: None,
+        }
+        .into();
+        let group = Group::new("other_user".into(), "some_group".into());
+
+        test_utils::setup()
+            .with_users(&[user.clone()])
+            .with_groups(&[group.clone()])
+            .run(|app_data| async move {
+                let app = test::init_service(
+                    App::new()
+                        .app_data(web::Data::new(app_data.clone()))
+                        .wrap(test_utils::cookie::middleware())
+                        .configure(config),
+                )
+                .await;
+
+                let data = api::UpdateGroupData {
+                    name: "new_name".into(),
+                };
+                let req = test::TestRequest::patch()
+                    .uri(&format!("/id/{}", &group.id))
+                    .cookie(test_utils::cookie::new(&user.username))
+                    .set_json(&data)
+                    .to_request();
+
+                let response = test::call_service(&app, req).await;
+
+                // Not found is fine since it is technically more secure
+                assert_eq!(response.status(), http::StatusCode::NOT_FOUND);
+            })
+            .await;
     }
 
     #[actix_web::test]
@@ -293,21 +386,110 @@ mod tests {
     }
 
     #[actix_web::test]
-    #[ignore]
     async fn test_delete_group() {
-        unimplemented!();
+        let user: User = api::NewUser {
+            username: "user".into(),
+            email: "user@netsblox.org".into(),
+            password: None,
+            group_id: None,
+            role: None,
+        }
+        .into();
+        let group = Group::new(user.username.clone(), "some_group".into());
+
+        test_utils::setup()
+            .with_users(&[user.clone()])
+            .with_groups(&[group.clone()])
+            .run(|app_data| async move {
+                let app = test::init_service(
+                    App::new()
+                        .app_data(web::Data::new(app_data.clone()))
+                        .wrap(test_utils::cookie::middleware())
+                        .configure(config),
+                )
+                .await;
+
+                let req = test::TestRequest::delete()
+                    .uri(&format!("/id/{}", &group.id))
+                    .cookie(test_utils::cookie::new(&user.username))
+                    .to_request();
+
+                let _group: api::Group = test::call_and_read_body_json(&app, req).await;
+            })
+            .await;
     }
 
     #[actix_web::test]
-    #[ignore]
     async fn test_delete_group_403() {
-        unimplemented!();
+        let user: User = api::NewUser {
+            username: "user".into(),
+            email: "user@netsblox.org".into(),
+            password: None,
+            group_id: None,
+            role: None,
+        }
+        .into();
+        let group = Group::new("other_user".into(), "some_group".into());
+
+        test_utils::setup()
+            .with_users(&[user.clone()])
+            .with_groups(&[group.clone()])
+            .run(|app_data| async move {
+                let app = test::init_service(
+                    App::new()
+                        .app_data(web::Data::new(app_data.clone()))
+                        .wrap(test_utils::cookie::middleware())
+                        .configure(config),
+                )
+                .await;
+
+                let req = test::TestRequest::delete()
+                    .uri(&format!("/id/{}", &group.id))
+                    .cookie(test_utils::cookie::new(&user.username))
+                    .to_request();
+
+                let response = test::call_service(&app, req).await;
+                assert_ne!(response.status(), http::StatusCode::OK);
+
+                let query = doc! {"id": group.id};
+                let group = app_data.groups.find_one(query, None).await.unwrap();
+                assert!(group.is_some());
+            })
+            .await;
     }
 
     #[actix_web::test]
-    #[ignore]
     async fn test_delete_group_404() {
-        unimplemented!();
+        let user: User = api::NewUser {
+            username: "user".into(),
+            email: "user@netsblox.org".into(),
+            password: None,
+            group_id: None,
+            role: None,
+        }
+        .into();
+        let group = Group::new("other_user".into(), "some_group".into());
+
+        test_utils::setup()
+            .with_users(&[user.clone()])
+            .run(|app_data| async move {
+                let app = test::init_service(
+                    App::new()
+                        .app_data(web::Data::new(app_data.clone()))
+                        .wrap(test_utils::cookie::middleware())
+                        .configure(config),
+                )
+                .await;
+
+                let req = test::TestRequest::delete()
+                    .uri(&format!("/id/{}", &group.id))
+                    .cookie(test_utils::cookie::new(&user.username))
+                    .to_request();
+
+                let response = test::call_service(&app, req).await;
+                assert_eq!(response.status(), http::StatusCode::NOT_FOUND);
+            })
+            .await;
     }
     // TODO: How does it handle malformed IDs?
 }

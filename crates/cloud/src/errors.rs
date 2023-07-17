@@ -47,6 +47,8 @@ pub enum UserError {
     InviteNotFoundError,
     #[display(fmt = "Invitation not allowed between members.")]
     InviteNotAllowedError,
+    #[display(fmt = "Invitation already exists.")]
+    InviteAlreadyExistsError,
     #[display(fmt = "Service host not found.")]
     ServiceHostNotFoundError,
     #[display(fmt = "Project not active.")]
@@ -65,6 +67,10 @@ pub enum UserError {
     GroupExistsError,
     #[display(fmt = "Invalid username.")]
     InvalidUsername,
+    #[display(fmt = "Invalid name.")]
+    InvalidRoleOrProjectName,
+    #[display(fmt = "Invalid library name.")]
+    InvalidLibraryName,
     #[display(fmt = "Invalid email address.")]
     InvalidEmailAddress,
     #[display(fmt = "Invalid client ID.")]
@@ -171,8 +177,10 @@ impl error::ResponseError for UserError {
             | Self::GroupNotFoundError => StatusCode::NOT_FOUND,
             Self::InternalError | Self::SnapConnectionError => StatusCode::INTERNAL_SERVER_ERROR,
             Self::InvalidUsername
+            | Self::InvalidRoleOrProjectName
             | Self::InvalidEmailAddress
             | Self::InvalidClientIdError
+            | Self::InvalidLibraryName
             | Self::InvalidAppIdError
             | Self::InvalidServiceHostIDError
             | Self::AccountAlreadyLinkedError
@@ -188,6 +196,7 @@ impl error::ResponseError for UserError {
             | Self::InviteNotAllowedError
             | Self::OAuthFlowError(..)
             | Self::ProjectNotActiveError => StatusCode::BAD_REQUEST,
+            Self::InviteAlreadyExistsError => StatusCode::CONFLICT,
         }
     }
 }

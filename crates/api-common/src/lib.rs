@@ -130,7 +130,6 @@ pub enum FriendLinkState {
     PENDING,
     APPROVED,
     REJECTED,
-    DELETED,
     BLOCKED,
 }
 
@@ -151,7 +150,6 @@ impl FromStr for FriendLinkState {
             "pending" => Ok(FriendLinkState::PENDING),
             "approved" => Ok(FriendLinkState::APPROVED),
             "rejected" => Ok(FriendLinkState::REJECTED),
-            "deleted" => Ok(FriendLinkState::DELETED),
             "blocked" => Ok(FriendLinkState::BLOCKED),
             _ => Err(ParseFriendLinkStateError),
         }
@@ -205,6 +203,7 @@ pub struct ProjectMetadata {
 
 #[derive(Deserialize, Serialize, Clone, Debug)]
 pub enum SaveState {
+    // TODO: rename these to be Pascal-case
     CREATED,
     TRANSIENT,
     BROKEN,
@@ -268,14 +267,14 @@ pub struct ClientStateData {
     pub state: ClientState,
 }
 
-#[derive(Debug, Deserialize, Serialize, Clone)]
+#[derive(Debug, Deserialize, Serialize, Clone, PartialEq, Eq)]
 #[serde(rename_all = "camelCase")]
 pub enum ClientState {
     Browser(BrowserClientState),
     External(ExternalClientState),
 }
 
-#[derive(Debug, Deserialize, Serialize, Clone)]
+#[derive(Debug, Deserialize, Serialize, Clone, PartialEq, Eq)]
 #[serde(rename_all = "camelCase")]
 pub struct BrowserClientState {
     pub role_id: RoleId,
@@ -328,7 +327,7 @@ impl<'de> Visitor<'de> for AppIdVisitor {
     }
 }
 
-#[derive(Debug, Deserialize, Serialize, Clone)]
+#[derive(Debug, Deserialize, Serialize, Clone, PartialEq, Eq)]
 #[serde(rename_all = "camelCase")]
 pub struct ExternalClientState {
     pub address: String,

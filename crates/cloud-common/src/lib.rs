@@ -178,7 +178,7 @@ impl From<Group> for Bson {
     }
 }
 
-#[derive(Serialize, Deserialize, Clone)]
+#[derive(Serialize, Deserialize, Clone, Debug)]
 #[serde(rename_all = "camelCase")]
 pub struct CollaborationInvite {
     pub id: String,
@@ -228,7 +228,7 @@ impl From<CollaborationInvite> for netsblox_api_common::CollaborationInvite {
     }
 }
 
-type FriendLinkId = String;
+type FriendLinkId = String; // FIXME: switch to newtype
 #[derive(Deserialize, Serialize, Clone, Debug)]
 #[serde(rename_all = "camelCase")]
 pub struct FriendLink {
@@ -267,7 +267,6 @@ impl From<FriendLink> for FriendInvite {
 
 impl From<FriendLink> for Bson {
     fn from(link: FriendLink) -> Bson {
-        println!("from friend link! {:?}", link);
         Bson::Document(doc! {
             "id": link.id,
             "sender": link.sender,
@@ -279,7 +278,7 @@ impl From<FriendLink> for Bson {
     }
 }
 
-#[derive(Deserialize, Serialize, Clone)]
+#[derive(Deserialize, Serialize, Clone, Debug)]
 #[serde(rename_all = "camelCase")]
 pub struct NetworkTraceMetadata {
     pub id: String,
@@ -291,7 +290,7 @@ impl NetworkTraceMetadata {
     pub fn new() -> Self {
         Self {
             id: Uuid::new_v4().to_string(),
-            start_time: DateTime::from_system_time(SystemTime::now()),
+            start_time: DateTime::now(),
             end_time: None,
         }
     }
@@ -307,7 +306,7 @@ impl From<NetworkTraceMetadata> for Bson {
     }
 }
 
-#[derive(Deserialize, Serialize, Clone)]
+#[derive(Deserialize, Serialize, Clone, Debug)]
 #[serde(rename_all = "camelCase")]
 pub struct ProjectMetadata {
     pub id: ProjectId,
@@ -327,14 +326,10 @@ impl ProjectMetadata {
     pub fn new(
         owner: &str,
         name: &str,
-        roles: Vec<RoleMetadata>,
+        roles: HashMap<RoleId, RoleMetadata>,
         save_state: SaveState,
     ) -> ProjectMetadata {
         let origin_time = DateTime::now();
-        let roles = roles
-            .into_iter()
-            .map(|role| (RoleId::new(Uuid::new_v4().to_string()), role))
-            .collect::<HashMap<_, _>>();
 
         let ten_minutes = Duration::new(10 * 60, 0);
         let delete_at =
@@ -399,7 +394,7 @@ impl From<ProjectMetadata> for netsblox_api_common::ProjectMetadata {
     }
 }
 
-#[derive(Deserialize, Serialize, Clone)]
+#[derive(Deserialize, Serialize, Clone, Debug)]
 #[serde(rename_all = "camelCase")]
 pub struct Project {
     pub id: ProjectId,
@@ -429,7 +424,7 @@ impl From<Project> for netsblox_api_common::Project {
     }
 }
 
-#[derive(Deserialize, Serialize, Clone)]
+#[derive(Deserialize, Serialize, Clone, Debug)]
 #[serde(rename_all = "camelCase")]
 pub struct RoleMetadata {
     pub name: String,
@@ -497,7 +492,7 @@ impl SentMessage {
         recipients: Vec<ClientState>,
         content: serde_json::Value,
     ) -> Self {
-        let time = DateTime::from_system_time(SystemTime::now());
+        let time = DateTime::now();
         SentMessage {
             project_id,
             recipients,

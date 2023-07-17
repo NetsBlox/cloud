@@ -9,7 +9,7 @@ use log::warn;
 use lru::LruCache;
 use mongodb::bson::{doc, DateTime};
 use netsblox_cloud_common::SentMessage;
-use serde_json::json;
+use serde_json::{json, Value};
 use std::collections::{HashMap, HashSet};
 use std::str::FromStr;
 use std::sync::{Arc, RwLock};
@@ -145,9 +145,9 @@ pub struct Topology {
 
 #[derive(Debug)]
 enum ProjectCleanup {
-    NONE,
-    IMMEDIATELY,
-    DELAYED,
+    None,
+    Immediately,
+    Delayed,
 }
 
 impl Topology {
@@ -206,11 +206,11 @@ impl Topology {
             .map(|addresses| addresses.to_vec())
     }
 
-    fn cache_address(&self, addr: &ClientAddress, b_addrs: &Vec<BrowserAddress>) {
+    fn cache_address(&self, addr: &ClientAddress, b_addrs: &[BrowserAddress]) {
         ADDRESS_CACHE
             .write()
             .unwrap()
-            .put(addr.clone(), b_addrs.clone());
+            .put(addr.clone(), b_addrs.to_vec());
         // TODO: clear cache on room close?
     }
 
@@ -276,18 +276,18 @@ impl Topology {
     }
 
     pub async fn send_msg(&self, msg: SendMessage) {
-        let message = ClientCommand::SendMessage(msg.content.clone());
-        let recipients = join_all(
-            msg.addresses
-                .iter()
-                .filter_map(|addr_str| ClientAddress::from_str(addr_str).ok())
-                .map(|address| self.get_clients_at(address)), // TODO: Get the project for these clients?
-        )
-        .await
-        .into_iter()
-        .flatten();
-
         if let Some(app) = &self.app_data {
+            let message = ClientCommand::SendMessage(msg.content.clone());
+            let recipients = join_all(
+                msg.addresses
+                    .iter()
+                    .filter_map(|addr_str| ClientAddress::from_str(addr_str).ok())
+                    .map(|address| self.get_clients_at(address)),
+            )
+            .await
+            .into_iter()
+            .flatten();
+
             // check if the message is allowed
             let recipients = self
                 .allowed_recipients(app, &msg.sender, recipients.collect())
@@ -298,7 +298,7 @@ impl Topology {
             });
 
             // maybe record the message
-            let project_ids: Vec<_> = recipients
+            let project_ids: HashSet<_> = recipients
                 .iter()
                 .map(|client| &client.id)
                 .chain(std::iter::once(&msg.sender))
@@ -311,9 +311,10 @@ impl Topology {
                 .collect();
 
             let projects = app
-                .get_project_metadata(&project_ids)
+                .get_project_metadata(project_ids.iter())
                 .await
-                .unwrap_or_else(|_err| Vec::new());
+                .unwrap_or_default();
+
             let recording_ids = projects
                 .iter()
                 .filter(|metadata| {
@@ -349,10 +350,10 @@ impl Topology {
                 .unwrap_or_default();
 
             if !messages.is_empty() {
-                app.recorded_messages
-                    .insert_many(messages, None)
-                    .await
-                    .unwrap();
+                let res = app.recorded_messages.insert_many(&messages, None).await;
+                if let Err(err) = res {
+                    warn!("Failed to record sent message: {}", err);
+                }
             }
 
             app.metrics.record_msg_sent();
@@ -507,9 +508,14 @@ impl Topology {
         }
     }
 
-    async fn reset_client_state(&mut self, id: &ClientId, new_project_id: Option<ProjectId>) {
+    async fn reset_client_state(
+        &mut self,
+        id: &ClientId,
+        new_project_id: Option<ProjectId>,
+    ) -> Option<ClientState> {
         self.usernames.remove(id);
-        match self.states.remove(id) {
+        let state = self.states.remove(id);
+        match &state {
             Some(ClientState::Browser(state)) => {
                 let room = self.rooms.get_mut(&state.project_id);
                 let mut empty: Vec<_> = Vec::new();
@@ -563,6 +569,7 @@ impl Topology {
             }
             None => {}
         }
+        state
     }
 
     async fn remove_room(&mut self, project_id: &ProjectId) -> Result<(), InternalError> {
@@ -582,20 +589,20 @@ impl Topology {
                 .map_err(InternalError::DatabaseConnectionError)?
                 .map(|md| match md.save_state {
                     SaveState::CREATED => unreachable!(),
-                    SaveState::TRANSIENT => ProjectCleanup::IMMEDIATELY,
-                    SaveState::BROKEN => ProjectCleanup::DELAYED,
-                    SaveState::SAVED => ProjectCleanup::NONE,
+                    SaveState::TRANSIENT => ProjectCleanup::Immediately,
+                    SaveState::BROKEN => ProjectCleanup::Delayed,
+                    SaveState::SAVED => ProjectCleanup::None,
                 })
-                .unwrap_or(ProjectCleanup::NONE);
+                .unwrap_or(ProjectCleanup::None);
 
             match cleanup {
-                ProjectCleanup::IMMEDIATELY => {
+                ProjectCleanup::Immediately => {
                     app.project_metadata
                         .delete_one(query, None)
                         .await
                         .map_err(InternalError::DatabaseConnectionError)?;
                 }
-                ProjectCleanup::DELAYED => {
+                ProjectCleanup::Delayed => {
                     let ten_minutes = Duration::new(10 * 60, 0);
                     let delete_at = DateTime::from_system_time(
                         SystemTime::now().checked_add(ten_minutes).unwrap(),
@@ -711,9 +718,9 @@ impl Topology {
             .map(|room| room.get_state(metadata, &self.usernames))
     }
 
-    pub async fn evict_client(&mut self, id: ClientId) {
+    pub async fn evict_client(&mut self, id: ClientId) -> Option<ClientState> {
         let username = self.usernames.remove(&id);
-        self.reset_client_state(&id, None).await;
+        let state = self.reset_client_state(&id, None).await;
         self.clients
             .get(&id)
             .map(|client| client.addr.do_send(EvictionNotice.into()));
@@ -723,6 +730,8 @@ impl Topology {
                 self.usernames.insert(id, username);
             }
         }
+
+        state
     }
 
     pub fn get_client_state(&self, id: &ClientId) -> Option<&ClientState> {
@@ -806,7 +815,6 @@ impl Topology {
                 .unwrap_or_else(Vec::new),
         };
 
-        println!("Sending to {count} clients", count = recipients.len());
         let message = ClientCommand::SendMessage(msg.content);
         recipients.iter().for_each(|client| {
             client.addr.do_send(message.clone()).unwrap();
@@ -821,6 +829,44 @@ impl Topology {
 
         let message = ClientCommand::SendMessage(msg.content);
         recipients.for_each(|client| {
+            client.addr.do_send(message.clone()).unwrap();
+        });
+    }
+
+    pub fn send_to_user(&self, msg: Value, username: &str) {
+        let recipients = self
+            .usernames
+            .iter()
+            .filter_map(|(client_id, name)| {
+                if name == username {
+                    Some(client_id)
+                } else {
+                    None
+                }
+            })
+            .filter_map(|client_id| self.clients.get(client_id));
+
+        let message = ClientCommand::SendMessage(msg);
+        recipients.for_each(|client| {
+            client.addr.do_send(message.clone()).unwrap();
+        });
+    }
+
+    pub fn send_to_room(&self, msg: Value, id: &ProjectId) {
+        let recipients = self
+            .rooms
+            .get(id)
+            .map(|room| {
+                room.roles
+                    .values()
+                    .flatten()
+                    .filter_map(|id| self.clients.get(id))
+                    .collect::<Vec<_>>()
+            })
+            .unwrap_or_default();
+
+        let message = ClientCommand::SendMessage(msg);
+        recipients.into_iter().for_each(|client| {
             client.addr.do_send(message.clone()).unwrap();
         });
     }

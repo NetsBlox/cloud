@@ -1,12 +1,11 @@
 use std::sync::{Arc, Mutex};
 
-use actix::Addr;
 use futures::{future::join_all, Future};
 use lazy_static::lazy_static;
 use mongodb::{bson::doc, Client};
-use netsblox_cloud_common::{BannedAccount, FriendLink, Group, Project, User};
+use netsblox_cloud_common::{BannedAccount, CollaborationInvite, FriendLink, Group, User};
 
-use crate::{app_data::AppData, config::Settings, network::topology::TopologyActor};
+use crate::{app_data::AppData, config::Settings};
 
 lazy_static! {
     static ref COUNTER: Arc<Mutex<u32>> = Arc::new(Mutex::new(0));
@@ -15,7 +14,7 @@ lazy_static! {
 pub(crate) fn setup() -> TestSetupBuilder {
     let mut counter = COUNTER.lock().unwrap();
     *counter += 1_u32;
-    let prefix = format!("test_{}", counter);
+    let prefix = format!("test-{}", counter);
     TestSetupBuilder {
         prefix,
         users: Vec::new(),
@@ -24,19 +23,21 @@ pub(crate) fn setup() -> TestSetupBuilder {
         groups: Vec::new(),
         clients: Vec::new(),
         friends: Vec::new(),
-        network: None,
+        collab_invites: Vec::new(),
+        // network: None,
     }
 }
 
 pub(crate) struct TestSetupBuilder {
     prefix: String,
     users: Vec<User>,
-    projects: Vec<Project>,
+    projects: Vec<project::ProjectFixture>,
     groups: Vec<Group>,
     clients: Vec<network::Client>,
     friends: Vec<FriendLink>,
     banned_users: Vec<String>,
-    network: Option<Addr<TopologyActor>>,
+    collab_invites: Vec<CollaborationInvite>,
+    //network: Option<Addr<TopologyActor>>,
 }
 
 impl TestSetupBuilder {
@@ -50,13 +51,18 @@ impl TestSetupBuilder {
         self
     }
 
-    pub(crate) fn with_projects(mut self, projects: &[Project]) -> Self {
+    pub(crate) fn with_groups(mut self, groups: &[Group]) -> Self {
+        self.groups.extend_from_slice(groups);
+        self
+    }
+
+    pub(crate) fn with_projects(mut self, projects: &[project::ProjectFixture]) -> Self {
         self.projects.extend_from_slice(projects);
         self
     }
 
-    pub(crate) fn with_groups(mut self, groups: &[Group]) -> Self {
-        self.groups.extend_from_slice(groups);
+    pub(crate) fn with_collab_invites(mut self, invites: &[CollaborationInvite]) -> Self {
+        self.collab_invites.extend_from_slice(invites);
         self
     }
 
@@ -70,10 +76,10 @@ impl TestSetupBuilder {
         self
     }
 
-    pub(crate) fn with_network(mut self, network: Addr<TopologyActor>) -> Self {
-        self.network = Some(network);
-        self
-    }
+    // pub(crate) fn with_network(mut self, network: Addr<TopologyActor>) -> Self {
+    //     self.network = Some(network);
+    //     self
+    // }
 
     pub(crate) async fn run<Fut>(self, f: impl FnOnce(AppData) -> Fut)
     where
@@ -84,37 +90,53 @@ impl TestSetupBuilder {
             .expect("Unable to connect to database");
 
         let mut settings = Settings::new().unwrap();
-        let db_name = format!("{}_{}", &self.prefix, settings.database.name);
+        let db_name = format!("{}-{}", &self.prefix, settings.database.name);
         settings.database.name = db_name.clone();
-        settings.s3.bucket = format!("{}_{}", &self.prefix, settings.s3.bucket);
+        settings.s3.bucket = format!("{}-{}", &self.prefix, settings.s3.bucket);
 
         let app_data = AppData::new(client.clone(), settings, None, None);
 
         // create the test fixtures (users, projects, etc)
         client.database(&db_name).drop(None).await.unwrap();
-        join_all(self.projects.iter().map(|proj| async {
-            let Project {
+        app_data
+            .initialize()
+            .await
+            .expect("Unable to initialize AppData");
+
+        join_all(self.projects.into_iter().map(|fixture| async {
+            let project::ProjectFixture {
                 id,
                 owner,
                 name,
-                roles,
+                mut roles,
                 save_state,
+                traces,
                 ..
-            } = proj;
-            let roles: Vec<_> = roles.values().map(|r| r.to_owned()).collect();
+            } = fixture;
             let metadata = app_data
-                .import_project(owner, name, Some(roles), Some(save_state.clone()))
+                .import_project(&owner, &name, &mut roles, Some(save_state.clone()))
                 .await
                 .unwrap();
 
-            let query = doc! {"id": metadata.id};
-            let update = doc! {"$set": {"id": id}};
+            let query = doc! {"id": &metadata.id};
+            let update = if traces.is_empty() {
+                doc! {"$set": {"id": &id}}
+            } else {
+                doc! {
+                    "$set": {
+                        "id": &id,
+                        "networkTraces": &traces
+                    },
+                }
+            };
             app_data
                 .project_metadata
                 .update_one(query, update, None)
                 .await
+                .unwrap();
         }))
         .await;
+
         if !self.banned_users.is_empty() {
             let banned_users = self.banned_users.into_iter().map(|username| {
                 let email = self
@@ -142,6 +164,14 @@ impl TestSetupBuilder {
             app_data
                 .groups
                 .insert_many(self.groups, None)
+                .await
+                .unwrap();
+        }
+
+        if !self.collab_invites.is_empty() {
+            app_data
+                .collab_invites
+                .insert_many(self.collab_invites, None)
                 .await
                 .unwrap();
         }
@@ -195,8 +225,10 @@ pub(crate) mod cookie {
 pub(crate) mod project {
     use std::collections::HashMap;
 
-    use mongodb::bson::DateTime;
-    use netsblox_cloud_common::{api, Project};
+    use netsblox_cloud_common::{
+        api::{self, RoleData, RoleId},
+        NetworkTraceMetadata,
+    };
     use uuid::Uuid;
 
     pub(crate) struct ProjectBuilder {
@@ -204,6 +236,8 @@ pub(crate) mod project {
         owner: Option<String>,
         name: Option<String>,
         collaborators: Vec<String>,
+        roles: HashMap<api::RoleId, api::RoleData>,
+        traces: Vec<NetworkTraceMetadata>,
     }
 
     impl ProjectBuilder {
@@ -217,6 +251,16 @@ pub(crate) mod project {
             self
         }
 
+        pub(crate) fn with_roles(mut self, roles: HashMap<api::RoleId, api::RoleData>) -> Self {
+            self.roles = roles;
+            self
+        }
+
+        pub(crate) fn with_traces(mut self, traces: &[NetworkTraceMetadata]) -> Self {
+            self.traces.extend_from_slice(traces);
+            self
+        }
+
         pub(crate) fn with_id(mut self, id: api::ProjectId) -> Self {
             self.id = Some(id);
             self
@@ -227,27 +271,63 @@ pub(crate) mod project {
             self
         }
 
-        pub(crate) fn build(self) -> Project {
-            let roles = HashMap::new(); // FIXME: we should populate with some defaults..
+        pub(crate) fn build(mut self) -> ProjectFixture {
             let id = self
                 .id
                 .unwrap_or_else(|| api::ProjectId::new(Uuid::new_v4().to_string()));
 
             let owner = self.owner.unwrap_or_else(|| String::from("admin"));
 
-            Project {
+            if self.roles.is_empty() {
+                self.roles.insert(
+                    RoleId::new(Uuid::new_v4().to_string()),
+                    RoleData {
+                        name: "myRole".to_owned(),
+                        code: "".to_owned(),
+                        media: "".to_owned(),
+                    },
+                );
+            }
+
+            ProjectFixture {
                 id,
                 owner,
-                name: "old name".into(),
-                updated: DateTime::now(),
-                state: api::PublishState::Private,
+                name: self.name.unwrap_or("my project".into()),
                 collaborators: self.collaborators,
-                origin_time: DateTime::now(),
+                roles: self.roles,
                 save_state: api::SaveState::SAVED,
-                roles,
+
+                traces: self.traces,
             }
         }
     }
+
+    #[derive(Clone, Debug)]
+    pub(crate) struct ProjectFixture {
+        pub(crate) id: api::ProjectId,
+        pub(crate) owner: String,
+        pub(crate) name: String,
+        pub(crate) collaborators: std::vec::Vec<String>,
+        pub(crate) save_state: api::SaveState,
+        pub(crate) roles: HashMap<RoleId, RoleData>,
+        pub(crate) traces: Vec<NetworkTraceMetadata>,
+    }
+
+    // impl ProjectFixture {
+    //     pub(crate) fn to_project(&self) -> Project {
+    //         Project {
+    //             id: self.id.clone(),
+    //             owner: self.owner.clone(),
+    //             name: self.name.clone(),
+    //             collaborators: self.collaborators.clone(),
+    //             roles: self.roles.clone(),
+    //             origin_time: self.origin_time.clone(),
+    //             save_state: self.save_state.clone(),
+    //             updated: self.updated.clone(),
+    //             state: self.state.clone(),
+    //         }
+    //     }
+    // }
 
     pub(crate) fn builder() -> ProjectBuilder {
         ProjectBuilder {
@@ -255,6 +335,8 @@ pub(crate) mod project {
             owner: None,
             name: None,
             collaborators: Vec::new(),
+            roles: HashMap::new(),
+            traces: Vec::new(),
         }
     }
 }
@@ -271,7 +353,7 @@ pub(crate) mod network {
     #[derive(Clone)]
     pub(crate) struct Client {
         pub(crate) id: ClientId,
-        state: Option<ClientState>,
+        pub(crate) state: Option<ClientState>,
         username: Option<String>,
     }
 
