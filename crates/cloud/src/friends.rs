@@ -422,7 +422,7 @@ mod tests {
             email: "admin@netsblox.org".into(),
             password: None,
             group_id: None,
-            role: Some(UserRole::User),
+            role: Some(UserRole::Admin),
         }
         .into();
         let f1: User = api::NewUser {
