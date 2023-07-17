@@ -3,7 +3,7 @@ use std::sync::{Arc, Mutex};
 use futures::{future::join_all, Future};
 use lazy_static::lazy_static;
 use mongodb::{bson::doc, Client};
-use netsblox_cloud_common::{BannedAccount, CollaborationInvite, FriendLink, Group, Project, User};
+use netsblox_cloud_common::{BannedAccount, CollaborationInvite, FriendLink, Group, User};
 
 use crate::{app_data::AppData, config::Settings};
 
@@ -104,37 +104,38 @@ impl TestSetupBuilder {
             .expect("Unable to initialize AppData");
 
         join_all(self.projects.into_iter().map(|fixture| async {
-            let project::ProjectFixture { project, traces } = fixture;
-
-            let Project {
+            let project::ProjectFixture {
                 id,
                 owner,
                 name,
                 mut roles,
                 save_state,
+                traces,
                 ..
-            } = project;
+            } = fixture;
             let metadata = app_data
                 .import_project(&owner, &name, &mut roles, Some(save_state.clone()))
                 .await
                 .unwrap();
 
-            let query = doc! {"id": metadata.id};
-            let update = doc! {"$set": {"id": id}};
+            let query = doc! {"id": &metadata.id};
+            let update = if traces.is_empty() {
+                doc! {"$set": {"id": &id}}
+            } else {
+                doc! {
+                    "$set": {
+                        "id": &id,
+                        "networkTraces": &traces
+                    },
+                }
+            };
             app_data
                 .project_metadata
                 .update_one(query, update, None)
                 .await
                 .unwrap();
-
-            if !traces.is_empty() {
-                let query = doc! {"id": metadata.id};
-                let update = doc! {"$set": {"id": id}};
-            }
         }))
         .await;
-
-        // TODO: enable all the network traces?
 
         if !self.banned_users.is_empty() {
             let banned_users = self.banned_users.into_iter().map(|username| {
@@ -224,10 +225,9 @@ pub(crate) mod cookie {
 pub(crate) mod project {
     use std::collections::HashMap;
 
-    use mongodb::bson::DateTime;
     use netsblox_cloud_common::{
         api::{self, RoleData, RoleId},
-        NetworkTraceMetadata, Project,
+        NetworkTraceMetadata,
     };
     use uuid::Uuid;
 
@@ -289,22 +289,14 @@ pub(crate) mod project {
                 );
             }
 
-            // FIXME: add the trace
-            let project = Project {
+            ProjectFixture {
                 id,
                 owner,
                 name: self.name.unwrap_or("my project".into()),
                 collaborators: self.collaborators,
                 roles: self.roles,
-
-                origin_time: DateTime::now(),
                 save_state: api::SaveState::SAVED,
-                updated: DateTime::now(),
-                state: api::PublishState::Private,
-            };
 
-            ProjectFixture {
-                project,
                 traces: self.traces,
             }
         }
@@ -312,9 +304,30 @@ pub(crate) mod project {
 
     #[derive(Clone, Debug)]
     pub(crate) struct ProjectFixture {
-        pub(crate) project: Project,
+        pub(crate) id: api::ProjectId,
+        pub(crate) owner: String,
+        pub(crate) name: String,
+        pub(crate) collaborators: std::vec::Vec<String>,
+        pub(crate) save_state: api::SaveState,
+        pub(crate) roles: HashMap<RoleId, RoleData>,
         pub(crate) traces: Vec<NetworkTraceMetadata>,
     }
+
+    // impl ProjectFixture {
+    //     pub(crate) fn to_project(&self) -> Project {
+    //         Project {
+    //             id: self.id.clone(),
+    //             owner: self.owner.clone(),
+    //             name: self.name.clone(),
+    //             collaborators: self.collaborators.clone(),
+    //             roles: self.roles.clone(),
+    //             origin_time: self.origin_time.clone(),
+    //             save_state: self.save_state.clone(),
+    //             updated: self.updated.clone(),
+    //             state: self.state.clone(),
+    //         }
+    //     }
+    // }
 
     pub(crate) fn builder() -> ProjectBuilder {
         ProjectBuilder {
@@ -340,7 +353,7 @@ pub(crate) mod network {
     #[derive(Clone)]
     pub(crate) struct Client {
         pub(crate) id: ClientId,
-        state: Option<ClientState>,
+        pub(crate) state: Option<ClientState>,
         username: Option<String>,
     }
 
