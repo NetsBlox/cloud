@@ -1,7 +1,5 @@
 pub mod topology;
 
-use std::time::SystemTime;
-
 use crate::app_data::AppData;
 use crate::common::api::{
     BrowserClientState, ClientId, ClientState, ClientStateData, OccupantInviteData, ProjectId,
@@ -664,6 +662,8 @@ impl StreamHandler<Result<ws::Message, ws::ProtocolError>> for WsSession {
 }
 #[cfg(test)]
 mod tests {
+    use std::time::SystemTime;
+
     use std::{collections::HashMap, time::Duration};
 
     use actix_web::{http, test, App};
@@ -892,7 +892,7 @@ mod tests {
                 println!("sending {} messages", messages.len());
                 for msg in messages {
                     app_data.network.send(msg).await.unwrap();
-                    tokio::time::sleep(Duration::from_millis(50)).await;
+                    tokio::time::sleep(Duration::from_millis(5)).await;
                 }
 
                 // wait for the messages to be recorded (up to a limit, ofc)
@@ -934,7 +934,6 @@ mod tests {
                 }
 
                 // fetch sent messages
-                println!("About to request the messages");
                 let req = test::TestRequest::get()
                     .cookie(test_utils::cookie::new(&owner.username))
                     .uri(&format!("/id/{}/trace/{}/messages", &project.id, &trace.id))

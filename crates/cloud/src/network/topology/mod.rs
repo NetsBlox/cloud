@@ -97,7 +97,6 @@ pub struct SetClientUsername {
 #[derive(Message)]
 #[rtype(result = "()")]
 pub struct SendMessage {
-    // TODO: include sender username
     pub sender: ClientId,
     pub addresses: Vec<String>,
     pub content: Value,
@@ -178,8 +177,6 @@ impl Handler<SendMessage> for TopologyActor {
     type Result = ();
 
     fn handle(&mut self, msg: SendMessage, ctx: &mut Context<Self>) -> Self::Result {
-        // TODO: check if the message should be recorded
-        // TODO: should we first check what clients are going to receive it?
         let network = self.network.clone();
         let fut = async move {
             let topology = network.read().await;

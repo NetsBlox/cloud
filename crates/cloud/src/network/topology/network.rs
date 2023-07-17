@@ -298,7 +298,7 @@ impl Topology {
             });
 
             // maybe record the message
-            let project_ids: Vec<_> = recipients
+            let project_ids: HashSet<_> = recipients
                 .iter()
                 .map(|client| &client.id)
                 .chain(std::iter::once(&msg.sender))
@@ -311,7 +311,7 @@ impl Topology {
                 .collect();
 
             let projects = app
-                .get_project_metadata(&project_ids)
+                .get_project_metadata(project_ids.iter())
                 .await
                 .unwrap_or_default();
 

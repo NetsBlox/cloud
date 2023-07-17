@@ -338,7 +338,7 @@ impl AppData {
 
     fn get_cached_project_metadata<'a>(
         &self,
-        ids: &'a [ProjectId],
+        ids: impl Iterator<Item = &'a ProjectId>,
     ) -> (Vec<ProjectMetadata>, Vec<&'a ProjectId>) {
         let mut results = Vec::new();
         let mut missing_projects = Vec::new();
@@ -352,9 +352,9 @@ impl AppData {
         (results, missing_projects)
     }
 
-    pub async fn get_project_metadata(
+    pub async fn get_project_metadata<'a>(
         &self,
-        ids: &[ProjectId],
+        ids: impl Iterator<Item = &'a ProjectId>,
     ) -> Result<Vec<ProjectMetadata>, UserError> {
         let (mut results, missing_projects) = self.get_cached_project_metadata(ids);
 
