@@ -276,18 +276,18 @@ impl Topology {
     }
 
     pub async fn send_msg(&self, msg: SendMessage) {
-        let message = ClientCommand::SendMessage(msg.content.clone());
-        let recipients = join_all(
-            msg.addresses
-                .iter()
-                .filter_map(|addr_str| ClientAddress::from_str(addr_str).ok())
-                .map(|address| self.get_clients_at(address)), // TODO: Get the project for these clients?
-        )
-        .await
-        .into_iter()
-        .flatten();
-
         if let Some(app) = &self.app_data {
+            let message = ClientCommand::SendMessage(msg.content.clone());
+            let recipients = join_all(
+                msg.addresses
+                    .iter()
+                    .filter_map(|addr_str| ClientAddress::from_str(addr_str).ok())
+                    .map(|address| self.get_clients_at(address)),
+            )
+            .await
+            .into_iter()
+            .flatten();
+
             // check if the message is allowed
             let recipients = self
                 .allowed_recipients(app, &msg.sender, recipients.collect())
