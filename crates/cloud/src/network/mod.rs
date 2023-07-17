@@ -350,11 +350,16 @@ async fn stop_network_trace(
         .find(|trace| trace.id == trace_id)
         .ok_or(UserError::NetworkTraceNotFoundError)?;
 
-    // TODO: do we want to remove it like this?
-    // why not just set the end time?
-    // we could even return the network trace metadata
-    let query = doc! {"id": project_id};
-    let update = doc! {"$pull": {"networkTraces": &trace}};
+    let query = doc! {
+        "id": project_id,
+        "networkTraces.id": &trace.id
+    };
+    let end_time = DateTime::now();
+    let update = doc! {
+        "$set": {
+            "networkTraces.$.endTime": end_time
+        }
+    };
     let options = FindOneAndUpdateOptions::builder()
         .return_document(ReturnDocument::After)
         .build();
