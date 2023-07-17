@@ -371,6 +371,13 @@ async fn stop_network_trace(
         .map_err(InternalError::DatabaseConnectionError)?
         .ok_or(UserError::ProjectNotFoundError)?;
 
+    let trace = metadata
+        .network_traces
+        .iter()
+        .find(|t| t.id == trace.id)
+        .unwrap() // guaranteed to exist since it was checked in the query
+        .clone();
+
     app.update_project_cache(metadata);
     Ok(HttpResponse::Ok().json(trace))
 }
@@ -657,7 +664,9 @@ impl StreamHandler<Result<ws::Message, ws::ProtocolError>> for WsSession {
 }
 #[cfg(test)]
 mod tests {
-    use actix_web::{test, App};
+    use std::{collections::HashMap, time::Duration};
+
+    use actix_web::{http, test, App};
     use netsblox_cloud_common::User;
 
     use super::*;
@@ -750,8 +759,7 @@ mod tests {
     }
 
     #[actix_web::test]
-    async fn test_stop_network_trace() {
-        // TODO: can we still get the network trace?
+    async fn test_network_trace_metadata() {
         let owner: User = api::NewUser {
             username: "owner".to_string(),
             email: "owner@netsblox.org".into(),
@@ -763,8 +771,8 @@ mod tests {
 
         let trace = NetworkTraceMetadata::new();
         let project = test_utils::project::builder()
-            .with_owner("owner".to_string())
-            .with_traces(&[trace]) // FIXME: how can we make this actually work...
+            .with_owner(owner.username.clone())
+            .with_traces(&[trace.clone()])
             .build();
 
         test_utils::setup()
@@ -779,28 +787,413 @@ mod tests {
                 )
                 .await;
 
-                let role_id = project.roles.keys().next().unwrap().to_owned();
-                let data = api::OccupantInviteData {
-                    username: owner.username.clone(),
-                    role_id,
-                };
-                let req = test::TestRequest::post()
+                let req = test::TestRequest::get()
                     .cookie(test_utils::cookie::new(&owner.username))
-                    .uri(&format!("/id/{}/occupants/invite", &project.id))
-                    .set_json(data)
+                    .uri(&format!("/id/{}/trace/{}", &project.id, &trace.id))
                     .to_request();
 
-                // Ensure that the collaboration invite is returned.
-                // This will panic if the response is incorrect so no assert needed.
-                let _invite: OccupantInvite = test::call_and_read_body_json(&app, req).await;
+                let metadata: NetworkTraceMetadata = test::call_and_read_body_json(&app, req).await;
+                assert_eq!(metadata.id, trace.id);
             })
             .await;
     }
 
     #[actix_web::test]
-    #[ignore]
+    async fn test_network_trace_msgs() {
+        let owner: User = api::NewUser {
+            username: "owner".to_string(),
+            email: "owner@netsblox.org".into(),
+            password: None,
+            group_id: None,
+            role: None,
+        }
+        .into();
+
+        let r1_id = api::RoleId::new("r1".into());
+        let r2_id = api::RoleId::new("r2".into());
+        let roles: HashMap<_, _> = [
+            (
+                r1_id.clone(),
+                api::RoleData {
+                    name: "sender".into(),
+                    code: "<code/>".into(),
+                    media: "<media/>".into(),
+                },
+            ),
+            (
+                r2_id.clone(),
+                api::RoleData {
+                    name: "rcvr".into(),
+                    code: "<code/>".into(),
+                    media: "<media/>".into(),
+                },
+            ),
+        ]
+        .into_iter()
+        .collect();
+
+        let trace = NetworkTraceMetadata::new();
+        let project = test_utils::project::builder()
+            .with_name("project".into())
+            .with_owner("owner".to_string())
+            .with_traces(&[trace.clone()])
+            .with_roles(roles)
+            .build();
+
+        let s1 = ClientState::Browser(BrowserClientState {
+            project_id: project.id.clone(),
+            role_id: r1_id,
+        });
+        let s2 = ClientState::Browser(BrowserClientState {
+            project_id: project.id.clone(),
+            role_id: r2_id,
+        });
+
+        let sender = test_utils::network::Client::new(Some(owner.username.clone()), Some(s1));
+        let rcvr = test_utils::network::Client::new(Some(owner.username.clone()), Some(s2));
+
+        test_utils::setup()
+            .with_users(&[owner.clone()])
+            .with_projects(&[project.clone()])
+            .with_clients(&[sender.clone(), rcvr.clone()])
+            .run(|app_data| async move {
+                let app = test::init_service(
+                    App::new()
+                        .wrap(test_utils::cookie::middleware())
+                        .app_data(web::Data::new(app_data.clone()))
+                        .configure(config),
+                )
+                .await;
+
+                // send messages
+                let content = json! ({
+                    "type": "message",
+                    "msgType": "message",
+                    "content": {
+                        "msg": "hello!"
+                    }
+                });
+                let messages = (0..10).flat_map(|_i| {
+                    [
+                        topology::SendMessage {
+                            sender: sender.id.clone(),
+                            addresses: vec!["rcvr@project@owner".into()],
+                            content: content.clone(),
+                        },
+                        topology::SendMessage {
+                            sender: rcvr.id.clone(),
+                            addresses: vec!["sender@project@owner".into()],
+                            content: content.clone(),
+                        },
+                    ]
+                });
+
+                let messages = messages.collect::<Vec<_>>();
+                println!("sending {} messages", messages.len());
+                for msg in messages {
+                    app_data.network.send(msg).await.unwrap();
+                    tokio::time::sleep(Duration::from_millis(50)).await;
+                }
+
+                // wait for the messages to be recorded (up to a limit, ofc)
+                let max_end_time = SystemTime::now() + Duration::from_millis(500);
+                let mut count = app_data
+                    .recorded_messages
+                    .count_documents(doc! {}, None)
+                    .await
+                    .unwrap();
+
+                while count < 20 {
+                    // TODO: why is this failing sometimes?
+                    assert!(SystemTime::now() < max_end_time);
+                    let times = app_data
+                        .recorded_messages
+                        .find(doc! {}, None)
+                        .await
+                        .unwrap()
+                        .try_collect::<Vec<_>>()
+                        .await
+                        .unwrap()
+                        .into_iter()
+                        .map(|msg| msg.time)
+                        .collect::<Vec<_>>();
+
+                    dbg!(&times);
+                    println!(
+                        "count is {} ({}) as of {:?}",
+                        &count,
+                        times.len(),
+                        DateTime::now()
+                    );
+
+                    count = app_data
+                        .recorded_messages
+                        .count_documents(doc! {}, None)
+                        .await
+                        .unwrap();
+                }
+
+                // fetch sent messages
+                println!("About to request the messages");
+                let req = test::TestRequest::get()
+                    .cookie(test_utils::cookie::new(&owner.username))
+                    .uri(&format!("/id/{}/trace/{}/messages", &project.id, &trace.id))
+                    .to_request();
+
+                let messages: Vec<SentMessage> = test::call_and_read_body_json(&app, req).await;
+                assert_eq!(messages.len(), 20);
+            })
+            .await;
+    }
+
+    #[actix_web::test]
+    async fn test_stop_network_trace() {
+        let owner: User = api::NewUser {
+            username: "owner".to_string(),
+            email: "owner@netsblox.org".into(),
+            password: None,
+            group_id: None,
+            role: None,
+        }
+        .into();
+
+        let r1_id = api::RoleId::new("r1".into());
+        let r2_id = api::RoleId::new("r2".into());
+        let roles: HashMap<_, _> = [
+            (
+                r1_id.clone(),
+                api::RoleData {
+                    name: "sender".into(),
+                    code: "<code/>".into(),
+                    media: "<media/>".into(),
+                },
+            ),
+            (
+                r2_id.clone(),
+                api::RoleData {
+                    name: "rcvr".into(),
+                    code: "<code/>".into(),
+                    media: "<media/>".into(),
+                },
+            ),
+        ]
+        .into_iter()
+        .collect();
+
+        let trace = NetworkTraceMetadata::new();
+        let project = test_utils::project::builder()
+            .with_name("project".into())
+            .with_owner("owner".to_string())
+            .with_traces(&[trace.clone()])
+            .with_roles(roles)
+            .build();
+
+        let s1 = ClientState::Browser(BrowserClientState {
+            project_id: project.id.clone(),
+            role_id: r1_id,
+        });
+        let s2 = ClientState::Browser(BrowserClientState {
+            project_id: project.id.clone(),
+            role_id: r2_id,
+        });
+
+        let sender = test_utils::network::Client::new(Some(owner.username.clone()), Some(s1));
+        let rcvr = test_utils::network::Client::new(Some(owner.username.clone()), Some(s2));
+
+        test_utils::setup()
+            .with_users(&[owner.clone()])
+            .with_projects(&[project.clone()])
+            .with_clients(&[sender.clone(), rcvr.clone()])
+            .run(|app_data| async move {
+                let app = test::init_service(
+                    App::new()
+                        .wrap(test_utils::cookie::middleware())
+                        .app_data(web::Data::new(app_data.clone()))
+                        .configure(config),
+                )
+                .await;
+
+                // send messages
+                let content = json! ({
+                    "type": "message",
+                    "msgType": "message",
+                    "content": {
+                        "msg": "hello!"
+                    }
+                });
+                app_data
+                    .network
+                    .send(topology::SendMessage {
+                        sender: sender.id.clone(),
+                        addresses: vec!["rcvr@project@owner".into()],
+                        content: content.clone(),
+                    })
+                    .await
+                    .unwrap();
+
+                // wait for the message to be recorded (up to a limit, ofc)
+                let max_end_time = SystemTime::now() + Duration::from_millis(150);
+                let mut is_recorded = app_data
+                    .recorded_messages
+                    .find_one(doc! {}, None)
+                    .await
+                    .unwrap()
+                    .is_some();
+
+                while !is_recorded {
+                    assert!(SystemTime::now() < max_end_time);
+                    tokio::time::sleep(Duration::from_millis(10)).await;
+
+                    is_recorded = app_data
+                        .recorded_messages
+                        .find_one(doc! {}, None)
+                        .await
+                        .unwrap()
+                        .is_some();
+                }
+
+                // stop recording messages
+                let req = test::TestRequest::post()
+                    .cookie(test_utils::cookie::new(&owner.username))
+                    .uri(&format!("/id/{}/trace/{}/stop", &project.id, &trace.id))
+                    .to_request();
+
+                let metadata: NetworkTraceMetadata = test::call_and_read_body_json(&app, req).await;
+                assert_eq!(metadata.id, trace.id);
+
+                // send another message
+                app_data
+                    .network
+                    .send(topology::SendMessage {
+                        sender: rcvr.id.clone(),
+                        addresses: vec!["sender@project@owner".into()],
+                        content: content.clone(),
+                    })
+                    .await
+                    .unwrap();
+
+                // fetch sent messages
+                let req = test::TestRequest::get()
+                    .cookie(test_utils::cookie::new(&owner.username))
+                    .uri(&format!("/id/{}/trace/{}/messages", &project.id, &trace.id))
+                    .to_request();
+
+                let mut messages: Vec<SentMessage> = test::call_and_read_body_json(&app, req).await;
+                assert_eq!(messages.len(), 1);
+
+                // Check that it is the first message
+                let msg = messages.pop().unwrap();
+                assert_eq!(msg.source, sender.state.unwrap());
+            })
+            .await;
+    }
+
+    #[actix_web::test]
+    async fn test_stop_network_trace_404() {
+        let owner: User = api::NewUser {
+            username: "owner".to_string(),
+            email: "owner@netsblox.org".into(),
+            password: None,
+            group_id: None,
+            role: None,
+        }
+        .into();
+
+        let r1_id = api::RoleId::new("r1".into());
+        let r2_id = api::RoleId::new("r2".into());
+        let roles: HashMap<_, _> = [
+            (
+                r1_id.clone(),
+                api::RoleData {
+                    name: "sender".into(),
+                    code: "<code/>".into(),
+                    media: "<media/>".into(),
+                },
+            ),
+            (
+                r2_id.clone(),
+                api::RoleData {
+                    name: "rcvr".into(),
+                    code: "<code/>".into(),
+                    media: "<media/>".into(),
+                },
+            ),
+        ]
+        .into_iter()
+        .collect();
+
+        let trace = NetworkTraceMetadata::new();
+        let project = test_utils::project::builder()
+            .with_name("project".into())
+            .with_owner("owner".to_string())
+            .with_roles(roles)
+            .build();
+
+        test_utils::setup()
+            .with_users(&[owner.clone()])
+            .with_projects(&[project.clone()])
+            .run(|app_data| async move {
+                let app = test::init_service(
+                    App::new()
+                        .wrap(test_utils::cookie::middleware())
+                        .app_data(web::Data::new(app_data.clone()))
+                        .configure(config),
+                )
+                .await;
+
+                // stop recording messages
+                let req = test::TestRequest::post()
+                    .cookie(test_utils::cookie::new(&owner.username))
+                    .uri(&format!("/id/{}/trace/{}/stop", &project.id, &trace.id))
+                    .to_request();
+
+                let response = test::call_service(&app, req).await;
+                assert_eq!(response.status(), http::StatusCode::NOT_FOUND);
+            })
+            .await;
+    }
+
+    #[actix_web::test]
     async fn test_delete_network_trace() {
-        todo!();
+        let owner: User = api::NewUser {
+            username: "owner".to_string(),
+            email: "owner@netsblox.org".into(),
+            password: None,
+            group_id: None,
+            role: None,
+        }
+        .into();
+
+        let trace = NetworkTraceMetadata::new();
+        let project = test_utils::project::builder()
+            .with_owner("owner".to_string())
+            .with_traces(&[trace.clone()])
+            .build();
+
+        test_utils::setup()
+            .with_users(&[owner.clone()])
+            .with_projects(&[project.clone()])
+            .run(|app_data| async move {
+                let app = test::init_service(
+                    App::new()
+                        .wrap(test_utils::cookie::middleware())
+                        .app_data(web::Data::new(app_data.clone()))
+                        .configure(config),
+                )
+                .await;
+
+                let req = test::TestRequest::delete()
+                    .cookie(test_utils::cookie::new(&owner.username))
+                    .uri(&format!("/id/{}/trace/{}", &project.id, &trace.id))
+                    .to_request();
+
+                let metadata: ProjectMetadata = test::call_and_read_body_json(&app, req).await;
+                assert!(metadata.network_traces.is_empty());
+                // check the network trace has been removed from the project metadata
+                let project = app_data.get_project_metadatum(&project.id).await.unwrap();
+                assert!(project.network_traces.is_empty());
+            })
+            .await;
     }
 
     #[actix_web::test]
