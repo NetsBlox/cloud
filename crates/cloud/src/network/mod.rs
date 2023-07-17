@@ -402,9 +402,7 @@ async fn get_network_trace(
         .ok_or(UserError::NetworkTraceNotFoundError)?;
 
     let start_time = trace.start_time;
-    let end_time = trace
-        .end_time
-        .unwrap_or_else(|| DateTime::from_system_time(SystemTime::now()));
+    let end_time = trace.end_time.unwrap_or_else(|| DateTime::now());
 
     let query = doc! {
         "projectId": project_id,

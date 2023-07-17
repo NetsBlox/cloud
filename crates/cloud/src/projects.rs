@@ -1171,7 +1171,6 @@ mod tests {
             .with_name("old name".into())
             .with_owner(username.to_string())
             .build();
-        dbg!(&project.name);
         let id = project.id.clone();
         let new_name = "shit";
         let project_update = UpdateProjectData {
@@ -1401,7 +1400,6 @@ mod tests {
 
                 let bytes = test::call_and_read_body(&app, req).await;
                 let body = std::str::from_utf8(&bytes).unwrap();
-                dbg!(body);
                 // let project: ProjectMetadata = test::call_and_read_body_json(&app, req).await;
                 // let role = project.roles.get(&role_id).unwrap();
                 // assert_eq!(role.name, data.name);

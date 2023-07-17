@@ -313,7 +313,8 @@ impl Topology {
             let projects = app
                 .get_project_metadata(&project_ids)
                 .await
-                .unwrap_or_else(|_err| Vec::new());
+                .unwrap_or_default();
+
             let recording_ids = projects
                 .iter()
                 .filter(|metadata| {
@@ -814,7 +815,6 @@ impl Topology {
                 .unwrap_or_else(Vec::new),
         };
 
-        println!("Sending to {count} clients", count = recipients.len());
         let message = ClientCommand::SendMessage(msg.content);
         recipients.iter().for_each(|client| {
             client.addr.do_send(message.clone()).unwrap();
@@ -846,7 +846,6 @@ impl Topology {
             })
             .filter_map(|client_id| self.clients.get(client_id));
 
-        dbg!(&self.usernames, &recipients, &msg);
         let message = ClientCommand::SendMessage(msg);
         recipients.for_each(|client| {
             client.addr.do_send(message.clone()).unwrap();

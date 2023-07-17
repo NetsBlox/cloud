@@ -514,7 +514,6 @@ impl AppData {
             ..Default::default()
         };
         self.s3.put_object(request).await.map_err(|err| {
-            dbg!(&err);
             warn!("Unable to upload to s3: {}", err);
             InternalError::S3Error
         })
@@ -1303,7 +1302,6 @@ mod tests {
                     .await
                     .unwrap();
 
-                dbg!(&link.state);
                 assert!(matches!(link.state, FriendLinkState::APPROVED));
             })
             .await;

@@ -290,7 +290,7 @@ impl NetworkTraceMetadata {
     pub fn new() -> Self {
         Self {
             id: Uuid::new_v4().to_string(),
-            start_time: DateTime::from_system_time(SystemTime::now()),
+            start_time: DateTime::now(),
             end_time: None,
         }
     }
@@ -492,7 +492,7 @@ impl SentMessage {
         recipients: Vec<ClientState>,
         content: serde_json::Value,
     ) -> Self {
-        let time = DateTime::from_system_time(SystemTime::now());
+        let time = DateTime::now();
         SentMessage {
             project_id,
             recipients,
