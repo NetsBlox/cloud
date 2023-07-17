@@ -350,10 +350,10 @@ impl Topology {
                 .unwrap_or_default();
 
             if !messages.is_empty() {
-                app.recorded_messages
-                    .insert_many(messages, None)
-                    .await
-                    .unwrap();
+                let res = app.recorded_messages.insert_many(&messages, None).await;
+                if let Err(err) = res {
+                    warn!("Failed to record sent message: {}", err);
+                }
             }
 
             app.metrics.record_msg_sent();
