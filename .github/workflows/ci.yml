@@ -5,20 +5,15 @@ jobs:
   build:
     name: Run tests
     runs-on: ubuntu-latest
-    services:
-      minio:
-        image: minio/minio
-        ports:
-          - 9000:9000
-        env:
-          MINIO_ACCESS_KEY: KEY
-          MINIO_SECRET_KEY: MYSECRET
     steps:
       - uses: actions/checkout@master
       - name: Start MongoDB
         uses: supercharge/mongodb-github-action@1.6.0
         with:
           mongodb-version: 5
+      - name: Setup minio
+        run: |
+          docker run -d -p 9000:9000 --name minio -e "MINIO_ACCESS_KEY=KEY" -e "MINIO_SECRET_KEY=MYSECRET" minio/minio server /data
       - uses: actions-rs/toolchain@v1
         with:
           toolchain: stable
