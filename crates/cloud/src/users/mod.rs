@@ -283,7 +283,8 @@ async fn login(
     }
     session.insert("username", &user.username).unwrap();
     app.metrics.record_login();
-    Ok(HttpResponse::Ok().body(user.username))
+    let user: api::User = user.into();
+    Ok(HttpResponse::Ok().json(user))
 }
 
 async fn update_ownership(
@@ -896,10 +897,53 @@ mod tests {
 
                 let response = test::call_service(&app, req).await;
                 assert_eq!(response.status(), http::StatusCode::OK);
+
                 let cookie = response.headers().get(http::header::SET_COOKIE);
                 assert!(cookie.is_some());
+
                 let cookie_data = cookie.unwrap().to_str().unwrap();
                 assert!(cookie_data.starts_with("test_netsblox="));
+            })
+            .await;
+    }
+
+    #[actix_web::test]
+    async fn test_login_user_json() {
+        let username: String = "user".into();
+        let password: String = "password".into();
+        let user: User = api::NewUser {
+            username: username.clone(),
+            email: "user@netsblox.org".into(),
+            password: Some(password.clone()),
+            group_id: None,
+            role: None,
+        }
+        .into();
+
+        test_utils::setup()
+            .with_users(&[user])
+            .run(|app_data| async {
+                let app = test::init_service(
+                    App::new()
+                        .wrap(test_utils::cookie::middleware())
+                        .app_data(web::Data::new(app_data))
+                        .configure(config),
+                )
+                .await;
+                let credentials = api::LoginRequest {
+                    credentials: Credentials::NetsBlox {
+                        username: username.clone(),
+                        password,
+                    },
+                    client_id: None,
+                };
+                let req = test::TestRequest::post()
+                    .uri("/login")
+                    .set_json(&credentials)
+                    .to_request();
+
+                let user: api::User = test::call_and_read_body_json(&app, req).await;
+                assert_eq!(user.username, username);
             })
             .await;
     }
