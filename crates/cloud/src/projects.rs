@@ -1391,18 +1391,15 @@ mod tests {
                     name: "new_name".into(),
                     client_id: None,
                 };
-                println!("/id/{}/{}", &project.id, &role_id);
                 let req = test::TestRequest::patch()
                     .cookie(test_utils::cookie::new(&user.username))
                     .uri(&format!("/id/{}/{}", &project.id, &role_id))
                     .set_json(&data)
                     .to_request();
 
-                let bytes = test::call_and_read_body(&app, req).await;
-                let body = std::str::from_utf8(&bytes).unwrap();
-                // let project: ProjectMetadata = test::call_and_read_body_json(&app, req).await;
-                // let role = project.roles.get(&role_id).unwrap();
-                // assert_eq!(role.name, data.name);
+                let project: ProjectMetadata = test::call_and_read_body_json(&app, req).await;
+                let role = project.roles.get(&role_id).unwrap();
+                assert_eq!(role.name, data.name);
 
                 let project = app_data.get_project_metadatum(&project.id).await.unwrap();
                 let role = project.roles.get(&role_id).unwrap();
