@@ -2,6 +2,7 @@ use std::collections::HashMap;
 use std::io::BufWriter;
 
 use crate::app_data::AppData;
+use crate::auth;
 use crate::common::api;
 use crate::common::api::{
     BrowserClientState, ClientId, CreateProjectData, Project, ProjectId, PublishState, RoleData,
@@ -11,6 +12,7 @@ use crate::common::ProjectMetadata;
 use crate::errors::{InternalError, UserError};
 use crate::libraries;
 use crate::network::topology;
+use crate::projects::actions;
 use crate::users::{can_edit_user, ensure_can_edit_user};
 use actix_session::Session;
 use actix_web::{delete, get, patch, post};
@@ -159,11 +161,9 @@ async fn get_project_named(
         .map_err(InternalError::DatabaseConnectionError)?
         .ok_or(UserError::ProjectNotFoundError)?;
 
-    // TODO: Do I need to have edit permissions?
-    ensure_can_view_project_metadata(&app, &session, None, &metadata).await?;
-
-    let project = app.fetch_project(&metadata).await?;
-    Ok(HttpResponse::Ok().json(project)) // TODO: Update this to a responder?
+    let metadata = auth::try_view_project(&app, &session, &metadata).await?;
+    let project = actions::get_project(&app, &metadata).await?;
+    Ok(HttpResponse::Ok().json(project))
 }
 
 #[get("/user/{owner}/{name}/metadata")]
@@ -198,17 +198,6 @@ async fn get_project_id_metadata(
 
     let metadata: api::ProjectMetadata = metadata.into();
     Ok(HttpResponse::Ok().json(metadata))
-}
-
-pub async fn ensure_can_view_project(
-    app: &AppData,
-    session: &Session,
-    client_id: Option<ClientId>,
-    project_id: &ProjectId,
-) -> Result<ProjectMetadata, UserError> {
-    let metadata = app.get_project_metadatum(project_id).await?;
-    ensure_can_view_project_metadata(app, session, client_id, &metadata).await?;
-    Ok(metadata)
 }
 
 async fn ensure_can_view_project_metadata(
@@ -305,9 +294,9 @@ async fn get_project(
     session: Session,
 ) -> Result<HttpResponse, UserError> {
     let (project_id,) = path.into_inner();
-    let metadata = ensure_can_view_project(&app, &session, None, &project_id).await?;
-
-    let project: api::Project = app.fetch_project(&metadata).await?.into();
+    let view_project = auth::try_view_project(&app, &session, None, &project_id).await?;
+    let project = actions::get_project(&app, &view_project).await?;
+    // TODO: do we need edit permissions?
     Ok(HttpResponse::Ok().json(project)) // TODO: Update this to a responder?
 }
 
@@ -318,34 +307,9 @@ async fn publish_project(
     session: Session,
 ) -> Result<HttpResponse, UserError> {
     let (project_id,) = path.into_inner();
-    let query = doc! {"id": &project_id};
-    let metadata = ensure_can_edit_project(&app, &session, None, &project_id).await?;
-    let state = if is_approval_required(&app, &metadata).await? {
-        PublishState::PendingApproval
-    } else {
-        PublishState::Public
-    };
-
-    let update = doc! {"$set": {"state": &state}};
-    app.project_metadata
-        .update_one(query, update, None)
-        .await
-        .map_err(InternalError::DatabaseConnectionError)?;
-
+    let edit_project = try_edit_project(&app, &session, None, &project_id).await?;
+    let state = actions::publish_project(&app, edit_project).await?;
     Ok(HttpResponse::Ok().json(state))
-}
-
-async fn is_approval_required(
-    app: &AppData,
-    metadata: &ProjectMetadata,
-) -> Result<bool, UserError> {
-    for role_md in metadata.roles.values() {
-        let role = app.fetch_role(role_md).await?;
-        if libraries::is_approval_required(&role.code) {
-            return Ok(true);
-        }
-    }
-    Ok(false)
 }
 
 #[post("/id/{projectID}/unpublish")]
@@ -355,22 +319,9 @@ async fn unpublish_project(
     session: Session,
 ) -> Result<HttpResponse, UserError> {
     let (project_id,) = path.into_inner();
-    let query = doc! {"id": &project_id};
-    ensure_can_edit_project(&app, &session, None, &project_id).await?;
-
-    let state = PublishState::Private;
-    let update = doc! {"$set": {"state": &state}};
-    let result = app
-        .project_metadata
-        .update_one(query, update, None)
-        .await
-        .map_err(|_err| UserError::InternalError)?;
-
-    if result.matched_count > 0 {
-        Ok(HttpResponse::Ok().json(state))
-    } else {
-        Err(UserError::ProjectNotFoundError)
-    }
+    let edit_project = auth::try_edit_project(&app, &session, None, &project_id).await?;
+    let state = actions::unpublish_project(&app, &edit_project).await?;
+    Ok(HttpResponse::Ok().json(state))
 }
 
 #[delete("/id/{projectID}")]

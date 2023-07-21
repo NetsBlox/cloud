@@ -1,4 +1,5 @@
 mod app_data;
+mod auth;
 mod collaboration_invites;
 mod common;
 mod config;

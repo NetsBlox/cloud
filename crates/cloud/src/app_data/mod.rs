@@ -543,6 +543,7 @@ impl AppData {
     }
 
     pub async fn fetch_project(&self, metadata: &ProjectMetadata) -> Result<Project, UserError> {
+        // TODO: move this to projects::actions
         let (keys, values): (Vec<_>, Vec<_>) = metadata.roles.clone().into_iter().unzip();
         // TODO: make fetch_role fallible
         let role_data = join_all(values.iter().map(|v| self.fetch_role(v))).await;
