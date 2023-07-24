@@ -247,7 +247,7 @@ impl FriendLink {
             id: Uuid::new_v4().to_string(),
             sender,
             recipient,
-            state: state.unwrap_or(FriendLinkState::PENDING),
+            state: state.unwrap_or(FriendLinkState::Pending),
             created_at,
             updated_at: created_at,
         }

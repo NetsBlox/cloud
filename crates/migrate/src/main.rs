@@ -138,7 +138,7 @@ async fn download(
         updated,
         state,
         origin_time: updated,
-        save_state: SaveState::SAVED,
+        save_state: SaveState::Saved,
         roles,
     }
 }

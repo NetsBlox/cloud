@@ -483,9 +483,9 @@ impl Topology {
             if let Some(ClientState::Browser(state)) = self.states.get(&msg.id) {
                 let query = doc! {
                     "id": &state.project_id,
-                    "saveState": SaveState::TRANSIENT
+                    "saveState": SaveState::Transient
                 };
-                let update = doc! {"$set": {"saveState": SaveState::BROKEN}};
+                let update = doc! {"$set": {"saveState": SaveState::Broken}};
                 app.project_metadata
                     .update_one(query, update, None)
                     .await
@@ -589,10 +589,10 @@ impl Topology {
                 .await
                 .map_err(InternalError::DatabaseConnectionError)?
                 .map(|md| match md.save_state {
-                    SaveState::CREATED => unreachable!(),
-                    SaveState::TRANSIENT => ProjectCleanup::Immediately,
-                    SaveState::BROKEN => ProjectCleanup::Delayed,
-                    SaveState::SAVED => ProjectCleanup::None,
+                    SaveState::Created => unreachable!(),
+                    SaveState::Transient => ProjectCleanup::Immediately,
+                    SaveState::Broken => ProjectCleanup::Delayed,
+                    SaveState::Saved => ProjectCleanup::None,
                 })
                 .unwrap_or(ProjectCleanup::None);
 

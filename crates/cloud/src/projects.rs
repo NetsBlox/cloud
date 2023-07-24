@@ -91,7 +91,7 @@ async fn list_user_projects(
     session: Session,
 ) -> Result<HttpResponse, UserError> {
     let (username,) = path.into_inner();
-    let query = doc! {"owner": &username, "saveState": SaveState::SAVED};
+    let query = doc! {"owner": &username, "saveState": SaveState::Saved};
     println!("query is: {:?}", query);
     let cursor = app
         .project_metadata
@@ -133,7 +133,7 @@ async fn list_shared_projects(
     let (username,) = path.into_inner();
     ensure_can_edit_user(&app, &session, &username).await?;
 
-    let query = doc! {"collaborators": &username, "saveState": SaveState::SAVED};
+    let query = doc! {"collaborators": &username, "saveState": SaveState::Saved};
     let cursor = app
         .project_metadata
         .find(query, None)

@@ -258,7 +258,7 @@ impl AppData {
                         .options(
                             IndexOptions::builder()
                                 .expire_after(Duration::from_secs(60 * 60 * 24 * 7))
-                                .partial_filter_expression(doc! {"saveState": SaveState::TRANSIENT})
+                                .partial_filter_expression(doc! {"saveState": SaveState::Transient})
                                 .background(true)
                                 .build(),
                         )
@@ -458,7 +458,7 @@ impl AppData {
         let roles: HashMap<RoleId, RoleMetadata> =
             roles.keys().cloned().zip(role_mds.into_iter()).collect();
 
-        let save_state = save_state.unwrap_or(SaveState::CREATED);
+        let save_state = save_state.unwrap_or(SaveState::Created);
         let metadata = ProjectMetadata::new(owner, &unique_name, roles, save_state);
         self.project_metadata
             .insert_one(metadata.clone(), None)
@@ -641,7 +641,7 @@ impl AppData {
         let update = doc! {
             "$set": {
                 &format!("roles.{}", role_id): role_md,
-                "saveState": SaveState::SAVED,
+                "saveState": SaveState::Saved,
                 "state": state,
             }
         };
@@ -834,8 +834,8 @@ impl AppData {
             let members = self.lookup_members(group_ids).await?;
 
             let query = doc! {"$or": [
-                {"sender": &username, "state": FriendLinkState::APPROVED},
-                {"recipient": &username, "state": FriendLinkState::APPROVED}
+                {"sender": &username, "state": FriendLinkState::Approved},
+                {"recipient": &username, "state": FriendLinkState::Approved}
             ]};
             let cursor = self
                 .friends
@@ -917,8 +917,8 @@ impl AppData {
     pub async fn unfriend(&self, owner: &str, friend: &str) -> Result<FriendLink, UserError> {
         let query = doc! {
             "$or": [
-                {"sender": &owner, "recipient": &friend, "state": FriendLinkState::APPROVED},
-                {"sender": &friend, "recipient": &owner, "state": FriendLinkState::APPROVED}
+                {"sender": &owner, "recipient": &friend, "state": FriendLinkState::Approved},
+                {"sender": &friend, "recipient": &owner, "state": FriendLinkState::Approved}
             ]
         };
         let link = self
@@ -945,7 +945,7 @@ impl AppData {
         let link = FriendLink::new(
             owner.to_owned(),
             other_user.to_owned(),
-            Some(FriendLinkState::BLOCKED),
+            Some(FriendLinkState::Blocked),
         );
         let update = doc! {
             "$set": {
@@ -986,7 +986,7 @@ impl AppData {
         let query = doc! {
             "sender": &owner,
             "recipient": &other_user,
-            "state": FriendLinkState::BLOCKED,
+            "state": FriendLinkState::Blocked,
         };
         self.friends
             .delete_one(query, None)
@@ -998,7 +998,7 @@ impl AppData {
     }
 
     pub async fn list_invites(&self, owner: &str) -> Result<Vec<FriendInvite>, UserError> {
-        let query = doc! {"recipient": &owner, "state": FriendLinkState::PENDING}; // TODO: ensure they are still pending
+        let query = doc! {"recipient": &owner, "state": FriendLinkState::Pending}; // TODO: ensure they are still pending
         let cursor = self
             .friends
             .find(query, None)
@@ -1023,10 +1023,10 @@ impl AppData {
         let query = doc! {
             "sender": &recipient,
             "recipient": &owner,
-            "state": FriendLinkState::PENDING
+            "state": FriendLinkState::Pending
         };
 
-        let update = doc! {"$set": {"state": FriendLinkState::APPROVED}};
+        let update = doc! {"$set": {"state": FriendLinkState::Approved}};
         let approved_existing = self
             .friends
             .update_one(query, update, None)
@@ -1042,14 +1042,14 @@ impl AppData {
 
             // TODO: send msg about removing the existing invite
 
-            FriendLinkState::APPROVED
+            FriendLinkState::Approved
         } else {
             let query = doc! {
                 "$or": [
-                    {"sender": &owner, "recipient": &recipient, "state": FriendLinkState::BLOCKED},
-                    {"sender": &recipient, "recipient": &owner, "state": FriendLinkState::BLOCKED},
-                    {"sender": &owner, "recipient": &recipient, "state": FriendLinkState::APPROVED},
-                    {"sender": &recipient, "recipient": &owner, "state": FriendLinkState::APPROVED},
+                    {"sender": &owner, "recipient": &recipient, "state": FriendLinkState::Blocked},
+                    {"sender": &recipient, "recipient": &owner, "state": FriendLinkState::Blocked},
+                    {"sender": &owner, "recipient": &recipient, "state": FriendLinkState::Approved},
+                    {"sender": &recipient, "recipient": &owner, "state": FriendLinkState::Approved},
                 ]
             };
 
@@ -1076,7 +1076,7 @@ impl AppData {
                     .await
                     .map_err(InternalError::ActixMessageError)?;
 
-                FriendLinkState::PENDING
+                FriendLinkState::Pending
             }
         };
 
@@ -1092,7 +1092,7 @@ impl AppData {
         let query = doc! {
           "recipient": &recipient,
           "sender": &sender,
-          "state": FriendLinkState::PENDING
+          "state": FriendLinkState::Pending
         };
         let update = doc! {"$set": {"state": &resp}};
 
@@ -1107,7 +1107,7 @@ impl AppData {
             .map_err(InternalError::DatabaseConnectionError)?
             .ok_or(UserError::InviteNotFoundError)?;
 
-        let friend_list_changed = matches!(resp, FriendLinkState::APPROVED);
+        let friend_list_changed = matches!(resp, FriendLinkState::Approved);
         if friend_list_changed {
             // invalidate cache
             let mut cache = FRIEND_CACHE.write().unwrap();
@@ -1298,11 +1298,11 @@ mod tests {
             .with_friend_links(&[link])
             .run(|app_data| async move {
                 let link = app_data
-                    .respond_to_request(&rcvr.username, &sender.username, FriendLinkState::APPROVED)
+                    .respond_to_request(&rcvr.username, &sender.username, FriendLinkState::Approved)
                     .await
                     .unwrap();
 
-                assert!(matches!(link.state, FriendLinkState::APPROVED));
+                assert!(matches!(link.state, FriendLinkState::Approved));
             })
             .await;
     }
@@ -1312,7 +1312,7 @@ mod tests {
         test_utils::setup()
             .run(|app_data| async move {
                 let result = app_data
-                    .respond_to_request("rcvr", "sender", FriendLinkState::APPROVED)
+                    .respond_to_request("rcvr", "sender", FriendLinkState::Approved)
                     .await;
 
                 assert!(matches!(result, Err(UserError::InviteNotFoundError)));
@@ -1341,7 +1341,7 @@ mod tests {
         let link = FriendLink::new(
             sender.username.clone(),
             rcvr.username.clone(),
-            Some(FriendLinkState::REJECTED),
+            Some(FriendLinkState::Rejected),
         );
 
         test_utils::setup()
@@ -1349,7 +1349,7 @@ mod tests {
             .with_friend_links(&[link])
             .run(|app_data| async move {
                 let result = app_data
-                    .respond_to_request("rcvr", "sender", FriendLinkState::APPROVED)
+                    .respond_to_request("rcvr", "sender", FriendLinkState::Approved)
                     .await;
 
                 assert!(matches!(result, Err(UserError::InviteNotFoundError)));
@@ -1378,7 +1378,7 @@ mod tests {
         let link = FriendLink::new(
             sender.username.clone(),
             rcvr.username.clone(),
-            Some(FriendLinkState::APPROVED),
+            Some(FriendLinkState::Approved),
         );
 
         test_utils::setup()
@@ -1386,7 +1386,7 @@ mod tests {
             .with_friend_links(&[link])
             .run(|app_data| async move {
                 let result = app_data
-                    .respond_to_request("rcvr", "sender", FriendLinkState::APPROVED)
+                    .respond_to_request("rcvr", "sender", FriendLinkState::Approved)
                     .await;
 
                 assert!(matches!(result, Err(UserError::InviteNotFoundError)));
@@ -1415,7 +1415,7 @@ mod tests {
         let link = FriendLink::new(
             sender.username.clone(),
             rcvr.username.clone(),
-            Some(FriendLinkState::BLOCKED),
+            Some(FriendLinkState::Blocked),
         );
 
         test_utils::setup()
@@ -1423,7 +1423,7 @@ mod tests {
             .with_friend_links(&[link])
             .run(|app_data| async move {
                 let result = app_data
-                    .respond_to_request("rcvr", "sender", FriendLinkState::APPROVED)
+                    .respond_to_request("rcvr", "sender", FriendLinkState::Approved)
                     .await;
 
                 assert!(matches!(result, Err(UserError::InviteNotFoundError)));
