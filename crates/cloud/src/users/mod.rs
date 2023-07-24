@@ -17,6 +17,7 @@ use actix_web::{web, HttpResponse};
 use futures::TryStreamExt;
 use lazy_static::lazy_static;
 use lettre::Address;
+use log::warn;
 use mongodb::bson::doc;
 use mongodb::options::ReturnDocument;
 use regex::Regex;
@@ -275,11 +276,23 @@ async fn login(
     }
 
     if let Some(client_id) = client_id {
+        // Update the username, then the project (which will send an update)
+        let result = app
+            .network
+            .send(topology::SetClientUsername {
+                id: client_id.clone(),
+                username: Some(user.username.clone()),
+            })
+            .await;
+
+        if let Err(err) = result {
+            warn!("Error while updating client username: {}", err);
+        }
+
+        // The following method will trigger a room update to be sent; must be
+        // called after updating the client username to ensure the room state is
+        // up to date.
         update_ownership(&app, &client_id, &user.username).await?;
-        app.network.do_send(topology::SetClientUsername {
-            id: client_id,
-            username: Some(user.username.clone()),
-        });
     }
     session.insert("username", &user.username).unwrap();
     app.metrics.record_login();
