@@ -816,6 +816,7 @@ impl AppData {
 
             std::iter::once(group.owner)
                 .chain(members.into_iter().map(|user| user.username))
+                .filter(|name| name != username)
                 .collect()
         } else {
             // look up:
@@ -1427,6 +1428,230 @@ mod tests {
                     .await;
 
                 assert!(matches!(result, Err(UserError::InviteNotFoundError)));
+            })
+            .await;
+    }
+
+    #[actix_web::test]
+    async fn test_lookup_friends() {
+        let user: User = api::NewUser {
+            username: "user".into(),
+            email: "user@netsblox.org".into(),
+            password: None,
+            group_id: None,
+            role: None,
+        }
+        .into();
+        let f1: User = api::NewUser {
+            username: "f1".into(),
+            email: "f1@netsblox.org".into(),
+            password: None,
+            group_id: None,
+            role: None,
+        }
+        .into();
+        let f2: User = api::NewUser {
+            username: "f2".into(),
+            email: "f2@netsblox.org".into(),
+            password: None,
+            group_id: None,
+            role: None,
+        }
+        .into();
+        let u3: User = api::NewUser {
+            username: "u3".into(),
+            email: "u3@netsblox.org".into(),
+            password: None,
+            group_id: None,
+            role: None,
+        }
+        .into();
+
+        let l1 = FriendLink::new(
+            user.username.clone(),
+            f1.username.clone(),
+            Some(FriendLinkState::Approved),
+        );
+        let l2 = FriendLink::new(
+            f2.username.clone(),
+            user.username.clone(),
+            Some(FriendLinkState::Approved),
+        );
+
+        test_utils::setup()
+            .with_users(&[user, f1, f2, u3])
+            .with_friend_links(&[l1, l2])
+            .run(|app_data| async move {
+                let friends = app_data.lookup_friends("user").await.unwrap();
+
+                assert_eq!(friends.len(), 2);
+            })
+            .await;
+    }
+
+    #[actix_web::test]
+    async fn test_lookup_friends_admin() {
+        let admin: User = api::NewUser {
+            username: "admin".into(),
+            email: "admin@netsblox.org".into(),
+            password: None,
+            group_id: None,
+            role: Some(UserRole::Admin),
+        }
+        .into();
+        let u1: User = api::NewUser {
+            username: "u1".into(),
+            email: "u1@netsblox.org".into(),
+            password: None,
+            group_id: None,
+            role: None,
+        }
+        .into();
+        let u2: User = api::NewUser {
+            username: "u2".into(),
+            email: "u2@netsblox.org".into(),
+            password: None,
+            group_id: None,
+            role: None,
+        }
+        .into();
+        let u3: User = api::NewUser {
+            username: "u3".into(),
+            email: "u3@netsblox.org".into(),
+            password: None,
+            group_id: None,
+            role: None,
+        }
+        .into();
+
+        test_utils::setup()
+            .with_users(&[admin, u1, u2, u3])
+            .run(|app_data| async move {
+                let friends = app_data.lookup_friends("admin").await.unwrap();
+
+                assert_eq!(friends.len(), 3);
+            })
+            .await;
+    }
+
+    #[actix_web::test]
+    async fn test_lookup_friends_member() {
+        let owner: User = api::NewUser {
+            username: "owner".into(),
+            email: "owner@netsblox.org".into(),
+            password: None,
+            group_id: None,
+            role: None,
+        }
+        .into();
+        let group = Group::new(owner.username.clone(), "some_group".into());
+        let m1: User = api::NewUser {
+            username: "m1".into(),
+            email: "m1@netsblox.org".into(),
+            password: None,
+            group_id: Some(group.id.clone()),
+            role: None,
+        }
+        .into();
+        let m2: User = api::NewUser {
+            username: "m2".into(),
+            email: "m2@netsblox.org".into(),
+            password: None,
+            group_id: Some(group.id.clone()),
+            role: None,
+        }
+        .into();
+        let u3: User = api::NewUser {
+            username: "u3".into(),
+            email: "u3@netsblox.org".into(),
+            password: None,
+            group_id: None,
+            role: None,
+        }
+        .into();
+
+        let l1 = FriendLink::new(
+            m1.username.clone(),
+            u3.username.clone(),
+            Some(FriendLinkState::Approved),
+        );
+
+        test_utils::setup()
+            .with_users(&[owner, m1.clone(), m2, u3])
+            .with_friend_links(&[l1]) // this link should be ignored
+            .with_groups(&[group])
+            .run(|app_data| async move {
+                let friends = app_data.lookup_friends(&m1.username).await.unwrap();
+
+                dbg!(&friends);
+                assert_eq!(friends.len(), 2);
+                assert!(friends.contains(&"m2".to_string()));
+                assert!(friends.contains(&"owner".to_string()));
+            })
+            .await;
+    }
+
+    #[actix_web::test]
+    async fn test_lookup_friends_group_owner() {
+        let owner: User = api::NewUser {
+            username: "owner".into(),
+            email: "owner@netsblox.org".into(),
+            password: None,
+            group_id: None,
+            role: None,
+        }
+        .into();
+        let group = Group::new(owner.username.clone(), "some_group".into());
+        let m1: User = api::NewUser {
+            username: "m1".into(),
+            email: "m1@netsblox.org".into(),
+            password: None,
+            group_id: Some(group.id.clone()),
+            role: None,
+        }
+        .into();
+        let m2: User = api::NewUser {
+            username: "m2".into(),
+            email: "m2@netsblox.org".into(),
+            password: None,
+            group_id: Some(group.id.clone()),
+            role: None,
+        }
+        .into();
+        let f1: User = api::NewUser {
+            username: "f1".into(),
+            email: "f1@netsblox.org".into(),
+            password: None,
+            group_id: None,
+            role: None,
+        }
+        .into();
+        let u1: User = api::NewUser {
+            username: "u1".into(),
+            email: "u1@netsblox.org".into(),
+            password: None,
+            group_id: None,
+            role: None,
+        }
+        .into();
+
+        let l1 = FriendLink::new(
+            owner.username.clone(),
+            f1.username.clone(),
+            Some(FriendLinkState::Approved),
+        );
+
+        test_utils::setup()
+            .with_users(&[owner.clone(), m1, m2, f1, u1])
+            .with_friend_links(&[l1]) // this link should be ignored
+            .with_groups(&[group])
+            .run(|app_data| async move {
+                let friends = app_data.lookup_friends(&owner.username).await.unwrap();
+
+                assert_eq!(friends.len(), 3);
+                assert!(friends.contains(&"m1".to_string()));
+                assert!(friends.contains(&"m2".to_string()));
+                assert!(friends.contains(&"f1".to_string()));
             })
             .await;
     }
