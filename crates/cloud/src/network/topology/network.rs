@@ -238,12 +238,11 @@ impl Topology {
         let role = chunks.next();
 
         let query = doc! {"name": project, "owner": &addr.user_id};
-        let empty = Vec::new();
         project_metadata
             .find_one(query, None)
             .await
             .map_err(|err| {
-                warn!("Unable to resolve address due to DB error: {:?}", err);
+                warn!("Unable to resolve address: {:?}", err);
                 InternalError::DatabaseConnectionError(err)
             })
             .ok()
@@ -270,9 +269,9 @@ impl Topology {
                         project_id: metadata.id.to_owned(),
                         role_id: role_id.to_owned(),
                     })
-                    .collect()
+                    .collect::<Vec<_>>()
             })
-            .unwrap_or(empty)
+            .unwrap_or_default()
     }
 
     pub async fn send_msg(&self, msg: SendMessage) {
@@ -334,7 +333,9 @@ impl Topology {
                         .map(|state| state.to_owned())
                         .collect::<Vec<_>>();
 
-                    // TODO: record the actual recipients
+                    // TODO: record the actual recipients. In other words, not just
+                    // the role that it was sent to but the actual user who was occupying
+                    // the role
                     recording_ids
                         .into_iter()
                         .map(|project_id| {
@@ -482,9 +483,9 @@ impl Topology {
             if let Some(ClientState::Browser(state)) = self.states.get(&msg.id) {
                 let query = doc! {
                     "id": &state.project_id,
-                    "saveState": SaveState::TRANSIENT
+                    "saveState": SaveState::Transient
                 };
-                let update = doc! {"$set": {"saveState": SaveState::BROKEN}};
+                let update = doc! {"$set": {"saveState": SaveState::Broken}};
                 app.project_metadata
                     .update_one(query, update, None)
                     .await
@@ -588,10 +589,10 @@ impl Topology {
                 .await
                 .map_err(InternalError::DatabaseConnectionError)?
                 .map(|md| match md.save_state {
-                    SaveState::CREATED => unreachable!(),
-                    SaveState::TRANSIENT => ProjectCleanup::Immediately,
-                    SaveState::BROKEN => ProjectCleanup::Delayed,
-                    SaveState::SAVED => ProjectCleanup::None,
+                    SaveState::Created => unreachable!(),
+                    SaveState::Transient => ProjectCleanup::Immediately,
+                    SaveState::Broken => ProjectCleanup::Delayed,
+                    SaveState::Saved => ProjectCleanup::None,
                 })
                 .unwrap_or(ProjectCleanup::None);
 

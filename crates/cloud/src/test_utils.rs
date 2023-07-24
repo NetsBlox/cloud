@@ -295,7 +295,7 @@ pub(crate) mod project {
                 name: self.name.unwrap_or("my project".into()),
                 collaborators: self.collaborators,
                 roles: self.roles,
-                save_state: api::SaveState::SAVED,
+                save_state: api::SaveState::Saved,
 
                 traces: self.traces,
             }

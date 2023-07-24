@@ -67,11 +67,11 @@ async fn set_client_state(
 
             let query = doc! {
                 "id": &metadata.id,
-                "saveState": SaveState::CREATED
+                "saveState": SaveState::Created
             };
             let update = doc! {
                 "$set": {
-                    "saveState": SaveState::TRANSIENT
+                    "saveState": SaveState::Transient
                 },
                 "$unset": {
                     "deleteAt": 1

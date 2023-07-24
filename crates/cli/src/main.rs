@@ -882,7 +882,7 @@ async fn do_command(mut cfg: Config, args: Cli) -> Result<(), error::Error> {
                             .to_owned()
                     }),
                     roles: Some(roles),
-                    save_state: Some(SaveState::SAVED),
+                    save_state: Some(SaveState::Saved),
                     client_id: None,
                 };
                 client.create_project(&project_data).await?;
@@ -1148,9 +1148,9 @@ async fn do_command(mut cfg: Config, args: Cli) -> Result<(), error::Error> {
             } => {
                 let recipient = user.clone().unwrap_or_else(|| get_current_user(cfg.host()));
                 let state = if *reject {
-                    FriendLinkState::REJECTED
+                    FriendLinkState::Rejected
                 } else {
-                    FriendLinkState::APPROVED
+                    FriendLinkState::Approved
                 };
                 client
                     .respond_to_friend_invite(&recipient, sender, state)
