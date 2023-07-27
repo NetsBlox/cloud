@@ -1,27 +1,21 @@
 use std::collections::HashMap;
-use std::io::BufWriter;
 
 use crate::app_data::AppData;
 use crate::auth;
 use crate::common::api;
 use crate::common::api::{
-    BrowserClientState, ClientId, CreateProjectData, Project, ProjectId, PublishState, RoleData,
-    RoleId, SaveState, UpdateProjectData, UpdateRoleData,
+    ClientId, CreateProjectData, ProjectId, PublishState, RoleData, RoleId, SaveState,
+    UpdateProjectData, UpdateRoleData,
 };
 use crate::common::ProjectMetadata;
 use crate::errors::{InternalError, UserError};
-use crate::libraries;
 use crate::network::topology;
-use crate::projects::actions;
+use crate::projects::actions::ProjectActions;
 use crate::users::{can_edit_user, ensure_can_edit_user};
 use actix_session::Session;
 use actix_web::{delete, get, patch, post};
 use actix_web::{web, HttpResponse};
-use futures::stream::{FuturesUnordered, TryStreamExt};
-use image::{
-    codecs::png::PngEncoder, ColorType, EncodableLayout, GenericImageView, ImageEncoder,
-    ImageFormat, RgbaImage,
-};
+use futures::stream::TryStreamExt;
 use lazy_static::lazy_static;
 use log::info;
 use mongodb::bson::doc;
@@ -161,8 +155,9 @@ async fn get_project_named(
         .map_err(InternalError::DatabaseConnectionError)?
         .ok_or(UserError::ProjectNotFoundError)?;
 
-    let metadata = auth::try_view_project(&app, &session, &metadata).await?;
-    let project = actions::get_project(&app, &metadata).await?;
+    let auth_vp = auth::try_view_project(&app, &session, None, &metadata.id).await?;
+    let actions: ProjectActions = app.into();
+    let project = actions.get_project(&auth_vp).await?;
     Ok(HttpResponse::Ok().json(project))
 }
 
@@ -181,7 +176,7 @@ async fn get_project_metadata(
         .map_err(InternalError::DatabaseConnectionError)?
         .ok_or(UserError::ProjectNotFoundError)?;
 
-    ensure_can_view_project_metadata(&app, &session, None, &metadata).await?;
+    let auth_vp = auth::try_view_project(&app, &session, None, &metadata.id).await?;
 
     let metadata: api::ProjectMetadata = metadata.into();
     Ok(HttpResponse::Ok().json(metadata))
@@ -194,9 +189,10 @@ async fn get_project_id_metadata(
     session: Session,
 ) -> Result<HttpResponse, UserError> {
     let (project_id,) = path.into_inner();
-    let metadata = ensure_can_view_project(&app, &session, None, &project_id).await?;
+    let auth_vp = auth::try_view_project(&app, &session, None, &project_id).await?;
+    let actions: ProjectActions = app.into();
 
-    let metadata: api::ProjectMetadata = metadata.into();
+    let metadata = actions.get_project_metadata(&auth_vp);
     Ok(HttpResponse::Ok().json(metadata))
 }
 
@@ -294,8 +290,10 @@ async fn get_project(
     session: Session,
 ) -> Result<HttpResponse, UserError> {
     let (project_id,) = path.into_inner();
-    let view_project = auth::try_view_project(&app, &session, None, &project_id).await?;
-    let project = actions::get_project(&app, &view_project).await?;
+    let auth_vp = auth::try_view_project(&app, &session, None, &project_id).await?;
+    let actions: ProjectActions = app.into();
+    let project = actions.get_project(&auth_vp).await?;
+
     // TODO: do we need edit permissions?
     Ok(HttpResponse::Ok().json(project)) // TODO: Update this to a responder?
 }
@@ -307,8 +305,9 @@ async fn publish_project(
     session: Session,
 ) -> Result<HttpResponse, UserError> {
     let (project_id,) = path.into_inner();
-    let edit_project = try_edit_project(&app, &session, None, &project_id).await?;
-    let state = actions::publish_project(&app, edit_project).await?;
+    let auth_ep = auth::try_edit_project(&app, &session, None, &project_id).await?;
+    let actions: ProjectActions = app.into();
+    let state = actions.publish_project(&auth_ep).await?;
     Ok(HttpResponse::Ok().json(state))
 }
 
@@ -319,8 +318,9 @@ async fn unpublish_project(
     session: Session,
 ) -> Result<HttpResponse, UserError> {
     let (project_id,) = path.into_inner();
-    let edit_project = auth::try_edit_project(&app, &session, None, &project_id).await?;
-    let state = actions::unpublish_project(&app, &edit_project).await?;
+    let auth_ep = auth::try_edit_project(&app, &session, None, &project_id).await?;
+    let actions: ProjectActions = app.into();
+    let state = actions.unpublish_project(&auth_ep).await?;
     Ok(HttpResponse::Ok().json(state))
 }
 
@@ -361,25 +361,11 @@ async fn update_project(
 
     let query = doc! {"id": &project_id};
     let body = body.into_inner();
-    let metadata = ensure_can_edit_project(&app, &session, body.client_id, &project_id).await?;
+    let auth_ep = auth::try_edit_project(&app, &session, body.client_id, &project_id).await?;
 
-    let name = app
-        .get_valid_project_name(&metadata.owner, &body.name)
-        .await?;
-    let update = doc! {"$set": {"name": &name}};
-    let options = FindOneAndUpdateOptions::builder()
-        .return_document(ReturnDocument::After)
-        .build();
-
-    let updated_metadata = app
-        .project_metadata
-        .find_one_and_update(query, update, options)
-        .await
-        .map_err(InternalError::DatabaseConnectionError)?
-        .ok_or(UserError::ProjectNotFoundError)?;
-
-    app.on_room_changed(updated_metadata.clone());
-    Ok(HttpResponse::Ok().json(updated_metadata))
+    let actions: ProjectActions = app.into();
+    let metadata = actions.update_project(&auth_ep, body.name).await?;
+    Ok(HttpResponse::Ok().json(metadata))
 }
 
 #[derive(Deserialize)]
@@ -398,27 +384,9 @@ async fn get_latest_project(
 ) -> Result<HttpResponse, UserError> {
     let (project_id,) = path.into_inner();
     let client_id = params.into_inner().client_id;
-    let metadata = ensure_can_view_project(&app, &session, client_id, &project_id).await?;
-
-    let roles = metadata
-        .roles
-        .keys()
-        .map(|role_id| fetch_role_data(&app, &metadata, role_id.to_owned()))
-        .collect::<FuturesUnordered<_>>()
-        .try_collect::<HashMap<RoleId, RoleData>>()
-        .await?;
-
-    let project = Project {
-        id: metadata.id.to_owned(),
-        name: metadata.name.to_owned(),
-        owner: metadata.owner.to_owned(),
-        updated: metadata.updated.to_system_time(),
-        state: metadata.state.to_owned(),
-        collaborators: metadata.collaborators.to_owned(),
-        origin_time: metadata.origin_time.to_system_time(),
-        save_state: metadata.save_state.to_owned(),
-        roles,
-    };
+    let auth_vp = auth::try_view_project(&app, &session, client_id, &project_id).await?;
+    let actions: ProjectActions = app.into();
+    let project = actions.get_latest_project(&auth_vp).await?;
     Ok(HttpResponse::Ok().json(project))
 }
 
@@ -436,71 +404,14 @@ async fn get_project_thumbnail(
     session: Session,
 ) -> Result<HttpResponse, UserError> {
     let (project_id,) = path.into_inner();
-    let metadata = ensure_can_view_project(&app, &session, None, &project_id).await?;
+    let auth_vp = auth::try_view_project(&app, &session, None, &project_id).await?;
 
-    let role_metadata = metadata
-        .roles
-        .values()
-        .max_by_key(|md| md.updated)
-        .ok_or(UserError::ThumbnailNotFoundError)?;
-    let role = app.fetch_role(role_metadata).await?;
-    let thumbnail = role
-        .code
-        .split("<thumbnail>data:image/png;base64,")
-        .nth(1)
-        .and_then(|text| text.split("</thumbnail>").next())
-        .ok_or(UserError::ThumbnailNotFoundError)
-        .and_then(|thumbnail_str| {
-            base64::decode(thumbnail_str)
-                .map_err(|err| InternalError::Base64DecodeError(err).into())
-        })
-        .and_then(|image_data| {
-            image::load_from_memory_with_format(&image_data, ImageFormat::Png)
-                .map_err(|err| InternalError::ThumbnailDecodeError(err).into())
-        })?;
+    let actions: ProjectActions = app.into();
+    let thumbnail = actions
+        .get_project_thumbnail(&auth_vp, params.aspect_ratio)
+        .await?;
 
-    let image_content = if let Some(aspect_ratio) = params.aspect_ratio {
-        let (width, height) = thumbnail.dimensions();
-        let current_ratio = (width as f32) / (height as f32);
-        let (resized_width, resized_height) = if current_ratio < aspect_ratio {
-            let new_width = (aspect_ratio * (height as f32)) as u32;
-            (new_width, height)
-        } else {
-            let new_height = ((width as f32) / aspect_ratio) as u32;
-            (width, new_height)
-        };
-
-        let top_offset: u32 = (resized_height - height) / 2;
-        let left_offset: u32 = (resized_width - width) / 2;
-        let mut image = RgbaImage::new(resized_width, resized_height);
-        for x in 0..width {
-            for y in 0..height {
-                let pixel = thumbnail.get_pixel(x, y);
-                image.put_pixel(x + left_offset, y + top_offset, pixel);
-            }
-        }
-        // encode the bytes as a png
-        let mut png_bytes = BufWriter::new(Vec::new());
-        let encoder = PngEncoder::new(&mut png_bytes);
-        let color = ColorType::Rgba8;
-        encoder
-            .write_image(image.as_bytes(), resized_width, resized_height, color)
-            .map_err(InternalError::ThumbnailEncodeError)?;
-        actix_web::web::Bytes::copy_from_slice(&png_bytes.into_inner().unwrap())
-    } else {
-        let (width, height) = thumbnail.dimensions();
-        let mut png_bytes = BufWriter::new(Vec::new());
-        let encoder = PngEncoder::new(&mut png_bytes);
-        let color = ColorType::Rgba8;
-        encoder
-            .write_image(thumbnail.as_bytes(), width, height, color)
-            .map_err(InternalError::ThumbnailEncodeError)?;
-        actix_web::web::Bytes::copy_from_slice(&png_bytes.into_inner().unwrap())
-    };
-
-    Ok(HttpResponse::Ok()
-        .content_type("image/png")
-        .body(image_content))
+    Ok(HttpResponse::Ok().content_type("image/png").body(thumbnail))
 }
 
 #[derive(Deserialize)]
@@ -542,14 +453,11 @@ async fn get_role(
     session: Session,
 ) -> Result<HttpResponse, UserError> {
     let (project_id, role_id) = path.into_inner();
+    let auth_vp = auth::try_view_project(&app, &session, None, &project_id).await?;
 
-    let metadata = ensure_can_view_project(&app, &session, None, &project_id).await?;
-    let role_md = metadata
-        .roles
-        .get(&role_id)
-        .ok_or(UserError::RoleNotFoundError)?;
+    let actions: ProjectActions = app.into();
+    let role = actions.get_role(&auth_vp, role_id).await?;
 
-    let role = app.fetch_role(role_md).await?;
     Ok(HttpResponse::Ok().json(role))
 }
 
@@ -560,27 +468,13 @@ async fn delete_role(
     session: Session,
 ) -> Result<HttpResponse, UserError> {
     let (project_id, role_id) = path.into_inner();
-    let query = doc! {"id": &project_id};
 
-    let metadata = ensure_can_edit_project(&app, &session, None, &project_id).await?;
-    if metadata.roles.keys().count() == 1 {
-        return Err(UserError::CannotDeleteLastRoleError);
-    }
+    let auth_ep = auth::try_edit_project(&app, &session, None, &project_id).await?;
 
-    let update = doc! {"$unset": {format!("roles.{}", role_id): &""}};
-    let options = FindOneAndUpdateOptions::builder()
-        .return_document(ReturnDocument::After)
-        .build();
+    let actions: ProjectActions = app.into();
+    let metadata = actions.delete_role(&auth_ep, role_id).await?;
 
-    let updated_metadata = app
-        .project_metadata
-        .find_one_and_update(query, update, options)
-        .await
-        .map_err(InternalError::DatabaseConnectionError)?
-        .ok_or(UserError::ProjectNotFoundError)?;
-
-    app.on_room_changed(updated_metadata.clone());
-    Ok(HttpResponse::Ok().json(updated_metadata))
+    Ok(HttpResponse::Ok().json(metadata))
 }
 
 #[post("/id/{projectID}/{roleID}")]
@@ -608,28 +502,11 @@ async fn rename_role(
 ) -> Result<HttpResponse, UserError> {
     let (project_id, role_id) = path.into_inner();
     let body = body.into_inner();
-    ensure_valid_name(&body.name)?;
-    let metadata = ensure_can_edit_project(&app, &session, body.client_id, &project_id).await?;
+    let auth_ep = auth::try_edit_project(&app, &session, body.client_id, &project_id).await?;
 
-    if metadata.roles.contains_key(&role_id) {
-        let query = doc! {"id": &project_id};
-        let update = doc! {"$set": {format!("roles.{}.name", role_id): &body.name}};
-        let options = FindOneAndUpdateOptions::builder()
-            .return_document(ReturnDocument::After)
-            .build();
-
-        let updated_metadata = app
-            .project_metadata
-            .find_one_and_update(query, update, options)
-            .await
-            .map_err(InternalError::DatabaseConnectionError)?
-            .ok_or(UserError::ProjectNotFoundError)?;
-
-        app.on_room_changed(updated_metadata.clone());
-        Ok(HttpResponse::Ok().json(updated_metadata))
-    } else {
-        Err(UserError::RoleNotFoundError)
-    }
+    let actions: ProjectActions = app.into();
+    let metadata = actions.rename_role(&auth_ep, role_id, &body.name).await?;
+    Ok(HttpResponse::Ok().json(metadata))
 }
 
 #[get("/id/{projectID}/{roleID}/latest")]
@@ -640,56 +517,13 @@ async fn get_latest_role(
     session: Session,
 ) -> Result<HttpResponse, UserError> {
     let (project_id, role_id) = path.into_inner();
-    let metadata =
-        ensure_can_view_project(&app, &session, params.into_inner().client_id, &project_id).await?;
+    let auth_vp =
+        auth::try_view_project(&app, &session, params.into_inner().client_id, &project_id).await?;
 
-    let (_, role_data) = fetch_role_data(&app, &metadata, role_id).await?;
+    let actions: ProjectActions = app.into();
+    let (_, role_data) = actions.fetch_role_data(&auth_vp, role_id).await?;
+
     Ok(HttpResponse::Ok().json(role_data))
-}
-
-async fn fetch_role_data(
-    app: &AppData,
-    metadata: &ProjectMetadata,
-    role_id: RoleId,
-) -> Result<(RoleId, RoleData), UserError> {
-    let role_md = metadata
-        .roles
-        .get(&role_id)
-        .ok_or(UserError::RoleNotFoundError)?;
-
-    // Try to fetch the role data from the current occupants
-    let state = BrowserClientState {
-        project_id: metadata.id.clone(),
-        role_id: role_id.clone(),
-    };
-
-    let task = app
-        .network
-        .send(topology::GetRoleRequest { state })
-        .await
-        .map_err(InternalError::ActixMessageError)?;
-    let request_opt = task.run().await.ok_or(UserError::InternalError);
-
-    let active_role = if let Ok(request) = request_opt {
-        request.send().await.ok()
-    } else {
-        None
-    };
-
-    // If unable to retrieve role data from current occupants (unoccupied or error),
-    // fetch the latest from the database
-    let role_data = match active_role {
-        Some(role_data) => role_data,
-        None => app.fetch_role(role_md).await?,
-    };
-    Ok((role_id, role_data))
-}
-
-#[derive(Deserialize, Serialize)]
-#[serde(rename_all = "camelCase")]
-struct RoleDataResponse {
-    id: String,
-    pub data: RoleData,
 }
 
 #[derive(Deserialize)]
@@ -702,23 +536,15 @@ struct ReportRoleParams {
 async fn report_latest_role(
     app: web::Data<AppData>,
     path: web::Path<(ProjectId, RoleId)>,
-    body: web::Json<RoleDataResponse>,
+    body: web::Json<api::RoleDataResponse>,
     params: web::Query<ReportRoleParams>,
     session: Session,
 ) -> Result<HttpResponse, UserError> {
     let (project_id, role_id) = path.into_inner();
-    let id = Uuid::parse_str(&body.id).map_err(|_err| UserError::ProjectNotFoundError)?;
     let client_id = params.into_inner().client_id;
-    let metadata = ensure_can_edit_project(&app, &session, client_id, &project_id).await?;
+    let edit_proj = auth::try_edit_project(&app, &session, client_id, &project_id).await?;
+    todo!();
 
-    if !metadata.roles.contains_key(&role_id) {
-        return Err(UserError::RoleNotFoundError);
-    }
-
-    app.network.do_send(topology::RoleDataResponse {
-        id,
-        data: body.into_inner().data,
-    });
     Ok(HttpResponse::Ok().finish())
 }
 
@@ -729,9 +555,12 @@ async fn list_collaborators(
     session: Session,
 ) -> Result<HttpResponse, UserError> {
     let (project_id,) = path.into_inner();
-    let metadata = ensure_can_edit_project(&app, &session, None, &project_id).await?;
+    let metadata = auth::try_view_project(&app, &session, None, &project_id).await?;
 
-    Ok(HttpResponse::Ok().json(metadata.collaborators))
+    let actions: ProjectActions = app.into();
+    let collaborators = actions.get_collaborators(&metadata);
+
+    Ok(HttpResponse::Ok().json(collaborators))
 }
 
 #[delete("/id/{projectID}/collaborators/{username}")]
@@ -741,22 +570,10 @@ async fn remove_collaborator(
     session: Session,
 ) -> Result<HttpResponse, UserError> {
     let (project_id, username) = path.into_inner();
-    let query = doc! {"id": &project_id};
-    ensure_can_edit_project(&app, &session, None, &project_id).await?;
+    let edit_proj = auth::try_edit_project(&app, &session, None, &project_id).await?;
+    let actions: ProjectActions = app.into();
+    let metadata = actions.remove_collaborator(&edit_proj, &username).await?;
 
-    let update = doc! {"$pull": {"collaborators": &username}};
-    let options = FindOneAndUpdateOptions::builder()
-        .return_document(ReturnDocument::After)
-        .build();
-
-    let metadata = app
-        .project_metadata
-        .find_one_and_update(query, update, options)
-        .await
-        .map_err(InternalError::DatabaseConnectionError)?
-        .ok_or(UserError::ProjectNotFoundError)?;
-
-    app.on_room_changed(metadata.clone());
     Ok(HttpResponse::Ok().json(metadata))
 }
 

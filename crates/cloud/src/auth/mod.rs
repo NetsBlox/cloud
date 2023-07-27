@@ -66,7 +66,7 @@ pub(crate) async fn try_delete_project(
     let metadata = view_project.metadata;
 
     if can_edit_project(app, session, client_id.as_ref(), &metadata).await? {
-        Ok(EditProject {
+        Ok(DeleteProject {
             metadata,
             _private: (),
         })

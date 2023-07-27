@@ -3,11 +3,11 @@ pub(crate) mod metrics;
 use crate::common::api::{
     oauth, LibraryMetadata, NewUser, ProjectId, PublishState, RoleId, UserRole,
 };
+use crate::projects::ProjectActions;
 use crate::{network, projects};
 //pub use self::
 use actix_web::rt::time;
 use futures::future::join_all;
-use futures::join;
 use lazy_static::lazy_static;
 use lettre::message::{Mailbox, MultiPart};
 use lettre::transport::smtp::authentication::Credentials;
@@ -31,7 +31,7 @@ use uuid::Uuid;
 use crate::common::api::{RoleData, SaveState};
 use crate::common::{
     AuthorizedServiceHost, BannedAccount, CollaborationInvite, FriendLink, Group, Library,
-    OAuthClient, OAuthToken, Project, ProjectMetadata, SetPasswordToken, User,
+    OAuthClient, OAuthToken, ProjectMetadata, SetPasswordToken, User,
 };
 use crate::common::{OccupantInvite, RoleMetadata, SentMessage};
 use crate::config::Settings;
@@ -42,8 +42,7 @@ use actix::{Actor, Addr};
 use futures::TryStreamExt;
 use mongodb::{Client, Collection, IndexModel};
 use rusoto_s3::{
-    CreateBucketRequest, DeleteObjectRequest, GetObjectRequest, PutObjectOutput, PutObjectRequest,
-    S3Client, S3,
+    CreateBucketRequest, DeleteObjectRequest, PutObjectOutput, PutObjectRequest, S3Client, S3,
 };
 
 // This is lazy_static to ensure it is shared between threads
@@ -58,10 +57,6 @@ lazy_static! {
         Arc::new(AsyncRwLock::new(LruCache::new(1000)));
 }
 
-lazy_static! {
-    static ref PROJECT_CACHE: Arc<RwLock<LruCache<ProjectId, ProjectMetadata>>> =
-        Arc::new(RwLock::new(LruCache::new(500)));
-}
 lazy_static! {
     static ref FRIEND_CACHE: Arc<RwLock<LruCache<String, Vec<String>>>> =
         Arc::new(RwLock::new(LruCache::new(1000)));
@@ -78,6 +73,7 @@ pub struct AppData {
     pub(crate) users: Collection<User>,
     pub(crate) banned_accounts: Collection<BannedAccount>,
     friends: Collection<FriendLink>,
+    // TODO: make a "cached collection type"?
     pub(crate) project_metadata: Collection<ProjectMetadata>,
     pub(crate) library_metadata: Collection<LibraryMetadata>,
     pub(crate) libraries: Collection<Library>,
@@ -331,27 +327,6 @@ impl AppData {
         }
     }
 
-    pub fn update_project_cache(&self, metadata: ProjectMetadata) {
-        let mut cache = PROJECT_CACHE.write().unwrap();
-        cache.put(metadata.id.clone(), metadata);
-    }
-
-    fn get_cached_project_metadata<'a>(
-        &self,
-        ids: impl Iterator<Item = &'a ProjectId>,
-    ) -> (Vec<ProjectMetadata>, Vec<&'a ProjectId>) {
-        let mut results = Vec::new();
-        let mut missing_projects = Vec::new();
-        let mut cache = PROJECT_CACHE.write().unwrap();
-        for id in ids {
-            match cache.get(id) {
-                Some(project_metadata) => results.push(project_metadata.clone()),
-                None => missing_projects.push(id),
-            }
-        }
-        (results, missing_projects)
-    }
-
     pub async fn get_project_metadata<'a>(
         &self,
         ids: impl Iterator<Item = &'a ProjectId>,
@@ -400,6 +375,7 @@ impl AppData {
         Ok(cache.get(id).unwrap().clone())
     }
 
+    // TODO: remove the following method (moved to projects/actions.rs)
     /// Get a unique project name for the given user and preferred name.
     pub async fn get_valid_project_name(
         &self,
@@ -519,54 +495,6 @@ impl AppData {
         })
     }
 
-    async fn download(&self, key: &str) -> Result<String, InternalError> {
-        let request = GetObjectRequest {
-            bucket: self.bucket.clone(),
-            key: String::from(key),
-            ..Default::default()
-        };
-
-        let output = self
-            .s3
-            .get_object(request)
-            .await
-            .map_err(|_err| InternalError::S3Error)?;
-        let byte_str = output
-            .body
-            .unwrap()
-            .map_ok(|b| b.to_vec())
-            .try_concat()
-            .await
-            .map_err(|_err| InternalError::S3ContentError)?;
-
-        String::from_utf8(byte_str).map_err(|_err| InternalError::S3ContentError)
-    }
-
-    pub async fn fetch_project(&self, metadata: &ProjectMetadata) -> Result<Project, UserError> {
-        // TODO: move this to projects::actions
-        let (keys, values): (Vec<_>, Vec<_>) = metadata.roles.clone().into_iter().unzip();
-        // TODO: make fetch_role fallible
-        let role_data = join_all(values.iter().map(|v| self.fetch_role(v))).await;
-
-        let roles = keys
-            .into_iter()
-            .zip(role_data)
-            .filter_map(|(k, data)| data.map(|d| (k, d)).ok())
-            .collect::<HashMap<RoleId, _>>();
-
-        Ok(Project {
-            id: metadata.id.to_owned(),
-            name: metadata.name.to_owned(),
-            owner: metadata.owner.to_owned(),
-            updated: metadata.updated.to_owned(),
-            state: metadata.state.to_owned(),
-            collaborators: metadata.collaborators.to_owned(),
-            origin_time: metadata.origin_time,
-            save_state: metadata.save_state.to_owned(),
-            roles,
-        })
-    }
-
     pub async fn delete_project(
         &self,
         metadata: ProjectMetadata,
@@ -592,18 +520,6 @@ impl AppData {
 
         // TODO: send update to any current occupants
         Ok(metadata)
-    }
-
-    pub async fn fetch_role(&self, metadata: &RoleMetadata) -> Result<RoleData, InternalError> {
-        let (code, media) = join!(
-            self.download(&metadata.code),
-            self.download(&metadata.media),
-        );
-        Ok(RoleData {
-            name: metadata.name.to_owned(),
-            code: code?,
-            media: media?,
-        })
     }
 
     /// Send updated room state and update project cache when room structure is changed or renamed
@@ -1199,6 +1115,16 @@ impl AppData {
         }
 
         Ok(())
+    }
+}
+
+impl From<actix_web::web::Data<AppData>> for ProjectActions {
+    fn from(app: actix_web::web::Data<AppData>) -> ProjectActions {
+        ProjectActions {
+            network: app.network,
+            bucket: app.bucket,
+            s3: app.s3,
+        }
     }
 }
 

@@ -247,6 +247,13 @@ impl Project {
     }
 }
 
+#[derive(Deserialize, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct RoleDataResponse {
+    pub id: Uuid,
+    pub data: RoleData,
+}
+
 #[derive(Deserialize, Serialize, Debug, Clone)]
 pub struct RoleData {
     pub name: String,
