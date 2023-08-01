@@ -465,4 +465,26 @@ impl ProjectActions {
 
         Ok(get_unique_name(project_names, basename))
     }
+
+    // FIXME: is there a better abstraction here that we could use?
+    pub fn update_project_cache(&self, metadata: ProjectMetadata) {
+        let mut cache = PROJECT_CACHE.write().unwrap();
+        cache.put(metadata.id.clone(), metadata);
+    }
+
+    fn get_cached_project_metadata<'a>(
+        &self,
+        ids: impl Iterator<Item = &'a ProjectId>,
+    ) -> (Vec<ProjectMetadata>, Vec<&'a ProjectId>) {
+        let mut results = Vec::new();
+        let mut missing_projects = Vec::new();
+        let mut cache = PROJECT_CACHE.write().unwrap();
+        for id in ids {
+            match cache.get(id) {
+                Some(project_metadata) => results.push(project_metadata.clone()),
+                None => missing_projects.push(id),
+            }
+        }
+        (results, missing_projects)
+    }
 }
