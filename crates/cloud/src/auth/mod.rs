@@ -209,7 +209,7 @@ pub(crate) async fn try_delete_group(
     todo!()
 }
 
-pub async fn is_super_user(app: &AppData, session: &Session) -> Result<bool, UserError> {
+async fn is_super_user(app: &AppData, session: &Session) -> Result<bool, UserError> {
     match get_session_role(app, session).await? {
         UserRole::Admin => Ok(true),
         _ => Ok(false),
