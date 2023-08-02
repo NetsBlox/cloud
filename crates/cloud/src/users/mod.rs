@@ -1,3 +1,4 @@
+mod actions;
 mod email_template;
 mod html_template;
 mod strategies;
@@ -24,33 +25,6 @@ use rustrict::CensorStr;
 use serde::Deserialize;
 use sha2::{Digest, Sha512};
 use std::collections::HashSet;
-
-pub async fn is_super_user(app: &AppData, session: &Session) -> Result<bool, UserError> {
-    match get_session_role(app, session).await? {
-        UserRole::Admin => Ok(true),
-        _ => Ok(false),
-    }
-}
-
-async fn get_session_role(app: &AppData, session: &Session) -> Result<UserRole, UserError> {
-    if let Some(username) = session.get::<String>("username").unwrap_or(None) {
-        get_user_role(app, &username).await
-    } else {
-        session.purge();
-        Err(UserError::LoginRequiredError)
-    }
-}
-
-pub(crate) async fn get_user_role(app: &AppData, username: &str) -> Result<UserRole, UserError> {
-    let query = doc! {"username": username};
-    Ok(app
-        .users
-        .find_one(query, None)
-        .await
-        .map_err(InternalError::DatabaseConnectionError)?
-        .map(|user| user.role)
-        .unwrap_or(UserRole::User))
-}
 
 pub async fn is_moderator(app: &AppData, session: &Session) -> Result<bool, UserError> {
     let role = get_session_role(app, session).await?;
@@ -97,38 +71,6 @@ pub async fn can_edit_user(
         Ok(can_edit)
     } else {
         Err(UserError::LoginRequiredError)
-    }
-}
-
-async fn has_group_containing(app: &AppData, owner: &str, member: &str) -> Result<bool, UserError> {
-    let query = doc! {"username": member};
-    match app
-        .users
-        .find_one(query, None)
-        .await
-        .map_err(InternalError::DatabaseConnectionError)?
-    {
-        Some(user) => match user.group_id {
-            Some(group_id) => {
-                let query = doc! {"owner": owner};
-                let cursor = app
-                    .groups
-                    .find(query, None)
-                    .await
-                    .map_err(InternalError::DatabaseConnectionError)?;
-                let groups = cursor
-                    .try_collect::<Vec<_>>()
-                    .await
-                    .map_err(InternalError::DatabaseConnectionError)?;
-                let group_ids = groups
-                    .into_iter()
-                    .map(|group| group.id)
-                    .collect::<HashSet<_>>();
-                Ok(group_ids.contains(&group_id))
-            }
-            None => Ok(false),
-        },
-        None => Ok(false),
     }
 }
 

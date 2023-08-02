@@ -3,6 +3,7 @@ pub(crate) mod metrics;
 use crate::common::api::{
     oauth, LibraryMetadata, NewUser, ProjectId, PublishState, RoleId, UserRole,
 };
+use crate::groups::actions::GroupActions;
 use crate::projects::ProjectActions;
 use crate::{network, projects};
 //pub use self::
@@ -399,218 +400,6 @@ impl AppData {
             .collect();
 
         Ok(get_unique_name(project_names, basename))
-    }
-
-    pub async fn import_project(
-        &self,
-        owner: &str,
-        name: &str,
-        roles: &mut HashMap<RoleId, RoleData>,
-        save_state: Option<SaveState>,
-    ) -> Result<ProjectMetadata, UserError> {
-        let unique_name = self.get_valid_project_name(owner, name).await?;
-
-        // Prepare the roles (ensure >=1 exists; upload them)
-        if roles.is_empty() {
-            roles.insert(
-                RoleId::new(Uuid::new_v4().to_string()),
-                RoleData {
-                    name: "myRole".to_owned(),
-                    code: "".to_owned(),
-                    media: "".to_owned(),
-                },
-            );
-        };
-
-        let role_mds: Vec<RoleMetadata> = join_all(
-            roles
-                .values()
-                .map(|role| self.upload_role(owner, &unique_name, role)),
-        )
-        .await
-        .into_iter()
-        .collect::<Result<Vec<RoleMetadata>, _>>()?;
-
-        let roles: HashMap<RoleId, RoleMetadata> =
-            roles.keys().cloned().zip(role_mds.into_iter()).collect();
-
-        let save_state = save_state.unwrap_or(SaveState::CREATED);
-        let metadata = ProjectMetadata::new(owner, &unique_name, roles, save_state);
-        self.project_metadata
-            .insert_one(metadata.clone(), None)
-            .await
-            .map_err(InternalError::DatabaseConnectionError)?;
-
-        Ok(metadata)
-    }
-
-    async fn upload_role(
-        &self,
-        owner: &str,
-        project_name: &str,
-        role: &RoleData,
-    ) -> Result<RoleMetadata, UserError> {
-        let is_guest = owner.starts_with('_');
-        let top_level = if is_guest { "guests" } else { "users" };
-        let basepath = format!("{}/{}/{}/{}", top_level, owner, project_name, &role.name);
-        let src_path = format!("{}/code.xml", &basepath);
-        let media_path = format!("{}/media.xml", &basepath);
-
-        self.upload(&media_path, role.media.to_owned()).await?;
-        self.upload(&src_path, role.code.to_owned()).await?;
-
-        Ok(RoleMetadata {
-            name: role.name.to_owned(),
-            code: src_path,
-            media: media_path,
-            updated: DateTime::now(),
-        })
-    }
-
-    async fn delete(&self, key: String) -> Result<(), UserError> {
-        let request = DeleteObjectRequest {
-            bucket: self.bucket.clone(),
-            key,
-            ..Default::default()
-        };
-
-        self.s3
-            .delete_object(request)
-            .await
-            .map_err(|_err| InternalError::S3Error)?;
-
-        Ok(())
-    }
-
-    async fn upload(&self, key: &str, body: String) -> Result<PutObjectOutput, InternalError> {
-        let request = PutObjectRequest {
-            bucket: self.bucket.clone(),
-            key: String::from(key),
-            body: Some(String::into_bytes(body).into()),
-            ..Default::default()
-        };
-        self.s3.put_object(request).await.map_err(|err| {
-            warn!("Unable to upload to s3: {}", err);
-            InternalError::S3Error
-        })
-    }
-
-    pub async fn delete_project(
-        &self,
-        metadata: ProjectMetadata,
-    ) -> Result<ProjectMetadata, UserError> {
-        let query = doc! {"id": &metadata.id};
-        let metadata = self
-            .project_metadata
-            .find_one_and_delete(query, None)
-            .await
-            .map_err(InternalError::DatabaseConnectionError)?
-            .ok_or(UserError::ProjectNotFoundError)?;
-
-        let paths = metadata
-            .roles
-            .clone()
-            .into_values()
-            .flat_map(|role| vec![role.code, role.media]);
-
-        join_all(paths.map(move |path| self.delete(path)))
-            .await
-            .into_iter()
-            .collect::<Result<Vec<_>, _>>()?;
-
-        // TODO: send update to any current occupants
-        Ok(metadata)
-    }
-
-    /// Send updated room state and update project cache when room structure is changed or renamed
-    pub fn on_room_changed(&self, updated_project: ProjectMetadata) {
-        self.network.do_send(topology::SendRoomState {
-            project: updated_project.clone(),
-        });
-
-        self.update_project_cache(updated_project);
-    }
-
-    pub async fn save_role(
-        &self,
-        metadata: &ProjectMetadata,
-        role_id: &RoleId,
-        role: RoleData,
-    ) -> Result<ProjectMetadata, UserError> {
-        let role_md = self
-            .upload_role(&metadata.owner, &metadata.name, &role)
-            .await?;
-
-        // check if the (public) project needs to be re-approved
-        let state = match metadata.state {
-            PublishState::Public => {
-                let needs_approval = libraries::is_approval_required(&role.code);
-                if needs_approval {
-                    PublishState::PendingApproval
-                } else {
-                    PublishState::Public
-                }
-            }
-            _ => metadata.state.clone(),
-        };
-
-        let query = doc! {"id": &metadata.id};
-        let update = doc! {
-            "$set": {
-                &format!("roles.{}", role_id): role_md,
-                "saveState": SaveState::SAVED,
-                "state": state,
-            }
-        };
-        let options = FindOneAndUpdateOptions::builder()
-            .return_document(ReturnDocument::After)
-            .build();
-
-        let updated_metadata = self
-            .project_metadata
-            .find_one_and_update(query, update, options)
-            .await
-            .map_err(InternalError::DatabaseConnectionError)?
-            .ok_or(UserError::ProjectNotFoundError)?;
-
-        self.on_room_changed(updated_metadata.clone());
-
-        Ok(updated_metadata)
-    }
-
-    pub async fn create_role(
-        &self,
-        metadata: ProjectMetadata,
-        role_data: RoleData,
-    ) -> Result<ProjectMetadata, UserError> {
-        let mut role_md = self
-            .upload_role(&metadata.owner, &metadata.name, &role_data)
-            .await?;
-
-        let options = FindOneAndUpdateOptions::builder()
-            .return_document(ReturnDocument::After)
-            .build();
-
-        let role_names = metadata
-            .roles
-            .into_values()
-            .map(|r| r.name)
-            .collect::<Vec<_>>();
-        let role_name = get_unique_name(role_names, &role_md.name);
-        role_md.name = role_name;
-
-        let role_id = Uuid::new_v4();
-        let query = doc! {"id": metadata.id};
-        let update = doc! {"$set": {&format!("roles.{}", role_id): role_md}};
-        let updated_metadata = self
-            .project_metadata
-            .find_one_and_update(query, update, options)
-            .await
-            .map_err(InternalError::DatabaseConnectionError)?
-            .ok_or(UserError::ProjectNotFoundError)?;
-
-        self.on_room_changed(updated_metadata.clone());
-        Ok(updated_metadata)
     }
 
     // Membership queries (cached)
@@ -1121,10 +910,17 @@ impl AppData {
 impl From<actix_web::web::Data<AppData>> for ProjectActions {
     fn from(app: actix_web::web::Data<AppData>) -> ProjectActions {
         ProjectActions {
+            project_metadata: app.project_metadata,
             network: app.network,
             bucket: app.bucket,
             s3: app.s3,
         }
+    }
+}
+
+impl From<actix_web::web::Data<AppData>> for GroupActions {
+    fn from(app: actix_web::web::Data<AppData>) -> GroupActions {
+        GroupActions { groups: app.groups }
     }
 }
 

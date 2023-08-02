@@ -16,16 +16,20 @@ use image::{
     ImageFormat, RgbaImage,
 };
 use lazy_static::lazy_static;
+use log::warn;
 use lru::LruCache;
-use mongodb::bson::doc;
+use mongodb::bson::{doc, DateTime};
 use mongodb::options::{FindOneAndUpdateOptions, ReturnDocument};
-use netsblox_cloud_common::api::{BrowserClientState, RoleData, RoleId};
+use mongodb::Collection;
+use netsblox_cloud_common::api::{BrowserClientState, RoleData, RoleId, SaveState};
 use netsblox_cloud_common::{
     api::{self, PublishState},
     ProjectMetadata,
 };
 use netsblox_cloud_common::{Project, RoleMetadata};
-use rusoto_s3::{GetObjectRequest, S3Client, S3};
+use rusoto_s3::{
+    DeleteObjectRequest, GetObjectRequest, PutObjectOutput, PutObjectRequest, S3Client, S3,
+};
 use uuid::Uuid;
 
 // FIXME: pass this as an argument to ProjectActions
@@ -35,15 +39,66 @@ lazy_static! {
 }
 
 pub(crate) struct ProjectActions {
+    // TODO: can I make cached projects?
+    project_metadata: Collection<ProjectMetadata>,
     bucket: String,
     s3: S3Client,
     network: Addr<TopologyActor>,
 }
 
 impl ProjectActions {
+    pub async fn create_project(
+        &self,
+        eu: &auth::EditUser,
+        project_data: api::CreateProjectData,
+    ) -> Result<ProjectMetadata, UserError> {
+        let name = project_data.name.to_owned();
+        let mut roles = project_data
+            .roles
+            .unwrap_or_default()
+            .into_iter()
+            .map(|role| (RoleId::new(Uuid::new_v4().to_string()), role))
+            .collect::<HashMap<_, _>>();
+        let owner = &eu.username;
+        let unique_name = self.get_valid_project_name(owner, &name).await?;
+
+        // Prepare the roles (ensure >=1 exists; upload them)
+        if roles.is_empty() {
+            roles.insert(
+                RoleId::new(Uuid::new_v4().to_string()),
+                RoleData {
+                    name: "myRole".to_owned(),
+                    code: "".to_owned(),
+                    media: "".to_owned(),
+                },
+            );
+        };
+
+        let role_mds: Vec<RoleMetadata> = join_all(
+            roles
+                .values()
+                .map(|role| self.upload_role(owner, &unique_name, role)),
+        )
+        .await
+        .into_iter()
+        .collect::<Result<Vec<RoleMetadata>, _>>()?;
+
+        let roles: HashMap<RoleId, RoleMetadata> =
+            roles.keys().cloned().zip(role_mds.into_iter()).collect();
+
+        let save_state = project_data.save_state.unwrap_or(SaveState::CREATED);
+        let metadata = ProjectMetadata::new(owner, &unique_name, roles, save_state);
+        self.project_metadata
+            .insert_one(metadata.clone(), None)
+            .await
+            .map_err(InternalError::DatabaseConnectionError)?;
+
+        Ok(metadata)
+    }
+
     pub(crate) async fn get_project(
         &self,
-        view_proj: &auth::ViewProjectMetadata,
+        view_proj: &auth::ViewProject,
     ) -> Result<api::Project, UserError> {
         let metadata = view_proj.metadata.clone();
         let (keys, values): (Vec<_>, Vec<_>) = metadata.roles.clone().into_iter().unzip();
@@ -73,7 +128,7 @@ impl ProjectActions {
 
     pub(crate) async fn get_latest_project(
         &self,
-        vp: &auth::ViewProjectMetadata,
+        vp: &auth::ViewProject,
     ) -> Result<api::Project, UserError> {
         let metadata = vp.metadata.clone();
         let roles = metadata
@@ -101,7 +156,7 @@ impl ProjectActions {
 
     pub(crate) async fn get_project_thumbnail(
         &self,
-        vp: &auth::ViewProjectMetadata,
+        vp: &auth::ViewProject,
         aspect_ratio: Option<f32>,
     ) -> Result<Bytes, UserError> {
         let role_metadata = vp
@@ -170,10 +225,7 @@ impl ProjectActions {
         Ok(image_content)
     }
 
-    pub(crate) fn get_project_metadata(
-        &self,
-        vp: &auth::ViewProjectMetadata,
-    ) -> api::ProjectMetadata {
+    pub(crate) fn get_project_metadata(&self, vp: &auth::ViewProject) -> api::ProjectMetadata {
         vp.metadata.clone().into()
     }
 
@@ -182,12 +234,12 @@ impl ProjectActions {
         ep: &auth::EditProject,
         new_name: &str,
     ) -> Result<api::ProjectMetadata, UserError> {
-        let metadata = ep.metadata;
+        let metadata = &ep.metadata;
         let name = self
             .get_valid_project_name(&metadata.owner, &new_name)
             .await?;
 
-        let query = doc! {"id": &project_id};
+        let query = doc! {"id": &metadata.id};
         let update = doc! {"$set": {"name": &name}};
         let options = FindOneAndUpdateOptions::builder()
             .return_document(ReturnDocument::After)
@@ -201,10 +253,10 @@ impl ProjectActions {
             .ok_or(UserError::ProjectNotFoundError)?;
 
         self.on_room_changed(updated_metadata.clone());
-        updated_metadata.into()
+        Ok(updated_metadata.into())
     }
 
-    pub(crate) fn get_collaborators(&self, md: &auth::ViewProjectMetadata) -> Vec<String> {
+    pub(crate) fn get_collaborators(&self, md: &auth::ViewProject) -> Vec<String> {
         md.metadata.collaborators.clone()
     }
 
@@ -231,7 +283,7 @@ impl ProjectActions {
         Ok(metadata.into())
     }
 
-    pub(crate) async fn report_latest_role(
+    pub(crate) async fn set_latest_role(
         &self,
         md: &auth::EditProject,
         role_id: &RoleId,
@@ -255,7 +307,7 @@ impl ProjectActions {
         &self,
         ep: &auth::EditProject,
     ) -> Result<api::PublishState, UserError> {
-        let state = if is_approval_required(&app, &ep.metadata).await? {
+        let state = if self.is_approval_required(&ep.metadata).await? {
             PublishState::PendingApproval
         } else {
             PublishState::Public
@@ -289,7 +341,7 @@ impl ProjectActions {
 
     pub(crate) async fn fetch_role_data(
         &self,
-        vp: &auth::ViewProjectMetadata,
+        vp: &auth::ViewProject,
         role_id: RoleId,
     ) -> Result<(RoleId, RoleData), UserError> {
         let role_md = vp
@@ -324,6 +376,42 @@ impl ProjectActions {
             None => self.fetch_role(role_md).await?,
         };
         Ok((role_id, role_data))
+    }
+
+    pub async fn create_role(
+        &self,
+        ep: &auth::EditProject,
+        role_data: RoleData,
+    ) -> Result<ProjectMetadata, UserError> {
+        let metadata = ep.metadata;
+        let mut role_md = self
+            .upload_role(&metadata.owner, &metadata.name, &role_data)
+            .await?;
+
+        let options = FindOneAndUpdateOptions::builder()
+            .return_document(ReturnDocument::After)
+            .build();
+
+        let role_names = metadata
+            .roles
+            .into_values()
+            .map(|r| r.name)
+            .collect::<Vec<_>>();
+        let role_name = get_unique_name(role_names, &role_md.name);
+        role_md.name = role_name;
+
+        let role_id = Uuid::new_v4();
+        let query = doc! {"id": metadata.id};
+        let update = doc! {"$set": {&format!("roles.{}", role_id): role_md}};
+        let updated_metadata = self
+            .project_metadata
+            .find_one_and_update(query, update, options)
+            .await
+            .map_err(InternalError::DatabaseConnectionError)?
+            .ok_or(UserError::ProjectNotFoundError)?;
+
+        self.on_room_changed(updated_metadata.clone());
+        Ok(updated_metadata)
     }
 
     pub(crate) async fn rename_role(
@@ -395,6 +483,84 @@ impl ProjectActions {
         Ok(role)
     }
 
+    /// Send updated room state and update project cache when room structure is changed or renamed
+    pub async fn save_role(
+        &self,
+        ep: &auth::EditProject,
+        role_id: &RoleId,
+        role: RoleData,
+    ) -> Result<ProjectMetadata, UserError> {
+        let metadata = &ep.metadata;
+        let role_md = self
+            .upload_role(&metadata.owner, &metadata.name, &role)
+            .await?;
+
+        // check if the (public) project needs to be re-approved
+        let state = match metadata.state {
+            PublishState::Public => {
+                let needs_approval = libraries::is_approval_required(&role.code);
+                if needs_approval {
+                    PublishState::PendingApproval
+                } else {
+                    PublishState::Public
+                }
+            }
+            _ => metadata.state.clone(),
+        };
+
+        let query = doc! {"id": &metadata.id};
+        let update = doc! {
+            "$set": {
+                &format!("roles.{}", role_id): role_md,
+                "saveState": SaveState::SAVED,
+                "state": state,
+            }
+        };
+        let options = FindOneAndUpdateOptions::builder()
+            .return_document(ReturnDocument::After)
+            .build();
+
+        let updated_metadata = self
+            .project_metadata
+            .find_one_and_update(query, update, options)
+            .await
+            .map_err(InternalError::DatabaseConnectionError)?
+            .ok_or(UserError::ProjectNotFoundError)?;
+
+        self.on_room_changed(updated_metadata.clone());
+
+        Ok(updated_metadata)
+    }
+
+    pub async fn delete_project(
+        &self,
+        dp: &auth::DeleteProject,
+    ) -> Result<ProjectMetadata, UserError> {
+        let query = doc! {"id": &dp.metadata.id};
+        let metadata = self
+            .project_metadata
+            .find_one_and_delete(query, None)
+            .await
+            .map_err(InternalError::DatabaseConnectionError)?
+            .ok_or(UserError::ProjectNotFoundError)?;
+
+        let paths = metadata
+            .roles
+            .clone()
+            .into_values()
+            .flat_map(|role| vec![role.code, role.media]);
+
+        join_all(paths.map(move |path| self.delete(path)))
+            .await
+            .into_iter()
+            .collect::<Result<Vec<_>, _>>()?;
+
+        self.network
+            .do_send(topology::ProjectDeleted::new(metadata.clone()));
+
+        Ok(metadata)
+    }
+
     // Helper functions
     async fn fetch_role(&self, metadata: &RoleMetadata) -> Result<RoleData, InternalError> {
         let (code, media) = join!(
@@ -429,6 +595,21 @@ impl ProjectActions {
             .map_err(|_err| InternalError::S3ContentError)?;
 
         String::from_utf8(byte_str).map_err(|_err| InternalError::S3ContentError)
+    }
+
+    async fn delete(&self, key: String) -> Result<(), UserError> {
+        let request = DeleteObjectRequest {
+            bucket: self.bucket.clone(),
+            key,
+            ..Default::default()
+        };
+
+        self.s3
+            .delete_object(request)
+            .await
+            .map_err(|_err| InternalError::S3Error)?;
+
+        Ok(())
     }
 
     async fn is_approval_required(&self, metadata: &ProjectMetadata) -> Result<bool, UserError> {
@@ -467,6 +648,14 @@ impl ProjectActions {
     }
 
     // FIXME: is there a better abstraction here that we could use?
+    fn on_room_changed(&self, updated_project: ProjectMetadata) {
+        self.network.do_send(topology::SendRoomState {
+            project: updated_project.clone(),
+        });
+
+        self.update_project_cache(updated_project);
+    }
+
     pub fn update_project_cache(&self, metadata: ProjectMetadata) {
         let mut cache = PROJECT_CACHE.write().unwrap();
         cache.put(metadata.id.clone(), metadata);
@@ -474,8 +663,8 @@ impl ProjectActions {
 
     fn get_cached_project_metadata<'a>(
         &self,
-        ids: impl Iterator<Item = &'a ProjectId>,
-    ) -> (Vec<ProjectMetadata>, Vec<&'a ProjectId>) {
+        ids: impl Iterator<Item = &'a api::ProjectId>,
+    ) -> (Vec<ProjectMetadata>, Vec<&'a api::ProjectId>) {
         let mut results = Vec::new();
         let mut missing_projects = Vec::new();
         let mut cache = PROJECT_CACHE.write().unwrap();
@@ -486,5 +675,41 @@ impl ProjectActions {
             }
         }
         (results, missing_projects)
+    }
+
+    async fn upload_role(
+        &self,
+        owner: &str,
+        project_name: &str,
+        role: &RoleData,
+    ) -> Result<RoleMetadata, UserError> {
+        let is_guest = owner.starts_with('_');
+        let top_level = if is_guest { "guests" } else { "users" };
+        let basepath = format!("{}/{}/{}/{}", top_level, owner, project_name, &role.name);
+        let src_path = format!("{}/code.xml", &basepath);
+        let media_path = format!("{}/media.xml", &basepath);
+
+        self.upload(&media_path, role.media.to_owned()).await?;
+        self.upload(&src_path, role.code.to_owned()).await?;
+
+        Ok(RoleMetadata {
+            name: role.name.to_owned(),
+            code: src_path,
+            media: media_path,
+            updated: DateTime::now(),
+        })
+    }
+
+    async fn upload(&self, key: &str, body: String) -> Result<PutObjectOutput, InternalError> {
+        let request = PutObjectRequest {
+            bucket: self.bucket.clone(),
+            key: String::from(key),
+            body: Some(String::into_bytes(body).into()),
+            ..Default::default()
+        };
+        self.s3.put_object(request).await.map_err(|err| {
+            warn!("Unable to upload to s3: {}", err);
+            InternalError::S3Error
+        })
     }
 }
