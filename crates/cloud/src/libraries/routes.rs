@@ -1,6 +1,7 @@
 use crate::app_data::AppData;
 use crate::common::api::{CreateLibraryData, LibraryMetadata, PublishState};
 use crate::errors::{InternalError, UserError};
+use crate::libraries::actions::LibraryActions;
 use crate::users::{can_edit_user, ensure_is_moderator, is_moderator};
 use actix_session::Session;
 use actix_web::{delete, get, post};
@@ -15,18 +16,9 @@ use rustrict::CensorStr;
 // TODO: add an endpoint for the official ones?
 #[get("/community/")]
 async fn list_community_libraries(app: web::Data<AppData>) -> Result<HttpResponse, UserError> {
-    let options = FindOptions::builder().sort(doc! {"name": 1}).build();
-    let public_filter = doc! {"state": PublishState::Public};
-    let cursor = app
-        .library_metadata
-        .find(public_filter, options)
-        .await
-        .map_err(InternalError::DatabaseConnectionError)?;
+    let actions: LibraryActions = app.into();
+    let libraries = actions.list_community_libraries().await?;
 
-    let libraries = cursor
-        .try_collect::<Vec<_>>()
-        .await
-        .map_err(InternalError::DatabaseConnectionError)?;
     Ok(HttpResponse::Ok().json(libraries))
 }
 
@@ -113,7 +105,7 @@ async fn save_user_library(
         Some(library) => {
             let needs_approval = match library.state {
                 PublishState::Private => false,
-                _ => is_approval_required(&data.blocks),
+                _ => utils::is_approval_required(&data.blocks),
             };
 
             let publish_state = if needs_approval {
