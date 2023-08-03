@@ -52,6 +52,7 @@ async fn list_user_projects(
     app: web::Data<AppData>,
     path: web::Path<(String,)>,
     req: HttpRequest,
+    session: Session,
 ) -> Result<HttpResponse, UserError> {
     let (username,) = path.into_inner();
     let query = doc! {"owner": &username, "saveState": SaveState::SAVED};
@@ -92,6 +93,7 @@ async fn list_shared_projects(
     app: web::Data<AppData>,
     path: web::Path<(String,)>,
     req: HttpRequest,
+    session: Session,
 ) -> Result<HttpResponse, UserError> {
     let (username,) = path.into_inner();
     ensure_can_edit_user(&app, &session, &username).await?;
@@ -143,9 +145,11 @@ async fn get_project_metadata(
         .map_err(InternalError::DatabaseConnectionError)?
         .ok_or(UserError::ProjectNotFoundError)?;
 
-    let auth_vp = auth::try_view_project(&app, &session, None, &metadata.id).await?;
+    let auth_vp = auth::try_view_project(&app, &req, None, &metadata.id).await?;
 
-    let metadata: api::ProjectMetadata = metadata.into();
+    let actions: ProjectActions = app.into();
+    let metadata = actions.get_project_metadata(&auth_vp);
+
     Ok(HttpResponse::Ok().json(metadata))
 }
 
@@ -156,10 +160,11 @@ async fn get_project_id_metadata(
     req: HttpRequest,
 ) -> Result<HttpResponse, UserError> {
     let (project_id,) = path.into_inner();
-    let auth_vp = auth::try_view_project(&app, &session, None, &project_id).await?;
-    let actions: ProjectActions = app.into();
+    let auth_vp = auth::try_view_project(&app, &req, None, &project_id).await?;
 
+    let actions: ProjectActions = app.into();
     let metadata = actions.get_project_metadata(&auth_vp);
+
     Ok(HttpResponse::Ok().json(metadata))
 }
 
@@ -170,7 +175,8 @@ async fn get_project(
     req: HttpRequest,
 ) -> Result<HttpResponse, UserError> {
     let (project_id,) = path.into_inner();
-    let auth_vp = auth::try_view_project(&app, &session, None, &project_id).await?;
+    let auth_vp = auth::try_view_project(&app, &req, None, &project_id).await?;
+
     let actions: ProjectActions = app.into();
     let project = actions.get_project(&auth_vp).await?;
 
@@ -184,7 +190,7 @@ async fn publish_project(
     req: HttpRequest,
 ) -> Result<HttpResponse, UserError> {
     let (project_id,) = path.into_inner();
-    let auth_ep = auth::try_edit_project(&app, &session, None, &project_id).await?;
+    let auth_ep = auth::try_edit_project(&app, &req, None, &project_id).await?;
     let actions: ProjectActions = app.into();
     let state = actions.publish_project(&auth_ep).await?;
     Ok(HttpResponse::Ok().json(state))
@@ -197,7 +203,7 @@ async fn unpublish_project(
     req: HttpRequest,
 ) -> Result<HttpResponse, UserError> {
     let (project_id,) = path.into_inner();
-    let auth_ep = auth::try_edit_project(&app, &session, None, &project_id).await?;
+    let auth_ep = auth::try_edit_project(&app, &req, None, &project_id).await?;
     let actions: ProjectActions = app.into();
     let state = actions.unpublish_project(&auth_ep).await?;
     Ok(HttpResponse::Ok().json(state))
@@ -210,7 +216,7 @@ async fn delete_project(
     req: HttpRequest,
 ) -> Result<HttpResponse, UserError> {
     let (project_id,) = path.into_inner();
-    let auth_dp = auth::try_delete_project(&app, &session, None, &project_id).await?;
+    let auth_dp = auth::try_delete_project(&app, &req, None, &project_id).await?;
     let actions: ProjectActions = app.into();
     let project = actions.delete_project(&auth_dp).await?;
 
@@ -228,7 +234,7 @@ async fn update_project(
 
     let query = doc! {"id": &project_id};
     let body = body.into_inner();
-    let auth_ep = auth::try_edit_project(&app, &session, body.client_id, &project_id).await?;
+    let auth_ep = auth::try_edit_project(&app, &req, body.client_id, &project_id).await?;
 
     let actions: ProjectActions = app.into();
     let metadata = actions.rename_project(&auth_ep, &body.name).await?;
@@ -251,7 +257,7 @@ async fn get_latest_project(
 ) -> Result<HttpResponse, UserError> {
     let (project_id,) = path.into_inner();
     let client_id = params.into_inner().client_id;
-    let auth_vp = auth::try_view_project(&app, &session, client_id, &project_id).await?;
+    let auth_vp = auth::try_view_project(&app, &req, client_id, &project_id).await?;
     let actions: ProjectActions = app.into();
     let project = actions.get_latest_project(&auth_vp).await?;
     Ok(HttpResponse::Ok().json(project))
@@ -271,7 +277,7 @@ async fn get_project_thumbnail(
     req: HttpRequest,
 ) -> Result<HttpResponse, UserError> {
     let (project_id,) = path.into_inner();
-    let auth_vp = auth::try_view_project(&app, &session, None, &project_id).await?;
+    let auth_vp = auth::try_view_project(&app, &req, None, &project_id).await?;
 
     let actions: ProjectActions = app.into();
     let thumbnail = actions
@@ -306,7 +312,7 @@ async fn create_role(
     req: HttpRequest,
 ) -> Result<HttpResponse, UserError> {
     let (project_id,) = path.into_inner();
-    let auth_ep = auth::try_edit_project(&app, &session, None, &project_id).await?;
+    let auth_ep = auth::try_edit_project(&app, &req, None, &project_id).await?;
 
     let actions: ProjectActions = app.into();
     let updated_metadata = actions
@@ -323,7 +329,7 @@ async fn get_role(
     req: HttpRequest,
 ) -> Result<HttpResponse, UserError> {
     let (project_id, role_id) = path.into_inner();
-    let auth_vp = auth::try_view_project(&app, &session, None, &project_id).await?;
+    let auth_vp = auth::try_view_project(&app, &req, None, &project_id).await?;
 
     let actions: ProjectActions = app.into();
     let role = actions.get_role(&auth_vp, role_id).await?;
@@ -339,7 +345,7 @@ async fn delete_role(
 ) -> Result<HttpResponse, UserError> {
     let (project_id, role_id) = path.into_inner();
 
-    let auth_ep = auth::try_edit_project(&app, &session, None, &project_id).await?;
+    let auth_ep = auth::try_edit_project(&app, &req, None, &project_id).await?;
 
     let actions: ProjectActions = app.into();
     let metadata = actions.delete_role(&auth_ep, role_id).await?;
@@ -355,7 +361,7 @@ async fn save_role(
     req: HttpRequest,
 ) -> Result<HttpResponse, UserError> {
     let (project_id, role_id) = path.into_inner();
-    let auth_ep = auth::try_edit_project(&app, &session, None, &project_id).await?;
+    let auth_ep = auth::try_edit_project(&app, &req, None, &project_id).await?;
     let actions: ProjectActions = app.into();
     let metadata = actions
         .save_role(&auth_ep, &role_id, body.into_inner())
@@ -373,7 +379,7 @@ async fn rename_role(
 ) -> Result<HttpResponse, UserError> {
     let (project_id, role_id) = path.into_inner();
     let body = body.into_inner();
-    let auth_ep = auth::try_edit_project(&app, &session, body.client_id, &project_id).await?;
+    let auth_ep = auth::try_edit_project(&app, &req, body.client_id, &project_id).await?;
 
     let actions: ProjectActions = app.into();
     let metadata = actions.rename_role(&auth_ep, role_id, &body.name).await?;
@@ -389,7 +395,7 @@ async fn get_latest_role(
 ) -> Result<HttpResponse, UserError> {
     let (project_id, role_id) = path.into_inner();
     let auth_vp =
-        auth::try_view_project(&app, &session, params.into_inner().client_id, &project_id).await?;
+        auth::try_view_project(&app, &req, params.into_inner().client_id, &project_id).await?;
 
     let actions: ProjectActions = app.into();
     let (_, role_data) = actions.fetch_role_data(&auth_vp, role_id).await?;
@@ -413,7 +419,7 @@ async fn report_latest_role(
 ) -> Result<HttpResponse, UserError> {
     let (project_id, role_id) = path.into_inner();
     let client_id = params.into_inner().client_id;
-    let auth_ep = auth::try_edit_project(&app, &session, client_id, &project_id).await?;
+    let auth_ep = auth::try_edit_project(&app, &req, client_id, &project_id).await?;
     let actions: ProjectActions = app.into();
     let resp = body.into_inner();
     actions

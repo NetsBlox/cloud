@@ -1,52 +1,47 @@
 pub(crate) mod metrics;
 
-use crate::common::api::{
-    oauth, LibraryMetadata, NewUser, ProjectId, PublishState, RoleId, UserRole,
-};
+use crate::common::api::{oauth, LibraryMetadata, NewUser, ProjectId, UserRole};
 use crate::groups::actions::GroupActions;
+use crate::libraries::actions::LibraryActions;
 use crate::network::actions::NetworkActions;
 use crate::projects::ProjectActions;
+use crate::services::hosts::actions::HostActions;
 use crate::users::actions::UserActions;
 use crate::{network, projects};
 //pub use self::
 use actix_web::rt::time;
-use futures::future::join_all;
 use lazy_static::lazy_static;
 use lettre::message::{Mailbox, MultiPart};
 use lettre::transport::smtp::authentication::Credentials;
 use lettre::{Address, Message, SmtpTransport, Transport};
 use log::{error, info, warn};
 use lru::LruCache;
-use mongodb::bson::{doc, DateTime, Document};
+use mongodb::bson::{doc, Document};
 use mongodb::options::{FindOneAndUpdateOptions, FindOptions, IndexOptions, ReturnDocument};
 use netsblox_cloud_common::api::{self, FriendInvite, FriendLinkState, GroupId};
 use rusoto_core::credential::StaticProvider;
 use rusoto_core::Region;
 use serde::{Deserialize, Serialize};
 use std::borrow::Borrow;
-use std::collections::{HashMap, HashSet};
+use std::collections::HashSet;
 use std::net::IpAddr;
 use std::sync::{Arc, RwLock};
 use std::time::Duration;
 use tokio::sync::RwLock as AsyncRwLock;
-use uuid::Uuid;
 
-use crate::common::api::{RoleData, SaveState};
+use crate::common::api::SaveState;
 use crate::common::{
     AuthorizedServiceHost, BannedAccount, CollaborationInvite, FriendLink, Group, Library,
     OAuthClient, OAuthToken, ProjectMetadata, SetPasswordToken, User,
 };
-use crate::common::{OccupantInvite, RoleMetadata, SentMessage};
+use crate::common::{OccupantInvite, SentMessage};
 use crate::config::Settings;
 use crate::errors::{InternalError, UserError};
-use crate::libraries;
-use crate::network::topology::{self, SetStorage, TopologyActor};
+use crate::network::topology::{SetStorage, TopologyActor};
 use actix::{Actor, Addr};
 use futures::TryStreamExt;
 use mongodb::{Client, Collection, IndexModel};
-use rusoto_s3::{
-    CreateBucketRequest, DeleteObjectRequest, PutObjectOutput, PutObjectRequest, S3Client, S3,
-};
+use rusoto_s3::{CreateBucketRequest, S3Client, S3};
 
 // This is lazy_static to ensure it is shared between threads
 // TODO: it would be nice to be able to configure the cache size from the settings
@@ -82,7 +77,7 @@ pub struct AppData {
     friends: Collection<FriendLink>,
     // TODO: make a "cached collection type"?
     pub(crate) project_metadata: Collection<ProjectMetadata>,
-    pub(crate) library_metadata: Collection<LibraryMetadata>,
+    pub(crate) library_metadata: Collection<LibraryMetadata>, // Do we even need this?
     pub(crate) libraries: Collection<Library>,
     pub(crate) authorized_services: Collection<AuthorizedServiceHost>,
 
@@ -943,16 +938,33 @@ impl From<actix_web::web::Data<AppData>> for GroupActions {
     }
 }
 
+impl From<actix_web::web::Data<AppData>> for LibraryActions {
+    fn from(app: actix_web::web::Data<AppData>) -> LibraryActions {
+        LibraryActions {
+            libraries: app.libraries,
+        }
+    }
+}
+
 impl From<actix_web::web::Data<AppData>> for UserActions {
     fn from(app: actix_web::web::Data<AppData>) -> UserActions {
         UserActions {
             users: app.users,
             banned_accounts: app.banned_accounts,
+            password_tokens: app.password_tokens,
             metrics: app.metrics,
 
             project_cache: PROJECT_CACHE.clone(),
             project_metadata: app.project_metadata,
             network: app.network,
+        }
+    }
+}
+
+impl From<actix_web::web::Data<AppData>> for HostActions {
+    fn from(app: actix_web::web::Data<AppData>) -> HostActions {
+        HostActions {
+            authorized_services: app.authorized_services,
         }
     }
 }

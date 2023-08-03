@@ -92,6 +92,26 @@ impl GroupActions {
         Ok(group.into())
     }
 
+    pub(crate) async fn set_group_hosts(
+        &self,
+        eg: &auth::EditGroup,
+        hosts: &[api::ServiceHost],
+    ) -> Result<api::Group, UserError> {
+        let query = doc! {"id": &eg.id};
+        let update = doc! {"$set": {"servicesHosts": hosts}};
+        let options = mongodb::options::FindOneAndUpdateOptions::builder()
+            .return_document(ReturnDocument::After)
+            .build();
+        let group = self
+            .groups
+            .find_one_and_update(query, update, options)
+            .await
+            .map_err(InternalError::DatabaseConnectionError)?
+            .ok_or(UserError::GroupNotFoundError)?;
+
+        Ok(group.into())
+    }
+
     pub(crate) async fn delete_group(
         &self,
         vg: &auth::DeleteGroup,

@@ -23,6 +23,7 @@ use super::strategies;
 pub(crate) struct UserActions {
     users: Collection<User>,
     banned_accounts: Collection<BannedAccount>,
+    password_tokens: Collection<SetPasswordToken>,
     metrics: metrics::Metrics,
 
     project_metadata: Collection<ProjectMetadata>,
@@ -187,6 +188,26 @@ impl UserActions {
         let user = self
             .users
             .find_one_and_update(query, update, None)
+            .await
+            .map_err(InternalError::DatabaseConnectionError)?
+            .ok_or(UserError::UserNotFoundError)?;
+
+        Ok(user.into())
+    }
+
+    pub(crate) async fn set_hosts(
+        &self,
+        eu: &auth::EditUser,
+        hosts: &[api::ServiceHost],
+    ) -> Result<api::User, UserError> {
+        let query = doc! {"username": &eu.username};
+        let update = doc! {"$set": {"servicesHosts": &hosts}};
+        let options = mongodb::options::FindOneAndUpdateOptions::builder()
+            .return_document(ReturnDocument::After)
+            .build();
+        let user = self
+            .users
+            .find_one_and_update(query, update, options)
             .await
             .map_err(InternalError::DatabaseConnectionError)?
             .ok_or(UserError::UserNotFoundError)?;

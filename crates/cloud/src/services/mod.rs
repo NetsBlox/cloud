@@ -1,5 +1,5 @@
-mod hosts;
-mod settings;
+pub(crate) mod hosts;
+pub(crate) mod settings;
 
 use actix_web::web;
 pub use hosts::ensure_is_authorized_host;
