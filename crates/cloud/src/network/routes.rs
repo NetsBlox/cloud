@@ -1,5 +1,4 @@
-pub mod topology;
-
+use super::topology;
 use crate::app_data::AppData;
 use crate::auth;
 use crate::common::api::{
@@ -11,7 +10,6 @@ use crate::common::{
 };
 use crate::errors::{InternalError, UserError};
 use crate::network::actions::NetworkActions;
-use crate::projects::{can_edit_project, ensure_can_edit_project, ensure_can_view_project};
 use crate::services::ensure_is_authorized_host;
 use crate::users::{ensure_can_edit_user, ensure_is_super_user};
 use actix::{Actor, Addr, AsyncContext, Handler, StreamHandler};
@@ -25,7 +23,6 @@ use mongodb::options::{FindOneAndUpdateOptions, ReturnDocument};
 use netsblox_cloud_common::ProjectMetadata;
 use serde::Deserialize;
 use serde_json::{json, Value};
-use topology::ClientCommand;
 
 #[post("/{client}/state")] // TODO: add token here (in a header), too?
 async fn set_client_state(
@@ -33,6 +30,7 @@ async fn set_client_state(
     path: web::Path<(ClientId,)>,
     body: web::Json<ClientStateData>,
     session: Session,
+    req: HttpRequest,
 ) -> Result<HttpResponse, UserError> {
     // TODO: should we allow users to set the client state for some other user?
     let username = session.get::<String>("username").ok().flatten();
@@ -59,16 +57,16 @@ async fn set_client_state(
             ClientState::External(ExternalClientState { address, app_id })
         }
         ClientState::Browser(client_state) => {
-            let metadata = ensure_can_view_project(
+            let auth_vp = auth::try_view_project(
                 &app,
-                &session,
+                &req,
                 Some(client_id.clone()),
                 &client_state.project_id,
             )
             .await?;
 
             let query = doc! {
-                "id": &metadata.id,
+                "id": &auth_vp.metadata.id,
                 "saveState": SaveState::CREATED
             };
             let update = doc! {
@@ -141,7 +139,7 @@ async fn get_room_state(
     req: HttpRequest,
 ) -> Result<HttpResponse, UserError> {
     let (project_id,) = path.into_inner();
-    let auth_vp = auth::try_view_project(&app, &session, None, &project_id).await?;
+    let auth_vp = auth::try_view_project(&app, &req, None, &project_id).await?;
 
     let actions: NetworkActions = app.into();
     let state = actions.get_room_state(&auth_vp).await?;
@@ -186,30 +184,23 @@ async fn invite_occupant(
     body: web::Json<OccupantInviteData>,
     path: web::Path<(ProjectId,)>,
     session: Session,
+    req: HttpRequest,
 ) -> Result<HttpResponse, UserError> {
     let (project_id,) = path.into_inner();
+    let data = body.into_inner();
+    let sender = data
+        .sender
+        .clone()
+        .or_else(|| session.get::<String>("username").ok().flatten())
+        .ok_or(UserError::LoginRequiredError)?;
 
-    let project = ensure_can_edit_project(&app, &session, None, &project_id).await?;
-    if !project.roles.contains_key(&body.role_id) {
-        return Err(UserError::RoleNotFoundError);
-    }
+    let auth_ep = auth::try_edit_project(&app, &req, None, &project_id).await?;
+    let auth_link = auth::try_invite_link(&app, &req, &sender, &data.username).await?;
 
-    let invite = OccupantInvite::new(project_id, body.into_inner());
-    app.occupant_invites
-        .insert_one(&invite, None)
-        .await
-        .map_err(InternalError::DatabaseConnectionError)?;
-
-    let inviter = session
-        .get::<String>("username")
-        .map_err(|_err| UserError::PermissionsError)?
-        .ok_or(UserError::PermissionsError)?;
-
-    app.network.do_send(topology::SendOccupantInvite {
-        inviter,
-        invite: invite.clone(),
-        project,
-    });
+    let actions: NetworkActions = app.into();
+    let invite = actions
+        .invite_occupant(&auth_ep, &auth_link, &data.role_id)
+        .await?;
 
     Ok(HttpResponse::Ok().json(invite))
 }
@@ -218,175 +209,61 @@ async fn invite_occupant(
 async fn evict_occupant(
     app: web::Data<AppData>,
     session: Session,
+    req: HttpRequest,
     path: web::Path<(ClientId,)>,
 ) -> Result<HttpResponse, UserError> {
     let (client_id,) = path.into_inner();
 
-    let metadata = ensure_can_evict_client(&app, &session, &client_id).await?;
+    let auth_eo = auth::try_evict_client(&app, &req, &client_id).await?;
 
-    app.network
-        .send(topology::EvictOccupant { client_id })
-        .await
-        .map_err(InternalError::ActixMessageError)?;
-
-    // Fetch the current state of the room
-    let room_state = if let Some(metadata) = metadata {
-        let task = app
-            .network
-            .send(topology::GetRoomState(metadata))
-            .await
-            .map_err(InternalError::ActixMessageError)?;
-
-        task.run().await
-    } else {
-        None
-    };
+    let actions: NetworkActions = app.into();
+    let room_state = actions.evict_occupant(&auth_eo).await?;
 
     Ok(HttpResponse::Ok().json(room_state))
-}
-
-async fn ensure_can_evict_client(
-    app: &AppData,
-    session: &Session,
-    client_id: &ClientId,
-) -> Result<Option<ProjectMetadata>, UserError> {
-    // Client can be evicted by project owners, collaborators
-    let metadata = get_project_for_client(app, client_id).await?;
-
-    if let Some(metadata) = metadata.clone() {
-        if can_edit_project(app, session, Some(client_id), &metadata).await? {
-            return Ok(Some(metadata));
-        }
-    }
-
-    // or by anyone who can edit the corresponding user
-    let task = app
-        .network
-        .send(topology::GetClientUsername(client_id.clone()))
-        .await
-        .map_err(InternalError::ActixMessageError)?;
-
-    let client_username = task.run().await;
-
-    match client_username {
-        Some(username) => ensure_can_edit_user(app, session, &username).await,
-        None => Err(UserError::PermissionsError), // TODO: allow guest to evict self?
-    }?;
-
-    Ok(metadata)
-}
-
-async fn get_project_for_client(
-    app: &AppData,
-    client_id: &ClientId,
-) -> Result<Option<ProjectMetadata>, UserError> {
-    let task = app
-        .network
-        .send(topology::GetClientState(client_id.clone()))
-        .await
-        .map_err(InternalError::ActixMessageError)?;
-
-    let client_state = task.run().await;
-    let project_id = client_state.and_then(|state| match state {
-        ClientState::Browser(BrowserClientState { project_id, .. }) => Some(project_id),
-        _ => None,
-    });
-
-    let metadata = if let Some(id) = project_id {
-        Some(app.get_project_metadatum(&id).await?)
-    } else {
-        None
-    };
-
-    Ok(metadata)
 }
 
 #[post("/id/{project_id}/trace/")]
 async fn start_network_trace(
     app: web::Data<AppData>,
-    session: Session,
+    req: HttpRequest,
     path: web::Path<(ProjectId,)>,
 ) -> Result<HttpResponse, UserError> {
     // TODO: do we need the client ID? Require login?
     let (project_id,) = path.into_inner();
-    ensure_can_edit_project(&app, &session, None, &project_id).await?;
-    let query = doc! {"id": project_id};
-    let new_trace = NetworkTraceMetadata::new();
-    let update = doc! {"$push": {"networkTraces": &new_trace}};
-    let options = FindOneAndUpdateOptions::builder()
-        .return_document(ReturnDocument::After)
-        .build();
-    let metadata = app
-        .project_metadata
-        .find_one_and_update(query, update, options)
-        .await
-        .map_err(InternalError::DatabaseConnectionError)?
-        .ok_or(UserError::ProjectNotFoundError)?;
+    let auth_vp = auth::try_view_project(&app, &req, None, &project_id).await?;
 
-    app.update_project_cache(metadata);
+    let actions: NetworkActions = app.into();
+    let new_trace = actions.start_network_trace(&auth_vp).await?;
+
     Ok(HttpResponse::Ok().json(new_trace))
 }
 
 #[post("/id/{project_id}/trace/{trace_id}/stop")]
 async fn stop_network_trace(
     app: web::Data<AppData>,
-    session: Session,
+    req: HttpRequest,
     path: web::Path<(ProjectId, String)>,
 ) -> Result<HttpResponse, UserError> {
     let (project_id, trace_id) = path.into_inner();
-    let metadata = ensure_can_edit_project(&app, &session, None, &project_id).await?;
+    let auth_vp = auth::try_view_project(&app, &req, None, &project_id).await?;
 
-    let trace = metadata
-        .network_traces
-        .iter()
-        .find(|trace| trace.id == trace_id)
-        .ok_or(UserError::NetworkTraceNotFoundError)?;
+    let actions: NetworkActions = app.into();
+    let trace = actions.stop_network_trace(&auth_vp, &trace_id).await?;
 
-    let query = doc! {
-        "id": project_id,
-        "networkTraces.id": &trace.id
-    };
-    let end_time = DateTime::now();
-    let update = doc! {
-        "$set": {
-            "networkTraces.$.endTime": end_time
-        }
-    };
-    let options = FindOneAndUpdateOptions::builder()
-        .return_document(ReturnDocument::After)
-        .build();
-
-    let metadata = app
-        .project_metadata
-        .find_one_and_update(query, update, options)
-        .await
-        .map_err(InternalError::DatabaseConnectionError)?
-        .ok_or(UserError::ProjectNotFoundError)?;
-
-    let trace = metadata
-        .network_traces
-        .iter()
-        .find(|t| t.id == trace.id)
-        .unwrap() // guaranteed to exist since it was checked in the query
-        .clone();
-
-    app.update_project_cache(metadata);
     Ok(HttpResponse::Ok().json(trace))
 }
 
 #[get("/id/{project_id}/trace/{trace_id}")]
 async fn get_network_trace_metadata(
     app: web::Data<AppData>,
-    session: Session,
+    req: HttpRequest,
     path: web::Path<(ProjectId, String)>,
 ) -> Result<HttpResponse, UserError> {
     let (project_id, trace_id) = path.into_inner();
-    let metadata = ensure_can_edit_project(&app, &session, None, &project_id).await?;
-    let trace = metadata
-        .network_traces
-        .iter()
-        .find(|trace| trace.id == trace_id)
-        .ok_or(UserError::NetworkTraceNotFoundError)?;
+    let auth_vp = auth::try_view_project(&app, &req, None, &project_id).await?;
+
+    let actions: NetworkActions = app.into();
+    let trace = actions.get_network_trace_metadata(&auth_vp, &trace_id)?;
 
     Ok(HttpResponse::Ok().json(trace))
 }
@@ -394,34 +271,14 @@ async fn get_network_trace_metadata(
 #[get("/id/{project_id}/trace/{trace_id}/messages")]
 async fn get_network_trace(
     app: web::Data<AppData>,
-    session: Session,
+    req: HttpRequest,
     path: web::Path<(ProjectId, String)>,
 ) -> Result<HttpResponse, UserError> {
     let (project_id, trace_id) = path.into_inner();
-    let metadata = ensure_can_edit_project(&app, &session, None, &project_id).await?;
-    let trace = metadata
-        .network_traces
-        .iter()
-        .find(|trace| trace.id == trace_id)
-        .ok_or(UserError::NetworkTraceNotFoundError)?;
+    let auth_vp = auth::try_view_project(&app, &req, None, &project_id).await?;
 
-    let start_time = trace.start_time;
-    let end_time = trace.end_time.unwrap_or_else(|| DateTime::now());
-
-    let query = doc! {
-        "projectId": project_id,
-        "time": {"$gt": start_time, "$lt": end_time}
-    };
-    let cursor = app
-        .recorded_messages
-        .find(query, None)
-        .await
-        .map_err(InternalError::DatabaseConnectionError)?;
-
-    let messages: Vec<SentMessage> = cursor
-        .try_collect::<Vec<_>>()
-        .await
-        .map_err(InternalError::DatabaseConnectionError)?;
+    let actions: NetworkActions = app.into();
+    let messages = actions.get_network_trace(&auth_vp, &trace_id).await?;
 
     Ok(HttpResponse::Ok().json(messages))
 }
@@ -429,48 +286,15 @@ async fn get_network_trace(
 #[delete("/id/{project_id}/trace/{trace_id}")]
 async fn delete_network_trace(
     app: web::Data<AppData>,
-    session: Session,
+    req: HttpRequest,
     path: web::Path<(ProjectId, String)>,
 ) -> Result<HttpResponse, UserError> {
     let (project_id, trace_id) = path.into_inner();
-    let metadata = ensure_can_edit_project(&app, &session, None, &project_id).await?;
-    let trace = metadata
-        .network_traces
-        .iter()
-        .find(|trace| trace.id == trace_id)
-        .ok_or(UserError::NetworkTraceNotFoundError)?;
+    let auth_vp = auth::try_view_project(&app, &req, None, &project_id).await?;
 
-    let query = doc! {"id": &project_id};
-    let update = doc! {"$pull": {"networkTraces": &trace}};
-    let options = FindOneAndUpdateOptions::builder()
-        .return_document(ReturnDocument::After)
-        .build();
-    let metadata = app
-        .project_metadata
-        .find_one_and_update(query, update, options)
-        .await
-        .map_err(InternalError::DatabaseConnectionError)?
-        .ok_or(UserError::ProjectNotFoundError)?;
+    let actions: NetworkActions = app.into();
+    let metadata = actions.delete_network_trace(&auth_vp, &trace_id).await?;
 
-    // remove all the messages
-    let earliest_start_time = metadata
-        .network_traces
-        .iter()
-        .map(|trace| trace.start_time)
-        .min()
-        .unwrap_or(DateTime::MAX);
-
-    let query = doc! {
-        "projectId": project_id,
-        "time": {"$lt": earliest_start_time}
-    };
-
-    app.recorded_messages
-        .delete_many(query, None)
-        .await
-        .map_err(InternalError::DatabaseConnectionError)?;
-
-    app.update_project_cache(metadata.clone());
     Ok(HttpResponse::Ok().json(metadata))
 }
 
@@ -497,26 +321,13 @@ async fn get_client_state(
     session: Session,
     req: HttpRequest,
 ) -> Result<HttpResponse, UserError> {
-    if ensure_is_authorized_host(&app, &req, None).await.is_err() {
-        ensure_is_super_user(&app, &session).await?
-    };
-
     let (client_id,) = path.into_inner();
+    let auth_vc = auth::try_view_client(&app, &req, &client_id).await?;
 
-    let task = app
-        .network
-        .send(topology::GetClientUsername(client_id.clone()))
-        .await
-        .map_err(InternalError::ActixMessageError)?;
-    let username = task.run().await;
-    let task = app
-        .network
-        .send(topology::GetClientState(client_id.clone()))
-        .await
-        .map_err(InternalError::ActixMessageError)?;
-    let state = task.run().await;
+    let actions: NetworkActions = app.into();
+    let client_info = actions.get_client_state(&auth_vc).await?;
 
-    Ok(HttpResponse::Ok().json(api::ClientInfo { username, state }))
+    Ok(HttpResponse::Ok().json(client_info))
 }
 
 pub fn config(cfg: &mut web::ServiceConfig) {

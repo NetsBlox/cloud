@@ -12,10 +12,10 @@ use crate::common::api;
 async fn list_groups(
     app: web::Data<AppData>,
     path: web::Path<(String,)>,
-    session: Session,
+    req: HttpRequest,
 ) -> Result<HttpResponse, UserError> {
     let (owner,) = path.into_inner();
-    let auth_vu = auth::try_view_user(&app, &session, None, &owner).await?;
+    let auth_vu = auth::try_view_user(&app, &req, None, &owner).await?;
 
     let actions: GroupActions = app.into();
     let groups = actions.list_groups(&auth_vu).await?;
@@ -27,11 +27,10 @@ async fn list_groups(
 async fn view_group(
     app: web::Data<AppData>,
     path: web::Path<(api::GroupId,)>,
-    session: Session,
     req: HttpRequest,
 ) -> Result<HttpResponse, UserError> {
     let (id,) = path.into_inner();
-    let auth_vg = auth::try_view_group(&app, &session, &id).await?;
+    let auth_vg = auth::try_view_group(&app, &req, &id).await?;
 
     let actions: GroupActions = app.into();
     let group = actions.view_group(&auth_vg).await?;
@@ -43,11 +42,11 @@ async fn view_group(
 async fn list_members(
     app: web::Data<AppData>,
     path: web::Path<(api::GroupId,)>,
-    session: Session,
+    req: HttpRequest,
 ) -> Result<HttpResponse, UserError> {
     let (id,) = path.into_inner();
 
-    let auth_vg = auth::try_view_group(&app, &session, &id).await?;
+    let auth_vg = auth::try_view_group(&app, &req, &id).await?;
 
     let actions: GroupActions = app.into();
     let members = actions.list_members(&auth_vg).await?;
@@ -60,11 +59,11 @@ async fn list_members(
 async fn create_group(
     app: web::Data<AppData>,
     path: web::Path<(String,)>,
-    session: Session,
+    req: HttpRequest,
     body: web::Json<api::CreateGroupData>,
 ) -> Result<HttpResponse, UserError> {
     let (owner,) = path.into_inner();
-    let auth_eu = auth::try_edit_user(&app, &session, None, &owner).await?;
+    let auth_eu = auth::try_edit_user(&app, &req, None, &owner).await?;
 
     let actions: GroupActions = app.into();
     let group = actions.create_group(&auth_eu, &body.name).await?;
@@ -77,10 +76,10 @@ async fn update_group(
     app: web::Data<AppData>,
     path: web::Path<(api::GroupId,)>,
     data: web::Json<api::UpdateGroupData>,
-    session: Session,
+    req: HttpRequest,
 ) -> Result<HttpResponse, UserError> {
     let (id,) = path.into_inner();
-    let auth_eg = auth::try_edit_group(&app, &session, &id).await?;
+    let auth_eg = auth::try_edit_group(&app, &req, Some(&id)).await?;
 
     let actions: GroupActions = app.into();
     let group = actions.rename_group(&auth_eg, &data.name).await?;
@@ -92,11 +91,11 @@ async fn update_group(
 async fn delete_group(
     app: web::Data<AppData>,
     path: web::Path<(api::GroupId,)>,
-    session: Session,
+    req: HttpRequest,
 ) -> Result<HttpResponse, UserError> {
     let (id,) = path.into_inner();
 
-    let auth_dg = auth::try_delete_group(&app, &session, &id).await?;
+    let auth_dg = auth::try_delete_group(&app, &req, &id).await?;
 
     let actions: GroupActions = app.into();
     let group = actions.delete_group(&auth_dg).await?;

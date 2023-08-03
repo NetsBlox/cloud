@@ -148,11 +148,6 @@ fn is_valid_name(name: &str) -> bool {
     LIBRARY_NAME.is_match(name) && !name.is_inappropriate()
 }
 
-// TODO: move this somewhere common to projects, libraries...
-pub fn is_approval_required(text: &str) -> bool {
-    text.contains("reportJSFunction") || text.is_inappropriate()
-}
-
 #[delete("/user/{owner}/{name}")]
 async fn delete_user_library(
     app: web::Data<AppData>,

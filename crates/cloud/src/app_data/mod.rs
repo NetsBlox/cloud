@@ -4,7 +4,9 @@ use crate::common::api::{
     oauth, LibraryMetadata, NewUser, ProjectId, PublishState, RoleId, UserRole,
 };
 use crate::groups::actions::GroupActions;
+use crate::network::actions::NetworkActions;
 use crate::projects::ProjectActions;
+use crate::users::actions::UserActions;
 use crate::{network, projects};
 //pub use self::
 use actix_web::rt::time;
@@ -17,7 +19,7 @@ use log::{error, info, warn};
 use lru::LruCache;
 use mongodb::bson::{doc, DateTime, Document};
 use mongodb::options::{FindOneAndUpdateOptions, FindOptions, IndexOptions, ReturnDocument};
-use netsblox_cloud_common::api::{FriendInvite, FriendLinkState, GroupId};
+use netsblox_cloud_common::api::{self, FriendInvite, FriendLinkState, GroupId};
 use rusoto_core::credential::StaticProvider;
 use rusoto_core::Region;
 use serde::{Deserialize, Serialize};
@@ -52,6 +54,10 @@ use rusoto_s3::{
 lazy_static! {
     static ref MEMBERSHIP_CACHE: Arc<AsyncRwLock<LruCache<String, bool>>> =
         Arc::new(AsyncRwLock::new(LruCache::new(1000)));
+}
+lazy_static! {
+    static ref PROJECT_CACHE: Arc<RwLock<LruCache<api::ProjectId, ProjectMetadata>>> =
+        Arc::new(RwLock::new(LruCache::new(500)));
 }
 lazy_static! {
     static ref ADMIN_CACHE: Arc<AsyncRwLock<LruCache<String, bool>>> =
@@ -910,6 +916,7 @@ impl AppData {
 impl From<actix_web::web::Data<AppData>> for ProjectActions {
     fn from(app: actix_web::web::Data<AppData>) -> ProjectActions {
         ProjectActions {
+            project_cache: PROJECT_CACHE.clone(),
             project_metadata: app.project_metadata,
             network: app.network,
             bucket: app.bucket,
@@ -918,9 +925,35 @@ impl From<actix_web::web::Data<AppData>> for ProjectActions {
     }
 }
 
+impl From<actix_web::web::Data<AppData>> for NetworkActions {
+    fn from(app: actix_web::web::Data<AppData>) -> NetworkActions {
+        NetworkActions {
+            project_cache: PROJECT_CACHE.clone(),
+            project_metadata: app.project_metadata,
+            occupant_invites: app.occupant_invites,
+            network: app.network,
+            recorded_messages: app.recorded_messages,
+        }
+    }
+}
+
 impl From<actix_web::web::Data<AppData>> for GroupActions {
     fn from(app: actix_web::web::Data<AppData>) -> GroupActions {
         GroupActions { groups: app.groups }
+    }
+}
+
+impl From<actix_web::web::Data<AppData>> for UserActions {
+    fn from(app: actix_web::web::Data<AppData>) -> UserActions {
+        UserActions {
+            users: app.users,
+            banned_accounts: app.banned_accounts,
+            metrics: app.metrics,
+
+            project_cache: PROJECT_CACHE.clone(),
+            project_metadata: app.project_metadata,
+            network: app.network,
+        }
     }
 }
 
@@ -956,18 +989,6 @@ async fn update_tor_nodes(tor_exit_nodes: &Collection<TorNode>) -> Result<(), Us
 #[derive(Deserialize, Serialize)]
 struct TorNode {
     addr: String,
-}
-
-fn get_unique_name(existing: Vec<String>, name: &str) -> String {
-    let names: HashSet<std::string::String> = HashSet::from_iter(existing.iter().cloned());
-    let base_name = name;
-    let mut role_name = base_name.to_owned();
-    let mut number: u8 = 2;
-    while names.contains(&role_name) {
-        role_name = format!("{} ({})", base_name, number);
-        number += 1;
-    }
-    role_name
 }
 
 fn is_opera_vpn(addr: &str) -> bool {

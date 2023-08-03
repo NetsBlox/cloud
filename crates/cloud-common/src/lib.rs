@@ -128,6 +128,16 @@ impl From<BannedAccount> for Bson {
     }
 }
 
+impl From<BannedAccount> for api::BannedAccount {
+    fn from(account: BannedAccount) -> Self {
+        api::BannedAccount {
+            username: account.username,
+            email: account.email,
+            banned_at: account.banned_at.into(),
+        }
+    }
+}
+
 #[derive(Serialize, Deserialize, Clone, Debug)]
 #[serde(rename_all = "camelCase")]
 pub struct Group {
@@ -306,6 +316,16 @@ impl From<NetworkTraceMetadata> for Bson {
     }
 }
 
+impl From<NetworkTraceMetadata> for netsblox_api_common::NetworkTraceMetadata {
+    fn from(trace: NetworkTraceMetadata) -> netsblox_api_common::NetworkTraceMetadata {
+        netsblox_api_common::NetworkTraceMetadata {
+            id: trace.id,
+            start_time: trace.start_time.into(),
+            end_time: trace.end_time.map(|t| t.into()),
+        }
+    }
+}
+
 #[derive(Deserialize, Serialize, Clone, Debug)]
 #[serde(rename_all = "camelCase")]
 pub struct ProjectMetadata {
@@ -464,12 +484,23 @@ pub struct OccupantInvite {
 }
 
 impl OccupantInvite {
-    pub fn new(project_id: ProjectId, req: OccupantInviteData) -> Self {
+    pub fn new(target: String, project_id: ProjectId, role_id: RoleId) -> Self {
         OccupantInvite {
             project_id,
-            username: req.username,
-            role_id: req.role_id,
+            username: target,
+            role_id,
             created_at: DateTime::from_system_time(SystemTime::now()),
+        }
+    }
+}
+
+impl From<OccupantInvite> for api::OccupantInvite {
+    fn from(invite: OccupantInvite) -> api::OccupantInvite {
+        api::OccupantInvite {
+            username: invite.username,
+            project_id: invite.project_id,
+            role_id: invite.role_id,
+            created_at: invite.created_at.into(),
         }
     }
 }
@@ -499,6 +530,18 @@ impl SentMessage {
             time,
             source,
             content,
+        }
+    }
+}
+
+impl From<SentMessage> for api::SentMessage {
+    fn from(msg: SentMessage) -> api::SentMessage {
+        api::SentMessage {
+            project_id: msg.project_id,
+            recipients: msg.recipients,
+            time: msg.time.into(),
+            source: msg.source,
+            content: msg.content,
         }
     }
 }

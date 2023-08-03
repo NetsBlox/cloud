@@ -66,6 +66,34 @@ impl PartialOrd for UserRole {
     }
 }
 
+#[derive(Deserialize, Serialize, Clone, Debug)]
+#[serde(rename_all = "camelCase")]
+pub struct NetworkTraceMetadata {
+    pub id: String,
+    pub start_time: SystemTime,
+    pub end_time: Option<SystemTime>,
+}
+
+#[derive(Deserialize, Serialize, Debug, Clone)]
+#[serde(rename_all = "camelCase")]
+pub struct SentMessage {
+    pub project_id: ProjectId,
+    pub recipients: Vec<ClientState>,
+    pub time: SystemTime,
+    pub source: ClientState,
+
+    pub content: serde_json::Value,
+}
+
+#[derive(Deserialize, Serialize, Debug, Clone)]
+#[serde(rename_all = "camelCase")]
+pub struct OccupantInvite {
+    pub username: String,
+    pub project_id: ProjectId,
+    pub role_id: RoleId,
+    pub created_at: SystemTime,
+}
+
 #[derive(Debug, Display, Error)]
 #[display(fmt = "Unable to parse user role. Expected admin, moderator, or user.")]
 pub struct UserRoleError;
@@ -94,6 +122,14 @@ pub struct ServiceHost {
 pub struct LinkedAccount {
     pub username: String,
     pub strategy: String,
+}
+
+#[derive(Serialize, Deserialize, Clone)]
+#[serde(rename_all = "camelCase")]
+pub struct BannedAccount {
+    pub username: String,
+    pub email: String,
+    pub banned_at: SystemTime,
 }
 
 #[derive(Serialize, Deserialize, Debug)]
@@ -534,6 +570,7 @@ pub struct OccupantState {
 pub struct OccupantInviteData {
     pub username: String,
     pub role_id: RoleId,
+    pub sender: Option<String>,
 }
 
 #[derive(Deserialize, Serialize, Debug, Clone)]

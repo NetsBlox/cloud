@@ -1,9 +1,10 @@
-mod actions;
+pub(crate) mod actions;
 mod email_template;
 mod html_template;
 mod strategies;
 
 use crate::app_data::AppData;
+use crate::auth;
 use crate::common::api;
 use crate::common::api::UserRole;
 use crate::common::{BannedAccount, SetPasswordToken, User};
@@ -11,6 +12,7 @@ use crate::errors::{InternalError, UserError};
 use crate::groups::ensure_can_edit_group;
 use crate::network::topology;
 use crate::services::ensure_is_authorized_host;
+use crate::users::actions::UserActions;
 use actix_session::Session;
 use actix_web::http::header;
 use actix_web::{get, patch, post, HttpRequest};
@@ -26,70 +28,13 @@ use serde::Deserialize;
 use sha2::{Digest, Sha512};
 use std::collections::HashSet;
 
-pub async fn is_moderator(app: &AppData, session: &Session) -> Result<bool, UserError> {
-    let role = get_session_role(app, session).await?;
-    Ok(role >= UserRole::Moderator)
-}
-
-pub async fn ensure_is_moderator(app: &AppData, session: &Session) -> Result<(), UserError> {
-    if !is_moderator(app, session).await? {
-        Err(UserError::PermissionsError)
-    } else {
-        Ok(())
-    }
-}
-
-pub async fn ensure_is_super_user(app: &AppData, session: &Session) -> Result<(), UserError> {
-    if !is_super_user(app, session).await? {
-        Err(UserError::PermissionsError)
-    } else {
-        Ok(())
-    }
-}
-
-pub async fn ensure_can_edit_user(
-    app: &AppData,
-    session: &Session,
-    username: &str,
-) -> Result<(), UserError> {
-    if !can_edit_user(app, session, username).await? {
-        Err(UserError::PermissionsError)
-    } else {
-        Ok(())
-    }
-}
-
-pub async fn can_edit_user(
-    app: &AppData,
-    session: &Session,
-    username: &str,
-) -> Result<bool, UserError> {
-    if let Some(requestor) = session.get::<String>("username").unwrap_or(None) {
-        let can_edit = requestor == username
-            || is_super_user(app, session).await?
-            || has_group_containing(app, &requestor, username).await?;
-        Ok(can_edit)
-    } else {
-        Err(UserError::LoginRequiredError)
-    }
-}
-
 #[get("/")]
-async fn list_users(app: web::Data<AppData>, session: Session) -> Result<HttpResponse, UserError> {
-    ensure_is_super_user(&app, &session).await?;
-    let query = doc! {};
-    let cursor = app
-        .users
-        .find(query, None)
-        .await
-        .map_err(InternalError::DatabaseConnectionError)?;
-    let users: Vec<api::User> = cursor
-        .try_collect::<Vec<_>>()
-        .await
-        .map_err(InternalError::DatabaseConnectionError)?
-        .into_iter()
-        .map(|user| user.into())
-        .collect();
+async fn list_users(app: web::Data<AppData>, req: HttpRequest) -> Result<HttpResponse, UserError> {
+    let auth_lu = auth::try_list_users(&app, &req).await?;
+
+    let actions: UserActions = app.into();
+    let users = actions.list_users(&auth_lu).await?;
+
     Ok(HttpResponse::Ok().json(users))
 }
 
@@ -105,85 +50,14 @@ async fn create_user(
         app.ensure_not_tor_ip(&addr).await?;
     }
 
-    ensure_valid_email(&user_data.email)?;
     // TODO: record IP? Definitely
     // TODO: add more security features. Maybe activate accounts?
 
-    let role = user_data.role.as_ref().unwrap_or(&UserRole::User);
-    match role {
-        UserRole::User => {
-            if let Some(group_id) = &user_data.group_id {
-                ensure_can_edit_group(&app, &session, group_id).await?;
-            }
-        }
-        _ => ensure_is_super_user(&app, &session).await?,
-    };
+    let auth_cu = auth::try_create_user(&app, &req, user_data.into_inner()).await?;
+    let actions: UserActions = app.into();
+    let user = actions.create_user(auth_cu).await?;
 
-    let user: User = user_data.into_inner().into();
-    ensure_valid_username(&user.username)?;
-
-    let query = doc! {"email": &user.email};
-    if let Some(_account) = app
-        .banned_accounts
-        .find_one(query, None)
-        .await
-        .map_err(InternalError::DatabaseConnectionError)?
-    {
-        return Err(UserError::InvalidEmailAddress);
-    }
-
-    let query = doc! {"username": &user.username};
-    let update = doc! {"$setOnInsert": &user};
-    let options = mongodb::options::FindOneAndUpdateOptions::builder()
-        .return_document(ReturnDocument::Before)
-        .upsert(true)
-        .build();
-    let existing_user = app
-        .users
-        .find_one_and_update(query, update, options)
-        .await
-        .map_err(InternalError::DatabaseConnectionError)?;
-
-    if existing_user.is_some() {
-        Err(UserError::UserExistsError)
-    } else {
-        if let Some(group_id) = user.group_id.clone() {
-            app.group_members_updated(&group_id).await;
-        }
-        app.metrics.record_signup();
-        let user: api::User = user.into();
-        Ok(HttpResponse::Ok().json(user))
-    }
-}
-
-fn ensure_valid_email(email: &str) -> Result<(), UserError> {
-    email
-        .parse::<Address>()
-        .map_err(|_err| UserError::InvalidEmailAddress)?;
-
-    Ok(())
-}
-
-fn ensure_valid_username(name: &str) -> Result<(), UserError> {
-    if !is_valid_username(name) {
-        Err(UserError::InvalidUsername)
-    } else {
-        Ok(())
-    }
-}
-
-fn is_valid_username(name: &str) -> bool {
-    let max_len = 25;
-    let min_len = 3;
-    let char_count = name.chars().count();
-    lazy_static! {
-        static ref USERNAME_REGEX: Regex = Regex::new(r"^[a-zA-Z][a-zA-Z0-9_\-]+$").unwrap();
-    }
-
-    char_count > min_len
-        && char_count < max_len
-        && USERNAME_REGEX.is_match(name)
-        && !name.is_inappropriate()
+    Ok(HttpResponse::Ok().json(user))
 }
 
 #[post("/login")]
@@ -199,69 +73,12 @@ async fn login(
     }
 
     let request = request.into_inner();
-    let client_id = request.client_id.clone();
-    let user = strategies::login(&app, request.credentials).await?;
 
-    let query = doc! {"$or": [
-        {"username": &user.username},
-        {"email": &user.email},
-    ]};
+    let actions: UserActions = app.into();
+    let user = actions.login(request).await?;
 
-    if let Some(_account) = app
-        .banned_accounts
-        .find_one(query.clone(), None)
-        .await
-        .map_err(InternalError::DatabaseConnectionError)?
-    {
-        return Err(UserError::BannedUserError);
-    }
-
-    if let Some(client_id) = client_id {
-        update_ownership(&app, &client_id, &user.username).await?;
-        app.network.do_send(topology::SetClientUsername {
-            id: client_id,
-            username: Some(user.username.clone()),
-        });
-    }
     session.insert("username", &user.username).unwrap();
-    app.metrics.record_login();
-    let user: api::User = user.into();
     Ok(HttpResponse::Ok().json(user))
-}
-
-async fn update_ownership(
-    app: &AppData,
-    client_id: &api::ClientId,
-    username: &str,
-) -> Result<(), UserError> {
-    // Update ownership of current project
-    if !client_id.as_str().starts_with('_') {
-        return Err(UserError::InvalidClientIdError);
-    }
-
-    let query = doc! {"owner": client_id.as_str()};
-    if let Some(metadata) = app
-        .project_metadata
-        .find_one(query.clone(), None)
-        .await
-        .map_err(InternalError::DatabaseConnectionError)?
-    {
-        // No project will be found for non-NetsBlox clients such as PyBlox
-        let name = app.get_valid_project_name(username, &metadata.name).await?;
-        let update = doc! {"$set": {"owner": username, "name": name}};
-        let options = mongodb::options::FindOneAndUpdateOptions::builder()
-            .return_document(ReturnDocument::After)
-            .build();
-        let new_metadata = app
-            .project_metadata
-            .find_one_and_update(query, update, Some(options))
-            .await
-            .map_err(InternalError::DatabaseConnectionError)?
-            .ok_or(UserError::ProjectNotFoundError)?;
-
-        app.on_room_changed(new_metadata);
-    }
-    Ok(())
 }
 
 #[derive(Deserialize, Debug)]
@@ -281,10 +98,9 @@ async fn logout(
     session.purge();
 
     if let Some(client_id) = &params.client_id {
-        app.network.do_send(topology::SetClientUsername {
-            id: client_id.clone(),
-            username: None,
-        });
+        // FIXME: this method should be updated as it currently could be used to half logout other users...
+        let actions: UserActions = app.into();
+        let user = actions.logout(&client_id);
     }
 
     HttpResponse::Ok().finish()
@@ -303,24 +119,13 @@ async fn whoami(session: Session) -> Result<HttpResponse, UserError> {
 async fn ban_user(
     app: web::Data<AppData>,
     path: web::Path<(String,)>,
-    session: Session,
+    req: HttpRequest,
 ) -> Result<HttpResponse, UserError> {
     let (username,) = path.into_inner();
-    ensure_can_edit_user(&app, &session, &username).await?;
+    let auth_bu = auth::try_ban_user(&app, &req, &username).await?;
 
-    let query = doc! {"username": username};
-    let user = app
-        .users
-        .find_one(query, None)
-        .await
-        .map_err(InternalError::DatabaseConnectionError)?
-        .ok_or(UserError::UserNotFoundError)?;
-
-    let account = BannedAccount::new(user.username, user.email);
-    app.banned_accounts
-        .insert_one(&account, None)
-        .await
-        .map_err(InternalError::DatabaseConnectionError)?;
+    let actions: UserActions = app.into();
+    let account = actions.ban_user(&auth_bu).await?;
 
     Ok(HttpResponse::Ok().json(account))
 }
@@ -329,24 +134,16 @@ async fn ban_user(
 async fn delete_user(
     app: web::Data<AppData>,
     path: web::Path<(String,)>,
-    session: Session,
+    req: HttpRequest,
 ) -> Result<HttpResponse, UserError> {
     let (username,) = path.into_inner();
-    ensure_can_edit_user(&app, &session, &username).await?;
 
-    let query = doc! {"username": username};
-    let user = app
-        .users
-        .find_one_and_delete(query, None)
-        .await
-        .map_err(InternalError::DatabaseConnectionError)?
-        .ok_or(UserError::UserNotFoundError)?;
+    let auth_eu = auth::try_edit_user(&app, &req, None, &username).await?;
 
-    if let Some(group_id) = user.group_id {
-        app.group_members_updated(&group_id).await;
-    }
+    let actions: UserActions = app.into();
+    let user = actions.delete_user(&auth_eu).await?;
 
-    Ok(HttpResponse::Ok().finish())
+    Ok(HttpResponse::Ok().json(user))
 }
 
 #[post("/{username}/password")]
@@ -361,38 +158,17 @@ async fn reset_password(
     }
 
     let (username,) = path.into_inner();
-    let user = app
-        .users
-        .find_one(doc! {"username": &username}, None)
-        .await
-        .map_err(InternalError::DatabaseConnectionError)?
-        .ok_or(UserError::UserNotFoundError)?;
+    let auth_eu = auth::try_edit_user(&app, &req, None, &username).await?;
 
-    let token = SetPasswordToken::new(username.clone());
+    let actions: UserActions = app.into();
+    let url_path = actions.reset_password(&auth_eu).await?;
 
-    let update = doc! {"$setOnInsert": &token};
-    let query = doc! {"username": &username};
-    let options = mongodb::options::UpdateOptions::builder()
-        .upsert(true)
-        .build();
-
-    let result = app
-        .password_tokens
-        .update_one(query, update, options)
-        .await
-        .map_err(InternalError::DatabaseConnectionError)?;
-
-    if result.upserted_id.is_none() {
-        return Err(UserError::PasswordResetLinkSentError);
-    }
-
+    // TODO: make a better type to return from reset_password like `ResetEmail`
     let subject = "Password Reset Request";
-    let url = format!(
-        "{}/users/{}/password?token={}",
-        app.settings.public_url, &username, &token.secret
-    );
+    let url = format!("{}{}", app.settings.public_url, url_path);
     let message = email_template::set_password_email(&username, &url);
     app.send_email(&user.email, subject, message).await?;
+
     Ok(HttpResponse::Ok().finish())
 }
 
@@ -419,62 +195,15 @@ async fn change_password(
     path: web::Path<(String,)>,
     data: web::Json<String>,
     params: web::Query<SetPasswordQueryParams>,
-    session: Session,
+    req: HttpRequest,
 ) -> Result<HttpResponse, UserError> {
     let (username,) = path.into_inner();
-    match params.into_inner().token {
-        Some(token) => {
-            let query = doc! {"secret": token};
-            let token = app
-                .password_tokens
-                .find_one_and_delete(query, None) // If the username is incorrect, the token is compromised (so delete either way)
-                .await
-                .map_err(InternalError::DatabaseConnectionError)?
-                .ok_or(UserError::PermissionsError)?;
 
-            if token.username != username {
-                return Err(UserError::PermissionsError);
-            }
-        }
-        None => ensure_can_edit_user(&app, &session, &username).await?,
-    }
+    let auth_sp = auth::try_set_password(&app, &req, &username, params.into_inner().token).await?;
+    let actions: UserActions = app.into();
+    let user = actions.set_password(&auth_sp, data.into_inner()).await?;
 
-    set_password(&app, &username, data.into_inner()).await?;
-    Ok(HttpResponse::Ok().finish())
-}
-
-async fn set_password(app: &AppData, username: &str, password: String) -> Result<(), UserError> {
-    let query = doc! {"username": username};
-    let user = app
-        .users
-        .find_one(query.clone(), None)
-        .await
-        .map_err(InternalError::DatabaseConnectionError)?
-        .ok_or(UserError::UserNotFoundError)?;
-
-    let update = doc! {
-        "$set": {
-            "hash": sha512(&(password + &user.salt))
-        }
-    };
-    let result = app
-        .users
-        .update_one(query, update, None)
-        .await
-        .map_err(InternalError::DatabaseConnectionError)?;
-
-    if result.matched_count == 0 {
-        Err(UserError::UserNotFoundError)
-    } else {
-        Ok(())
-    }
-}
-
-pub(crate) fn sha512(text: &str) -> String {
-    let mut hasher = Sha512::new();
-    hasher.update(text);
-    let hash = hasher.finalize();
-    hex::encode(hash)
+    Ok(HttpResponse::Ok().json(user))
 }
 
 #[get("/{username}")]
@@ -485,19 +214,10 @@ async fn view_user(
     req: HttpRequest,
 ) -> Result<HttpResponse, UserError> {
     let (username,) = path.into_inner();
+    let auth_vu = auth::try_view_user(&app, &req, None, &username).await?;
 
-    if ensure_is_authorized_host(&app, &req, None).await.is_err() {
-        ensure_can_edit_user(&app, &session, &username).await?;
-    }
-
-    let query = doc! {"username": username};
-    let user: api::User = app
-        .users
-        .find_one(query, None)
-        .await
-        .map_err(InternalError::DatabaseConnectionError)?
-        .ok_or(UserError::UserNotFoundError)?
-        .into();
+    let actions: UserActions = app.into();
+    let user = actions.get_user(&auth_vu).await?;
 
     Ok(HttpResponse::Ok().json(user))
 }
@@ -507,43 +227,17 @@ async fn link_account(
     app: web::Data<AppData>,
     path: web::Path<(String,)>,
     creds: web::Json<strategies::Credentials>,
-    session: Session,
+    req: HttpRequest,
 ) -> Result<HttpResponse, UserError> {
     let (username,) = path.into_inner();
-    ensure_can_edit_user(&app, &session, &username).await?;
+
     let creds = creds.into_inner();
+    let auth_eu = auth::try_edit_user(&app, &req, None, &username).await?;
 
-    if let strategies::Credentials::NetsBlox { .. } = creds {
-        return Err(UserError::InvalidAccountTypeError);
-    };
+    let actions: UserActions = app.into();
+    let user = actions.link_account(&auth_eu, creds).await?;
 
-    strategies::authenticate(&creds).await?;
-
-    let account: api::LinkedAccount = creds.into();
-    let query = doc! {"linkedAccounts": {"$elemMatch": &account}};
-    let existing = app
-        .users
-        .find_one(query, None)
-        .await
-        .map_err(InternalError::DatabaseConnectionError)?;
-
-    if existing.is_some() {
-        return Err(UserError::AccountAlreadyLinkedError);
-    }
-
-    let query = doc! {"username": &username};
-    let update = doc! {"$push": {"linkedAccounts": &account}};
-    let result = app
-        .users
-        .update_one(query, update, None)
-        .await
-        .map_err(InternalError::DatabaseConnectionError)?;
-
-    if result.matched_count == 0 {
-        Ok(HttpResponse::NotFound().finish())
-    } else {
-        Ok(HttpResponse::Ok().finish())
-    }
+    Ok(HttpResponse::Ok().json(user))
 }
 
 #[post("/{username}/unlink")]
@@ -551,22 +245,15 @@ async fn unlink_account(
     app: web::Data<AppData>,
     path: web::Path<(String,)>,
     account: web::Json<api::LinkedAccount>,
-    session: Session,
+    req: HttpRequest,
 ) -> Result<HttpResponse, UserError> {
     let (username,) = path.into_inner();
-    ensure_can_edit_user(&app, &session, &username).await?;
-    let query = doc! {"username": username};
-    let update = doc! {"$pull": {"linkedAccounts": &account.into_inner()}};
-    let options = mongodb::options::FindOneAndUpdateOptions::builder()
-        .return_document(ReturnDocument::After)
-        .build();
+    let auth_eu = auth::try_edit_user(&app, &req, None, &username).await?;
 
-    let user = app
-        .users
-        .find_one_and_update(query, update, options)
-        .await
-        .map_err(InternalError::DatabaseConnectionError)?
-        .ok_or(UserError::UserNotFoundError)?;
+    let actions: UserActions = app.into();
+    let user = actions
+        .unlink_account(&auth_eu, account.into_inner())
+        .await?;
 
     Ok(HttpResponse::Ok().json(user))
 }

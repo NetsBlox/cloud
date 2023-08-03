@@ -12,45 +12,22 @@ use crate::errors::{InternalError, UserError};
 use crate::projects::actions::ProjectActions;
 use crate::users::{can_edit_user, ensure_can_edit_user};
 use actix_session::Session;
-use actix_web::{delete, get, patch, post};
+use actix_web::{delete, get, patch, post, HttpRequest};
 use actix_web::{web, HttpResponse};
 use futures::stream::TryStreamExt;
-use lazy_static::lazy_static;
 use log::info;
 use mongodb::bson::doc;
 use mongodb::Cursor;
 use regex::Regex;
-use rustrict::CensorStr;
 use serde::Deserialize;
 use uuid::Uuid;
-
-pub(crate) fn ensure_valid_name(name: &str) -> Result<(), UserError> {
-    if !is_valid_name(name) {
-        Err(UserError::InvalidRoleOrProjectName)
-    } else {
-        Ok(())
-    }
-}
-
-fn is_valid_name(name: &str) -> bool {
-    let max_len = 25;
-    let min_len = 1;
-    let char_count = name.chars().count();
-    lazy_static! {
-        static ref NAME_REGEX: Regex = Regex::new(r"^[a-zA-Z][a-zA-Z0-9_ \(\)\-]*$").unwrap();
-    }
-
-    char_count >= min_len
-        && char_count <= max_len
-        && NAME_REGEX.is_match(name)
-        && !name.is_inappropriate()
-}
 
 #[post("/")]
 async fn create_project(
     app: web::Data<AppData>,
     body: web::Json<CreateProjectData>,
     session: Session,
+    req: HttpRequest,
 ) -> Result<HttpResponse, UserError> {
     let project_data = body.into_inner();
 
@@ -63,7 +40,7 @@ async fn create_project(
         .or_else(|| client_id.clone().map(|id| id.as_str().to_string()))
         .ok_or(UserError::LoginRequiredError)?;
 
-    let auth_eu = auth::try_edit_user(&app, &session, client_id.as_ref(), &owner).await?;
+    let auth_eu = auth::try_edit_user(&app, &req, client_id.as_ref(), &owner).await?;
     let actions: ProjectActions = app.into();
     let metadata = actions.create_project(&auth_eu, project_data).await?;
 
@@ -74,7 +51,7 @@ async fn create_project(
 async fn list_user_projects(
     app: web::Data<AppData>,
     path: web::Path<(String,)>,
-    session: Session,
+    req: HttpRequest,
 ) -> Result<HttpResponse, UserError> {
     let (username,) = path.into_inner();
     let query = doc! {"owner": &username, "saveState": SaveState::SAVED};
@@ -114,7 +91,7 @@ async fn get_visible_projects(
 async fn list_shared_projects(
     app: web::Data<AppData>,
     path: web::Path<(String,)>,
-    session: Session,
+    req: HttpRequest,
 ) -> Result<HttpResponse, UserError> {
     let (username,) = path.into_inner();
     ensure_can_edit_user(&app, &session, &username).await?;
@@ -134,7 +111,7 @@ async fn list_shared_projects(
 async fn get_project_named(
     app: web::Data<AppData>,
     path: web::Path<(String, String)>,
-    session: Session,
+    req: HttpRequest,
 ) -> Result<HttpResponse, UserError> {
     let (owner, name) = path.into_inner();
     let query = doc! {"owner": owner, "name": name};
@@ -145,7 +122,7 @@ async fn get_project_named(
         .map_err(InternalError::DatabaseConnectionError)?
         .ok_or(UserError::ProjectNotFoundError)?;
 
-    let auth_vp = auth::try_view_project(&app, &session, None, &metadata.id).await?;
+    let auth_vp = auth::try_view_project(&app, &req, None, &metadata.id).await?;
     let actions: ProjectActions = app.into();
     let project = actions.get_project(&auth_vp).await?;
     Ok(HttpResponse::Ok().json(project))
@@ -155,7 +132,7 @@ async fn get_project_named(
 async fn get_project_metadata(
     app: web::Data<AppData>,
     path: web::Path<(String, String)>,
-    session: Session,
+    req: HttpRequest,
 ) -> Result<HttpResponse, UserError> {
     let (owner, name) = path.into_inner();
     let query = doc! {"owner": owner, "name": name};
@@ -176,7 +153,7 @@ async fn get_project_metadata(
 async fn get_project_id_metadata(
     app: web::Data<AppData>,
     path: web::Path<(ProjectId,)>,
-    session: Session,
+    req: HttpRequest,
 ) -> Result<HttpResponse, UserError> {
     let (project_id,) = path.into_inner();
     let auth_vp = auth::try_view_project(&app, &session, None, &project_id).await?;
@@ -190,7 +167,7 @@ async fn get_project_id_metadata(
 async fn get_project(
     app: web::Data<AppData>,
     path: web::Path<(ProjectId,)>,
-    session: Session,
+    req: HttpRequest,
 ) -> Result<HttpResponse, UserError> {
     let (project_id,) = path.into_inner();
     let auth_vp = auth::try_view_project(&app, &session, None, &project_id).await?;
@@ -204,7 +181,7 @@ async fn get_project(
 async fn publish_project(
     app: web::Data<AppData>,
     path: web::Path<(ProjectId,)>,
-    session: Session,
+    req: HttpRequest,
 ) -> Result<HttpResponse, UserError> {
     let (project_id,) = path.into_inner();
     let auth_ep = auth::try_edit_project(&app, &session, None, &project_id).await?;
@@ -217,7 +194,7 @@ async fn publish_project(
 async fn unpublish_project(
     app: web::Data<AppData>,
     path: web::Path<(ProjectId,)>,
-    session: Session,
+    req: HttpRequest,
 ) -> Result<HttpResponse, UserError> {
     let (project_id,) = path.into_inner();
     let auth_ep = auth::try_edit_project(&app, &session, None, &project_id).await?;
@@ -230,7 +207,7 @@ async fn unpublish_project(
 async fn delete_project(
     app: web::Data<AppData>,
     path: web::Path<(ProjectId,)>,
-    session: Session,
+    req: HttpRequest,
 ) -> Result<HttpResponse, UserError> {
     let (project_id,) = path.into_inner();
     let auth_dp = auth::try_delete_project(&app, &session, None, &project_id).await?;
@@ -245,7 +222,7 @@ async fn update_project(
     app: web::Data<AppData>,
     path: web::Path<(ProjectId,)>,
     body: web::Json<UpdateProjectData>,
-    session: Session,
+    req: HttpRequest,
 ) -> Result<HttpResponse, UserError> {
     let (project_id,) = path.into_inner();
 
@@ -270,7 +247,7 @@ async fn get_latest_project(
     app: web::Data<AppData>,
     path: web::Path<(ProjectId,)>,
     params: web::Query<GetProjectRoleParams>,
-    session: Session,
+    req: HttpRequest,
 ) -> Result<HttpResponse, UserError> {
     let (project_id,) = path.into_inner();
     let client_id = params.into_inner().client_id;
@@ -291,7 +268,7 @@ async fn get_project_thumbnail(
     app: web::Data<AppData>,
     path: web::Path<(ProjectId,)>,
     params: web::Query<ThumbnailParams>,
-    session: Session,
+    req: HttpRequest,
 ) -> Result<HttpResponse, UserError> {
     let (project_id,) = path.into_inner();
     let auth_vp = auth::try_view_project(&app, &session, None, &project_id).await?;
@@ -326,7 +303,7 @@ async fn create_role(
     app: web::Data<AppData>,
     body: web::Json<CreateRoleData>,
     path: web::Path<(ProjectId,)>,
-    session: Session,
+    req: HttpRequest,
 ) -> Result<HttpResponse, UserError> {
     let (project_id,) = path.into_inner();
     let auth_ep = auth::try_edit_project(&app, &session, None, &project_id).await?;
@@ -343,7 +320,7 @@ async fn create_role(
 async fn get_role(
     app: web::Data<AppData>,
     path: web::Path<(ProjectId, RoleId)>,
-    session: Session,
+    req: HttpRequest,
 ) -> Result<HttpResponse, UserError> {
     let (project_id, role_id) = path.into_inner();
     let auth_vp = auth::try_view_project(&app, &session, None, &project_id).await?;
@@ -358,7 +335,7 @@ async fn get_role(
 async fn delete_role(
     app: web::Data<AppData>,
     path: web::Path<(ProjectId, RoleId)>,
-    session: Session,
+    req: HttpRequest,
 ) -> Result<HttpResponse, UserError> {
     let (project_id, role_id) = path.into_inner();
 
@@ -375,7 +352,7 @@ async fn save_role(
     app: web::Data<AppData>,
     body: web::Json<RoleData>,
     path: web::Path<(ProjectId, RoleId)>,
-    session: Session,
+    req: HttpRequest,
 ) -> Result<HttpResponse, UserError> {
     let (project_id, role_id) = path.into_inner();
     let auth_ep = auth::try_edit_project(&app, &session, None, &project_id).await?;
@@ -392,7 +369,7 @@ async fn rename_role(
     app: web::Data<AppData>,
     body: web::Json<UpdateRoleData>,
     path: web::Path<(ProjectId, RoleId)>,
-    session: Session,
+    req: HttpRequest,
 ) -> Result<HttpResponse, UserError> {
     let (project_id, role_id) = path.into_inner();
     let body = body.into_inner();
@@ -408,7 +385,7 @@ async fn get_latest_role(
     app: web::Data<AppData>,
     path: web::Path<(ProjectId, RoleId)>,
     params: web::Query<GetProjectRoleParams>,
-    session: Session,
+    req: HttpRequest,
 ) -> Result<HttpResponse, UserError> {
     let (project_id, role_id) = path.into_inner();
     let auth_vp =
@@ -432,7 +409,7 @@ async fn report_latest_role(
     path: web::Path<(ProjectId, RoleId)>,
     body: web::Json<api::RoleDataResponse>,
     params: web::Query<ReportRoleParams>,
-    session: Session,
+    req: HttpRequest,
 ) -> Result<HttpResponse, UserError> {
     let (project_id, role_id) = path.into_inner();
     let client_id = params.into_inner().client_id;
@@ -450,10 +427,10 @@ async fn report_latest_role(
 async fn list_collaborators(
     app: web::Data<AppData>,
     path: web::Path<(ProjectId,)>,
-    session: Session,
+    req: HttpRequest,
 ) -> Result<HttpResponse, UserError> {
     let (project_id,) = path.into_inner();
-    let metadata = auth::try_view_project(&app, &session, None, &project_id).await?;
+    let metadata = auth::try_view_project(&app, &req, None, &project_id).await?;
 
     let actions: ProjectActions = app.into();
     let collaborators = actions.get_collaborators(&metadata);
@@ -465,10 +442,10 @@ async fn list_collaborators(
 async fn remove_collaborator(
     app: web::Data<AppData>,
     path: web::Path<(ProjectId, String)>,
-    session: Session,
+    req: HttpRequest,
 ) -> Result<HttpResponse, UserError> {
     let (project_id, username) = path.into_inner();
-    let edit_proj = auth::try_edit_project(&app, &session, None, &project_id).await?;
+    let edit_proj = auth::try_edit_project(&app, &req, None, &project_id).await?;
     let actions: ProjectActions = app.into();
     let metadata = actions.remove_collaborator(&edit_proj, &username).await?;
 

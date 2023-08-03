@@ -5,7 +5,7 @@ use std::sync::{Arc, RwLock};
 // TODO: is there any shared fn-ality across actions?
 use crate::errors::{InternalError, UserError};
 use crate::network::topology::{self, TopologyActor};
-use crate::{auth, libraries};
+use crate::{auth, libraries, utils};
 use actix::Addr;
 use actix_web::web::Bytes;
 use futures::future::join_all;
@@ -33,16 +33,12 @@ use rusoto_s3::{
 use uuid::Uuid;
 
 // FIXME: pass this as an argument to ProjectActions
-lazy_static! {
-    static ref PROJECT_CACHE: Arc<RwLock<LruCache<api::ProjectId, ProjectMetadata>>> =
-        Arc::new(RwLock::new(LruCache::new(500)));
-}
-
 pub(crate) struct ProjectActions {
-    // TODO: can I make cached projects?
-    project_metadata: Collection<ProjectMetadata>,
     bucket: String,
     s3: S3Client,
+
+    project_metadata: Collection<ProjectMetadata>,
+    project_cache: Arc<RwLock<LruCache<api::ProjectId, ProjectMetadata>>>,
     network: Addr<TopologyActor>,
 }
 
@@ -60,7 +56,8 @@ impl ProjectActions {
             .map(|role| (RoleId::new(Uuid::new_v4().to_string()), role))
             .collect::<HashMap<_, _>>();
         let owner = &eu.username;
-        let unique_name = self.get_valid_project_name(owner, &name).await?;
+        let unique_name =
+            utils::get_valid_project_name(&self.project_metadata, owner, &name).await?;
 
         // Prepare the roles (ensure >=1 exists; upload them)
         if roles.is_empty() {
@@ -235,9 +232,9 @@ impl ProjectActions {
         new_name: &str,
     ) -> Result<api::ProjectMetadata, UserError> {
         let metadata = &ep.metadata;
-        let name = self
-            .get_valid_project_name(&metadata.owner, &new_name)
-            .await?;
+        let name =
+            utils::get_valid_project_name(&self.project_metadata, &metadata.owner, &new_name)
+                .await?;
 
         let query = doc! {"id": &metadata.id};
         let update = doc! {"$set": {"name": &name}};
@@ -252,7 +249,7 @@ impl ProjectActions {
             .map_err(InternalError::DatabaseConnectionError)?
             .ok_or(UserError::ProjectNotFoundError)?;
 
-        self.on_room_changed(updated_metadata.clone());
+        utils::on_room_changed(&self.network, &self.project_cache, updated_metadata.clone());
         Ok(updated_metadata.into())
     }
 
@@ -278,7 +275,7 @@ impl ProjectActions {
             .map_err(InternalError::DatabaseConnectionError)?
             .ok_or(UserError::ProjectNotFoundError)?;
 
-        self.on_room_changed(metadata.clone());
+        utils::on_room_changed(&self.network, &self.project_cache, metadata.clone());
 
         Ok(metadata.into())
     }
@@ -383,25 +380,25 @@ impl ProjectActions {
         ep: &auth::EditProject,
         role_data: RoleData,
     ) -> Result<ProjectMetadata, UserError> {
-        let metadata = ep.metadata;
         let mut role_md = self
-            .upload_role(&metadata.owner, &metadata.name, &role_data)
+            .upload_role(&ep.metadata.owner, &ep.metadata.name, &role_data)
             .await?;
 
         let options = FindOneAndUpdateOptions::builder()
             .return_document(ReturnDocument::After)
             .build();
 
-        let role_names = metadata
+        let role_names = ep
+            .metadata
             .roles
-            .into_values()
-            .map(|r| r.name)
+            .values()
+            .map(|r| r.name.to_owned())
             .collect::<Vec<_>>();
-        let role_name = get_unique_name(role_names, &role_md.name);
+        let role_name = utils::get_unique_name(role_names, &role_md.name);
         role_md.name = role_name;
 
         let role_id = Uuid::new_v4();
-        let query = doc! {"id": metadata.id};
+        let query = doc! {"id": &ep.metadata.id};
         let update = doc! {"$set": {&format!("roles.{}", role_id): role_md}};
         let updated_metadata = self
             .project_metadata
@@ -410,7 +407,7 @@ impl ProjectActions {
             .map_err(InternalError::DatabaseConnectionError)?
             .ok_or(UserError::ProjectNotFoundError)?;
 
-        self.on_room_changed(updated_metadata.clone());
+        utils::on_room_changed(&self.network, &self.project_cache, updated_metadata.clone());
         Ok(updated_metadata)
     }
 
@@ -420,7 +417,7 @@ impl ProjectActions {
         role_id: RoleId,
         name: &str,
     ) -> Result<ProjectMetadata, UserError> {
-        ensure_valid_name(name)?;
+        utils::ensure_valid_name(name)?;
         if ep.metadata.roles.contains_key(&role_id) {
             let query = doc! {"id": &ep.metadata.id};
             let update = doc! {"$set": {format!("roles.{}.name", role_id): name}};
@@ -435,7 +432,7 @@ impl ProjectActions {
                 .map_err(InternalError::DatabaseConnectionError)?
                 .ok_or(UserError::ProjectNotFoundError)?;
 
-            self.on_room_changed(updated_metadata.clone());
+            utils::on_room_changed(&self.network, &self.project_cache, updated_metadata.clone());
             Ok(updated_metadata)
         } else {
             Err(UserError::RoleNotFoundError)
@@ -464,7 +461,7 @@ impl ProjectActions {
             .map_err(InternalError::DatabaseConnectionError)?
             .ok_or(UserError::ProjectNotFoundError)?;
 
-        self.on_room_changed(updated_metadata.clone());
+        utils::on_room_changed(&self.network, &self.project_cache, updated_metadata.clone());
         Ok(updated_metadata)
     }
 
@@ -498,7 +495,7 @@ impl ProjectActions {
         // check if the (public) project needs to be re-approved
         let state = match metadata.state {
             PublishState::Public => {
-                let needs_approval = libraries::is_approval_required(&role.code);
+                let needs_approval = utils::is_approval_required(&role.code);
                 if needs_approval {
                     PublishState::PendingApproval
                 } else {
@@ -527,7 +524,7 @@ impl ProjectActions {
             .map_err(InternalError::DatabaseConnectionError)?
             .ok_or(UserError::ProjectNotFoundError)?;
 
-        self.on_room_changed(updated_metadata.clone());
+        utils::on_room_changed(&self.network, &self.project_cache, updated_metadata.clone());
 
         Ok(updated_metadata)
     }
@@ -615,50 +612,11 @@ impl ProjectActions {
     async fn is_approval_required(&self, metadata: &ProjectMetadata) -> Result<bool, UserError> {
         for role_md in metadata.roles.values() {
             let role = self.fetch_role(role_md).await?;
-            if libraries::is_approval_required(&role.code) {
+            if utils::is_approval_required(&role.code) {
                 return Ok(true);
             }
         }
         Ok(false)
-    }
-
-    /// Get a unique project name for the given user and preferred name.
-    async fn get_valid_project_name(
-        &self,
-        owner: &str,
-        basename: &str,
-    ) -> Result<String, UserError> {
-        ensure_valid_name(basename)?;
-
-        let query = doc! {"owner": &owner};
-        let cursor = self
-            .project_metadata
-            .find(query, None)
-            .await
-            .map_err(InternalError::DatabaseConnectionError)?;
-        let project_names = cursor
-            .try_collect::<Vec<_>>()
-            .await
-            .map_err(InternalError::DatabaseConnectionError)?
-            .iter()
-            .map(|md| md.name.to_owned())
-            .collect();
-
-        Ok(get_unique_name(project_names, basename))
-    }
-
-    // FIXME: is there a better abstraction here that we could use?
-    fn on_room_changed(&self, updated_project: ProjectMetadata) {
-        self.network.do_send(topology::SendRoomState {
-            project: updated_project.clone(),
-        });
-
-        self.update_project_cache(updated_project);
-    }
-
-    pub fn update_project_cache(&self, metadata: ProjectMetadata) {
-        let mut cache = PROJECT_CACHE.write().unwrap();
-        cache.put(metadata.id.clone(), metadata);
     }
 
     fn get_cached_project_metadata<'a>(
@@ -667,7 +625,7 @@ impl ProjectActions {
     ) -> (Vec<ProjectMetadata>, Vec<&'a api::ProjectId>) {
         let mut results = Vec::new();
         let mut missing_projects = Vec::new();
-        let mut cache = PROJECT_CACHE.write().unwrap();
+        let mut cache = self.project_cache.write().unwrap();
         for id in ids {
             match cache.get(id) {
                 Some(project_metadata) => results.push(project_metadata.clone()),
