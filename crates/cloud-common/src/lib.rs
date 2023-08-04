@@ -238,11 +238,10 @@ impl From<CollaborationInvite> for netsblox_api_common::CollaborationInvite {
     }
 }
 
-type FriendLinkId = String; // FIXME: switch to newtype
 #[derive(Deserialize, Serialize, Clone, Debug)]
 #[serde(rename_all = "camelCase")]
 pub struct FriendLink {
-    pub id: FriendLinkId,
+    pub id: api::FriendLinkId,
     pub sender: String,
     pub recipient: String,
     pub state: FriendLinkState,
@@ -260,6 +259,19 @@ impl FriendLink {
             state: state.unwrap_or(FriendLinkState::PENDING),
             created_at,
             updated_at: created_at,
+        }
+    }
+}
+
+impl From<FriendLink> for api::FriendLink {
+    fn from(link: FriendLink) -> api::FriendLink {
+        api::FriendLink {
+            id: link.id,
+            sender: link.sender,
+            recipient: link.recipient,
+            state: link.state,
+            created_at: link.created_at.into(),
+            updated_at: link.updated_at.into(),
         }
     }
 }

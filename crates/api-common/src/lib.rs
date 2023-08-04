@@ -161,6 +161,18 @@ impl From<Credentials> for LinkedAccount {
     }
 }
 
+pub type FriendLinkId = String; // FIXME: switch to newtype
+#[derive(Deserialize, Serialize, Clone, Debug)]
+#[serde(rename_all = "camelCase")]
+pub struct FriendLink {
+    pub id: FriendLinkId,
+    pub sender: String,
+    pub recipient: String,
+    pub state: FriendLinkState,
+    pub created_at: SystemTime,
+    pub updated_at: SystemTime,
+}
+
 #[derive(Deserialize, Serialize, Clone, Debug)]
 pub enum FriendLinkState {
     PENDING,

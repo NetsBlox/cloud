@@ -1,4 +1,5 @@
 use std::{
+    borrow::Borrow,
     collections::HashSet,
     sync::{Arc, RwLock},
 };
@@ -6,9 +7,13 @@ use std::{
 use actix::Addr;
 use futures::TryStreamExt;
 use lazy_static::lazy_static;
+use log::error;
 use lru::LruCache;
 use mongodb::{bson::doc, Collection};
-use netsblox_cloud_common::{api, ProjectMetadata};
+use netsblox_cloud_common::{
+    api::{self, GroupId, UserRole},
+    FriendLink, Group, ProjectMetadata, User,
+};
 use regex::Regex;
 use rustrict::CensorStr;
 use sha2::{Digest, Sha512};
@@ -107,3 +112,163 @@ pub(crate) fn sha512(text: &str) -> String {
     let hash = hasher.finalize();
     hex::encode(hash)
 }
+
+// Friends
+
+pub(crate) async fn get_friends(
+    users: &Collection<User>,
+    groups: &Collection<Group>,
+    friends: &Collection<FriendLink>,
+    friend_cache: Arc<RwLock<LruCache<String, Vec<String>>>>,
+    username: &str,
+) -> Result<Vec<String>, UserError> {
+    let friend_names = if let Some(names) = get_cached_friends(friend_cache.clone(), username) {
+        names
+    } else {
+        let names = lookup_friends(users, groups, friends, username).await?;
+        let mut cache = friend_cache.write().unwrap();
+        cache.put(username.to_owned(), names.clone());
+        names
+    };
+    Ok(friend_names)
+}
+
+async fn lookup_friends(
+    users: &Collection<User>,
+    groups: &Collection<Group>,
+    friends: &Collection<FriendLink>,
+    username: &str,
+) -> Result<Vec<String>, UserError> {
+    let query = doc! {"username": &username};
+    let user = users
+        .find_one(query, None)
+        .await
+        .map_err(InternalError::DatabaseConnectionError)?
+        .ok_or(UserError::UserNotFoundError)?;
+
+    let is_universal_friend = matches!(user.role, UserRole::Admin);
+
+    let friend_names: Vec<_> = if is_universal_friend {
+        users
+            .find(doc! {}, None)
+            .await
+            .map_err(InternalError::DatabaseConnectionError)?
+            .try_collect::<Vec<User>>()
+            .await
+            .map_err(InternalError::DatabaseConnectionError)?
+            .into_iter()
+            .map(|user| user.username)
+            .filter(|name| name != username)
+            .collect()
+    } else if let Some(group_id) = user.group_id {
+        // get owner + all members
+        let query = doc! {"id": &group_id};
+        let group = groups
+            .find_one(query, None)
+            .await
+            .map_err(InternalError::DatabaseConnectionError)?
+            .ok_or(UserError::GroupNotFoundError)?;
+        let members = lookup_members(users, std::iter::once(&group_id)).await?;
+
+        std::iter::once(group.owner)
+            .chain(members.into_iter().map(|user| user.username))
+            .collect()
+    } else {
+        // look up:
+        //   - members of any group we own
+        //   - accepted friend requests/links
+        let query = doc! {"owner": &username};
+        let groups = groups
+            .find(query, None)
+            .await
+            .map_err(InternalError::DatabaseConnectionError)?
+            .try_collect::<Vec<_>>()
+            .await
+            .map_err(InternalError::DatabaseConnectionError)?;
+        let group_ids = groups.into_iter().map(|group| group.id);
+        let members = lookup_members(users, group_ids).await?;
+
+        let query = doc! {"$or": [
+            {"sender": &username, "state": api::FriendLinkState::APPROVED},
+            {"recipient": &username, "state": api::FriendLinkState::APPROVED}
+        ]};
+        let cursor = friends
+            .find(query, None)
+            .await
+            .map_err(InternalError::DatabaseConnectionError)?;
+        let links = cursor
+            .try_collect::<Vec<_>>()
+            .await
+            .map_err(InternalError::DatabaseConnectionError)?;
+
+        links
+            .into_iter()
+            .map(|l| {
+                if l.sender == username {
+                    l.recipient
+                } else {
+                    l.sender
+                }
+            })
+            .chain(members.into_iter().map(|user| user.username))
+            .collect()
+    };
+
+    Ok(friend_names)
+}
+
+async fn lookup_members<T>(
+    users: &Collection<User>,
+    group_ids: impl Iterator<Item = T>,
+) -> Result<Vec<User>, UserError>
+where
+    T: Borrow<GroupId>,
+{
+    let member_queries: Vec<_> = group_ids.map(|id| doc! {"groupId": id.borrow()}).collect();
+    if !member_queries.is_empty() {
+        let query = doc! {"$or": member_queries};
+
+        let members = users
+            .find(query, None)
+            .await
+            .map_err(InternalError::DatabaseConnectionError)?
+            .try_collect::<Vec<_>>()
+            .await
+            .map_err(InternalError::DatabaseConnectionError)?;
+
+        Ok(members)
+    } else {
+        Ok(Vec::new())
+    }
+}
+
+/// Invalidate the relevant cached values when a user is added or removed
+/// from a group
+pub(crate) async fn group_members_updated(
+    users: &Collection<User>,
+    friend_cache: Arc<RwLock<LruCache<String, Vec<String>>>>,
+    group_id: &GroupId,
+) {
+    if let Ok(members) = lookup_members(users, std::iter::once(group_id)).await {
+        let mut cache = friend_cache.write().unwrap();
+        members.into_iter().for_each(|user| {
+            cache.pop(&user.username);
+        });
+    } else {
+        error!("Error occurred while retrieving members for {}", group_id);
+    }
+}
+
+fn get_cached_friends(
+    friend_cache: Arc<RwLock<LruCache<String, Vec<String>>>>,
+    username: &str,
+) -> Option<Vec<String>> {
+    let mut cache = friend_cache.write().unwrap();
+    cache.get(username).map(|friends| friends.to_owned())
+}
+
+// TODO: tests for cache invalidation
+// - [ ] projects
+// - [ ] friends
+
+// TODO: tests for friend-checking

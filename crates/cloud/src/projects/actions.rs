@@ -5,7 +5,7 @@ use std::sync::{Arc, RwLock};
 // TODO: is there any shared fn-ality across actions?
 use crate::errors::{InternalError, UserError};
 use crate::network::topology::{self, TopologyActor};
-use crate::{auth, libraries, utils};
+use crate::{auth, utils};
 use actix::Addr;
 use actix_web::web::Bytes;
 use futures::future::join_all;
@@ -15,7 +15,6 @@ use image::{
     codecs::png::PngEncoder, ColorType, EncodableLayout, GenericImageView, ImageEncoder,
     ImageFormat, RgbaImage,
 };
-use lazy_static::lazy_static;
 use log::warn;
 use lru::LruCache;
 use mongodb::bson::{doc, DateTime};
