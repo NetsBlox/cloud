@@ -5,33 +5,28 @@ use actix_web::{delete, get, post, web, HttpRequest, HttpResponse};
 use futures::TryStreamExt;
 use mongodb::bson::doc;
 
+use crate::auth;
 use crate::common::api;
+use crate::groups::actions::GroupActions;
+use crate::users::actions::UserActions;
 use crate::{
     app_data::AppData,
     errors::{InternalError, UserError},
-    groups::ensure_can_edit_group,
-    services::ensure_is_authorized_host,
-    users::ensure_can_edit_user,
 };
 
 #[get("/user/{username}/")]
 async fn list_user_hosts_with_settings(
     app: web::Data<AppData>,
     path: web::Path<(String,)>,
-    session: Session,
+    req: HttpRequest,
 ) -> Result<HttpResponse, UserError> {
     let (username,) = path.into_inner();
-    ensure_can_edit_user(&app, &session, &username).await?;
+    let auth_vu = auth::try_view_user(&app, &req, None, &username).await?;
 
-    let query = doc! {"username": &username};
-    let user = app
-        .users
-        .find_one(query, None)
-        .await
-        .map_err(InternalError::DatabaseConnectionError)?
-        .ok_or(UserError::UserNotFoundError)?;
+    let actions: UserActions = app.into();
+    let settings = actions.get_service_settings(&auth_vu).await?;
+    let hosts: Vec<_> = settings.keys().collect();
 
-    let hosts: Vec<_> = user.service_settings.keys().collect();
     Ok(HttpResponse::Ok().json(hosts))
 }
 
@@ -43,28 +38,14 @@ async fn get_user_settings(
     req: HttpRequest,
 ) -> Result<HttpResponse, UserError> {
     let (username, host) = path.into_inner();
-    if ensure_is_authorized_host(&app, &req, Some(&host))
-        .await
-        .is_err()
-    {
-        ensure_can_edit_user(&app, &session, &username).await?;
-    }
+    let auth_vu = auth::try_view_user(&app, &req, None, &username).await?;
 
-    let query = doc! {"username": &username};
-    let user = app
-        .users
-        .find_one(query, None)
-        .await
-        .map_err(InternalError::DatabaseConnectionError)?
-        .ok_or(UserError::UserNotFoundError)?;
+    let actions: UserActions = app.into();
+    let settings = actions.get_service_settings(&auth_vu).await?;
+    let empty_string = String::default();
+    let settings = settings.get(&host).unwrap_or(&empty_string).to_owned();
 
-    let default_settings = String::from("");
-    let settings = user
-        .service_settings
-        .get(&host)
-        .unwrap_or(&default_settings);
-
-    Ok(HttpResponse::Ok().body(settings.to_owned()))
+    Ok(HttpResponse::Ok().body(settings))
 }
 
 #[get("/user/{username}/{host}/all")]
@@ -75,12 +56,10 @@ async fn get_all_settings(
     session: Session,
 ) -> Result<HttpResponse, UserError> {
     let (username, host) = path.into_inner();
-    if ensure_is_authorized_host(&app, &req, Some(&host))
-        .await
-        .is_err()
-    {
-        ensure_can_edit_user(&app, &session, &username).await?;
-    }
+
+    // TODO: port this to use actions
+    // TODO: get user settings
+    // TODO: get all groups
 
     let query = doc! {"username": &username};
     let user = app
@@ -140,29 +119,14 @@ async fn set_user_settings(
     req: HttpRequest,
 ) -> Result<HttpResponse, UserError> {
     let (username, host) = path.into_inner();
-    if ensure_is_authorized_host(&app, &req, Some(&host))
-        .await
-        .is_err()
-    {
-        ensure_can_edit_user(&app, &session, &username).await?;
-    }
+    let auth_eu = auth::try_edit_user(&app, &req, None, &username).await?;
 
     let settings = std::str::from_utf8(&body).map_err(|_err| UserError::InternalError)?;
 
-    let query = doc! {"username": &username};
-    let update = doc! {"$set": {format!("serviceSettings.{}", &host): settings}};
+    let actions: UserActions = app.into();
+    let user = actions.set_user_settings(&auth_eu, &host, settings).await?;
 
-    let result = app
-        .users
-        .update_one(query, update, None)
-        .await
-        .map_err(InternalError::DatabaseConnectionError)?;
-
-    if result.matched_count == 0 {
-        Err(UserError::UserNotFoundError)
-    } else {
-        Ok(HttpResponse::Ok().finish())
-    }
+    Ok(HttpResponse::Ok().finish())
 }
 
 #[delete("/user/{username}/{host}")]
@@ -173,47 +137,28 @@ async fn delete_user_settings(
     req: HttpRequest,
 ) -> Result<HttpResponse, UserError> {
     let (username, host) = path.into_inner();
-    if ensure_is_authorized_host(&app, &req, Some(&host))
-        .await
-        .is_err()
-    {
-        ensure_can_edit_user(&app, &session, &username).await?;
-    }
+    let auth_eu = auth::try_edit_user(&app, &req, None, &username).await?;
 
-    let query = doc! {"username": &username};
-    let update = doc! {"$unset": {format!("serviceSettings.{}", &host): true}};
+    let actions: UserActions = app.into();
+    let user = actions.delete_user_settings(&auth_eu, &host).await?;
 
-    let result = app
-        .users
-        .update_one(query, update, None)
-        .await
-        .map_err(InternalError::DatabaseConnectionError)?;
-
-    if result.matched_count == 0 {
-        Err(UserError::UserNotFoundError)
-    } else {
-        Ok(HttpResponse::Ok().finish())
-    }
+    Ok(HttpResponse::Ok().finish())
 }
 
 #[get("/group/{group_id}/")]
 async fn list_group_hosts_with_settings(
     app: web::Data<AppData>,
     path: web::Path<(api::GroupId,)>,
-    session: Session,
+    req: HttpRequest,
 ) -> Result<HttpResponse, UserError> {
     let (group_id,) = path.into_inner();
-    ensure_can_edit_group(&app, &session, &group_id).await?;
 
-    let query = doc! {"id": &group_id};
-    let group = app
-        .groups
-        .find_one(query, None)
-        .await
-        .map_err(InternalError::DatabaseConnectionError)?
-        .ok_or(UserError::UserNotFoundError)?;
+    let auth_vg = auth::try_view_group(&app, &req, &group_id).await?;
 
-    let hosts: Vec<_> = group.service_settings.keys().collect();
+    let actions: GroupActions = app.into();
+    let settings = actions.get_service_settings(&auth_vg).await?;
+    let hosts: Vec<_> = settings.keys().collect();
+
     Ok(HttpResponse::Ok().json(hosts))
 }
 
@@ -225,28 +170,15 @@ async fn get_group_settings(
     req: HttpRequest,
 ) -> Result<HttpResponse, UserError> {
     let (group_id, host) = path.into_inner();
-    if ensure_is_authorized_host(&app, &req, Some(&host))
-        .await
-        .is_err()
-    {
-        ensure_can_edit_group(&app, &session, &group_id).await?;
-    }
+    let auth_vg = auth::try_view_group(&app, &req, &group_id).await?;
 
-    let query = doc! {"id": &group_id};
-    let group = app
-        .groups
-        .find_one(query, None)
-        .await
-        .map_err(InternalError::DatabaseConnectionError)?
-        .ok_or(UserError::GroupNotFoundError)?;
+    let actions: GroupActions = app.into();
+    let settings = actions.get_service_settings(&auth_vg).await?;
 
-    let default_settings = String::from("");
-    let settings = group
-        .service_settings
-        .get(&host)
-        .unwrap_or(&default_settings);
+    let empty_string = String::default();
+    let settings = settings.get(&host).unwrap_or(&empty_string).to_owned();
 
-    Ok(HttpResponse::Ok().body(settings.to_owned()))
+    Ok(HttpResponse::Ok().body(settings))
 }
 
 #[post("/group/{group_id}/{host}")]
@@ -258,29 +190,16 @@ async fn set_group_settings(
     req: HttpRequest,
 ) -> Result<HttpResponse, UserError> {
     let (group_id, host) = path.into_inner();
-
-    if ensure_is_authorized_host(&app, &req, Some(&host))
-        .await
-        .is_err()
-    {
-        ensure_can_edit_group(&app, &session, &group_id).await?;
-    }
-
-    let query = doc! {"id": &group_id};
     let settings = std::str::from_utf8(&body).map_err(|_err| UserError::InternalError)?;
-    let update = doc! {"$set": {format!("serviceSettings.{}", &host): settings}};
 
-    let result = app
-        .groups
-        .update_one(query, update, None)
-        .await
-        .map_err(InternalError::DatabaseConnectionError)?;
+    let auth_eg = auth::try_edit_group(&app, &req, Some(&group_id)).await?;
 
-    if result.matched_count == 0 {
-        Err(UserError::GroupNotFoundError)
-    } else {
-        Ok(HttpResponse::Ok().finish())
-    }
+    let actions: GroupActions = app.into();
+    let group = actions
+        .set_service_settings(&auth_eg, &host, &settings)
+        .await?;
+
+    Ok(HttpResponse::Ok().finish())
 }
 
 #[delete("/group/{group_id}/{host}")]
@@ -291,27 +210,13 @@ async fn delete_group_settings(
     req: HttpRequest,
 ) -> Result<HttpResponse, UserError> {
     let (group_id, host) = path.into_inner();
-    if ensure_is_authorized_host(&app, &req, Some(&host))
-        .await
-        .is_err()
-    {
-        ensure_can_edit_group(&app, &session, &group_id).await?;
-    }
 
-    let query = doc! {"id": &group_id};
-    let update = doc! {"$unset": {format!("serviceSettings.{}", &host): true}};
+    let auth_eg = auth::try_edit_group(&app, &req, Some(&group_id)).await?;
 
-    let result = app
-        .groups
-        .update_one(query, update, None)
-        .await
-        .map_err(InternalError::DatabaseConnectionError)?;
+    let actions: GroupActions = app.into();
+    let group = actions.delete_service_settings(&auth_eg, &host).await?;
 
-    if result.matched_count == 0 {
-        Err(UserError::GroupNotFoundError)
-    } else {
-        Ok(HttpResponse::Ok().finish())
-    }
+    Ok(HttpResponse::Ok().finish())
 }
 
 pub fn config(cfg: &mut web::ServiceConfig) {
@@ -325,3 +230,7 @@ pub fn config(cfg: &mut web::ServiceConfig) {
         .service(list_group_hosts_with_settings)
         .service(delete_group_settings);
 }
+
+// TODO: add test for setting service settings from authorized host
+// TODO: only can edit it's own settings, right?
+// TODO: add test for delete service settings from authorized host

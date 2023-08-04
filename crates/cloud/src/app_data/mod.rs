@@ -77,7 +77,6 @@ pub struct AppData {
     friends: Collection<FriendLink>,
     // TODO: make a "cached collection type"?
     pub(crate) project_metadata: Collection<ProjectMetadata>,
-    pub(crate) library_metadata: Collection<LibraryMetadata>, // Do we even need this?
     pub(crate) libraries: Collection<Library>,
     pub(crate) authorized_services: Collection<AuthorizedServiceHost>,
 
@@ -143,7 +142,6 @@ impl AppData {
         let banned_accounts =
             db.collection::<BannedAccount>(&(prefix.to_owned() + "bannedAccounts"));
         let project_metadata = db.collection::<ProjectMetadata>(&(prefix.to_owned() + "projects"));
-        let library_metadata = db.collection::<LibraryMetadata>(&(prefix.to_owned() + "libraries"));
         let libraries = db.collection::<Library>(&(prefix.to_owned() + "libraries"));
         let authorized_services =
             db.collection::<AuthorizedServiceHost>(&(prefix.to_owned() + "authorizedServices"));
@@ -170,7 +168,6 @@ impl AppData {
             users,
             banned_accounts,
             project_metadata,
-            library_metadata,
             libraries,
             authorized_services,
 

@@ -12,10 +12,8 @@ use actix_session::Session;
 use actix_web::{delete, get, post, HttpRequest};
 use actix_web::{web, HttpResponse};
 use futures::TryStreamExt;
-use lazy_static::lazy_static;
 use mongodb::bson::doc;
 use mongodb::options::{ReturnDocument, UpdateOptions};
-use regex::Regex;
 
 #[get("/group/{id}")]
 async fn list_group_hosts(
@@ -152,8 +150,6 @@ async fn authorize_host(
     host_data: web::Json<api::AuthorizedServiceHost>,
     req: HttpRequest,
 ) -> Result<HttpResponse, UserError> {
-    ensure_valid_service_id(&host_data.id)?;
-
     let auth_ah = auth::try_auth_host(&app, &req).await?;
 
     let actions: HostActions = app.into();
@@ -175,23 +171,6 @@ async fn unauthorize_host(
     let host = actions.unauthorize(&auth_ah, &host_id).await?;
 
     Ok(HttpResponse::Ok().json(host))
-}
-
-pub fn ensure_valid_service_id(id: &str) -> Result<(), UserError> {
-    let max_len = 25;
-    let min_len = 3;
-    let char_count = id.chars().count();
-    lazy_static! {
-        // This is safe to unwrap since it is a constant
-        static ref SERVICE_ID_REGEX: Regex = Regex::new(r"^[A-Za-z][A-Za-z0-9_\-]+$").unwrap();
-    }
-
-    let is_valid = char_count > min_len && char_count < max_len && SERVICE_ID_REGEX.is_match(id);
-    if is_valid {
-        Ok(())
-    } else {
-        Err(UserError::InvalidServiceHostIDError)
-    }
 }
 
 pub fn config(cfg: &mut web::ServiceConfig) {

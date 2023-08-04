@@ -1,3 +1,5 @@
+use std::collections::HashMap;
+
 use futures::TryStreamExt;
 use mongodb::{bson::doc, options::ReturnDocument, Collection};
 use netsblox_cloud_common::{api, Group};
@@ -102,6 +104,64 @@ impl GroupActions {
         let options = mongodb::options::FindOneAndUpdateOptions::builder()
             .return_document(ReturnDocument::After)
             .build();
+        let group = self
+            .groups
+            .find_one_and_update(query, update, options)
+            .await
+            .map_err(InternalError::DatabaseConnectionError)?
+            .ok_or(UserError::GroupNotFoundError)?;
+
+        Ok(group.into())
+    }
+
+    pub(crate) async fn get_service_settings(
+        &self,
+        vg: &auth::ViewGroup,
+    ) -> Result<HashMap<String, String>, UserError> {
+        let query = doc! {"id": &vg.id};
+        let group = self
+            .groups
+            .find_one(query, None)
+            .await
+            .map_err(InternalError::DatabaseConnectionError)?
+            .ok_or(UserError::UserNotFoundError)?;
+
+        Ok(group.service_settings)
+    }
+
+    pub(crate) async fn set_service_settings(
+        &self,
+        vg: &auth::EditGroup,
+        host: &str,
+        settings: &str,
+    ) -> Result<api::Group, UserError> {
+        let query = doc! {"id": &vg.id};
+        let update = doc! {"$set": {format!("serviceSettings.{}", &host): settings}};
+        let options = mongodb::options::FindOneAndUpdateOptions::builder()
+            .return_document(ReturnDocument::After)
+            .build();
+
+        let group = self
+            .groups
+            .find_one_and_update(query, update, options)
+            .await
+            .map_err(InternalError::DatabaseConnectionError)?
+            .ok_or(UserError::GroupNotFoundError)?;
+
+        Ok(group.into())
+    }
+
+    pub(crate) async fn delete_service_settings(
+        &self,
+        vg: &auth::EditGroup,
+        host: &str,
+    ) -> Result<api::Group, UserError> {
+        let query = doc! {"id": &vg.id};
+        let update = doc! {"$unset": {format!("serviceSettings.{}", &host): true}};
+        let options = mongodb::options::FindOneAndUpdateOptions::builder()
+            .return_document(ReturnDocument::After)
+            .build();
+
         let group = self
             .groups
             .find_one_and_update(query, update, options)
