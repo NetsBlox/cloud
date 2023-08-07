@@ -5,7 +5,6 @@ use crate::errors::UserError;
 use crate::libraries::actions::LibraryActions;
 use actix_web::{delete, get, post, HttpRequest};
 use actix_web::{web, HttpResponse};
-use mongodb::options::FindOptions;
 
 // TODO: add an endpoint for the official ones?
 #[get("/community/")]

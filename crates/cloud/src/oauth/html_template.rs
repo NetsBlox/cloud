@@ -1,4 +1,4 @@
-use crate::oauth::Scope;
+use super::routes::Scope;
 
 pub(crate) fn authorize_page(username: &str, client: &str, scopes: &[Scope]) -> String {
     let scope_html: String = scopes

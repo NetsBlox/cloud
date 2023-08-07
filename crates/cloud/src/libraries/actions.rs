@@ -23,6 +23,10 @@ pub(crate) struct LibraryActions {
 }
 
 impl LibraryActions {
+    pub(crate) fn new(libraries: Collection<Library>) -> Self {
+        Self { libraries }
+    }
+
     pub(crate) async fn list_community_libraries(
         &self,
     ) -> Result<Vec<api::LibraryMetadata>, UserError> {

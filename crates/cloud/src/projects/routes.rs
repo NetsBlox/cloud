@@ -1,26 +1,16 @@
-use std::collections::HashMap;
-
 use crate::app_data::AppData;
 use crate::auth;
 use crate::common::api;
 use crate::common::api::{
-    ClientId, CreateProjectData, ProjectId, PublishState, RoleData, RoleId, SaveState,
-    UpdateProjectData, UpdateRoleData,
+    ClientId, CreateProjectData, ProjectId, RoleData, RoleId, UpdateProjectData, UpdateRoleData,
 };
-use crate::common::ProjectMetadata;
 use crate::errors::{InternalError, UserError};
 use crate::projects::actions::ProjectActions;
-use crate::users::{can_edit_user, ensure_can_edit_user};
 use actix_session::Session;
 use actix_web::{delete, get, patch, post, HttpRequest};
 use actix_web::{web, HttpResponse};
-use futures::stream::TryStreamExt;
-use log::info;
 use mongodb::bson::doc;
-use mongodb::Cursor;
-use regex::Regex;
 use serde::Deserialize;
-use uuid::Uuid;
 
 #[post("/")]
 async fn create_project(
@@ -55,37 +45,12 @@ async fn list_user_projects(
     session: Session,
 ) -> Result<HttpResponse, UserError> {
     let (username,) = path.into_inner();
-    let query = doc! {"owner": &username, "saveState": SaveState::SAVED};
-    println!("query is: {:?}", query);
-    let cursor = app
-        .project_metadata
-        .find(query, None)
-        .await
-        .map_err(InternalError::DatabaseConnectionError)?;
+    let auth_lp = auth::try_list_projects(&app, &req, &username).await?;
 
-    let projects = get_visible_projects(&app, &session, &username, cursor).await;
-    info!("Found {} projects for {}", projects.len(), username);
+    let actions: ProjectActions = app.into();
+    let projects = actions.list_projects(&auth_lp).await?;
+
     Ok(HttpResponse::Ok().json(projects))
-}
-
-async fn get_visible_projects(
-    app: &AppData,
-    session: &Session,
-    owner: &str,
-    cursor: Cursor<ProjectMetadata>,
-) -> Vec<api::ProjectMetadata> {
-    let projects = if can_edit_user(app, session, owner).await.unwrap_or(false) {
-        cursor.try_collect::<Vec<_>>().await.unwrap()
-    } else {
-        cursor
-            .try_collect::<Vec<_>>()
-            .await
-            .unwrap()
-            .into_iter()
-            .filter(|p| matches!(p.state, PublishState::Public))
-            .collect::<Vec<_>>()
-    };
-    projects.into_iter().map(|project| project.into()).collect()
 }
 
 #[get("/shared/{username}")]
@@ -96,16 +61,11 @@ async fn list_shared_projects(
     session: Session,
 ) -> Result<HttpResponse, UserError> {
     let (username,) = path.into_inner();
-    ensure_can_edit_user(&app, &session, &username).await?;
+    let auth_lp = auth::try_list_projects(&app, &req, &username).await?;
 
-    let query = doc! {"collaborators": &username, "saveState": SaveState::SAVED};
-    let cursor = app
-        .project_metadata
-        .find(query, None)
-        .await
-        .expect("Could not retrieve projects");
+    let actions: ProjectActions = app.into();
+    let projects = actions.list_shared_projects(&auth_lp).await?;
 
-    let projects = get_visible_projects(&app, &session, &username, cursor).await;
     Ok(HttpResponse::Ok().json(projects))
 }
 
@@ -126,6 +86,7 @@ async fn get_project_named(
 
     let auth_vp = auth::try_view_project(&app, &req, None, &metadata.id).await?;
     let actions: ProjectActions = app.into();
+
     let project = actions.get_project(&auth_vp).await?;
     Ok(HttpResponse::Ok().json(project))
 }
@@ -1452,33 +1413,5 @@ mod tests {
                     .for_each(|(i, name)| assert_eq!(name, project.collaborators[i]));
             })
             .await;
-    }
-
-    #[actix_web::test]
-    async fn test_x_is_valid_name() {
-        assert!(is_valid_name("X"));
-    }
-
-    #[actix_web::test]
-    async fn test_is_valid_name_spaces() {
-        assert!(is_valid_name("Player 1"));
-    }
-
-    #[actix_web::test]
-    async fn test_is_valid_name_dashes() {
-        assert!(is_valid_name("Player-i"));
-    }
-
-    #[actix_web::test]
-    async fn test_is_valid_name_parens() {
-        assert!(is_valid_name("untitled (20)"));
-    }
-
-    #[actix_web::test]
-    async fn test_is_valid_name_profanity() {
-        assert!(!is_valid_name("shit"));
-        assert!(!is_valid_name("fuck"));
-        assert!(!is_valid_name("damn"));
-        assert!(!is_valid_name("hell"));
     }
 }

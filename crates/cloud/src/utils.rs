@@ -1,12 +1,9 @@
-use std::{
-    borrow::Borrow,
-    collections::HashSet,
-    sync::{Arc, RwLock},
-};
-
 use actix::Addr;
+use actix_session::SessionExt;
+use actix_web::HttpRequest;
 use futures::TryStreamExt;
 use lazy_static::lazy_static;
+use lettre::{Message, SmtpTransport, Transport};
 use log::error;
 use lru::LruCache;
 use mongodb::{bson::doc, Collection};
@@ -17,6 +14,11 @@ use netsblox_cloud_common::{
 use regex::Regex;
 use rustrict::CensorStr;
 use sha2::{Digest, Sha512};
+use std::{
+    borrow::Borrow,
+    collections::HashSet,
+    sync::{Arc, RwLock},
+};
 
 use crate::{
     errors::{InternalError, UserError},
@@ -266,8 +268,61 @@ fn get_cached_friends(
     cache.get(username).map(|friends| friends.to_owned())
 }
 
+pub(crate) fn get_username(req: &HttpRequest) -> Option<String> {
+    let session = req.get_session();
+    session.get::<String>("username").unwrap_or(None)
+}
+
+pub(crate) fn send_email(
+    mailer: &SmtpTransport,
+    email: impl TryInto<Message>,
+) -> Result<(), UserError> {
+    let message = email
+        .try_into()
+        .map_err(|_err| InternalError::EmailBuildError)?;
+
+    mailer
+        .send(&message)
+        .map_err(InternalError::SendEmailError)?;
+
+    Ok(())
+}
+
 // TODO: tests for cache invalidation
 // - [ ] projects
 // - [ ] friends
 
 // TODO: tests for friend-checking
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[actix_web::test]
+    async fn test_x_is_valid_name() {
+        assert!(is_valid_name("X"));
+    }
+
+    #[actix_web::test]
+    async fn test_is_valid_name_spaces() {
+        assert!(is_valid_name("Player 1"));
+    }
+
+    #[actix_web::test]
+    async fn test_is_valid_name_dashes() {
+        assert!(is_valid_name("Player-i"));
+    }
+
+    #[actix_web::test]
+    async fn test_is_valid_name_parens() {
+        assert!(is_valid_name("untitled (20)"));
+    }
+
+    #[actix_web::test]
+    async fn test_is_valid_name_profanity() {
+        assert!(!is_valid_name("shit"));
+        assert!(!is_valid_name("fuck"));
+        assert!(!is_valid_name("damn"));
+        assert!(!is_valid_name("hell"));
+    }
+}

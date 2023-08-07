@@ -33,6 +33,24 @@ pub(crate) struct FriendActions {
 }
 
 impl FriendActions {
+    pub(crate) fn new(
+        friends: Collection<FriendLink>,
+        friend_cache: Arc<RwLock<LruCache<String, Vec<String>>>>,
+
+        users: Collection<User>,
+        groups: Collection<Group>,
+        network: Addr<TopologyActor>,
+    ) -> Self {
+        Self {
+            friends,
+            friend_cache,
+
+            users,
+            groups,
+            network,
+        }
+    }
+
     pub(crate) async fn list_friends(
         &self,
         vu: &auth::users::ViewUser,
@@ -52,9 +70,15 @@ impl FriendActions {
         &self,
         vu: &auth::users::ViewUser,
     ) -> Result<Vec<String>, UserError> {
-        // TODO: implement the check if the user is an admin
-        let is_universal_friend =
-            matches!(get_user_role(&app, &owner).await?, api::UserRole::Admin);
+        let query = doc! {"username": &vu.username};
+        let user = self
+            .users
+            .find_one(query, None)
+            .await
+            .map_err(InternalError::DatabaseConnectionError)?
+            .ok_or(UserError::UserNotFoundError)?;
+
+        let is_universal_friend = matches!(user.role, api::UserRole::Admin);
         let filter_usernames = if is_universal_friend {
             None
         } else {

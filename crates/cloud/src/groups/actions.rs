@@ -13,6 +13,10 @@ pub(crate) struct GroupActions {
 }
 
 impl GroupActions {
+    pub(crate) fn new(groups: Collection<Group>, users: Collection<User>) -> Self {
+        Self { groups, users }
+    }
+
     pub(crate) async fn create_group(
         &self,
         eu: &auth::EditUser,

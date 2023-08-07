@@ -3,6 +3,7 @@ pub(crate) mod groups;
 pub(crate) mod hosts;
 pub(crate) mod libraries;
 pub(crate) mod network;
+pub(crate) mod oauth;
 pub(crate) mod projects;
 pub(crate) mod users;
 
@@ -11,19 +12,13 @@ pub(crate) use crate::auth::groups::*;
 pub(crate) use crate::auth::hosts::*;
 pub(crate) use crate::auth::libraries::*;
 pub(crate) use crate::auth::network::*;
+pub(crate) use crate::auth::oauth::*;
 pub(crate) use crate::auth::projects::*;
 pub(crate) use crate::auth::users::*;
 
 use crate::app_data::AppData;
-use crate::errors::{InternalError, UserError};
-use crate::network::topology;
-use actix_session::{Session, SessionExt};
+use crate::errors::UserError;
 use actix_web::HttpRequest;
-use futures::TryStreamExt;
-use mongodb::bson::doc;
-use netsblox_cloud_common::api::{self, ClientId, UserRole};
-use netsblox_cloud_common::ProjectMetadata;
-use std::collections::HashSet;
 
 /// Invite link is an authorized directed link btwn users to be
 /// used to send invitations like occupant, collaboration invites

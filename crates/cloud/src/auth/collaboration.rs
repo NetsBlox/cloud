@@ -1,6 +1,6 @@
-
 use actix_web::HttpRequest;
-use netsblox_cloud_common::{CollaborationInvite, ProjectMetadata};
+use mongodb::bson::doc;
+use netsblox_cloud_common::{api, CollaborationInvite, ProjectMetadata};
 
 use crate::{
     app_data::AppData,
@@ -17,7 +17,7 @@ pub(crate) struct InviteCollaborator {
 pub(crate) async fn try_invite(
     app: &AppData,
     req: &HttpRequest,
-    project_id: &ProjectId,
+    project_id: &api::ProjectId,
 ) -> Result<InviteCollaborator, UserError> {
     // Only the owner for now
     let metadata = app.get_project_metadatum(project_id).await?;

@@ -2,18 +2,15 @@ use crate::app_data::AppData;
 use crate::auth;
 use crate::common::api;
 use crate::common::api::{GroupId, ServiceHost};
-use crate::common::AuthorizedServiceHost;
 use crate::errors::{InternalError, UserError};
 use crate::groups::actions::GroupActions;
 use crate::services::hosts::actions::HostActions;
 use crate::users::actions::UserActions;
-use crate::users::ensure_can_edit_user;
 use actix_session::Session;
 use actix_web::{delete, get, post, HttpRequest};
 use actix_web::{web, HttpResponse};
 use futures::TryStreamExt;
 use mongodb::bson::doc;
-use mongodb::options::{ReturnDocument, UpdateOptions};
 
 #[get("/group/{id}")]
 async fn list_group_hosts(

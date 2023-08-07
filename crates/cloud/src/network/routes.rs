@@ -1,4 +1,4 @@
-use super::topology;
+use super::topology::{self, ClientCommand};
 use crate::app_data::AppData;
 use crate::auth;
 use crate::common::api::{
@@ -452,7 +452,7 @@ mod tests {
     use std::{collections::HashMap, time::Duration};
 
     use actix_web::{http, test, App};
-    use netsblox_cloud_common::User;
+    use netsblox_cloud_common::{NetworkTraceMetadata, User};
 
     use super::*;
     use crate::test_utils;
@@ -529,6 +529,7 @@ mod tests {
                 let data = api::OccupantInviteData {
                     username: rcvr.username.clone(),
                     role_id,
+                    sender: None,
                 };
                 let req = test::TestRequest::post()
                     .cookie(test_utils::cookie::new(&sender.username))
@@ -538,7 +539,7 @@ mod tests {
 
                 // Ensure that the collaboration invite is returned.
                 // This will panic if the response is incorrect so no assert needed.
-                let _invite: OccupantInvite = test::call_and_read_body_json(&app, req).await;
+                let _invite: api::OccupantInvite = test::call_and_read_body_json(&app, req).await;
             })
             .await;
     }

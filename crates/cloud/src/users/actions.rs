@@ -7,7 +7,10 @@ use crate::auth;
 use actix::Addr;
 use futures::TryStreamExt;
 use lazy_static::lazy_static;
-use lettre::Address;
+use lettre::{
+    message::{Mailbox, MultiPart},
+    Address, Message, SmtpTransport,
+};
 use lru::LruCache;
 use mongodb::{bson::doc, options::ReturnDocument, Collection};
 use netsblox_cloud_common::{api, BannedAccount, ProjectMetadata, SetPasswordToken, User};
@@ -21,7 +24,7 @@ use crate::{
     utils,
 };
 
-use super::strategies;
+use super::{email_template, strategies};
 
 pub(crate) struct UserActions {
     users: Collection<User>,
@@ -34,9 +37,53 @@ pub(crate) struct UserActions {
     network: Addr<TopologyActor>,
 
     friend_cache: Arc<RwLock<LruCache<String, Vec<String>>>>,
+
+    // email support
+    mailer: SmtpTransport,
+    sender: Mailbox,
+    public_url: String,
+}
+
+/// A struct for passing data to the constructor of `UserActions` w/o either 1) making
+/// all fields public on UserActions or 2) having *way* too many arguments
+pub(crate) struct UserActionData {
+    pub(crate) users: Collection<User>,
+    pub(crate) banned_accounts: Collection<BannedAccount>,
+    pub(crate) password_tokens: Collection<SetPasswordToken>,
+    pub(crate) metrics: metrics::Metrics,
+
+    pub(crate) project_metadata: Collection<ProjectMetadata>,
+    pub(crate) project_cache: Arc<RwLock<LruCache<api::ProjectId, ProjectMetadata>>>,
+    pub(crate) network: Addr<TopologyActor>,
+
+    pub(crate) friend_cache: Arc<RwLock<LruCache<String, Vec<String>>>>,
+
+    // email support
+    pub(crate) mailer: SmtpTransport,
+    pub(crate) sender: Mailbox,
+    pub(crate) public_url: String,
 }
 
 impl UserActions {
+    pub(crate) fn new(data: UserActionData) -> Self {
+        UserActions {
+            users: data.users,
+            banned_accounts: data.banned_accounts,
+            password_tokens: data.password_tokens,
+            metrics: data.metrics,
+
+            project_cache: data.project_cache,
+            project_metadata: data.project_metadata,
+            network: data.network,
+
+            friend_cache: data.friend_cache,
+
+            mailer: data.mailer,
+            sender: data.sender,
+            public_url: data.public_url,
+        }
+    }
+
     pub(crate) async fn create_user(&self, cu: auth::CreateUser) -> Result<api::User, UserError> {
         ensure_valid_email(&cu.data.email)?;
         let user: User = cu.data.into();
@@ -167,10 +214,16 @@ impl UserActions {
             return Err(UserError::PasswordResetLinkSentError);
         }
 
-        let url = format!("/users/{}/password?token={}", &eu.username, &token.secret);
+        let email = SetPasswordEmail {
+            sender: self.sender.clone(),
+            public_url: self.public_url.clone(),
+            user,
+            token,
+        };
 
-        // TODO: return the user, too?
-        Ok(url)
+        utils::send_email(&self.mailer, email)?;
+
+        Ok(())
     }
 
     pub(crate) async fn set_password(
@@ -438,4 +491,45 @@ fn is_valid_username(name: &str) -> bool {
         && char_count < max_len
         && USERNAME_REGEX.is_match(name)
         && !name.is_inappropriate()
+}
+
+pub(crate) struct SetPasswordEmail {
+    sender: Mailbox,
+    user: User,
+    token: SetPasswordToken,
+    public_url: String,
+}
+
+impl SetPasswordEmail {
+    fn render(&self) -> MultiPart {
+        let url = format!(
+            "{}/users/{}/password?token={}",
+            self.public_url, &self.user.username, &self.token.secret
+        );
+        email_template::set_password_email(&self.user.username, &url)
+    }
+}
+
+impl TryFrom<SetPasswordEmail> for lettre::Message {
+    type Error = UserError;
+
+    fn try_from(email: SetPasswordEmail) -> Result<Self, UserError> {
+        let subject = "Password Reset Request";
+        let body = email.render();
+        let to_email = email.user.email;
+        let message = Message::builder()
+            .from(email.sender)
+            .to(Mailbox::new(
+                None,
+                to_email
+                    .parse::<Address>()
+                    .map_err(|_err| UserError::InvalidEmailAddress)?,
+            ))
+            .subject(subject.to_string())
+            .date_now()
+            .multipart(body)
+            .map_err(|_err| InternalError::EmailBuildError)?;
+
+        Ok(message)
+    }
 }

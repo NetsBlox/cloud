@@ -18,8 +18,7 @@ pub(crate) async fn try_list_libraries(
     req: &HttpRequest,
     username: &str,
 ) -> Result<ListLibraries, UserError> {
-    let session = req.get_session();
-    let visibility = if is_super_user(&app, &session).await? {
+    let visibility = if super::is_super_user(app, req).await? {
         PublishState::Private
     } else {
         PublishState::Public
@@ -54,15 +53,16 @@ pub(crate) async fn try_view_library(
         .map_err(InternalError::DatabaseConnectionError)?
         .ok_or(UserError::LibraryNotFoundError)?;
 
-    if !matches!(library.state, PublishState::Public) {
-        // check that we can edit the user
-        try_edit_user(app, req, None, owner).await?;
-    }
+    todo!();
+    // if !matches!(library.state, PublishState::Public) {
+    //     // check that we can edit the user
+    //     try_edit_user(app, req, None, owner).await?;
+    // }
 
-    Ok(ViewLibrary {
-        library,
-        _private: (),
-    })
+    // Ok(ViewLibrary {
+    //     library,
+    //     _private: (),
+    // })
 }
 
 pub(crate) struct EditLibrary {
@@ -75,12 +75,13 @@ pub(crate) async fn try_edit_library(
     req: &HttpRequest,
     owner: &str,
 ) -> Result<EditLibrary, UserError> {
-    try_edit_user(app, req, None, owner).await?;
+    todo!()
+    // try_edit_user(app, req, None, owner).await?;
 
-    Ok(EditLibrary {
-        owner: owner.to_owned(),
-        _private: (),
-    })
+    // Ok(EditLibrary {
+    //     owner: owner.to_owned(),
+    //     _private: (),
+    // })
 }
 
 pub(crate) struct PublishLibrary {
@@ -94,22 +95,23 @@ pub(crate) async fn try_publish_library(
     req: &HttpRequest,
     owner: &str,
 ) -> Result<PublishLibrary, UserError> {
-    let session = req.get_session();
-    if is_moderator(app, &session).await? {
-        Ok(PublishLibrary {
-            owner: owner.to_owned(),
-            can_approve: true,
-            _private: (),
-        })
-    } else {
-        try_edit_user(app, req, None, owner).await?;
+    todo!();
+    // let session = req.get_session();
+    // if is_moderator(app, &session).await? {
+    //     Ok(PublishLibrary {
+    //         owner: owner.to_owned(),
+    //         can_approve: true,
+    //         _private: (),
+    //     })
+    // } else {
+    //     try_edit_user(app, req, None, owner).await?;
 
-        Ok(PublishLibrary {
-            owner: owner.to_owned(),
-            can_approve: false,
-            _private: (),
-        })
-    }
+    //     Ok(PublishLibrary {
+    //         owner: owner.to_owned(),
+    //         can_approve: false,
+    //         _private: (),
+    //     })
+    // }
 }
 
 pub(crate) struct ModerateLibraries {

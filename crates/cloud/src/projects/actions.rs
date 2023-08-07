@@ -20,7 +20,7 @@ use log::warn;
 use lru::LruCache;
 use mongodb::bson::{doc, DateTime};
 use mongodb::options::{FindOneAndUpdateOptions, ReturnDocument};
-use mongodb::Collection;
+use mongodb::{Collection, Cursor};
 use netsblox_cloud_common::api::{BrowserClientState, RoleData, RoleId, SaveState};
 use netsblox_cloud_common::{
     api::{self, PublishState},
@@ -34,15 +34,31 @@ use uuid::Uuid;
 
 // FIXME: pass this as an argument to ProjectActions
 pub(crate) struct ProjectActions {
-    bucket: String,
-    s3: S3Client,
-
     project_metadata: Collection<ProjectMetadata>,
     project_cache: Arc<RwLock<LruCache<api::ProjectId, ProjectMetadata>>>,
     network: Addr<TopologyActor>,
+
+    bucket: String,
+    s3: S3Client,
 }
 
 impl ProjectActions {
+    pub(crate) fn new(
+        project_metadata: Collection<ProjectMetadata>,
+        project_cache: Arc<RwLock<LruCache<api::ProjectId, ProjectMetadata>>>,
+        network: Addr<TopologyActor>,
+
+        bucket: String,
+        s3: S3Client,
+    ) -> Self {
+        Self {
+            project_metadata,
+            project_cache,
+            network,
+            bucket,
+            s3,
+        }
+    }
     pub async fn create_project(
         &self,
         eu: &auth::users::EditUser,
@@ -222,10 +238,7 @@ impl ProjectActions {
         Ok(image_content)
     }
 
-    pub(crate) fn get_project_metadata(
-        &self,
-        vp: &auth::ViewProject,
-    ) -> api::projects::ProjectMetadata {
+    pub(crate) fn get_project_metadata(&self, vp: &auth::ViewProject) -> api::ProjectMetadata {
         vp.metadata.clone().into()
     }
 
@@ -378,7 +391,7 @@ impl ProjectActions {
         Ok((role_id, role_data))
     }
 
-    pub async fn create_role(
+    pub(crate) async fn create_role(
         &self,
         ep: &auth::projects::EditProject,
         role_data: RoleData,
@@ -532,7 +545,7 @@ impl ProjectActions {
         Ok(updated_metadata)
     }
 
-    pub async fn delete_project(
+    pub(crate) async fn delete_project(
         &self,
         dp: &auth::projects::DeleteProject,
     ) -> Result<ProjectMetadata, UserError> {
@@ -559,6 +572,34 @@ impl ProjectActions {
             .do_send(topology::ProjectDeleted::new(metadata.clone()));
 
         Ok(metadata)
+    }
+
+    pub(crate) async fn list_projects(
+        &self,
+        lp: &auth::projects::ListProjects,
+    ) -> Result<Vec<api::ProjectMetadata>, UserError> {
+        let query = doc! {"owner": &lp.username, "saveState": SaveState::SAVED};
+        let cursor = self
+            .project_metadata
+            .find(query, None)
+            .await
+            .map_err(InternalError::DatabaseConnectionError)?;
+
+        get_visible_projects(cursor, lp.visibility.clone()).await
+    }
+
+    pub(crate) async fn list_shared_projects(
+        &self,
+        lp: &auth::projects::ListProjects,
+    ) -> Result<Vec<api::ProjectMetadata>, UserError> {
+        let query = doc! {"collaborators": &lp.username, "saveState": SaveState::SAVED};
+        let cursor = self
+            .project_metadata
+            .find(query, None)
+            .await
+            .map_err(InternalError::DatabaseConnectionError)?;
+
+        get_visible_projects(cursor, lp.visibility.clone()).await
     }
 
     // Helper functions
@@ -657,4 +698,21 @@ impl ProjectActions {
             InternalError::S3Error
         })
     }
+}
+
+async fn get_visible_projects(
+    cursor: Cursor<ProjectMetadata>,
+    visibility: PublishState,
+) -> Result<Vec<api::ProjectMetadata>, UserError> {
+    let projects = cursor
+        .try_collect::<Vec<_>>()
+        .await
+        .map_err(InternalError::DatabaseConnectionError)?;
+    let visible_projects: Vec<_> = projects
+        .into_iter()
+        .filter(|p| p.state >= visibility)
+        .map(|p| p.into())
+        .collect();
+
+    Ok(visible_projects)
 }

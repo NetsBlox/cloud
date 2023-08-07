@@ -1,15 +1,11 @@
-use actix_session::Session;
 use actix_web::{get, post, HttpRequest};
 use actix_web::{web, HttpResponse};
-use futures::TryStreamExt;
-use mongodb::bson::doc;
 
 use crate::app_data::AppData;
+use crate::auth;
 use crate::collaboration_invites::actions::CollaborationInviteActions;
-use crate::common::{api, api::InvitationState, api::ProjectId, CollaborationInvite};
-use crate::errors::{InternalError, UserError};
-use crate::{auth, network};
-use mongodb::options::{FindOneAndUpdateOptions, ReturnDocument};
+use crate::common::{api::InvitationState, api::ProjectId};
+use crate::errors::UserError;
 
 #[get("/user/{receiver}/")]
 async fn list_invites(

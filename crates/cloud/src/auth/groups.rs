@@ -2,7 +2,7 @@ use crate::app_data::AppData;
 use actix_web::HttpRequest;
 use netsblox_cloud_common::api;
 
-use crate::errors::{InternalError, UserError};
+use crate::errors::UserError;
 
 pub(crate) struct ViewGroup {
     pub(crate) id: api::GroupId,
@@ -35,7 +35,7 @@ pub(crate) async fn try_edit_group(
 }
 
 pub(crate) struct DeleteGroup {
-    pub(crate) id: GroupId,
+    pub(crate) id: api::GroupId,
     _private: (),
 }
 

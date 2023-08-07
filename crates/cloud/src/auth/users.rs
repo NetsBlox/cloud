@@ -1,6 +1,6 @@
 use std::collections::HashSet;
 
-use actix_session::SessionExt;
+use actix_session::{Session, SessionExt};
 use actix_web::HttpRequest;
 use futures::TryStreamExt;
 use mongodb::bson::doc;
@@ -68,8 +68,7 @@ pub(crate) async fn try_list_users(
     app: &AppData,
     req: &HttpRequest,
 ) -> Result<ListUsers, UserError> {
-    let session = req.get_session();
-    if is_super_user(&app, &session).await? {
+    if is_super_user(&app, req).await? {
         Ok(ListUsers { _private: () })
     } else {
         Err(UserError::PermissionsError)
@@ -92,7 +91,7 @@ pub(crate) async fn try_edit_user(
 
     if let Some(requestor) = session.get::<String>("username").unwrap_or(None) {
         let can_edit = requestor == username
-            || is_super_user(app, &session).await?
+            || is_super_user(app, req).await?
             || has_group_containing(app, &requestor, username).await?;
         if can_edit {
             Ok(EditUser {
@@ -179,8 +178,9 @@ pub(crate) async fn try_ban_user(
     }
 }
 
-async fn is_super_user(app: &AppData, session: &Session) -> Result<bool, UserError> {
-    match get_session_role(app, session).await? {
+pub(super) async fn is_super_user(app: &AppData, req: &HttpRequest) -> Result<bool, UserError> {
+    let session = req.get_session();
+    match get_session_role(app, &session).await? {
         UserRole::Admin => Ok(true),
         _ => Ok(false),
     }

@@ -14,9 +14,15 @@ pub(crate) struct HostActions {
 }
 
 impl HostActions {
+    pub(crate) fn new(authorized_services: Collection<AuthorizedServiceHost>) -> Self {
+        Self {
+            authorized_services,
+        }
+    }
+
     pub(crate) async fn get_hosts(
         &self,
-        lh: &auth::ViewAuthHosts,
+        _lh: &auth::ViewAuthHosts,
     ) -> Result<Vec<api::AuthorizedServiceHost>, UserError> {
         let query = doc! {};
         let cursor = self
@@ -37,7 +43,7 @@ impl HostActions {
     }
     pub(crate) async fn authorize(
         &self,
-        lh: &auth::AuthorizeHost,
+        _lh: &auth::AuthorizeHost,
         host: api::AuthorizedServiceHost,
     ) -> Result<String, UserError> {
         ensure_valid_service_id(&host.id)?;

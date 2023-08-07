@@ -1,7 +1,9 @@
 use std::time::SystemTime;
 
-use mongodb::{bson::doc, Collection};
+use futures::TryStreamExt;
+use mongodb::{bson::doc, options::ReturnDocument, Collection};
 use netsblox_cloud_common::{api::oauth, OAuthClient, OAuthToken};
+use passwords::PasswordGenerator;
 use uuid::Uuid;
 
 use crate::{
@@ -10,7 +12,10 @@ use crate::{
     utils::sha512,
 };
 
-use super::routes::AuthorizeClientParams;
+use super::{
+    html_template,
+    routes::{AuthorizeClientParams, Scope},
+};
 
 pub(crate) struct OAuthActions {
     clients: Collection<OAuthClient>,
@@ -19,10 +24,44 @@ pub(crate) struct OAuthActions {
 }
 
 impl OAuthActions {
+    pub(crate) fn new(
+        clients: Collection<OAuthClient>,
+        tokens: Collection<OAuthToken>,
+        codes: Collection<oauth::Code>,
+    ) -> Self {
+        Self {
+            clients,
+            tokens,
+            codes,
+        }
+    }
+
+    pub(crate) async fn render_auth_page(
+        &self,
+        eu: &auth::EditUser,
+        client_id: &oauth::ClientId,
+    ) -> Result<String, UserError> {
+        let query = doc! {"id": &client_id};
+        let client = self
+            .clients
+            .find_one(query, None)
+            .await
+            .map_err(InternalError::DatabaseConnectionError)?
+            .ok_or(UserError::OAuthClientNotFoundError)?;
+
+        // FIXME: the requestor should pass the scopes
+        let scopes = [Scope::ViewAlexaSkills, Scope::ExecuteBlocks];
+        Ok(html_template::authorize_page(
+            &eu.username,
+            &client.name,
+            &scopes,
+        ))
+    }
+
     pub(crate) async fn authorize(
         &self,
         eu: &auth::EditUser,
-        params: AuthorizeClientParams,
+        params: &AuthorizeClientParams,
     ) -> Result<String, UserError> {
         let redirect_uri = params
             .redirect_uri
@@ -86,5 +125,81 @@ impl OAuthActions {
         };
 
         Ok(url)
+    }
+
+    pub(crate) async fn create_client(
+        &self,
+        cc: &auth::ManageClient,
+        name: &str,
+    ) -> Result<oauth::CreatedClientData, UserError> {
+        let query = doc! {"name": &name};
+        let secret = PasswordGenerator::new()
+            .length(12)
+            .spaces(false)
+            .exclude_similar_characters(true)
+            .generate_one()
+            .map_err(|_err| InternalError::PasswordGenerationError)?;
+
+        let client = OAuthClient::new(name.to_owned(), secret.clone());
+        let client_id = client.id.clone();
+
+        let update = doc! {"$setOnInsert": client};
+        let options = mongodb::options::FindOneAndUpdateOptions::builder()
+            .return_document(ReturnDocument::Before)
+            .upsert(true)
+            .build();
+
+        let existing_client = self
+            .clients
+            .find_one_and_update(query, update, options)
+            .await
+            .map_err(InternalError::DatabaseConnectionError)?;
+
+        if existing_client.is_some() {
+            Err(UserError::OAuthClientAlreadyExistsError)
+        } else {
+            let created_client = oauth::CreatedClientData {
+                id: client_id,
+                secret,
+            };
+            Ok(created_client)
+        }
+    }
+
+    pub(crate) async fn delete_client(
+        &self,
+        cc: &auth::ManageClient,
+        client_id: &oauth::ClientId,
+    ) -> Result<oauth::Client, UserError> {
+        let query = doc! {"id": client_id};
+        let client = self
+            .clients
+            .find_one_and_delete(query, None)
+            .await
+            .map_err(InternalError::DatabaseConnectionError)?
+            .ok_or(UserError::OAuthClientNotFoundError)?;
+
+        Ok(client.into())
+    }
+
+    pub(crate) async fn list_clients(
+        &self,
+        cc: &auth::ManageClient,
+    ) -> Result<Vec<oauth::Client>, UserError> {
+        let cursor = self
+            .clients
+            .find(doc! {}, None)
+            .await
+            .map_err(InternalError::DatabaseConnectionError)?;
+
+        let clients: Vec<oauth::Client> = cursor
+            .try_collect::<Vec<_>>()
+            .await
+            .map_err(InternalError::DatabaseConnectionError)?
+            .into_iter()
+            .map(|c| c.into())
+            .collect();
+
+        Ok(clients)
     }
 }

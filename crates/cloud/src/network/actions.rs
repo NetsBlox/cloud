@@ -29,6 +29,23 @@ pub(crate) struct NetworkActions {
 }
 
 impl NetworkActions {
+    pub(crate) fn new(
+        project_metadata: Collection<ProjectMetadata>,
+        project_cache: Arc<RwLock<LruCache<api::ProjectId, ProjectMetadata>>>,
+        network: Addr<TopologyActor>,
+
+        occupant_invites: Collection<OccupantInvite>,
+        recorded_messages: Collection<SentMessage>,
+    ) -> Self {
+        Self {
+            project_metadata,
+            occupant_invites,
+            project_cache,
+            recorded_messages,
+            network,
+        }
+    }
+
     // TODO: can we ensure occupants can view the room state?
     pub(crate) async fn get_room_state(
         &self,

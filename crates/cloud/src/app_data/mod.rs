@@ -7,16 +7,15 @@ use crate::groups::actions::GroupActions;
 use crate::libraries::actions::LibraryActions;
 use crate::network::actions::NetworkActions;
 use crate::oauth::actions::OAuthActions;
-use crate::projects;
 use crate::projects::ProjectActions;
 use crate::services::hosts::actions::HostActions;
-use crate::users::actions::UserActions;
+use crate::users::actions::{UserActionData, UserActions};
 //pub use self::
 use actix_web::rt::time;
 use lazy_static::lazy_static;
-use lettre::message::{Mailbox, MultiPart};
+use lettre::message::Mailbox;
 use lettre::transport::smtp::authentication::Credentials;
-use lettre::{Address, Message, SmtpTransport, Transport};
+use lettre::SmtpTransport;
 use log::{error, info, warn};
 use lru::LruCache;
 use mongodb::bson::{doc, Document};
@@ -392,32 +391,6 @@ impl AppData {
         Ok(cache.get(id).unwrap().clone())
     }
 
-    // TODO: remove the following method (moved to projects/actions.rs)
-    /// Get a unique project name for the given user and preferred name.
-    pub async fn get_valid_project_name(
-        &self,
-        owner: &str,
-        basename: &str,
-    ) -> Result<String, UserError> {
-        projects::ensure_valid_name(basename)?;
-
-        let query = doc! {"owner": &owner};
-        let cursor = self
-            .project_metadata
-            .find(query, None)
-            .await
-            .map_err(InternalError::DatabaseConnectionError)?;
-        let project_names = cursor
-            .try_collect::<Vec<_>>()
-            .await
-            .map_err(InternalError::DatabaseConnectionError)?
-            .iter()
-            .map(|md| md.name.to_owned())
-            .collect();
-
-        Ok(get_unique_name(project_names, basename))
-    }
-
     // Membership queries (cached)
     pub async fn keep_members(&self, usernames: HashSet<String>) -> Result<Vec<String>, UserError> {
         let cache = MEMBERSHIP_CACHE.write().await;
@@ -516,31 +489,6 @@ impl AppData {
         }
     }
 
-    pub async fn send_email(
-        &self,
-        to_email: &str,
-        subject: &str,
-        body: MultiPart,
-    ) -> Result<(), UserError> {
-        let email = Message::builder()
-            .from(self.sender.clone())
-            .to(Mailbox::new(
-                None,
-                to_email
-                    .parse::<Address>()
-                    .map_err(|_err| UserError::InvalidEmailAddress)?,
-            ))
-            .subject(subject.to_string())
-            .date_now()
-            .multipart(body)
-            .map_err(|_err| InternalError::EmailBuildError)?;
-
-        self.mailer
-            .send(&email)
-            .map_err(InternalError::SendEmailError)?;
-        Ok(())
-    }
-
     #[cfg(test)]
     pub(crate) async fn insert_friends(&self, friends: &[FriendLink]) -> Result<(), InternalError> {
         self.friends
@@ -584,102 +532,98 @@ impl AppData {
 
 impl From<actix_web::web::Data<AppData>> for ProjectActions {
     fn from(app: actix_web::web::Data<AppData>) -> ProjectActions {
-        ProjectActions {
-            project_cache: PROJECT_CACHE.clone(),
-            project_metadata: app.project_metadata,
-            network: app.network,
-            bucket: app.bucket,
-            s3: app.s3,
-        }
+        ProjectActions::new(
+            app.project_metadata.clone(),
+            PROJECT_CACHE.clone(),
+            app.network.clone(),
+            app.bucket.clone(),
+            app.s3.clone(),
+        )
     }
 }
 
 impl From<actix_web::web::Data<AppData>> for FriendActions {
     fn from(app: actix_web::web::Data<AppData>) -> FriendActions {
-        FriendActions {
-            friend_cache: FRIEND_CACHE.clone(),
-            friends: app.friends,
-
-            users: app.users,
-            groups: app.groups,
-            network: app.network,
-        }
+        FriendActions::new(
+            app.friends.clone(),
+            FRIEND_CACHE.clone(),
+            app.users.clone(),
+            app.groups.clone(),
+            app.network.clone(),
+        )
     }
 }
 
 impl From<actix_web::web::Data<AppData>> for CollaborationInviteActions {
     fn from(app: actix_web::web::Data<AppData>) -> CollaborationInviteActions {
-        CollaborationInviteActions {
-            collab_invites: app.collab_invites,
-
-            project_metadata: app.project_metadata,
-            project_cache: PROJECT_CACHE.clone(),
-            network: app.network,
-        }
+        CollaborationInviteActions::new(
+            app.collab_invites.clone(),
+            app.project_metadata.clone(),
+            PROJECT_CACHE.clone(),
+            app.network.clone(),
+        )
     }
 }
 
 impl From<actix_web::web::Data<AppData>> for NetworkActions {
     fn from(app: actix_web::web::Data<AppData>) -> NetworkActions {
-        NetworkActions {
-            project_cache: PROJECT_CACHE.clone(),
-            project_metadata: app.project_metadata,
-            occupant_invites: app.occupant_invites,
-            network: app.network,
-            recorded_messages: app.recorded_messages,
-        }
+        NetworkActions::new(
+            app.project_metadata.clone(),
+            PROJECT_CACHE.clone(),
+            app.network.clone(),
+            app.occupant_invites.clone(),
+            app.recorded_messages.clone(),
+        )
     }
 }
 
 impl From<actix_web::web::Data<AppData>> for GroupActions {
     fn from(app: actix_web::web::Data<AppData>) -> GroupActions {
-        GroupActions {
-            groups: app.groups,
-            users: app.users,
-        }
+        GroupActions::new(app.groups.clone(), app.users.clone())
     }
 }
 
 impl From<actix_web::web::Data<AppData>> for OAuthActions {
     fn from(app: actix_web::web::Data<AppData>) -> OAuthActions {
-        OAuthActions {
-            clients: app.oauth_clients,
-            tokens: app.oauth_tokens,
-            codes: app.oauth_codes,
-        }
+        OAuthActions::new(
+            app.oauth_clients.clone(),
+            app.oauth_tokens.clone(),
+            app.oauth_codes.clone(),
+        )
     }
 }
 
 impl From<actix_web::web::Data<AppData>> for LibraryActions {
     fn from(app: actix_web::web::Data<AppData>) -> LibraryActions {
-        LibraryActions {
-            libraries: app.libraries,
-        }
+        LibraryActions::new(app.libraries.clone())
     }
 }
 
 impl From<actix_web::web::Data<AppData>> for UserActions {
     fn from(app: actix_web::web::Data<AppData>) -> UserActions {
-        UserActions {
-            users: app.users,
-            banned_accounts: app.banned_accounts,
-            password_tokens: app.password_tokens,
-            metrics: app.metrics,
+        let data = UserActionData {
+            users: app.users.clone(),
+            banned_accounts: app.banned_accounts.clone(),
+            password_tokens: app.password_tokens.clone(),
+            metrics: app.metrics.clone(),
 
             project_cache: PROJECT_CACHE.clone(),
-            project_metadata: app.project_metadata,
-            network: app.network,
+            project_metadata: app.project_metadata.clone(),
+            network: app.network.clone(),
 
             friend_cache: FRIEND_CACHE.clone(),
-        }
+
+            mailer: app.mailer.clone(),
+            sender: app.sender.clone(),
+            public_url: app.settings.public_url.clone(),
+        };
+        UserActions::new(data)
     }
 }
 
 impl From<actix_web::web::Data<AppData>> for HostActions {
     fn from(app: actix_web::web::Data<AppData>) -> HostActions {
-        HostActions {
-            authorized_services: app.authorized_services,
-        }
+        HostActions::new(app.authorized_services.clone())
     }
 }
 
@@ -768,11 +712,15 @@ mod tests {
             .with_friend_links(&[link])
             .run(|app_data| async move {
                 let link = app_data
-                    .respond_to_request(&rcvr.username, &sender.username, FriendLinkState::APPROVED)
+                    .respond_to_request(
+                        &rcvr.username,
+                        &sender.username,
+                        api::FriendLinkState::APPROVED,
+                    )
                     .await
                     .unwrap();
 
-                assert!(matches!(link.state, FriendLinkState::APPROVED));
+                assert!(matches!(link.state, api::FriendLinkState::APPROVED));
             })
             .await;
     }
@@ -782,7 +730,7 @@ mod tests {
         test_utils::setup()
             .run(|app_data| async move {
                 let result = app_data
-                    .respond_to_request("rcvr", "sender", FriendLinkState::APPROVED)
+                    .respond_to_request("rcvr", "sender", api::FriendLinkState::APPROVED)
                     .await;
 
                 assert!(matches!(result, Err(UserError::InviteNotFoundError)));
@@ -848,7 +796,7 @@ mod tests {
         let link = FriendLink::new(
             sender.username.clone(),
             rcvr.username.clone(),
-            Some(FriendLinkState::APPROVED),
+            Some(api::FriendLinkState::APPROVED),
         );
 
         test_utils::setup()
@@ -856,7 +804,7 @@ mod tests {
             .with_friend_links(&[link])
             .run(|app_data| async move {
                 let result = app_data
-                    .respond_to_request("rcvr", "sender", FriendLinkState::APPROVED)
+                    .respond_to_request("rcvr", "sender", api::FriendLinkState::APPROVED)
                     .await;
 
                 assert!(matches!(result, Err(UserError::InviteNotFoundError)));
@@ -885,7 +833,7 @@ mod tests {
         let link = FriendLink::new(
             sender.username.clone(),
             rcvr.username.clone(),
-            Some(FriendLinkState::BLOCKED),
+            Some(api::FriendLinkState::BLOCKED),
         );
 
         test_utils::setup()
@@ -893,7 +841,7 @@ mod tests {
             .with_friend_links(&[link])
             .run(|app_data| async move {
                 let result = app_data
-                    .respond_to_request("rcvr", "sender", FriendLinkState::APPROVED)
+                    .respond_to_request("rcvr", "sender", api::FriendLinkState::APPROVED)
                     .await;
 
                 assert!(matches!(result, Err(UserError::InviteNotFoundError)));

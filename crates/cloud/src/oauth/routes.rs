@@ -1,22 +1,15 @@
-use actix_session::Session;
 use actix_web::http::header;
 use actix_web::{delete, get, post, web, HttpRequest, HttpResponse};
 use derive_more::Display;
-use futures::TryStreamExt;
 use mongodb::bson::doc;
-use mongodb::options::ReturnDocument;
-use passwords::PasswordGenerator;
 use serde::Deserialize;
-use std::time::SystemTime;
-use uuid::Uuid;
 
 use crate::app_data::AppData;
-use crate::auth;
 use crate::common::api::oauth;
-use crate::common::{OAuthClient, OAuthToken};
+use crate::common::OAuthToken;
 use crate::errors::{InternalError, OAuthFlowError, UserError};
 use crate::oauth::actions::OAuthActions;
-use crate::utils::sha512;
+use crate::{auth, utils};
 
 #[derive(Deserialize)]
 struct AuthorizeParams {
@@ -42,23 +35,21 @@ async fn authorization_page(
     params: web::Query<AuthorizeParams>,
     req: HttpRequest,
 ) -> Result<HttpResponse, UserError> {
-    let session = req.get_session();
-    let current_user = session.get::<String>("username").ok().flatten();
-    if let Some(username) = current_user {
-        let query = doc! {"id": &params.client_id};
-        let client = app
-            .oauth_clients
-            .find_one(query, None)
-            .await
-            .map_err(InternalError::DatabaseConnectionError)?
-            .ok_or(UserError::OAuthClientNotFoundError)?;
+    let auth_eu = if let Some(username) = utils::get_username(&req) {
+        auth::try_edit_user(&app, &req, None, &username).await
+    } else {
+        Err(UserError::LoginRequiredError)
+    };
 
-        // FIXME: the requestor should pass the scopes
-        let scopes = [Scope::ViewAlexaSkills, Scope::ExecuteBlocks];
-        let html = html_template::authorize_page(&username, &client.name, &scopes);
-        Ok(HttpResponse::Ok()
+    let response = if let Ok(auth_eu) = auth_eu {
+        let actions: OAuthActions = app.into();
+        let html = actions
+            .render_auth_page(&auth_eu, &params.client_id)
+            .await?;
+
+        HttpResponse::Ok()
             .content_type(header::ContentType::html())
-            .body(html))
+            .body(html)
     } else {
         let url = app
             .settings
@@ -66,16 +57,16 @@ async fn authorization_page(
             .as_ref()
             .ok_or(UserError::LoginRequiredError)?;
 
-        let response = HttpResponse::Found()
+        HttpResponse::Found()
             .insert_header(("Location", url.as_str()))
-            .finish();
+            .finish()
+    };
 
-        Ok(response)
-    }
+    Ok(response)
 }
 
 #[derive(Deserialize)]
-pub(super) struct AuthorizeClientParams {
+pub(crate) struct AuthorizeClientParams {
     pub(super) client_id: oauth::ClientId,
     pub(super) client_secret: String,
     pub(super) redirect_uri: Option<String>,
@@ -185,57 +176,22 @@ async fn create_client(
     params: web::Json<oauth::CreateClientData>,
     req: HttpRequest,
 ) -> Result<HttpResponse, UserError> {
-    ensure_is_super_user(&app, &session).await?;
+    let auth_cc = auth::try_manage_client(&app, &req).await?;
 
-    let query = doc! {"name": &params.name};
-
-    let secret = PasswordGenerator::new()
-        .length(12)
-        .spaces(false)
-        .exclude_similar_characters(true)
-        .generate_one()
-        .map_err(|_err| InternalError::PasswordGenerationError)?;
-
-    let client = OAuthClient::new(params.name.clone(), secret.clone());
-    let client_id = client.id.clone();
-
-    let update = doc! {"$setOnInsert": client};
-    let options = mongodb::options::FindOneAndUpdateOptions::builder()
-        .return_document(ReturnDocument::Before)
-        .upsert(true)
-        .build();
-
-    let existing_client = app
-        .oauth_clients
-        .find_one_and_update(query, update, options)
-        .await
-        .map_err(InternalError::DatabaseConnectionError)?;
-
-    if existing_client.is_some() {
-        Err(UserError::OAuthClientAlreadyExistsError)
-    } else {
-        Ok(HttpResponse::Ok().json(oauth::CreatedClientData {
-            id: client_id,
-            secret,
-        }))
-    }
+    let actions: OAuthActions = app.into();
+    let client = actions.create_client(&auth_cc, &params.name).await?;
+    Ok(HttpResponse::Ok().json(client))
 }
 
 #[get("/clients/")]
-async fn list_clients(app: web::Data<AppData>) -> Result<HttpResponse, UserError> {
-    let cursor = app
-        .oauth_clients
-        .find(doc! {}, None)
-        .await
-        .map_err(InternalError::DatabaseConnectionError)?;
+async fn list_clients(
+    app: web::Data<AppData>,
+    req: HttpRequest,
+) -> Result<HttpResponse, UserError> {
+    let auth_cc = auth::try_manage_client(&app, &req).await?;
 
-    let clients: Vec<oauth::Client> = cursor
-        .try_collect::<Vec<_>>()
-        .await
-        .map_err(InternalError::DatabaseConnectionError)?
-        .into_iter()
-        .map(|c| c.into())
-        .collect();
+    let actions: OAuthActions = app.into();
+    let clients = actions.list_clients(&auth_cc).await?;
 
     Ok(HttpResponse::Ok().json(clients))
 }
@@ -246,17 +202,13 @@ async fn remove_client(
     path: web::Path<(oauth::ClientId,)>,
     req: HttpRequest,
 ) -> Result<HttpResponse, UserError> {
-    ensure_is_super_user(&app, &session).await?;
-
+    let auth_cc = auth::try_manage_client(&app, &req).await?;
     let (client_id,) = path.into_inner();
-    let query = doc! {"id": client_id};
-    app.oauth_clients
-        .find_one_and_delete(query, None)
-        .await
-        .map_err(InternalError::DatabaseConnectionError)?
-        .ok_or(UserError::OAuthClientNotFoundError)?;
 
-    Ok(HttpResponse::Ok().finish())
+    let actions: OAuthActions = app.into();
+    let client = actions.delete_client(&auth_cc, &client_id).await?;
+
+    Ok(HttpResponse::Ok().json(client))
 }
 
 pub fn config(cfg: &mut web::ServiceConfig) {

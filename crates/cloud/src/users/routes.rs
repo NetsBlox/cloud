@@ -1,4 +1,5 @@
-use super::{email_template, html_template};
+use super::html_template;
+use super::strategies;
 use crate::app_data::AppData;
 use crate::auth;
 use crate::common::api;
@@ -144,13 +145,7 @@ async fn reset_password(
     let auth_eu = auth::try_edit_user(&app, &req, None, &username).await?;
 
     let actions: UserActions = app.into();
-    let url_path = actions.reset_password(&auth_eu).await?;
-
-    // TODO: make a better type to return from reset_password like `ResetEmail`
-    let subject = "Password Reset Request";
-    let url = format!("{}{}", app.settings.public_url, url_path);
-    let message = email_template::set_password_email(&username, &url);
-    app.send_email(&user.email, subject, message).await?;
+    actions.reset_password(&auth_eu).await?;
 
     Ok(HttpResponse::Ok().finish())
 }

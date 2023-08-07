@@ -35,35 +35,36 @@ pub(crate) async fn try_evict_client(
     client_id: &api::ClientId,
 ) -> Result<EvictClient, UserError> {
     let project = get_project_for_client(app, client_id).await?;
+    todo!()
 
     // client can be evicted by anyone who can edit the browser project
-    if let Some(metadata) = project.clone() {
-        let session = req.get_session();
-        if can_edit_project(app, req, Some(client_id), &metadata).await? {
-            return Ok(EvictClient {
-                project,
-                id: client_id.to_owned(),
-                _private: (),
-            });
-        }
-    }
+    // if let Some(metadata) = project.clone() {
+    //     let session = req.get_session();
+    //     if can_edit_project(app, req, Some(client_id), &metadata).await? {
+    //         return Ok(EvictClient {
+    //             project,
+    //             id: client_id.to_owned(),
+    //             _private: (),
+    //         });
+    //     }
+    // }
 
-    // or by anyone who can edit the corresponding user
-    let task = app
-        .network
-        .send(topology::GetClientUsername(client_id.clone()))
-        .await
-        .map_err(InternalError::ActixMessageError)?;
+    // // or by anyone who can edit the corresponding user
+    // let task = app
+    //     .network
+    //     .send(topology::GetClientUsername(client_id.clone()))
+    //     .await
+    //     .map_err(InternalError::ActixMessageError)?;
 
-    let username = task.run().await.ok_or(UserError::PermissionsError)?;
+    // let username = task.run().await.ok_or(UserError::PermissionsError)?;
 
-    let auth_eu = auth::try_edit_user(app, req, None, &username).await?;
+    // let auth_eu = auth::try_edit_user(app, req, None, &username).await?;
 
-    Ok(EvictClient {
-        project,
-        id: client_id.to_owned(),
-        _private: (),
-    })
+    // Ok(EvictClient {
+    //     project,
+    //     id: client_id.to_owned(),
+    //     _private: (),
+    // })
 }
 
 pub(crate) struct ListActiveRooms {
@@ -74,8 +75,7 @@ pub(crate) async fn try_list_rooms(
     app: &AppData,
     req: &HttpRequest,
 ) -> Result<ListActiveRooms, UserError> {
-    let session = req.get_session();
-    if is_super_user(app, &session).await? {
+    if is_super_user(app, req).await? {
         Ok(ListActiveRooms { _private: () })
     } else {
         Err(UserError::PermissionsError)
@@ -91,7 +91,7 @@ pub(crate) async fn try_list_clients(
     req: &HttpRequest,
 ) -> Result<ListClients, UserError> {
     let session = req.get_session();
-    if is_super_user(app, &session).await? {
+    if is_super_user(app, req).await? {
         Ok(ListClients { _private: () })
     } else {
         Err(UserError::PermissionsError)

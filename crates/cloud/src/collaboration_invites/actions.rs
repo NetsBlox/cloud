@@ -29,6 +29,20 @@ pub(crate) struct CollaborationInviteActions {
 }
 
 impl CollaborationInviteActions {
+    pub(crate) fn new(
+        collab_invites: Collection<CollaborationInvite>,
+
+        project_metadata: Collection<ProjectMetadata>,
+        project_cache: Arc<RwLock<LruCache<api::ProjectId, ProjectMetadata>>>,
+        network: Addr<TopologyActor>,
+    ) -> Self {
+        Self {
+            collab_invites,
+            project_metadata,
+            project_cache,
+            network,
+        }
+    }
     pub(crate) async fn list_invites(
         &self,
         eu: &auth::ViewUser,

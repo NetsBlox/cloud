@@ -4,9 +4,32 @@ use mongodb::bson::doc;
 use netsblox_cloud_common::{api, ProjectMetadata};
 
 use crate::app_data::AppData;
-use crate::errors::{InternalError, UserError};
+use crate::errors::UserError;
 
 pub(crate) struct ViewProject {
+    pub(crate) metadata: ProjectMetadata,
+    _private: (),
+}
+
+pub(crate) enum ProjectRole {
+    Owner,
+    Collaborator,
+}
+
+/// Permissions to list projects for a given owner or with a given collaborator
+pub(crate) struct ListProjects {
+    pub(crate) username: String,
+    //pub(crate) role: ProjectRole,
+    pub(crate) visibility: api::PublishState,
+    _private: (),
+}
+
+pub(crate) struct EditProject {
+    pub(crate) metadata: ProjectMetadata,
+    _private: (),
+}
+
+pub(crate) struct DeleteProject {
     pub(crate) metadata: ProjectMetadata,
     _private: (),
 }
@@ -55,11 +78,6 @@ pub(crate) async fn try_view_project(
     }
 }
 
-pub(crate) struct EditProject {
-    pub(crate) metadata: ProjectMetadata,
-    _private: (),
-}
-
 pub(crate) async fn try_edit_project(
     app: &AppData,
     req: &HttpRequest,
@@ -79,11 +97,6 @@ pub(crate) async fn try_edit_project(
     }
 }
 
-pub(crate) struct DeleteProject {
-    pub(crate) metadata: ProjectMetadata,
-    _private: (),
-}
-
 // TODO: should I define a macro for this to automatically convert project IDs to metadata?
 // Or should we define a trait for these authorization objects? try_auth?
 pub(crate) async fn try_delete_project(
@@ -94,15 +107,35 @@ pub(crate) async fn try_delete_project(
 ) -> Result<DeleteProject, UserError> {
     let metadata = app.get_project_metadatum(project_id).await?;
 
-    let auth_dp = can_delete_project(app, req, client_id.as_ref(), &metadata).await;
-    if auth_dp.is_ok() {
-        Ok(DeleteProject {
-            metadata,
-            _private: (),
-        })
+    todo!()
+    // let auth_dp = can_delete_project(app, req, client_id.as_ref(), &metadata).await;
+    // if auth_dp.is_ok() {
+    //     Ok(DeleteProject {
+    //         metadata,
+    //         _private: (),
+    //     })
+    // } else {
+    //     Err(UserError::PermissionsError)
+    // }
+}
+
+pub(crate) async fn try_list_projects(
+    app: &AppData,
+    req: &HttpRequest,
+    username: &str,
+) -> Result<ListProjects, UserError> {
+    let auth_eu = super::try_edit_user(app, req, None, username).await;
+    let visibility = if let Ok(auth_eu) = auth_eu {
+        api::PublishState::Private
     } else {
-        Err(UserError::PermissionsError)
-    }
+        api::PublishState::PendingApproval
+    };
+
+    Ok(ListProjects {
+        username: username.to_owned(),
+        visibility,
+        _private: (),
+    })
 }
 
 async fn can_edit_project(
@@ -111,26 +144,27 @@ async fn can_edit_project(
     client_id: Option<&api::ClientId>,
     project: &ProjectMetadata,
 ) -> Result<EditProject, UserError> {
-    let session = req.get_session();
-    let is_owner = client_id
-        .map(|id| id.as_str() == project.owner)
-        .unwrap_or(false);
+    todo!()
+    // let session = req.get_session();
+    // let is_owner = client_id
+    //     .map(|id| id.as_str() == project.owner)
+    //     .unwrap_or(false);
 
-    if is_owner {
-        Ok(true)
-    } else {
-        match session.get::<String>("username").unwrap_or(None) {
-            Some(username) => {
-                if project.collaborators.contains(&username) {
-                    Ok(true)
-                } else {
-                    try_edit_user(app, req, client_id, &project.owner).await?;
-                    Ok(true)
-                }
-            }
-            None => Err(UserError::LoginRequiredError),
-        }
-    }
+    // if is_owner {
+    //     Ok(true)
+    // } else {
+    //     match session.get::<String>("username").unwrap_or(None) {
+    //         Some(username) => {
+    //             if project.collaborators.contains(&username) {
+    //                 Ok(true)
+    //             } else {
+    //                 try_edit_user(app, req, client_id, &project.owner).await?;
+    //                 Ok(true)
+    //             }
+    //         }
+    //         None => Err(UserError::LoginRequiredError),
+    //     }
+    // }
 }
 
 fn flatten<T>(nested: Option<Option<T>>) -> Option<T> {

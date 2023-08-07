@@ -119,7 +119,7 @@ async fn main() -> std::io::Result<()> {
             .service(web::scope("/groups").configure(groups::routes::config))
             .service(web::scope("/friends").configure(friends::routes::config))
             .service(web::scope("/network").configure(network::routes::config))
-            .service(web::scope("/oauth").configure(oauth::config))
+            .service(web::scope("/oauth").configure(oauth::routes::config))
             .service(
                 web::scope("/collaboration-invites")
                     .configure(collaboration_invites::routes::config),

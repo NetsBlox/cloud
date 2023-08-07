@@ -14,12 +14,11 @@ use mongodb::{
 use reqwest::{Method, Response};
 use serde::Deserialize;
 
+use crate::utils::sha512;
 use crate::{
     common::User,
     errors::{InternalError, UserError},
 };
-
-use super::sha512;
 
 #[allow(dead_code)]
 #[derive(Deserialize)]
