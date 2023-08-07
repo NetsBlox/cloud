@@ -399,9 +399,30 @@ pub struct CreateLibraryData {
 #[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq)]
 pub enum PublishState {
     Private,
-    PendingApproval,
     ApprovalDenied,
+    PendingApproval,
     Public,
+}
+
+impl PartialOrd for PublishState {
+    fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
+        if self.eq(other) {
+            Some(Ordering::Equal)
+        } else if matches!(self, PublishState::Private) {
+            Some(Ordering::Greater)
+        } else if matches!(other, PublishState::Private) {
+            Some(Ordering::Less)
+        } else if matches!(self, PublishState::ApprovalDenied) {
+            Some(Ordering::Greater)
+        } else if matches!(other, PublishState::ApprovalDenied) {
+            Some(Ordering::Less)
+        } else if matches!(self, PublishState::PendingApproval) {
+            Some(Ordering::Greater)
+        } else {
+            // other must be PendingApproval and we are Public
+            Some(Ordering::Less)
+        }
+    }
 }
 
 #[derive(Serialize, Deserialize)]
