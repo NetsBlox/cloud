@@ -1,15 +1,10 @@
 use crate::app_data::AppData;
 use crate::auth;
-use crate::common::api::{FriendLinkState, UserRole};
-use crate::errors::{InternalError, UserError};
+use crate::common::api::FriendLinkState;
+use crate::errors::UserError;
 use crate::friends::actions::FriendActions;
-use crate::network::topology::GetOnlineUsers;
-use actix_session::Session;
 use actix_web::{get, post, HttpRequest};
 use actix_web::{web, HttpResponse};
-use futures::TryStreamExt;
-use mongodb::bson::doc;
-use mongodb::options::FindOptions;
 
 #[get("/{owner}/")]
 async fn list_friends(
@@ -63,7 +58,7 @@ async fn unfriend(
 async fn block_user(
     app: web::Data<AppData>,
     path: web::Path<(String, String)>,
-    session: Session,
+    req: HttpRequest,
 ) -> Result<HttpResponse, UserError> {
     let (owner, friend) = path.into_inner();
     let auth_eu = auth::try_edit_user(&app, &req, None, &owner).await?;

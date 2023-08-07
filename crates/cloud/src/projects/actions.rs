@@ -3,9 +3,10 @@ use std::io::BufWriter;
 use std::sync::{Arc, RwLock};
 
 // TODO: is there any shared fn-ality across actions?
+use crate::auth;
 use crate::errors::{InternalError, UserError};
 use crate::network::topology::{self, TopologyActor};
-use crate::{auth, utils};
+use crate::utils;
 use actix::Addr;
 use actix_web::web::Bytes;
 use futures::future::join_all;
@@ -44,7 +45,7 @@ pub(crate) struct ProjectActions {
 impl ProjectActions {
     pub async fn create_project(
         &self,
-        eu: &auth::EditUser,
+        eu: &auth::users::EditUser,
         project_data: api::CreateProjectData,
     ) -> Result<ProjectMetadata, UserError> {
         let name = project_data.name.to_owned();
@@ -94,7 +95,7 @@ impl ProjectActions {
 
     pub(crate) async fn get_project(
         &self,
-        view_proj: &auth::ViewProject,
+        view_proj: &auth::projects::ViewProject,
     ) -> Result<api::Project, UserError> {
         let metadata = view_proj.metadata.clone();
         let (keys, values): (Vec<_>, Vec<_>) = metadata.roles.clone().into_iter().unzip();
@@ -124,7 +125,7 @@ impl ProjectActions {
 
     pub(crate) async fn get_latest_project(
         &self,
-        vp: &auth::ViewProject,
+        vp: &auth::projects::ViewProject,
     ) -> Result<api::Project, UserError> {
         let metadata = vp.metadata.clone();
         let roles = metadata
@@ -152,7 +153,7 @@ impl ProjectActions {
 
     pub(crate) async fn get_project_thumbnail(
         &self,
-        vp: &auth::ViewProject,
+        vp: &auth::projects::ViewProject,
         aspect_ratio: Option<f32>,
     ) -> Result<Bytes, UserError> {
         let role_metadata = vp
@@ -221,13 +222,16 @@ impl ProjectActions {
         Ok(image_content)
     }
 
-    pub(crate) fn get_project_metadata(&self, vp: &auth::ViewProject) -> api::ProjectMetadata {
+    pub(crate) fn get_project_metadata(
+        &self,
+        vp: &auth::ViewProject,
+    ) -> api::projects::ProjectMetadata {
         vp.metadata.clone().into()
     }
 
     pub(crate) async fn rename_project(
         &self,
-        ep: &auth::EditProject,
+        ep: &auth::projects::EditProject,
         new_name: &str,
     ) -> Result<api::ProjectMetadata, UserError> {
         let metadata = &ep.metadata;
@@ -252,13 +256,13 @@ impl ProjectActions {
         Ok(updated_metadata.into())
     }
 
-    pub(crate) fn get_collaborators(&self, md: &auth::ViewProject) -> Vec<String> {
+    pub(crate) fn get_collaborators(&self, md: &auth::projects::ViewProject) -> Vec<String> {
         md.metadata.collaborators.clone()
     }
 
     pub(crate) async fn remove_collaborator(
         &self,
-        ep: &auth::EditProject,
+        ep: &auth::projects::EditProject,
         collaborator: &str,
     ) -> Result<api::ProjectMetadata, UserError> {
         let query = doc! {"id": &ep.metadata.id};
@@ -281,7 +285,7 @@ impl ProjectActions {
 
     pub(crate) async fn set_latest_role(
         &self,
-        md: &auth::EditProject,
+        md: &auth::projects::EditProject,
         role_id: &RoleId,
         id: &Uuid,
         data: RoleData,
@@ -301,7 +305,7 @@ impl ProjectActions {
 
     pub(crate) async fn publish_project(
         &self,
-        ep: &auth::EditProject,
+        ep: &auth::projects::EditProject,
     ) -> Result<api::PublishState, UserError> {
         let state = if self.is_approval_required(&ep.metadata).await? {
             PublishState::PendingApproval
@@ -321,7 +325,7 @@ impl ProjectActions {
 
     pub(crate) async fn unpublish_project(
         &self,
-        edit: &auth::EditProject,
+        edit: &auth::projects::EditProject,
     ) -> Result<api::PublishState, UserError> {
         let query = doc! {"id": &edit.metadata.id};
         let state = PublishState::Private;
@@ -337,7 +341,7 @@ impl ProjectActions {
 
     pub(crate) async fn fetch_role_data(
         &self,
-        vp: &auth::ViewProject,
+        vp: &auth::projects::ViewProject,
         role_id: RoleId,
     ) -> Result<(RoleId, RoleData), UserError> {
         let role_md = vp
@@ -376,7 +380,7 @@ impl ProjectActions {
 
     pub async fn create_role(
         &self,
-        ep: &auth::EditProject,
+        ep: &auth::projects::EditProject,
         role_data: RoleData,
     ) -> Result<ProjectMetadata, UserError> {
         let mut role_md = self
@@ -412,7 +416,7 @@ impl ProjectActions {
 
     pub(crate) async fn rename_role(
         &self,
-        ep: &auth::EditProject,
+        ep: &auth::projects::EditProject,
         role_id: RoleId,
         name: &str,
     ) -> Result<ProjectMetadata, UserError> {
@@ -440,7 +444,7 @@ impl ProjectActions {
 
     pub(crate) async fn delete_role(
         &self,
-        ep: &auth::EditProject,
+        ep: &auth::projects::EditProject,
         role_id: RoleId,
     ) -> Result<ProjectMetadata, UserError> {
         if ep.metadata.roles.keys().count() == 1 {
@@ -466,7 +470,7 @@ impl ProjectActions {
 
     pub(crate) async fn get_role(
         &self,
-        vp: &auth::ViewProject,
+        vp: &auth::projects::ViewProject,
         role_id: RoleId,
     ) -> Result<RoleData, UserError> {
         let role_md = vp
@@ -482,7 +486,7 @@ impl ProjectActions {
     /// Send updated room state and update project cache when room structure is changed or renamed
     pub async fn save_role(
         &self,
-        ep: &auth::EditProject,
+        ep: &auth::projects::EditProject,
         role_id: &RoleId,
         role: RoleData,
     ) -> Result<ProjectMetadata, UserError> {
@@ -530,7 +534,7 @@ impl ProjectActions {
 
     pub async fn delete_project(
         &self,
-        dp: &auth::DeleteProject,
+        dp: &auth::projects::DeleteProject,
     ) -> Result<ProjectMetadata, UserError> {
         let query = doc! {"id": &dp.metadata.id};
         let metadata = self
@@ -616,22 +620,6 @@ impl ProjectActions {
             }
         }
         Ok(false)
-    }
-
-    fn get_cached_project_metadata<'a>(
-        &self,
-        ids: impl Iterator<Item = &'a api::ProjectId>,
-    ) -> (Vec<ProjectMetadata>, Vec<&'a api::ProjectId>) {
-        let mut results = Vec::new();
-        let mut missing_projects = Vec::new();
-        let mut cache = self.project_cache.write().unwrap();
-        for id in ids {
-            match cache.get(id) {
-                Some(project_metadata) => results.push(project_metadata.clone()),
-                None => missing_projects.push(id),
-            }
-        }
-        (results, missing_projects)
     }
 
     async fn upload_role(

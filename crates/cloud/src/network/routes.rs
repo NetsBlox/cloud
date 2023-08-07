@@ -2,25 +2,17 @@ use super::topology;
 use crate::app_data::AppData;
 use crate::auth;
 use crate::common::api::{
-    BrowserClientState, ClientId, ClientState, ClientStateData, OccupantInviteData, ProjectId,
-    SaveState,
+    ClientId, ClientState, ClientStateData, OccupantInviteData, ProjectId, SaveState,
 };
-use crate::common::{
-    api, api::ExternalClientState, NetworkTraceMetadata, OccupantInvite, SentMessage,
-};
+use crate::common::{api, api::ExternalClientState};
 use crate::errors::{InternalError, UserError};
 use crate::network::actions::NetworkActions;
-use crate::services::ensure_is_authorized_host;
-use crate::users::{ensure_can_edit_user, ensure_is_super_user};
 use actix::{Actor, Addr, AsyncContext, Handler, StreamHandler};
 use actix_session::Session;
 use actix_web::{delete, get, post};
 use actix_web::{web, HttpRequest, HttpResponse};
 use actix_web_actors::ws::{self, CloseCode};
-use futures::TryStreamExt;
-use mongodb::bson::{doc, DateTime};
-use mongodb::options::{FindOneAndUpdateOptions, ReturnDocument};
-use netsblox_cloud_common::ProjectMetadata;
+use mongodb::bson::doc;
 use serde::Deserialize;
 use serde_json::{json, Value};
 
@@ -57,13 +49,9 @@ async fn set_client_state(
             ClientState::External(ExternalClientState { address, app_id })
         }
         ClientState::Browser(client_state) => {
-            let auth_vp = auth::try_view_project(
-                &app,
-                &req,
-                Some(client_id.clone()),
-                &client_state.project_id,
-            )
-            .await?;
+            let auth_vp =
+                auth::try_view_project(&app, &req, Some(&client_id), &client_state.project_id)
+                    .await?;
 
             let query = doc! {
                 "id": &auth_vp.metadata.id,
@@ -148,15 +136,11 @@ async fn get_room_state(
 }
 
 #[get("/")]
-async fn get_rooms(app: web::Data<AppData>, session: Session) -> Result<HttpResponse, UserError> {
-    ensure_is_super_user(&app, &session).await?;
+async fn get_rooms(app: web::Data<AppData>, req: HttpRequest) -> Result<HttpResponse, UserError> {
+    let auth_lr = auth::try_list_rooms(&app, &req).await?;
 
-    let task = app
-        .network
-        .send(topology::GetActiveRooms {})
-        .await
-        .map_err(InternalError::ActixMessageError)?;
-    let rooms = task.run().await;
+    let actions: NetworkActions = app.into();
+    let rooms = actions.list_rooms(&auth_lr).await?;
 
     Ok(HttpResponse::Ok().json(rooms))
 }
@@ -164,16 +148,12 @@ async fn get_rooms(app: web::Data<AppData>, session: Session) -> Result<HttpResp
 #[get("/external")]
 async fn get_external_clients(
     app: web::Data<AppData>,
-    session: Session,
+    req: HttpRequest,
 ) -> Result<HttpResponse, UserError> {
-    ensure_is_super_user(&app, &session).await?;
+    let auth_lc = auth::try_list_clients(&app, &req).await?;
 
-    let task = app
-        .network
-        .send(topology::GetExternalClients {})
-        .await
-        .map_err(InternalError::ActixMessageError)?;
-    let clients = task.run().await;
+    let actions: NetworkActions = app.into();
+    let clients = actions.list_external_clients(&auth_lc).await?;
 
     Ok(HttpResponse::Ok().json(clients))
 }
@@ -305,11 +285,11 @@ async fn send_message(
     req: HttpRequest,
 ) -> Result<HttpResponse, UserError> {
     // TODO: Should this be used to send messages from the CLI?
-    ensure_is_authorized_host(&app, &req, None).await?;
-
     let message = message.into_inner();
-    app.network
-        .do_send(topology::SendMessageFromServices { message });
+    let auth_sm = auth::try_send_message(&app, &req, &message).await?;
+
+    let actions: NetworkActions = app.into();
+    actions.send_message(&auth_sm, message);
 
     Ok(HttpResponse::Ok().finish())
 }

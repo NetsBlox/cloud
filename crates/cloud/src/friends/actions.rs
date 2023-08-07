@@ -33,7 +33,10 @@ pub(crate) struct FriendActions {
 }
 
 impl FriendActions {
-    pub(crate) async fn list_friends(&self, vu: &auth::ViewUser) -> Result<Vec<String>, UserError> {
+    pub(crate) async fn list_friends(
+        &self,
+        vu: &auth::users::ViewUser,
+    ) -> Result<Vec<String>, UserError> {
         let friends = utils::get_friends(
             &self.users,
             &self.groups,
@@ -47,10 +50,11 @@ impl FriendActions {
     }
     pub(crate) async fn list_online_friends(
         &self,
-        vu: &auth::ViewUser,
+        vu: &auth::users::ViewUser,
     ) -> Result<Vec<String>, UserError> {
         // TODO: implement the check if the user is an admin
-        let is_universal_friend = matches!(get_user_role(&app, &owner).await?, UserRole::Admin);
+        let is_universal_friend =
+            matches!(get_user_role(&app, &owner).await?, api::UserRole::Admin);
         let filter_usernames = if is_universal_friend {
             None
         } else {
@@ -69,7 +73,7 @@ impl FriendActions {
 
     pub(crate) async fn unfriend(
         &self,
-        vu: &auth::EditUser,
+        vu: &auth::users::EditUser,
         friend: &str,
     ) -> Result<(), UserError> {
         let query = doc! {
@@ -95,7 +99,7 @@ impl FriendActions {
 
     pub(crate) async fn block(
         &self,
-        eu: &auth::EditUser,
+        eu: &auth::users::EditUser,
         other_user: &str,
     ) -> Result<api::FriendLink, UserError> {
         let query = doc! {
@@ -146,7 +150,7 @@ impl FriendActions {
 
     pub(crate) async fn unblock(
         &self,
-        eu: &auth::EditUser,
+        eu: &auth::users::EditUser,
         other_user: &str,
     ) -> Result<(), UserError> {
         let query = doc! {
@@ -165,7 +169,7 @@ impl FriendActions {
 
     pub async fn list_invites(
         &self,
-        vu: &auth::ViewUser,
+        vu: &auth::users::ViewUser,
     ) -> Result<Vec<api::FriendInvite>, UserError> {
         let query = doc! {"recipient": &vu.username, "state": FriendLinkState::PENDING}; // TODO: ensure they are still pending
         let cursor = self
@@ -186,7 +190,7 @@ impl FriendActions {
 
     pub async fn send_invite(
         &self,
-        eu: &auth::EditUser,
+        eu: &auth::users::EditUser,
         recipient: &str,
     ) -> Result<api::FriendLinkState, UserError> {
         // ensure users are valid
@@ -220,7 +224,7 @@ impl FriendActions {
 
     async fn send_invite_unchecked(
         &self,
-        eu: &auth::EditUser,
+        eu: &auth::users::EditUser,
         recipient: &str,
     ) -> Result<api::FriendLinkState, UserError> {
         let query = doc! {
@@ -288,7 +292,7 @@ impl FriendActions {
 
     pub(crate) async fn respond_to_invite(
         &self,
-        eu: &auth::EditUser,
+        eu: &auth::users::EditUser,
         sender: &str,
         resp: FriendLinkState,
     ) -> Result<FriendLink, UserError> {

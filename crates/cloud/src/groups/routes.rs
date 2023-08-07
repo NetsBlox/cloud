@@ -2,7 +2,6 @@ use crate::app_data::AppData;
 use crate::auth;
 use crate::errors::UserError;
 use crate::groups::actions::GroupActions;
-use actix_session::Session;
 use actix_web::{delete, get, patch, post, HttpRequest};
 use actix_web::{web, HttpResponse};
 

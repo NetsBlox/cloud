@@ -2,15 +2,14 @@ use std::collections::HashMap;
 
 use futures::TryStreamExt;
 use mongodb::{bson::doc, options::ReturnDocument, Collection};
-use netsblox_cloud_common::{api, Group};
+use netsblox_cloud_common::{api, Group, User};
 
-use crate::{
-    auth,
-    errors::{InternalError, UserError},
-};
+use crate::auth;
+use crate::errors::{InternalError, UserError};
 
 pub(crate) struct GroupActions {
     groups: Collection<Group>,
+    users: Collection<User>,
 }
 
 impl GroupActions {
@@ -42,7 +41,7 @@ impl GroupActions {
 
     pub(crate) async fn list_groups(
         &self,
-        vg: &auth::ViewUser,
+        vg: &auth::users::ViewUser,
     ) -> Result<Vec<api::Group>, UserError> {
         let query = doc! {"owner": &vg.username};
         let cursor = self
@@ -61,7 +60,10 @@ impl GroupActions {
         Ok(groups)
     }
 
-    pub(crate) async fn view_group(&self, vg: &auth::ViewGroup) -> Result<api::Group, UserError> {
+    pub(crate) async fn view_group(
+        &self,
+        vg: &auth::groups::ViewGroup,
+    ) -> Result<api::Group, UserError> {
         let query = doc! {"id": &vg.id};
         let group = self
             .groups
@@ -75,7 +77,7 @@ impl GroupActions {
 
     pub(crate) async fn rename_group(
         &self,
-        eg: &auth::EditGroup,
+        eg: &auth::groups::EditGroup,
         name: &str,
     ) -> Result<api::Group, UserError> {
         let query = doc! {"id": &eg.id};
@@ -96,7 +98,7 @@ impl GroupActions {
 
     pub(crate) async fn set_group_hosts(
         &self,
-        eg: &auth::EditGroup,
+        eg: &auth::groups::EditGroup,
         hosts: &[api::ServiceHost],
     ) -> Result<api::Group, UserError> {
         let query = doc! {"id": &eg.id};
@@ -116,7 +118,7 @@ impl GroupActions {
 
     pub(crate) async fn get_service_settings(
         &self,
-        vg: &auth::ViewGroup,
+        vg: &auth::groups::ViewGroup,
     ) -> Result<HashMap<String, String>, UserError> {
         let query = doc! {"id": &vg.id};
         let group = self
@@ -131,7 +133,7 @@ impl GroupActions {
 
     pub(crate) async fn set_service_settings(
         &self,
-        vg: &auth::EditGroup,
+        vg: &auth::groups::EditGroup,
         host: &str,
         settings: &str,
     ) -> Result<api::Group, UserError> {
@@ -153,7 +155,7 @@ impl GroupActions {
 
     pub(crate) async fn delete_service_settings(
         &self,
-        vg: &auth::EditGroup,
+        vg: &auth::groups::EditGroup,
         host: &str,
     ) -> Result<api::Group, UserError> {
         let query = doc! {"id": &vg.id};
@@ -174,7 +176,7 @@ impl GroupActions {
 
     pub(crate) async fn delete_group(
         &self,
-        vg: &auth::DeleteGroup,
+        vg: &auth::groups::DeleteGroup,
     ) -> Result<api::Group, UserError> {
         let query = doc! {"id": &vg.id};
         let group: api::Group = self
@@ -191,9 +193,10 @@ impl GroupActions {
     // TODO: move this to the user actions??
     pub(crate) async fn list_members(
         &self,
-        vg: &auth::ViewGroup,
+        vg: &auth::groups::ViewGroup,
     ) -> Result<Vec<api::User>, UserError> {
         let query = doc! {"groupId": &vg.id};
+        // TODO:
         let cursor = self
             .users
             .find(query, None)

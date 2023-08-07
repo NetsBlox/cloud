@@ -1,14 +1,16 @@
 pub(crate) mod metrics;
 
-use crate::common::api::{oauth, LibraryMetadata, NewUser, ProjectId, UserRole};
+use crate::collaboration_invites::actions::CollaborationInviteActions;
+use crate::common::api::{oauth, NewUser, ProjectId, UserRole};
 use crate::friends::actions::FriendActions;
 use crate::groups::actions::GroupActions;
 use crate::libraries::actions::LibraryActions;
 use crate::network::actions::NetworkActions;
+use crate::oauth::actions::OAuthActions;
+use crate::projects;
 use crate::projects::ProjectActions;
 use crate::services::hosts::actions::HostActions;
 use crate::users::actions::UserActions;
-use crate::{network, projects};
 //pub use self::
 use actix_web::rt::time;
 use lazy_static::lazy_static;
@@ -18,12 +20,11 @@ use lettre::{Address, Message, SmtpTransport, Transport};
 use log::{error, info, warn};
 use lru::LruCache;
 use mongodb::bson::{doc, Document};
-use mongodb::options::{FindOneAndUpdateOptions, FindOptions, IndexOptions, ReturnDocument};
-use netsblox_cloud_common::api::{self, FriendInvite, FriendLinkState, GroupId};
+use mongodb::options::{FindOptions, IndexOptions};
+use netsblox_cloud_common::api;
 use rusoto_core::credential::StaticProvider;
 use rusoto_core::Region;
 use serde::{Deserialize, Serialize};
-use std::borrow::Borrow;
 use std::collections::HashSet;
 use std::net::IpAddr;
 use std::sync::{Arc, RwLock};
@@ -357,6 +358,22 @@ impl AppData {
         Ok(results)
     }
 
+    fn get_cached_project_metadata<'a>(
+        &self,
+        ids: impl Iterator<Item = &'a api::ProjectId>,
+    ) -> (Vec<ProjectMetadata>, Vec<&'a api::ProjectId>) {
+        let mut results = Vec::new();
+        let mut missing_projects = Vec::new();
+        let mut cache = PROJECT_CACHE.write().unwrap();
+        for id in ids {
+            match cache.get(id) {
+                Some(project_metadata) => results.push(project_metadata.clone()),
+                None => missing_projects.push(id),
+            }
+        }
+        (results, missing_projects)
+    }
+
     fn get_cached_project(&self, id: &ProjectId) -> Option<ProjectMetadata> {
         let mut cache = PROJECT_CACHE.write().unwrap();
         cache.get(id).map(|md| md.to_owned())
@@ -538,6 +555,17 @@ impl AppData {
         Ok(())
     }
 
+    pub(crate) async fn get_friends(&self, username: &str) -> Result<Vec<String>, UserError> {
+        crate::utils::get_friends(
+            &self.users,
+            &self.groups,
+            &self.friends,
+            FRIEND_CACHE.clone(),
+            username,
+        )
+        .await
+    }
+
     #[cfg(test)]
     pub(crate) async fn drop_all_data(&self) -> Result<(), InternalError> {
         let bucket = &self.settings.s3.bucket;
@@ -571,6 +599,22 @@ impl From<actix_web::web::Data<AppData>> for FriendActions {
         FriendActions {
             friend_cache: FRIEND_CACHE.clone(),
             friends: app.friends,
+
+            users: app.users,
+            groups: app.groups,
+            network: app.network,
+        }
+    }
+}
+
+impl From<actix_web::web::Data<AppData>> for CollaborationInviteActions {
+    fn from(app: actix_web::web::Data<AppData>) -> CollaborationInviteActions {
+        CollaborationInviteActions {
+            collab_invites: app.collab_invites,
+
+            project_metadata: app.project_metadata,
+            project_cache: PROJECT_CACHE.clone(),
+            network: app.network,
         }
     }
 }
@@ -589,7 +633,20 @@ impl From<actix_web::web::Data<AppData>> for NetworkActions {
 
 impl From<actix_web::web::Data<AppData>> for GroupActions {
     fn from(app: actix_web::web::Data<AppData>) -> GroupActions {
-        GroupActions { groups: app.groups }
+        GroupActions {
+            groups: app.groups,
+            users: app.users,
+        }
+    }
+}
+
+impl From<actix_web::web::Data<AppData>> for OAuthActions {
+    fn from(app: actix_web::web::Data<AppData>) -> OAuthActions {
+        OAuthActions {
+            clients: app.oauth_clients,
+            tokens: app.oauth_tokens,
+            codes: app.oauth_codes,
+        }
     }
 }
 
@@ -612,6 +669,8 @@ impl From<actix_web::web::Data<AppData>> for UserActions {
             project_cache: PROJECT_CACHE.clone(),
             project_metadata: app.project_metadata,
             network: app.network,
+
+            friend_cache: FRIEND_CACHE.clone(),
         }
     }
 }

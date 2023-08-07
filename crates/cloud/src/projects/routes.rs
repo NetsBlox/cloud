@@ -256,8 +256,9 @@ async fn get_latest_project(
     req: HttpRequest,
 ) -> Result<HttpResponse, UserError> {
     let (project_id,) = path.into_inner();
-    let client_id = params.into_inner().client_id;
-    let auth_vp = auth::try_view_project(&app, &req, client_id, &project_id).await?;
+    let params = params.into_inner();
+    let auth_vp =
+        auth::try_view_project(&app, &req, params.client_id.as_ref(), &project_id).await?;
     let actions: ProjectActions = app.into();
     let project = actions.get_latest_project(&auth_vp).await?;
     Ok(HttpResponse::Ok().json(project))
@@ -394,8 +395,9 @@ async fn get_latest_role(
     req: HttpRequest,
 ) -> Result<HttpResponse, UserError> {
     let (project_id, role_id) = path.into_inner();
+    let params = params.into_inner();
     let auth_vp =
-        auth::try_view_project(&app, &req, params.into_inner().client_id, &project_id).await?;
+        auth::try_view_project(&app, &req, params.client_id.as_ref(), &project_id).await?;
 
     let actions: ProjectActions = app.into();
     let (_, role_data) = actions.fetch_role_data(&auth_vp, role_id).await?;

@@ -114,7 +114,7 @@ async fn main() -> std::io::Result<()> {
             })
             .app_data(web::Data::new(app_data.clone()))
             .service(web::scope("/libraries").configure(libraries::routes::config))
-            .service(web::scope("/users").configure(users::config))
+            .service(web::scope("/users").configure(users::routes::config))
             .service(web::scope("/projects").configure(projects::routes::config))
             .service(web::scope("/groups").configure(groups::routes::config))
             .service(web::scope("/friends").configure(friends::routes::config))

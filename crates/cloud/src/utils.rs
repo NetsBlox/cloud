@@ -114,7 +114,6 @@ pub(crate) fn sha512(text: &str) -> String {
 }
 
 // Friends
-
 pub(crate) async fn get_friends(
     users: &Collection<User>,
     groups: &Collection<Group>,

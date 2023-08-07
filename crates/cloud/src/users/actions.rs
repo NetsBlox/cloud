@@ -3,6 +3,7 @@ use std::{
     sync::{Arc, RwLock},
 };
 
+use crate::auth;
 use actix::Addr;
 use futures::TryStreamExt;
 use lazy_static::lazy_static;
@@ -15,7 +16,6 @@ use rustrict::CensorStr;
 
 use crate::{
     app_data::metrics,
-    auth,
     errors::{InternalError, UserError},
     network::topology::{self, TopologyActor},
     utils,
@@ -32,6 +32,8 @@ pub(crate) struct UserActions {
     project_metadata: Collection<ProjectMetadata>,
     project_cache: Arc<RwLock<LruCache<api::ProjectId, ProjectMetadata>>>,
     network: Addr<TopologyActor>,
+
+    friend_cache: Arc<RwLock<LruCache<String, Vec<String>>>>,
 }
 
 impl UserActions {
@@ -66,7 +68,8 @@ impl UserActions {
             Err(UserError::UserExistsError)
         } else {
             if let Some(group_id) = user.group_id.clone() {
-                app.group_members_updated(&group_id).await;
+                utils::group_members_updated(&self.users, self.friend_cache.clone(), &group_id)
+                    .await;
             }
             self.metrics.record_signup();
             let user: api::User = user.into();
@@ -95,8 +98,8 @@ impl UserActions {
             .map_err(InternalError::DatabaseConnectionError)?
             .ok_or(UserError::UserNotFoundError)?;
 
-        if let Some(group_id) = user.group_id {
-            app.group_members_updated(&group_id).await;
+        if let Some(group_id) = user.group_id.as_ref() {
+            utils::group_members_updated(&self.users, self.friend_cache.clone(), group_id).await;
         }
 
         Ok(user.into())

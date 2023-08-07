@@ -284,4 +284,35 @@ impl NetworkActions {
 
         Ok(room_state)
     }
+    pub(crate) async fn list_rooms(
+        &self,
+        lr: &auth::ListActiveRooms,
+    ) -> Result<Vec<api::ProjectId>, UserError> {
+        let task = self
+            .network
+            .send(topology::GetActiveRooms {})
+            .await
+            .map_err(InternalError::ActixMessageError)?;
+        let rooms = task.run().await;
+
+        Ok(rooms)
+    }
+
+    pub(crate) async fn list_external_clients(
+        &self,
+        lc: &auth::ListClients,
+    ) -> Result<Vec<api::ExternalClient>, UserError> {
+        let task = self
+            .network
+            .send(topology::GetExternalClients {})
+            .await
+            .map_err(InternalError::ActixMessageError)?;
+        let clients = task.run().await;
+        Ok(clients)
+    }
+
+    pub(crate) fn send_message(&self, lc: &auth::SendMessage, message: api::SendMessage) {
+        self.network
+            .do_send(topology::SendMessageFromServices { message });
+    }
 }

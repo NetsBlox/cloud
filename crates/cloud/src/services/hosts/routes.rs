@@ -7,7 +7,7 @@ use crate::errors::{InternalError, UserError};
 use crate::groups::actions::GroupActions;
 use crate::services::hosts::actions::HostActions;
 use crate::users::actions::UserActions;
-use crate::users::{ensure_can_edit_user, ensure_is_super_user, is_super_user};
+use crate::users::ensure_can_edit_user;
 use actix_session::Session;
 use actix_web::{delete, get, post, HttpRequest};
 use actix_web::{web, HttpResponse};
@@ -83,17 +83,15 @@ async fn set_user_hosts(
 async fn list_all_hosts(
     app: web::Data<AppData>,
     path: web::Path<(String,)>,
-    session: Session,
+    req: HttpRequest,
 ) -> Result<HttpResponse, UserError> {
     let (username,) = path.into_inner();
 
     // FIXME: Update this
-    // let auth_vu = auth::try_view_user(&app, &req, None, &username).await?;
+    let _auth_vu = auth::try_view_user(&app, &req, None, &username).await?;
 
     // let actions: UserActions = app.into();
     // let user = actions.get_all_hosts(&auth_vu).await?;
-
-    ensure_can_edit_user(&app, &session, &username).await?;
 
     let query = doc! {"username": &username};
     let user = app
