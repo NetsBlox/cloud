@@ -452,10 +452,13 @@ mod tests {
     use std::{collections::HashMap, time::Duration};
 
     use actix_web::{http, test, App};
+    use mongodb::bson::DateTime;
+    use netsblox_cloud_common::api::BrowserClientState;
     use netsblox_cloud_common::{NetworkTraceMetadata, User};
 
     use super::*;
     use crate::test_utils;
+    use futures::TryStreamExt;
 
     #[actix_web::test]
     #[ignore]
@@ -725,7 +728,8 @@ mod tests {
                     .uri(&format!("/id/{}/trace/{}/messages", &project.id, &trace.id))
                     .to_request();
 
-                let messages: Vec<SentMessage> = test::call_and_read_body_json(&app, req).await;
+                let messages: Vec<api::SentMessage> =
+                    test::call_and_read_body_json(&app, req).await;
                 assert_eq!(messages.len(), 20);
             })
             .await;
@@ -863,7 +867,8 @@ mod tests {
                     .uri(&format!("/id/{}/trace/{}/messages", &project.id, &trace.id))
                     .to_request();
 
-                let mut messages: Vec<SentMessage> = test::call_and_read_body_json(&app, req).await;
+                let mut messages: Vec<api::SentMessage> =
+                    test::call_and_read_body_json(&app, req).await;
                 assert_eq!(messages.len(), 1);
 
                 // Check that it is the first message
@@ -972,7 +977,7 @@ mod tests {
                     .uri(&format!("/id/{}/trace/{}", &project.id, &trace.id))
                     .to_request();
 
-                let metadata: ProjectMetadata = test::call_and_read_body_json(&app, req).await;
+                let metadata: api::ProjectMetadata = test::call_and_read_body_json(&app, req).await;
                 assert!(metadata.network_traces.is_empty());
                 // check the network trace has been removed from the project metadata
                 let project = app_data.get_project_metadatum(&project.id).await.unwrap();

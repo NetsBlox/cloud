@@ -594,7 +594,7 @@ mod tests {
                     .set_json(&update_data)
                     .to_request();
 
-                let metadata: ProjectMetadata = test::call_and_read_body_json(&app, req).await;
+                let metadata: api::ProjectMetadata = test::call_and_read_body_json(&app, req).await;
                 assert_eq!(metadata.name, update_data.name);
 
                 // TODO: check the database is updated, too
@@ -653,7 +653,7 @@ mod tests {
                     .set_json(&update_data)
                     .to_request();
 
-                let metadata: ProjectMetadata = test::call_and_read_body_json(&app, req).await;
+                let metadata: api::ProjectMetadata = test::call_and_read_body_json(&app, req).await;
                 assert_ne!(metadata.name, existing.name);
                 assert!(metadata.name.starts_with(&update_data.name));
 
@@ -1009,7 +1009,7 @@ mod tests {
                     .set_json(&data)
                     .to_request();
 
-                let project: ProjectMetadata = test::call_and_read_body_json(&app, req).await;
+                let project: api::ProjectMetadata = test::call_and_read_body_json(&app, req).await;
                 let role = project.roles.get(&role_id).unwrap();
                 assert_eq!(role.name, data.name);
 
@@ -1156,7 +1156,7 @@ mod tests {
                     .set_json(&data)
                     .to_request();
 
-                let project: ProjectMetadata = test::call_and_read_body_json(&app, req).await;
+                let project: api::ProjectMetadata = test::call_and_read_body_json(&app, req).await;
                 let role = project.roles.get(&role_id).unwrap();
                 assert_eq!(role.name, data.name);
 
@@ -1269,7 +1269,7 @@ mod tests {
                     .uri(&format!("/id/{}/collaborators/user2", &project.id))
                     .to_request();
 
-                let project: ProjectMetadata = test::call_and_read_body_json(&app, req).await;
+                let project: api::ProjectMetadata = test::call_and_read_body_json(&app, req).await;
                 let expected = ["user3"];
                 project
                     .collaborators

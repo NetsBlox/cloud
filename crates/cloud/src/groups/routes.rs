@@ -114,6 +114,7 @@ pub fn config(cfg: &mut web::ServiceConfig) {
 #[cfg(test)]
 mod tests {
     use actix_web::{body::MessageBody, http, test, App};
+    use mongodb::bson::doc;
     use netsblox_cloud_common::{Group, User};
 
     use super::*;

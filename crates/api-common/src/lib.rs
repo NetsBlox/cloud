@@ -40,7 +40,7 @@ pub struct User {
     pub services_hosts: Option<Vec<ServiceHost>>,
 }
 
-#[derive(Serialize, Deserialize)]
+#[derive(Serialize, Deserialize, Debug)]
 pub struct NewUser {
     pub username: String,
     pub email: String,
@@ -244,6 +244,7 @@ pub struct ProjectMetadata {
     pub updated: SystemTime,
     pub state: PublishState,
     pub collaborators: std::vec::Vec<String>,
+    pub network_traces: Vec<NetworkTraceMetadata>,
     pub origin_time: SystemTime,
     pub save_state: SaveState,
     pub roles: HashMap<RoleId, RoleMetadata>,
@@ -537,6 +538,9 @@ pub struct CreateProjectData {
     pub roles: Option<Vec<RoleData>>,
     pub client_id: Option<ClientId>,
     pub save_state: Option<SaveState>,
+
+    #[cfg(test)]
+    pub role_dict: Option<HashMap<RoleId, RoleData>>,
 }
 
 // Network debugging data

@@ -542,8 +542,34 @@ impl From<actix_web::web::Data<AppData>> for ProjectActions {
     }
 }
 
+// TODO: replace this with a macro
+impl From<AppData> for ProjectActions {
+    fn from(app: AppData) -> ProjectActions {
+        ProjectActions::new(
+            app.project_metadata.clone(),
+            PROJECT_CACHE.clone(),
+            app.network.clone(),
+            app.bucket.clone(),
+            app.s3.clone(),
+        )
+    }
+}
+
+// TODO: can we pass references instead of cloning everything?
 impl From<actix_web::web::Data<AppData>> for FriendActions {
     fn from(app: actix_web::web::Data<AppData>) -> FriendActions {
+        FriendActions::new(
+            app.friends.clone(),
+            FRIEND_CACHE.clone(),
+            app.users.clone(),
+            app.groups.clone(),
+            app.network.clone(),
+        )
+    }
+}
+
+impl From<AppData> for FriendActions {
+    fn from(app: AppData) -> FriendActions {
         FriendActions::new(
             app.friends.clone(),
             FRIEND_CACHE.clone(),
@@ -685,167 +711,5 @@ mod tests {
     #[ignore]
     async fn test_save_role_set_transient_false() {
         todo!();
-    }
-
-    #[actix_web::test]
-    async fn test_respond_to_request() {
-        let sender: User = api::NewUser {
-            username: "sender".into(),
-            email: "sender@netsblox.org".into(),
-            password: None,
-            group_id: None,
-            role: None,
-        }
-        .into();
-        let rcvr: User = api::NewUser {
-            username: "rcvr".into(),
-            email: "rcvr@netsblox.org".into(),
-            password: None,
-            group_id: None,
-            role: None,
-        }
-        .into();
-        let link = FriendLink::new(sender.username.clone(), rcvr.username.clone(), None);
-
-        test_utils::setup()
-            .with_users(&[sender.clone(), rcvr.clone()])
-            .with_friend_links(&[link])
-            .run(|app_data| async move {
-                let link = app_data
-                    .respond_to_request(
-                        &rcvr.username,
-                        &sender.username,
-                        api::FriendLinkState::APPROVED,
-                    )
-                    .await
-                    .unwrap();
-
-                assert!(matches!(link.state, api::FriendLinkState::APPROVED));
-            })
-            .await;
-    }
-
-    #[actix_web::test]
-    async fn test_respond_to_request_404() {
-        test_utils::setup()
-            .run(|app_data| async move {
-                let result = app_data
-                    .respond_to_request("rcvr", "sender", api::FriendLinkState::APPROVED)
-                    .await;
-
-                assert!(matches!(result, Err(UserError::InviteNotFoundError)));
-            })
-            .await;
-    }
-
-    #[actix_web::test]
-    async fn test_respond_to_request_rejected() {
-        let sender: User = api::NewUser {
-            username: "sender".into(),
-            email: "sender@netsblox.org".into(),
-            password: None,
-            group_id: None,
-            role: None,
-        }
-        .into();
-        let rcvr: User = api::NewUser {
-            username: "rcvr".into(),
-            email: "rcvr@netsblox.org".into(),
-            password: None,
-            group_id: None,
-            role: None,
-        }
-        .into();
-        let link = FriendLink::new(
-            sender.username.clone(),
-            rcvr.username.clone(),
-            Some(FriendLinkState::REJECTED),
-        );
-
-        test_utils::setup()
-            .with_users(&[sender.clone(), rcvr.clone()])
-            .with_friend_links(&[link])
-            .run(|app_data| async move {
-                let result = app_data
-                    .respond_to_request("rcvr", "sender", FriendLinkState::APPROVED)
-                    .await;
-
-                assert!(matches!(result, Err(UserError::InviteNotFoundError)));
-            })
-            .await;
-    }
-
-    #[actix_web::test]
-    async fn test_respond_to_request_approved() {
-        let sender: User = api::NewUser {
-            username: "sender".into(),
-            email: "sender@netsblox.org".into(),
-            password: None,
-            group_id: None,
-            role: None,
-        }
-        .into();
-        let rcvr: User = api::NewUser {
-            username: "rcvr".into(),
-            email: "rcvr@netsblox.org".into(),
-            password: None,
-            group_id: None,
-            role: None,
-        }
-        .into();
-        let link = FriendLink::new(
-            sender.username.clone(),
-            rcvr.username.clone(),
-            Some(api::FriendLinkState::APPROVED),
-        );
-
-        test_utils::setup()
-            .with_users(&[sender.clone(), rcvr.clone()])
-            .with_friend_links(&[link])
-            .run(|app_data| async move {
-                let result = app_data
-                    .respond_to_request("rcvr", "sender", api::FriendLinkState::APPROVED)
-                    .await;
-
-                assert!(matches!(result, Err(UserError::InviteNotFoundError)));
-            })
-            .await;
-    }
-
-    #[actix_web::test]
-    async fn test_respond_to_request_blocked() {
-        let sender: User = api::NewUser {
-            username: "sender".into(),
-            email: "sender@netsblox.org".into(),
-            password: None,
-            group_id: None,
-            role: None,
-        }
-        .into();
-        let rcvr: User = api::NewUser {
-            username: "rcvr".into(),
-            email: "rcvr@netsblox.org".into(),
-            password: None,
-            group_id: None,
-            role: None,
-        }
-        .into();
-        let link = FriendLink::new(
-            sender.username.clone(),
-            rcvr.username.clone(),
-            Some(api::FriendLinkState::BLOCKED),
-        );
-
-        test_utils::setup()
-            .with_users(&[sender.clone(), rcvr.clone()])
-            .with_friend_links(&[link])
-            .run(|app_data| async move {
-                let result = app_data
-                    .respond_to_request("rcvr", "sender", api::FriendLinkState::APPROVED)
-                    .await;
-
-                assert!(matches!(result, Err(UserError::InviteNotFoundError)));
-            })
-            .await;
     }
 }

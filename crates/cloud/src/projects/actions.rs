@@ -61,16 +61,13 @@ impl ProjectActions {
     }
     pub async fn create_project(
         &self,
-        eu: &auth::users::EditUser,
-        project_data: api::CreateProjectData,
+        eu: &auth::EditUser,
+        project_data: impl Into<CreateProjectDataDict>,
     ) -> Result<ProjectMetadata, UserError> {
+        let project_data: CreateProjectDataDict = project_data.into();
         let name = project_data.name.to_owned();
-        let mut roles = project_data
-            .roles
-            .unwrap_or_default()
-            .into_iter()
-            .map(|role| (RoleId::new(Uuid::new_v4().to_string()), role))
-            .collect::<HashMap<_, _>>();
+        let mut roles = project_data.roles;
+
         let owner = &eu.username;
         let unique_name =
             utils::get_valid_project_name(&self.project_metadata, owner, &name).await?;
@@ -715,4 +712,31 @@ async fn get_visible_projects(
         .collect();
 
     Ok(visible_projects)
+}
+
+pub(crate) struct CreateProjectDataDict {
+    pub owner: Option<String>,
+    pub name: String,
+    pub client_id: Option<api::ClientId>,
+    pub save_state: Option<SaveState>,
+    pub roles: HashMap<RoleId, RoleData>,
+}
+
+impl From<api::CreateProjectData> for CreateProjectDataDict {
+    fn from(data: api::CreateProjectData) -> Self {
+        let roles: HashMap<RoleId, RoleData> = data
+            .roles
+            .unwrap_or_default()
+            .into_iter()
+            .map(|role| (RoleId::new(Uuid::new_v4().to_string()), role))
+            .collect::<HashMap<_, _>>();
+
+        Self {
+            owner: data.owner,
+            name: data.name,
+            client_id: data.client_id,
+            save_state: data.save_state,
+            roles,
+        }
+    }
 }

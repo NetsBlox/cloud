@@ -417,6 +417,11 @@ impl From<ProjectMetadata> for netsblox_api_common::ProjectMetadata {
             state: metadata.state,
             collaborators: metadata.collaborators,
             save_state: metadata.save_state,
+            network_traces: metadata
+                .network_traces
+                .into_iter()
+                .map(|t| t.into())
+                .collect(),
             roles: metadata
                 .roles
                 .into_iter()

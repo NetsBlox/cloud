@@ -35,7 +35,7 @@ pub(crate) async fn try_auth_host(
     }
 }
 
-async fn ensure_is_authorized_host(
+pub(crate) async fn is_authorized_host(
     app: &AppData,
     req: &HttpRequest,
     host_id: Option<&str>,

@@ -9,7 +9,7 @@ use lru::LruCache;
 use mongodb::{bson::doc, Collection};
 use netsblox_cloud_common::{
     api::{self, GroupId, UserRole},
-    FriendLink, Group, ProjectMetadata, User,
+    AuthorizedServiceHost, FriendLink, Group, ProjectMetadata, User,
 };
 use regex::Regex;
 use rustrict::CensorStr;
@@ -270,7 +270,32 @@ fn get_cached_friends(
 
 pub(crate) fn get_username(req: &HttpRequest) -> Option<String> {
     let session = req.get_session();
+    println!("{:?}", session.get::<String>("username"));
     session.get::<String>("username").unwrap_or(None)
+}
+
+pub(crate) async fn get_authorized_host(
+    authorized_services: &Collection<AuthorizedServiceHost>,
+    req: &HttpRequest,
+) -> Result<Option<AuthorizedServiceHost>, UserError> {
+    let query = req
+        .headers()
+        .get("X-Authorization")
+        .and_then(|value| value.to_str().ok())
+        .and_then(|value_str| {
+            let mut chunks = value_str.split(':');
+            let id = chunks.next();
+            let secret = chunks.next();
+            id.and_then(|id| secret.map(|s| (id, s)))
+        })
+        .map(|(id, secret)| doc! {"id": id, "secret": secret});
+
+    let host = authorized_services
+        .find_one(query, None)
+        .await
+        .map_err(InternalError::DatabaseConnectionError)?;
+
+    Ok(host)
 }
 
 pub(crate) fn send_email(

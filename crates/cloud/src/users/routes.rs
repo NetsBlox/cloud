@@ -5,6 +5,7 @@ use crate::auth;
 use crate::common::api;
 use crate::errors::UserError;
 use crate::users::actions::UserActions;
+use crate::utils;
 use actix_session::Session;
 use actix_web::http::header;
 use actix_web::{get, patch, post, HttpRequest};
@@ -27,7 +28,6 @@ async fn create_user(
     app: web::Data<AppData>,
     req: HttpRequest,
     user_data: web::Json<api::NewUser>,
-    session: Session,
 ) -> Result<HttpResponse, UserError> {
     let req_addr = req.peer_addr().map(|addr| addr.ip());
     if let Some(addr) = req_addr {
@@ -91,8 +91,8 @@ async fn logout(
 }
 
 #[get("/whoami")]
-async fn whoami(session: Session) -> Result<HttpResponse, UserError> {
-    if let Some(username) = session.get::<String>("username").ok().flatten() {
+async fn whoami(req: HttpRequest) -> Result<HttpResponse, UserError> {
+    if let Some(username) = utils::get_username(&req) {
         Ok(HttpResponse::Ok().body(username))
     } else {
         Err(UserError::PermissionsError)
@@ -110,6 +110,21 @@ async fn ban_user(
 
     let actions: UserActions = app.into();
     let account = actions.ban_user(&auth_bu).await?;
+
+    Ok(HttpResponse::Ok().json(account))
+}
+
+#[post("/{username}/unban")]
+async fn unban_user(
+    app: web::Data<AppData>,
+    path: web::Path<(String,)>,
+    req: HttpRequest,
+) -> Result<HttpResponse, UserError> {
+    let (username,) = path.into_inner();
+    let auth_bu = auth::try_ban_user(&app, &req, &username).await?;
+
+    let actions: UserActions = app.into();
+    let account = actions.unban_user(&auth_bu).await?;
 
     Ok(HttpResponse::Ok().json(account))
 }
@@ -243,6 +258,7 @@ pub fn config(cfg: &mut web::ServiceConfig) {
         .service(logout)
         .service(delete_user)
         .service(ban_user)
+        .service(unban_user)
         .service(reset_password)
         .service(change_password_page)
         .service(change_password)
@@ -256,11 +272,14 @@ pub fn config(cfg: &mut web::ServiceConfig) {
 mod tests {
     use std::time::Duration;
 
-    use crate::test_utils;
+    use crate::{errors::InternalError, network::topology, test_utils};
 
     use super::*;
     use actix_web::{http, test, App};
-    use netsblox_cloud_common::{api::Credentials, Group};
+    use netsblox_cloud_common::{
+        api::{BannedAccount, Credentials, UserRole},
+        Group, User,
+    };
 
     #[actix_web::test]
     async fn test_create_user() {
@@ -1139,34 +1158,4 @@ mod tests {
     //     async fn test_link_account_duplicate() {
     //         todo!();
     //     }
-
-    #[actix_web::test]
-    async fn test_is_valid_username_caps() {
-        assert!(super::is_valid_username("HelloWorld"));
-    }
-
-    #[actix_web::test]
-    async fn test_is_valid_username() {
-        assert!(super::is_valid_username("hello"));
-    }
-
-    #[actix_web::test]
-    async fn test_is_valid_username_leading_underscore() {
-        assert!(!super::is_valid_username("_hello"));
-    }
-
-    #[actix_web::test]
-    async fn test_is_valid_username_leading_dash() {
-        assert!(!super::is_valid_username("-hello"));
-    }
-
-    #[actix_web::test]
-    async fn test_is_valid_username_at_symbol() {
-        assert!(!super::is_valid_username("hello@gmail.com"));
-    }
-
-    #[actix_web::test]
-    async fn test_is_valid_username_vulgar() {
-        assert!(!super::is_valid_username("shit"));
-    }
 }

@@ -16,7 +16,6 @@ use mongodb::bson::doc;
 async fn list_group_hosts(
     app: web::Data<AppData>,
     path: web::Path<(GroupId,)>,
-    session: Session,
     req: HttpRequest,
 ) -> Result<HttpResponse, UserError> {
     let (id,) = path.into_inner();

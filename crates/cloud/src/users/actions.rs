@@ -533,3 +533,38 @@ impl TryFrom<SetPasswordEmail> for lettre::Message {
         Ok(message)
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[actix_web::test]
+    async fn test_is_valid_username_caps() {
+        assert!(is_valid_username("HelloWorld"));
+    }
+
+    #[actix_web::test]
+    async fn test_is_valid_username() {
+        assert!(is_valid_username("hello"));
+    }
+
+    #[actix_web::test]
+    async fn test_is_valid_username_leading_underscore() {
+        assert!(!is_valid_username("_hello"));
+    }
+
+    #[actix_web::test]
+    async fn test_is_valid_username_leading_dash() {
+        assert!(!is_valid_username("-hello"));
+    }
+
+    #[actix_web::test]
+    async fn test_is_valid_username_at_symbol() {
+        assert!(!is_valid_username("hello@gmail.com"));
+    }
+
+    #[actix_web::test]
+    async fn test_is_valid_username_vulgar() {
+        assert!(!is_valid_username("shit"));
+    }
+}

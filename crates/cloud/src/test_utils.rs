@@ -3,9 +3,14 @@ use std::sync::{Arc, Mutex};
 use futures::{future::join_all, Future};
 use lazy_static::lazy_static;
 use mongodb::{bson::doc, Client};
-use netsblox_cloud_common::{BannedAccount, CollaborationInvite, FriendLink, Group, User};
+use netsblox_cloud_common::{api, BannedAccount, CollaborationInvite, FriendLink, Group, User};
 
-use crate::{app_data::AppData, config::Settings};
+use crate::{
+    app_data::AppData,
+    auth,
+    config::Settings,
+    projects::{actions::CreateProjectDataDict, ProjectActions},
+};
 
 lazy_static! {
     static ref COUNTER: Arc<Mutex<u32>> = Arc::new(Mutex::new(0));
@@ -108,13 +113,23 @@ impl TestSetupBuilder {
                 id,
                 owner,
                 name,
-                mut roles,
+                roles,
                 save_state,
                 traces,
                 ..
             } = fixture;
-            let metadata = app_data
-                .import_project(&owner, &name, &mut roles, Some(save_state.clone()))
+
+            let auth_eu = auth::EditUser::test(owner.clone());
+            let actions: ProjectActions = app_data.clone().into();
+            let project_data = CreateProjectDataDict {
+                owner: Some(owner),
+                name,
+                roles,
+                client_id: None,
+                save_state: Some(api::SaveState::SAVED),
+            };
+            let metadata = actions
+                .create_project(&auth_eu, project_data)
                 .await
                 .unwrap();
 

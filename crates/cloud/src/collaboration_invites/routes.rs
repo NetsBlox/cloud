@@ -64,7 +64,7 @@ pub fn config(cfg: &mut web::ServiceConfig) {
 mod tests {
     use super::*;
     use actix_web::{http, test, web, App};
-    use netsblox_cloud_common::{api, User};
+    use netsblox_cloud_common::{api, CollaborationInvite, User};
 
     use crate::test_utils;
 
