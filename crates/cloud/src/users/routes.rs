@@ -84,7 +84,7 @@ async fn logout(
     if let Some(client_id) = &params.client_id {
         // FIXME: this method should be updated as it currently could be used to half logout other users...
         let actions: UserActions = app.into();
-        let user = actions.logout(&client_id);
+        actions.logout(&client_id);
     }
 
     HttpResponse::Ok().finish()
@@ -203,7 +203,6 @@ async fn change_password(
 async fn view_user(
     app: web::Data<AppData>,
     path: web::Path<(String,)>,
-    session: Session,
     req: HttpRequest,
 ) -> Result<HttpResponse, UserError> {
     let (username,) = path.into_inner();

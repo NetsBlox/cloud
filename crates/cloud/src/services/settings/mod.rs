@@ -1,4 +1,4 @@
-mod actions;
+pub(crate) mod actions;
 mod routes;
 
 pub(crate) use routes::config;

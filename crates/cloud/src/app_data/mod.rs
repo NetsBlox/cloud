@@ -9,6 +9,7 @@ use crate::network::actions::NetworkActions;
 use crate::oauth::actions::OAuthActions;
 use crate::projects::ProjectActions;
 use crate::services::hosts::actions::HostActions;
+use crate::services::settings::actions::SettingsActions;
 use crate::users::actions::{UserActionData, UserActions};
 //pub use self::
 use actix_web::rt::time;
@@ -606,6 +607,12 @@ impl From<actix_web::web::Data<AppData>> for NetworkActions {
 impl From<actix_web::web::Data<AppData>> for GroupActions {
     fn from(app: actix_web::web::Data<AppData>) -> GroupActions {
         GroupActions::new(app.groups.clone(), app.users.clone())
+    }
+}
+
+impl From<actix_web::web::Data<AppData>> for SettingsActions {
+    fn from(app: actix_web::web::Data<AppData>) -> SettingsActions {
+        SettingsActions::new(app.users.clone(), app.groups.clone())
     }
 }
 

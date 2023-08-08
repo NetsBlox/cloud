@@ -31,10 +31,15 @@ pub(crate) struct InviteLink {
 pub(crate) async fn try_invite_link(
     app: &AppData,
     req: &HttpRequest,
-    source: &String,
-    target: &String,
+    source: &str,
+    target: &str,
 ) -> Result<InviteLink, UserError> {
-    // TODO: ensure we can edit the source
-    // TODO: source -> target are friends
-    todo!()
+    try_edit_user(app, req, None, source)
+        .await
+        .map(|_eu| InviteLink {
+            source: source.to_owned(),
+            target: target.to_owned(),
+            _private: (),
+        })
+    // TODO: ensure source -> target are friends
 }

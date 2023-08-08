@@ -13,6 +13,26 @@ pub(crate) struct ListLibraries {
     _private: (),
 }
 
+pub(crate) struct ViewLibrary {
+    pub(crate) library: Library,
+    _private: (),
+}
+
+pub(crate) struct EditLibrary {
+    pub(crate) owner: String,
+    _private: (),
+}
+
+pub(crate) struct PublishLibrary {
+    pub(crate) owner: String,
+    pub(crate) can_approve: bool,
+    _private: (),
+}
+
+pub(crate) struct ModerateLibraries {
+    _private: (),
+}
+
 pub(crate) async fn try_list_libraries(
     app: &AppData,
     req: &HttpRequest,
@@ -31,20 +51,13 @@ pub(crate) async fn try_list_libraries(
     })
 }
 
-pub(crate) struct ViewLibrary {
-    pub(crate) library: Library,
-    _private: (),
-}
-
 pub(crate) async fn try_view_library(
     app: &AppData,
     req: &HttpRequest,
     owner: &str,
     name: &str,
 ) -> Result<ViewLibrary, UserError> {
-    let session = req.get_session();
-
-    // Check that the library is public or the user is editable by the current sess
+    // Check that the library is public or the user is editable by the current session
     let query = doc! {"owner": owner, "name": name};
     let library = app
         .libraries
@@ -53,21 +66,15 @@ pub(crate) async fn try_view_library(
         .map_err(InternalError::DatabaseConnectionError)?
         .ok_or(UserError::LibraryNotFoundError)?;
 
-    todo!();
-    // if !matches!(library.state, PublishState::Public) {
-    //     // check that we can edit the user
-    //     try_edit_user(app, req, None, owner).await?;
-    // }
+    if !matches!(library.state, PublishState::Public) {
+        // check that we can edit the user
+        super::try_edit_user(app, req, None, owner).await?;
+    }
 
-    // Ok(ViewLibrary {
-    //     library,
-    //     _private: (),
-    // })
-}
-
-pub(crate) struct EditLibrary {
-    pub(crate) owner: String,
-    _private: (),
+    Ok(ViewLibrary {
+        library,
+        _private: (),
+    })
 }
 
 pub(crate) async fn try_edit_library(
@@ -75,19 +82,12 @@ pub(crate) async fn try_edit_library(
     req: &HttpRequest,
     owner: &str,
 ) -> Result<EditLibrary, UserError> {
-    todo!()
-    // try_edit_user(app, req, None, owner).await?;
+    super::try_edit_user(app, req, None, owner).await?;
 
-    // Ok(EditLibrary {
-    //     owner: owner.to_owned(),
-    //     _private: (),
-    // })
-}
-
-pub(crate) struct PublishLibrary {
-    pub(crate) owner: String,
-    pub(crate) can_approve: bool,
-    _private: (),
+    Ok(EditLibrary {
+        owner: owner.to_owned(),
+        _private: (),
+    })
 }
 
 pub(crate) async fn try_publish_library(
@@ -95,27 +95,22 @@ pub(crate) async fn try_publish_library(
     req: &HttpRequest,
     owner: &str,
 ) -> Result<PublishLibrary, UserError> {
-    todo!();
-    // let session = req.get_session();
-    // if is_moderator(app, &session).await? {
-    //     Ok(PublishLibrary {
-    //         owner: owner.to_owned(),
-    //         can_approve: true,
-    //         _private: (),
-    //     })
-    // } else {
-    //     try_edit_user(app, req, None, owner).await?;
+    let session = req.get_session();
+    if is_moderator(app, &session).await? {
+        Ok(PublishLibrary {
+            owner: owner.to_owned(),
+            can_approve: true,
+            _private: (),
+        })
+    } else {
+        super::try_edit_user(app, req, None, owner).await?;
 
-    //     Ok(PublishLibrary {
-    //         owner: owner.to_owned(),
-    //         can_approve: false,
-    //         _private: (),
-    //     })
-    // }
-}
-
-pub(crate) struct ModerateLibraries {
-    _private: (),
+        Ok(PublishLibrary {
+            owner: owner.to_owned(),
+            can_approve: false,
+            _private: (),
+        })
+    }
 }
 
 pub(crate) async fn try_moderate_libraries(

@@ -520,7 +520,7 @@ mod tests {
                     .cookie(cookie)
                     .to_request();
 
-                let link: FriendLink = test::call_and_read_body_json(&app, req).await;
+                let link: api::FriendLink = test::call_and_read_body_json(&app, req).await;
                 assert!(matches!(link.state, FriendLinkState::BLOCKED));
                 assert_ne!(link.created_at, link.updated_at);
             })

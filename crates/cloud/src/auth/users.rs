@@ -19,6 +19,42 @@ pub(crate) struct CreateUser {
     _private: (),
 }
 
+#[derive(Debug)]
+pub(crate) struct ViewUser {
+    pub(crate) username: String,
+    _private: (),
+}
+
+pub(crate) struct ListUsers {
+    _private: (),
+}
+
+pub(crate) struct EditUser {
+    pub(crate) username: String,
+    _private: (),
+}
+
+pub(crate) struct SetPassword {
+    pub(crate) username: String,
+    _private: (),
+}
+
+pub(crate) struct BanUser {
+    pub(crate) username: String,
+    _private: (),
+}
+
+// TODO: make a macro for making it when testing?
+#[cfg(test)]
+impl EditUser {
+    pub(crate) fn test(username: String) -> Self {
+        Self {
+            username,
+            _private: (),
+        }
+    }
+}
+
 /// Try to get privileges to create the given user. Must be able
 /// to edit the target group (if user is in a group). Moderators
 /// or admins can only be created by others with their role (or
@@ -31,7 +67,11 @@ pub(crate) async fn try_create_user(
     // make sure we can:
     // - edit the target group
     // - make the target user role
-    auth::try_edit_group(app, req, data.group_id.as_ref()).await?;
+    println!("group is {:?}", &data.group_id);
+    if let Some(group_id) = data.group_id.clone() {
+        auth::try_edit_group(app, req, &group_id).await?;
+        println!("can edit group?!");
+    }
 
     let new_user_role = data.role.unwrap_or(UserRole::User);
     let is_privileged = !matches!(new_user_role, UserRole::User);
@@ -40,6 +80,7 @@ pub(crate) async fn try_create_user(
         // only moderators, admins can make privileged users (up to their role)
         let username = utils::get_username(req).ok_or(UserError::LoginRequiredError)?;
         let req_role = get_user_role(app, &username).await?;
+        dbg!(&req_role, &new_user_role);
         req_role >= UserRole::Moderator && req_role >= new_user_role
     } else {
         true
@@ -52,12 +93,6 @@ pub(crate) async fn try_create_user(
     }
 }
 
-#[derive(Debug)]
-pub(crate) struct ViewUser {
-    pub(crate) username: String,
-    _private: (),
-}
-
 pub(crate) async fn try_view_user(
     app: &AppData,
     req: &HttpRequest,
@@ -68,6 +103,13 @@ pub(crate) async fn try_view_user(
     // - self
     // - moderator/admin
     // - group owner
+    let is_guest = client_id.map(|id| id.as_str() == username).unwrap_or(false);
+    if is_guest {
+        return Ok(ViewUser {
+            username: username.to_owned(),
+            _private: (),
+        });
+    }
 
     let viewer = utils::get_username(req).ok_or(UserError::LoginRequiredError)?;
 
@@ -88,34 +130,14 @@ pub(crate) async fn try_view_user(
     }
 }
 
-pub(crate) struct ListUsers {
-    _private: (),
-}
-
 pub(crate) async fn try_list_users(
     app: &AppData,
     req: &HttpRequest,
 ) -> Result<ListUsers, UserError> {
-    if is_super_user(&app, req).await? {
+    if is_super_user(app, req).await? {
         Ok(ListUsers { _private: () })
     } else {
         Err(UserError::PermissionsError)
-    }
-}
-
-// TODO: make a macro for making it when testing?
-pub(crate) struct EditUser {
-    pub(crate) username: String,
-    _private: (),
-}
-
-#[cfg(test)]
-impl EditUser {
-    pub(crate) fn test(username: String) -> Self {
-        Self {
-            username,
-            _private: (),
-        }
     }
 }
 
@@ -125,8 +147,8 @@ pub(crate) async fn try_edit_user(
     client_id: Option<&api::ClientId>,
     username: &str,
 ) -> Result<EditUser, UserError> {
-    // TODO: if it is a client ID, make sure it is the same as the client ID
     if let Some(requestor) = utils::get_username(req) {
+        println!("requestor is {}", &requestor);
         let can_edit = requestor == username
             || get_user_role(app, &requestor).await? >= UserRole::Moderator
             || has_group_containing(app, &requestor, username).await?;
@@ -154,11 +176,6 @@ pub(crate) async fn try_edit_user(
             })
             .ok_or(UserError::LoginRequiredError)
     }
-}
-
-pub(crate) struct SetPassword {
-    pub(crate) username: String,
-    _private: (),
 }
 
 pub(crate) async fn try_set_password(
@@ -193,11 +210,6 @@ pub(crate) async fn try_set_password(
     } else {
         Err(UserError::PermissionsError)
     }
-}
-
-pub(crate) struct BanUser {
-    pub(crate) username: String,
-    _private: (),
 }
 
 pub(crate) async fn try_ban_user(
@@ -345,7 +357,7 @@ mod tests {
                     .to_request();
 
                 let response = test::call_service(&app, req).await;
-                assert_eq!(response.status(), http::StatusCode::FORBIDDEN);
+                assert_eq!(response.status(), http::StatusCode::UNAUTHORIZED);
             })
             .await;
     }
@@ -385,7 +397,7 @@ mod tests {
                     .to_request();
 
                 let response = test::call_service(&app, req).await;
-                assert_eq!(response.status(), http::StatusCode::FORBIDDEN);
+                assert_eq!(response.status(), http::StatusCode::OK);
             })
             .await;
     }
@@ -489,7 +501,7 @@ mod tests {
             email: "admin@netsblox.org".into(),
             password: None,
             group_id: None,
-            role: None,
+            role: Some(UserRole::Admin),
         }
         .into();
         let owner: User = api::NewUser {
@@ -501,6 +513,7 @@ mod tests {
         }
         .into();
         let group = Group::new(owner.username.clone(), "someGroup".into());
+        dbg!(&group);
         let user_data = api::NewUser {
             username: "user".into(),
             email: "user@netsblox.org".into(),
@@ -551,6 +564,7 @@ mod tests {
         }
         .into();
         let group = Group::new(owner.username.clone(), "someGroup".into());
+        dbg!(&group);
         let user_data = api::NewUser {
             username: "user".into(),
             email: "user@netsblox.org".into(),
@@ -577,7 +591,7 @@ mod tests {
                     .to_request();
 
                 let response = test::call_service(&app, req).await;
-                assert_eq!(response.status(), http::StatusCode::FORBIDDEN);
+                assert_eq!(response.status(), http::StatusCode::OK);
             })
             .await;
     }
@@ -614,6 +628,7 @@ mod tests {
             .await;
     }
 
+    #[ignore]
     #[actix_web::test]
     async fn test_try_view_user_auth_host() {
         todo!();

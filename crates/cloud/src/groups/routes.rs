@@ -78,7 +78,7 @@ async fn update_group(
     req: HttpRequest,
 ) -> Result<HttpResponse, UserError> {
     let (id,) = path.into_inner();
-    let auth_eg = auth::try_edit_group(&app, &req, Some(&id)).await?;
+    let auth_eg = auth::try_edit_group(&app, &req, &id).await?;
 
     let actions: GroupActions = app.into();
     let group = actions.rename_group(&auth_eg, &data.name).await?;
@@ -271,9 +271,7 @@ mod tests {
                     .to_request();
 
                 let response = test::call_service(&app, req).await;
-
-                // Not found is fine since it is technically more secure
-                assert_eq!(response.status(), http::StatusCode::NOT_FOUND);
+                assert_eq!(response.status(), http::StatusCode::FORBIDDEN);
             })
             .await;
     }

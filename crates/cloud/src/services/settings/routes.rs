@@ -1,18 +1,12 @@
-use std::collections::HashMap;
-
 use actix_session::Session;
 use actix_web::{delete, get, post, web, HttpRequest, HttpResponse};
-use futures::TryStreamExt;
-use mongodb::bson::doc;
 
 use crate::auth;
 use crate::common::api;
 use crate::groups::actions::GroupActions;
+use crate::services::settings::actions::SettingsActions;
 use crate::users::actions::UserActions;
-use crate::{
-    app_data::AppData,
-    errors::{InternalError, UserError},
-};
+use crate::{app_data::AppData, errors::UserError};
 
 #[get("/user/{username}/")]
 async fn list_user_hosts_with_settings(
@@ -34,7 +28,6 @@ async fn list_user_hosts_with_settings(
 async fn get_user_settings(
     app: web::Data<AppData>,
     path: web::Path<(String, String)>,
-    session: Session,
     req: HttpRequest,
 ) -> Result<HttpResponse, UserError> {
     let (username, host) = path.into_inner();
@@ -53,59 +46,12 @@ async fn get_all_settings(
     req: HttpRequest,
     app: web::Data<AppData>,
     path: web::Path<(String, String)>,
-    session: Session,
 ) -> Result<HttpResponse, UserError> {
     let (username, host) = path.into_inner();
 
-    // TODO: port this to use actions
-    // TODO: get user settings
-    // TODO: get all groups
-
-    let query = doc! {"username": &username};
-    let user = app
-        .users
-        .find_one(query, None)
-        .await
-        .map_err(InternalError::DatabaseConnectionError)?
-        .ok_or(UserError::UserNotFoundError)?;
-
-    let query = match user.group_id {
-        Some(ref group_id) => doc! {"$or": [
-            {"owner": &username},
-            {"id": group_id}
-        ]},
-        None => doc! {"owner": username},
-    };
-    let cursor = app
-        .groups
-        .find(query, None)
-        .await
-        .map_err(InternalError::DatabaseConnectionError)?;
-
-    let mut groups: Vec<_> = cursor
-        .try_collect::<Vec<_>>()
-        .await
-        .map_err(InternalError::DatabaseConnectionError)?;
-
-    let member_settings = user
-        .group_id
-        .and_then(|group_id| groups.iter().position(|group| group.id == group_id))
-        .map(|pos| groups.swap_remove(pos))
-        .and_then(|group| group.service_settings.get(&host).map(|s| s.to_owned()));
-
-    let all_settings = api::ServiceSettings {
-        user: user.service_settings.get(&host).cloned(),
-        member: member_settings,
-        groups: groups
-            .into_iter()
-            .filter_map(|group| {
-                group
-                    .service_settings
-                    .get(&host)
-                    .map(|s| (group.id, s.to_owned()))
-            })
-            .collect::<HashMap<_, _>>(),
-    };
+    let auth_vu = auth::try_view_user(&app, &req, None, &username).await?;
+    let actions: SettingsActions = app.into();
+    let all_settings = actions.get_settings(&auth_vu, &host).await?;
 
     Ok(HttpResponse::Ok().json(all_settings))
 }
@@ -115,7 +61,6 @@ async fn set_user_settings(
     app: web::Data<AppData>,
     path: web::Path<(String, String)>,
     body: web::Bytes,
-    session: Session,
     req: HttpRequest,
 ) -> Result<HttpResponse, UserError> {
     let (username, host) = path.into_inner();
@@ -124,7 +69,7 @@ async fn set_user_settings(
     let settings = std::str::from_utf8(&body).map_err(|_err| UserError::InternalError)?;
 
     let actions: UserActions = app.into();
-    let user = actions.set_user_settings(&auth_eu, &host, settings).await?;
+    actions.set_user_settings(&auth_eu, &host, settings).await?;
 
     Ok(HttpResponse::Ok().finish())
 }
@@ -133,14 +78,13 @@ async fn set_user_settings(
 async fn delete_user_settings(
     app: web::Data<AppData>,
     path: web::Path<(String, String)>,
-    session: Session,
     req: HttpRequest,
 ) -> Result<HttpResponse, UserError> {
     let (username, host) = path.into_inner();
     let auth_eu = auth::try_edit_user(&app, &req, None, &username).await?;
 
     let actions: UserActions = app.into();
-    let user = actions.delete_user_settings(&auth_eu, &host).await?;
+    actions.delete_user_settings(&auth_eu, &host).await?;
 
     Ok(HttpResponse::Ok().finish())
 }
@@ -192,7 +136,7 @@ async fn set_group_settings(
     let (group_id, host) = path.into_inner();
     let settings = std::str::from_utf8(&body).map_err(|_err| UserError::InternalError)?;
 
-    let auth_eg = auth::try_edit_group(&app, &req, Some(&group_id)).await?;
+    let auth_eg = auth::try_edit_group(&app, &req, &group_id).await?;
 
     let actions: GroupActions = app.into();
     let group = actions
@@ -211,7 +155,7 @@ async fn delete_group_settings(
 ) -> Result<HttpResponse, UserError> {
     let (group_id, host) = path.into_inner();
 
-    let auth_eg = auth::try_edit_group(&app, &req, Some(&group_id)).await?;
+    let auth_eg = auth::try_edit_group(&app, &req, &group_id).await?;
 
     let actions: GroupActions = app.into();
     let group = actions.delete_service_settings(&auth_eg, &host).await?;

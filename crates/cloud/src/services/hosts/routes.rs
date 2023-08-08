@@ -6,7 +6,6 @@ use crate::errors::{InternalError, UserError};
 use crate::groups::actions::GroupActions;
 use crate::services::hosts::actions::HostActions;
 use crate::users::actions::UserActions;
-use actix_session::Session;
 use actix_web::{delete, get, post, HttpRequest};
 use actix_web::{web, HttpResponse};
 use futures::TryStreamExt;
@@ -36,7 +35,7 @@ async fn set_group_hosts(
 ) -> Result<HttpResponse, UserError> {
     let (id,) = path.into_inner();
 
-    let auth_eg = auth::try_edit_group(&app, &req, Some(&id)).await?;
+    let auth_eg = auth::try_edit_group(&app, &req, &id).await?;
 
     let actions: GroupActions = app.into();
     let group = actions.set_group_hosts(&auth_eg, &hosts).await?;

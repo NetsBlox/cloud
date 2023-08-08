@@ -429,7 +429,7 @@ impl ProjectActions {
         ep: &auth::projects::EditProject,
         role_id: RoleId,
         name: &str,
-    ) -> Result<ProjectMetadata, UserError> {
+    ) -> Result<api::ProjectMetadata, UserError> {
         utils::ensure_valid_name(name)?;
         if ep.metadata.roles.contains_key(&role_id) {
             let query = doc! {"id": &ep.metadata.id};
@@ -446,7 +446,7 @@ impl ProjectActions {
                 .ok_or(UserError::ProjectNotFoundError)?;
 
             utils::on_room_changed(&self.network, &self.project_cache, updated_metadata.clone());
-            Ok(updated_metadata)
+            Ok(updated_metadata.into())
         } else {
             Err(UserError::RoleNotFoundError)
         }

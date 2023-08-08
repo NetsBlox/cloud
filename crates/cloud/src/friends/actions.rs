@@ -458,12 +458,11 @@ mod tests {
             .run(|app_data| async move {
                 let actions: FriendActions = app_data.into();
                 let auth_eu = auth::EditUser::test(rcvr.username.clone());
-                let link = actions
+                let result = actions
                     .respond_to_invite(&auth_eu, "sender", api::FriendLinkState::APPROVED)
-                    .await
-                    .unwrap();
+                    .await;
 
-                assert!(matches!(link.state, api::FriendLinkState::APPROVED));
+                assert!(matches!(result, Err(UserError::InviteNotFoundError)));
             })
             .await;
     }

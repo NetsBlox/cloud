@@ -299,7 +299,15 @@ impl UserActions {
         &self,
         bu: &auth::BanUser,
     ) -> Result<api::BannedAccount, UserError> {
-        todo!();
+        let query = doc! {"username": &bu.username};
+        let account = self
+            .banned_accounts
+            .find_one_and_delete(query, None)
+            .await
+            .map_err(InternalError::DatabaseConnectionError)?
+            .ok_or(UserError::UserNotFoundError)?;
+
+        Ok(account.into())
     }
 
     pub(crate) async fn link_account(
@@ -384,8 +392,7 @@ impl UserActions {
     ) -> Result<(), UserError> {
         let query = doc! {"username": &lu.username};
         let update = doc! {"$set": {format!("serviceSettings.{}", &host): settings}};
-        let user = self
-            .users
+        self.users
             .find_one_and_update(query, update, None)
             .await
             .map_err(InternalError::DatabaseConnectionError)?
@@ -417,8 +424,7 @@ impl UserActions {
         let query = doc! {"username": &lu.username};
         let update = doc! {"$unset": {format!("serviceSettings.{}", &host): true}};
 
-        let user = self
-            .users
+        self.users
             .find_one_and_update(query, update, None)
             .await
             .map_err(InternalError::DatabaseConnectionError)?

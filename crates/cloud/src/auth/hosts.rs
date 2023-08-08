@@ -9,6 +9,10 @@ pub(crate) struct ViewAuthHosts {
     _private: (),
 }
 
+pub(crate) struct AuthorizeHost {
+    _private: (),
+}
+
 pub(crate) async fn try_view_auth_hosts(
     app: &AppData,
     req: &HttpRequest,
@@ -18,10 +22,6 @@ pub(crate) async fn try_view_auth_hosts(
     } else {
         Err(UserError::PermissionsError)
     }
-}
-
-pub(crate) struct AuthorizeHost {
-    _private: (),
 }
 
 pub(crate) async fn try_auth_host(
@@ -35,7 +35,7 @@ pub(crate) async fn try_auth_host(
     }
 }
 
-pub(crate) async fn is_authorized_host(
+pub(crate) async fn get_authorized_host(
     app: &AppData,
     req: &HttpRequest,
     host_id: Option<&str>,

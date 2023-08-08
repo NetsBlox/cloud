@@ -252,7 +252,7 @@ impl NetworkActions {
         link: &auth::InviteLink,
         role_id: &api::RoleId,
     ) -> Result<api::OccupantInvite, UserError> {
-        if !ep.metadata.roles.contains_key(&role_id) {
+        if !ep.metadata.roles.contains_key(role_id) {
             return Err(UserError::RoleNotFoundError);
         }
 
