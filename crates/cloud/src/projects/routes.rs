@@ -1,12 +1,11 @@
 use crate::app_data::AppData;
-use crate::auth;
 use crate::common::api;
 use crate::common::api::{
     ClientId, CreateProjectData, ProjectId, RoleData, RoleId, UpdateProjectData, UpdateRoleData,
 };
 use crate::errors::{InternalError, UserError};
 use crate::projects::actions::ProjectActions;
-use actix_session::Session;
+use crate::{auth, utils};
 use actix_web::{delete, get, patch, post, HttpRequest};
 use actix_web::{web, HttpResponse};
 use mongodb::bson::doc;
@@ -16,12 +15,11 @@ use serde::Deserialize;
 async fn create_project(
     app: web::Data<AppData>,
     body: web::Json<CreateProjectData>,
-    session: Session,
     req: HttpRequest,
 ) -> Result<HttpResponse, UserError> {
     let project_data = body.into_inner();
 
-    let current_user = session.get::<String>("username").unwrap_or(None);
+    let current_user = utils::get_username(&req);
     let client_id = project_data.client_id.clone();
     let owner = project_data
         .owner
@@ -42,7 +40,6 @@ async fn list_user_projects(
     app: web::Data<AppData>,
     path: web::Path<(String,)>,
     req: HttpRequest,
-    session: Session,
 ) -> Result<HttpResponse, UserError> {
     let (username,) = path.into_inner();
     let auth_lp = auth::try_list_projects(&app, &req, &username).await?;
@@ -58,7 +55,6 @@ async fn list_shared_projects(
     app: web::Data<AppData>,
     path: web::Path<(String,)>,
     req: HttpRequest,
-    session: Session,
 ) -> Result<HttpResponse, UserError> {
     let (username,) = path.into_inner();
     let auth_lp = auth::try_list_projects(&app, &req, &username).await?;

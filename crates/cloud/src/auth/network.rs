@@ -35,19 +35,25 @@ pub(crate) async fn try_view_client(
     req: &HttpRequest,
     client_id: &api::ClientId,
 ) -> Result<ViewClient, UserError> {
-    if is_super_user(app, req).await? {
-        return Ok(ViewClient {
-            id: client_id.to_owned(),
-            _private: (),
-        });
-    }
+    let is_auth_host = utils::get_authorized_host(&app.authorized_services, req)
+        .await?
+        .is_some();
 
-    super::get_authorized_host(app, req, None)
-        .await
-        .map(|_host| ViewClient {
+    if is_auth_host {
+        Ok(ViewClient {
             id: client_id.to_owned(),
             _private: (),
         })
+    } else if is_super_user(app, req).await? {
+        Ok(ViewClient {
+            id: client_id.to_owned(),
+            _private: (),
+        })
+    } else if utils::get_username(req).is_some() {
+        Err(UserError::PermissionsError)
+    } else {
+        Err(UserError::LoginRequiredError)
+    }
 }
 
 pub(crate) async fn try_evict_client(

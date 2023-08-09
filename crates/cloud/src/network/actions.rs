@@ -303,7 +303,7 @@ impl NetworkActions {
     }
     pub(crate) async fn list_rooms(
         &self,
-        lr: &auth::ListActiveRooms,
+        _lr: &auth::ListActiveRooms,
     ) -> Result<Vec<api::ProjectId>, UserError> {
         let task = self
             .network
@@ -317,7 +317,7 @@ impl NetworkActions {
 
     pub(crate) async fn list_external_clients(
         &self,
-        lc: &auth::ListClients,
+        _lc: &auth::ListClients,
     ) -> Result<Vec<api::ExternalClient>, UserError> {
         let task = self
             .network
@@ -328,7 +328,7 @@ impl NetworkActions {
         Ok(clients)
     }
 
-    pub(crate) fn send_message(&self, lc: &auth::SendMessage, message: api::SendMessage) {
+    pub(crate) fn send_message(&self, _lc: &auth::SendMessage, message: api::SendMessage) {
         self.network
             .do_send(topology::SendMessageFromServices { message });
     }

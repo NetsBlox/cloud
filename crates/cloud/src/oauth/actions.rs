@@ -129,7 +129,7 @@ impl OAuthActions {
 
     pub(crate) async fn create_client(
         &self,
-        cc: &auth::ManageClient,
+        _cc: &auth::ManageClient,
         name: &str,
     ) -> Result<oauth::CreatedClientData, UserError> {
         let query = doc! {"name": &name};
@@ -168,7 +168,7 @@ impl OAuthActions {
 
     pub(crate) async fn delete_client(
         &self,
-        cc: &auth::ManageClient,
+        _cc: &auth::ManageClient,
         client_id: &oauth::ClientId,
     ) -> Result<oauth::Client, UserError> {
         let query = doc! {"id": client_id};
@@ -184,7 +184,7 @@ impl OAuthActions {
 
     pub(crate) async fn list_clients(
         &self,
-        cc: &auth::ManageClient,
+        _cc: &auth::ManageClient,
     ) -> Result<Vec<oauth::Client>, UserError> {
         let cursor = self
             .clients

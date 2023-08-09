@@ -188,7 +188,6 @@ async fn invite_occupant(
 #[post("/clients/{clientID}/evict")]
 async fn evict_occupant(
     app: web::Data<AppData>,
-    session: Session,
     req: HttpRequest,
     path: web::Path<(ClientId,)>,
 ) -> Result<HttpResponse, UserError> {
@@ -298,7 +297,6 @@ async fn send_message(
 async fn get_client_state(
     app: web::Data<AppData>,
     path: web::Path<(ClientId,)>,
-    session: Session,
     req: HttpRequest,
 ) -> Result<HttpResponse, UserError> {
     let (client_id,) = path.into_inner();
