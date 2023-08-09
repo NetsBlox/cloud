@@ -37,8 +37,20 @@ pub(crate) async fn try_view_project(
     project_id: &api::ProjectId,
 ) -> Result<ViewProject, UserError> {
     // FIXME: if owned by guest account, should everyone be able to see it?
-    let session = req.get_session();
     let metadata = app.get_project_metadatum(project_id).await?;
+    let is_auth_host = utils::get_authorized_host(&app.authorized_services, req)
+        .await?
+        .is_some();
+
+    println!("is auth host? {}", is_auth_host);
+    if is_auth_host {
+        return Ok(ViewProject {
+            metadata,
+            _private: (),
+        });
+    }
+
+    let session = req.get_session();
 
     let can_view = match metadata.state {
         api::PublishState::Private => {
@@ -49,7 +61,7 @@ pub(crate) async fn try_view_project(
                 true
             } else {
                 // the user has been invited to the project
-                if let Some(username) = session.get::<String>("username").unwrap_or(None) {
+                if let Some(username) = utils::get_username(req) {
                     let query = doc! {"username": username};
                     let invite = flatten(app.occupant_invites.find_one(query, None).await.ok());
                     invite.is_some()

@@ -43,7 +43,7 @@ impl HostActions {
     }
     pub(crate) async fn authorize(
         &self,
-        _lh: &auth::AuthorizeHost,
+        _ah: &auth::AuthorizeHost,
         host: api::AuthorizedServiceHost,
     ) -> Result<String, UserError> {
         ensure_valid_service_id(&host.id)?;
@@ -67,7 +67,7 @@ impl HostActions {
 
     pub(crate) async fn unauthorize(
         &self,
-        lh: &auth::AuthorizeHost,
+        _ah: &auth::AuthorizeHost,
         host_id: &str,
     ) -> Result<api::AuthorizedServiceHost, UserError> {
         let query = doc! {"id": &host_id};

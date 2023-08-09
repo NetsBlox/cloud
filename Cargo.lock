@@ -1955,6 +1955,7 @@ dependencies = [
  "serde 1.0.136",
  "serde_json",
  "tokio",
+ "uuid 1.0.0-alpha.1",
  "xmlparser",
 ]
 

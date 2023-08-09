@@ -366,7 +366,7 @@ impl UserActions {
         Ok(user.into())
     }
 
-    pub(crate) async fn list_users(&self, lu: &auth::ListUsers) -> Result<Vec<String>, UserError> {
+    pub(crate) async fn list_users(&self, _lu: &auth::ListUsers) -> Result<Vec<String>, UserError> {
         let query = doc! {};
         let cursor = self
             .users

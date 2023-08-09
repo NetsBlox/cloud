@@ -193,7 +193,6 @@ async fn update_project(
 ) -> Result<HttpResponse, UserError> {
     let (project_id,) = path.into_inner();
 
-    let query = doc! {"id": &project_id};
     let body = body.into_inner();
     let auth_ep = auth::try_edit_project(&app, &req, body.client_id, &project_id).await?;
 

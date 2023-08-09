@@ -1,4 +1,3 @@
-use actix_session::Session;
 use actix_web::{delete, get, post, web, HttpRequest, HttpResponse};
 
 use crate::auth;
@@ -110,7 +109,6 @@ async fn list_group_hosts_with_settings(
 async fn get_group_settings(
     app: web::Data<AppData>,
     path: web::Path<(api::GroupId, String)>,
-    session: Session,
     req: HttpRequest,
 ) -> Result<HttpResponse, UserError> {
     let (group_id, host) = path.into_inner();
@@ -130,7 +128,6 @@ async fn set_group_settings(
     app: web::Data<AppData>,
     path: web::Path<(api::GroupId, String)>,
     body: web::Bytes,
-    session: Session,
     req: HttpRequest,
 ) -> Result<HttpResponse, UserError> {
     let (group_id, host) = path.into_inner();
@@ -139,7 +136,7 @@ async fn set_group_settings(
     let auth_eg = auth::try_edit_group(&app, &req, &group_id).await?;
 
     let actions: GroupActions = app.into();
-    let group = actions
+    actions
         .set_service_settings(&auth_eg, &host, &settings)
         .await?;
 
@@ -150,7 +147,6 @@ async fn set_group_settings(
 async fn delete_group_settings(
     app: web::Data<AppData>,
     path: web::Path<(api::GroupId, String)>,
-    session: Session,
     req: HttpRequest,
 ) -> Result<HttpResponse, UserError> {
     let (group_id, host) = path.into_inner();
@@ -158,7 +154,7 @@ async fn delete_group_settings(
     let auth_eg = auth::try_edit_group(&app, &req, &group_id).await?;
 
     let actions: GroupActions = app.into();
-    let group = actions.delete_service_settings(&auth_eg, &host).await?;
+    actions.delete_service_settings(&auth_eg, &host).await?;
 
     Ok(HttpResponse::Ok().finish())
 }

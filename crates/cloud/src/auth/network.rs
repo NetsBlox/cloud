@@ -3,7 +3,6 @@ use crate::app_data::AppData;
 use crate::errors::{InternalError, UserError};
 use crate::network::topology;
 use crate::utils;
-use actix_session::SessionExt;
 use actix_web::HttpRequest;
 use netsblox_cloud_common::api::{self, ClientId};
 use netsblox_cloud_common::ProjectMetadata;

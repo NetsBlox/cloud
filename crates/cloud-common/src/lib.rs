@@ -1,8 +1,7 @@
 use mongodb::bson::{self, doc, document::Document, Bson, DateTime};
 pub use netsblox_api_common as api;
 use netsblox_api_common::{
-    oauth, ClientState, LibraryMetadata, NewUser, OccupantInviteData, PublishState, RoleId,
-    UserRole,
+    oauth, ClientState, LibraryMetadata, NewUser, PublishState, RoleId, UserRole,
 };
 use netsblox_api_common::{
     FriendInvite, FriendLinkState, GroupId, InvitationState, LinkedAccount, ProjectId, RoleData,
