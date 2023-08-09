@@ -106,8 +106,7 @@ impl FriendActions {
                 {"sender": &friend, "recipient": &vu.username, "state": FriendLinkState::APPROVED}
             ]
         };
-        let link = self
-            .friends
+        self.friends
             .find_one_and_delete(query, None)
             .await
             .map_err(InternalError::DatabaseConnectionError)?

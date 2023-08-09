@@ -210,7 +210,7 @@ impl LibraryActions {
 
     pub(crate) async fn list_pending_libraries(
         &self,
-        ml: &auth::ModerateLibraries,
+        _ml: &auth::ModerateLibraries,
     ) -> Result<Vec<api::LibraryMetadata>, UserError> {
         let cursor = self
             .libraries
@@ -231,7 +231,7 @@ impl LibraryActions {
 
     pub(crate) async fn set_library_state(
         &self,
-        ml: &auth::ModerateLibraries,
+        _ml: &auth::ModerateLibraries,
         owner: &str,
         name: &str,
         state: api::PublishState,

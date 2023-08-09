@@ -1,14 +1,13 @@
 use super::topology::{self, ClientCommand};
 use crate::app_data::AppData;
-use crate::auth;
 use crate::common::api::{
     ClientId, ClientState, ClientStateData, OccupantInviteData, ProjectId, SaveState,
 };
 use crate::common::{api, api::ExternalClientState};
 use crate::errors::{InternalError, UserError};
 use crate::network::actions::NetworkActions;
+use crate::{auth, utils};
 use actix::{Actor, Addr, AsyncContext, Handler, StreamHandler};
-use actix_session::Session;
 use actix_web::{delete, get, post};
 use actix_web::{web, HttpRequest, HttpResponse};
 use actix_web_actors::ws::{self, CloseCode};
@@ -21,11 +20,10 @@ async fn set_client_state(
     app: web::Data<AppData>,
     path: web::Path<(ClientId,)>,
     body: web::Json<ClientStateData>,
-    session: Session,
     req: HttpRequest,
 ) -> Result<HttpResponse, UserError> {
     // TODO: should we allow users to set the client state for some other user?
-    let username = session.get::<String>("username").ok().flatten();
+    let username = utils::get_username(&req);
     let (client_id,) = path.into_inner();
     if !client_id.as_str().starts_with('_') {
         // TODO: move this to the struct parsing
@@ -123,7 +121,6 @@ async fn connect_client(
 async fn get_room_state(
     app: web::Data<AppData>,
     path: web::Path<(ProjectId,)>,
-    session: Session,
     req: HttpRequest,
 ) -> Result<HttpResponse, UserError> {
     let (project_id,) = path.into_inner();
@@ -163,7 +160,6 @@ async fn invite_occupant(
     app: web::Data<AppData>,
     body: web::Json<OccupantInviteData>,
     path: web::Path<(ProjectId,)>,
-    session: Session,
     req: HttpRequest,
 ) -> Result<HttpResponse, UserError> {
     let (project_id,) = path.into_inner();
@@ -171,7 +167,7 @@ async fn invite_occupant(
     let sender = data
         .sender
         .clone()
-        .or_else(|| session.get::<String>("username").ok().flatten())
+        .or_else(|| utils::get_username(&req))
         .ok_or(UserError::LoginRequiredError)?;
 
     let auth_ep = auth::try_edit_project(&app, &req, None, &project_id).await?;

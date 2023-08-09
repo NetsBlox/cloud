@@ -1,4 +1,3 @@
-use actix_session::SessionExt;
 use actix_web::HttpRequest;
 use mongodb::bson::doc;
 use netsblox_cloud_common::{api, ProjectMetadata};
@@ -42,15 +41,12 @@ pub(crate) async fn try_view_project(
         .await?
         .is_some();
 
-    println!("is auth host? {}", is_auth_host);
     if is_auth_host {
         return Ok(ViewProject {
             metadata,
             _private: (),
         });
     }
-
-    let session = req.get_session();
 
     let can_view = match metadata.state {
         api::PublishState::Private => {
