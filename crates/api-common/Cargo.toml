@@ -10,7 +10,7 @@ A crate containing the types used by the NetsBlox cloud API
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-uuid = { version = "1.0.0-alpha.1", features = ["v4", "fast-rng"] }
+uuid = { version = "1.0.0-alpha.1", features = ["v4", "fast-rng", "serde"] }
 serde = { version = "1.0.130", features = ["derive"] }
 bson = { version = "2.0.0", optional = true }
 derive_more = "0.99.17"

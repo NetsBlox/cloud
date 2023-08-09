@@ -409,18 +409,18 @@ impl PartialOrd for PublishState {
         if self.eq(other) {
             Some(Ordering::Equal)
         } else if matches!(self, PublishState::Private) {
-            Some(Ordering::Greater)
+            Some(Ordering::Less)
         } else if matches!(other, PublishState::Private) {
-            Some(Ordering::Less)
+            Some(Ordering::Greater)
         } else if matches!(self, PublishState::ApprovalDenied) {
-            Some(Ordering::Greater)
-        } else if matches!(other, PublishState::ApprovalDenied) {
             Some(Ordering::Less)
-        } else if matches!(self, PublishState::PendingApproval) {
+        } else if matches!(other, PublishState::ApprovalDenied) {
             Some(Ordering::Greater)
+        } else if matches!(self, PublishState::PendingApproval) {
+            Some(Ordering::Less)
         } else {
             // other must be PendingApproval and we are Public
-            Some(Ordering::Less)
+            Some(Ordering::Greater)
         }
     }
 }
@@ -712,5 +712,20 @@ mod tests {
         let app_id: AppId = serde_json::from_str(&app_id_str).unwrap();
         assert_eq!(&app_id.as_str(), &"netsblox");
         assert_eq!(app_id, AppId::new("netsblox"));
+    }
+
+    #[test]
+    fn publish_state_priv_lt_pending() {
+        assert!(PublishState::Private < PublishState::PendingApproval);
+    }
+
+    #[test]
+    fn publish_state_pending_lt_public() {
+        assert!(PublishState::PendingApproval < PublishState::Public);
+    }
+
+    #[test]
+    fn publish_state_public_eq() {
+        assert!(PublishState::Public == PublishState::Public);
     }
 }
