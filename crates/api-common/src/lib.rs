@@ -486,8 +486,8 @@ pub struct UpdateGroupData {
 #[derive(Deserialize, Serialize, Clone, Debug)]
 pub enum InvitationState {
     Pending,
-    ACCEPTED,
-    REJECTED,
+    Accepted,
+    Rejected,
 }
 
 pub type InvitationId = String;

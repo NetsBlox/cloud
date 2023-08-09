@@ -124,7 +124,7 @@ impl CollaborationInviteActions {
             .ok_or(UserError::InviteNotFoundError)?;
 
         // Update the project
-        if matches!(state, InvitationState::ACCEPTED) {
+        if matches!(state, InvitationState::Accepted) {
             let query = doc! {"id": &ri.invite.project_id};
             let update = doc! {"$addToSet": {"collaborators": &ri.invite.receiver}};
             let options = FindOneAndUpdateOptions::builder()

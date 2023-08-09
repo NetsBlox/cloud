@@ -56,6 +56,24 @@ pub(crate) async fn try_view_client(
     }
 }
 
+// helper function
+pub(crate) async fn ensure_is_auth_host_or_admin(
+    app: &AppData,
+    req: &HttpRequest,
+) -> Result<(), UserError> {
+    let is_auth_host = utils::get_authorized_host(&app.authorized_services, req)
+        .await?
+        .is_some();
+
+    if is_auth_host || is_super_user(app, req).await? {
+        Ok(())
+    } else if utils::get_username(req).is_some() {
+        Err(UserError::PermissionsError)
+    } else {
+        Err(UserError::LoginRequiredError)
+    }
+}
+
 pub(crate) async fn try_evict_client(
     app: &AppData,
     req: &HttpRequest,
