@@ -976,9 +976,9 @@ async fn do_command(mut cfg: Config, args: Cli) -> Result<(), error::Error> {
                     .expect("Invitation not found.");
 
                 let state = if *reject {
-                    InvitationState::REJECTED
+                    InvitationState::Rejected
                 } else {
-                    InvitationState::ACCEPTED
+                    InvitationState::Accepted
                 };
                 client
                     .respond_to_collaboration_invite(&invite.id, &state)
