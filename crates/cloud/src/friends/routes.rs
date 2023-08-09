@@ -117,7 +117,7 @@ async fn send_invite(
     let state = actions.send_invite(&auth_eu, &recipient).await?;
 
     match state {
-        FriendLinkState::BLOCKED => Ok(HttpResponse::Conflict().json(state)),
+        FriendLinkState::Blocked => Ok(HttpResponse::Conflict().json(state)),
         _ => Ok(HttpResponse::Ok().json(state)),
     }
 }
@@ -218,12 +218,12 @@ mod tests {
         let l1 = FriendLink::new(
             user.username.clone(),
             f1.username.clone(),
-            Some(FriendLinkState::APPROVED),
+            Some(FriendLinkState::Approved),
         );
         let l2 = FriendLink::new(
             user.username.clone(),
             f2.username.clone(),
-            Some(FriendLinkState::APPROVED),
+            Some(FriendLinkState::Approved),
         );
 
         // Connect f1, nonfriend
@@ -282,7 +282,7 @@ mod tests {
         let l1 = FriendLink::new(
             user.username.clone(),
             f1.username.clone(),
-            Some(FriendLinkState::APPROVED),
+            Some(FriendLinkState::Approved),
         );
 
         test_utils::setup()
@@ -341,7 +341,7 @@ mod tests {
         let l1 = FriendLink::new(
             user.username.clone(),
             f1.username.clone(),
-            Some(FriendLinkState::APPROVED),
+            Some(FriendLinkState::Approved),
         );
 
         test_utils::setup()
@@ -400,7 +400,7 @@ mod tests {
         let l1 = FriendLink::new(
             user.username.clone(),
             f1.username.clone(),
-            Some(FriendLinkState::APPROVED),
+            Some(FriendLinkState::Approved),
         );
 
         test_utils::setup()
@@ -496,7 +496,7 @@ mod tests {
         let mut l1 = FriendLink::new(
             user.username.clone(),
             f1.username.clone(),
-            Some(FriendLinkState::APPROVED),
+            Some(FriendLinkState::Approved),
         );
 
         // Roll back the creation date to make it obvious that the update time is different
@@ -521,7 +521,7 @@ mod tests {
                     .to_request();
 
                 let link: api::FriendLink = test::call_and_read_body_json(&app, req).await;
-                assert!(matches!(link.state, FriendLinkState::BLOCKED));
+                assert!(matches!(link.state, FriendLinkState::Blocked));
                 assert_ne!(link.created_at, link.updated_at);
             })
             .await;
@@ -554,7 +554,7 @@ mod tests {
         let l1 = FriendLink::new(
             user.username.clone(),
             f1.username.clone(),
-            Some(FriendLinkState::BLOCKED),
+            Some(FriendLinkState::Blocked),
         );
 
         test_utils::setup()

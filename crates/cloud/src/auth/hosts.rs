@@ -1,9 +1,7 @@
 use super::is_super_user;
 use crate::app_data::AppData;
-use crate::errors::{InternalError, UserError};
+use crate::errors::UserError;
 use actix_web::HttpRequest;
-use mongodb::bson::doc;
-use netsblox_cloud_common::AuthorizedServiceHost;
 
 pub(crate) struct ViewAuthHosts {
     _private: (),

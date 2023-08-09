@@ -102,8 +102,8 @@ impl FriendActions {
     ) -> Result<(), UserError> {
         let query = doc! {
             "$or": [
-                {"sender": &vu.username, "recipient": &friend, "state": FriendLinkState::APPROVED},
-                {"sender": &friend, "recipient": &vu.username, "state": FriendLinkState::APPROVED}
+                {"sender": &vu.username, "recipient": &friend, "state": FriendLinkState::Approved},
+                {"sender": &friend, "recipient": &vu.username, "state": FriendLinkState::Approved}
             ]
         };
         self.friends
@@ -134,7 +134,7 @@ impl FriendActions {
         let link = FriendLink::new(
             eu.username.to_owned(),
             other_user.to_owned(),
-            Some(FriendLinkState::BLOCKED),
+            Some(FriendLinkState::Blocked),
         );
         let update = doc! {
             "$set": {
@@ -179,7 +179,7 @@ impl FriendActions {
         let query = doc! {
             "sender": &eu.username,
             "recipient": &other_user,
-            "state": FriendLinkState::BLOCKED,
+            "state": FriendLinkState::Blocked,
         };
         self.friends
             .delete_one(query, None)
@@ -194,7 +194,7 @@ impl FriendActions {
         &self,
         vu: &auth::users::ViewUser,
     ) -> Result<Vec<api::FriendInvite>, UserError> {
-        let query = doc! {"recipient": &vu.username, "state": FriendLinkState::PENDING}; // TODO: ensure they are still pending
+        let query = doc! {"recipient": &vu.username, "state": FriendLinkState::Pending}; // TODO: ensure they are still pending
         let cursor = self
             .friends
             .find(query, None)
@@ -253,10 +253,10 @@ impl FriendActions {
         let query = doc! {
             "sender": &recipient,
             "recipient": &eu.username,
-            "state": FriendLinkState::PENDING
+            "state": FriendLinkState::Pending
         };
 
-        let update = doc! {"$set": {"state": FriendLinkState::APPROVED}};
+        let update = doc! {"$set": {"state": FriendLinkState::Approved}};
         let approved_existing = self
             .friends
             .update_one(query, update, None)
@@ -272,14 +272,14 @@ impl FriendActions {
 
             // TODO: send msg about removing the existing invite
 
-            FriendLinkState::APPROVED
+            FriendLinkState::Approved
         } else {
             let query = doc! {
                 "$or": [
-                    {"sender": &eu.username, "recipient": &recipient, "state": FriendLinkState::BLOCKED},
-                    {"sender": &recipient, "recipient": &eu.username, "state": FriendLinkState::BLOCKED},
-                    {"sender": &eu.username, "recipient": &recipient, "state": FriendLinkState::APPROVED},
-                    {"sender": &recipient, "recipient": &eu.username, "state": FriendLinkState::APPROVED},
+                    {"sender": &eu.username, "recipient": &recipient, "state": FriendLinkState::Blocked},
+                    {"sender": &recipient, "recipient": &eu.username, "state": FriendLinkState::Blocked},
+                    {"sender": &eu.username, "recipient": &recipient, "state": FriendLinkState::Approved},
+                    {"sender": &recipient, "recipient": &eu.username, "state": FriendLinkState::Approved},
                 ]
             };
 
@@ -306,7 +306,7 @@ impl FriendActions {
                     .await
                     .map_err(InternalError::ActixMessageError)?;
 
-                FriendLinkState::PENDING
+                FriendLinkState::Pending
             }
         };
 
@@ -322,7 +322,7 @@ impl FriendActions {
         let query = doc! {
           "recipient": &eu.username,
           "sender": &sender,
-          "state": FriendLinkState::PENDING
+          "state": FriendLinkState::Pending
         };
         let update = doc! {"$set": {"state": &resp}};
 
@@ -337,7 +337,7 @@ impl FriendActions {
             .map_err(InternalError::DatabaseConnectionError)?
             .ok_or(UserError::InviteNotFoundError)?;
 
-        let friend_list_changed = matches!(resp, FriendLinkState::APPROVED);
+        let friend_list_changed = matches!(resp, FriendLinkState::Approved);
         if friend_list_changed {
             // invalidate cache
             let mut cache = self.friend_cache.write().unwrap();
@@ -393,11 +393,11 @@ mod tests {
                 let actions: FriendActions = app_data.into();
                 let auth_eu = auth::EditUser::test(rcvr.username.clone());
                 let link = actions
-                    .respond_to_invite(&auth_eu, &sender.username, api::FriendLinkState::APPROVED)
+                    .respond_to_invite(&auth_eu, &sender.username, api::FriendLinkState::Approved)
                     .await
                     .unwrap();
 
-                assert!(matches!(link.state, api::FriendLinkState::APPROVED));
+                assert!(matches!(link.state, api::FriendLinkState::Approved));
             })
             .await;
     }
@@ -419,7 +419,7 @@ mod tests {
                 let actions: FriendActions = app_data.into();
                 let auth_eu = auth::EditUser::test(rcvr.username.clone());
                 let result = actions
-                    .respond_to_invite(&auth_eu, "sender", api::FriendLinkState::APPROVED)
+                    .respond_to_invite(&auth_eu, "sender", api::FriendLinkState::Approved)
                     .await;
 
                 assert!(matches!(result, Err(UserError::InviteNotFoundError)));
@@ -458,7 +458,7 @@ mod tests {
                 let actions: FriendActions = app_data.into();
                 let auth_eu = auth::EditUser::test(rcvr.username.clone());
                 let result = actions
-                    .respond_to_invite(&auth_eu, "sender", api::FriendLinkState::APPROVED)
+                    .respond_to_invite(&auth_eu, "sender", api::FriendLinkState::Approved)
                     .await;
 
                 assert!(matches!(result, Err(UserError::InviteNotFoundError)));
@@ -487,7 +487,7 @@ mod tests {
         let link = FriendLink::new(
             sender.username.clone(),
             rcvr.username.clone(),
-            Some(api::FriendLinkState::APPROVED),
+            Some(api::FriendLinkState::Approved),
         );
 
         test_utils::setup()
@@ -497,7 +497,7 @@ mod tests {
                 let actions: FriendActions = app_data.into();
                 let auth_eu = auth::EditUser::test(rcvr.username.clone());
                 let result = actions
-                    .respond_to_invite(&auth_eu, "sender", api::FriendLinkState::APPROVED)
+                    .respond_to_invite(&auth_eu, "sender", api::FriendLinkState::Approved)
                     .await;
 
                 assert!(matches!(result, Err(UserError::InviteNotFoundError)));
@@ -526,7 +526,7 @@ mod tests {
         let link = FriendLink::new(
             sender.username.clone(),
             rcvr.username.clone(),
-            Some(api::FriendLinkState::BLOCKED),
+            Some(api::FriendLinkState::Blocked),
         );
 
         test_utils::setup()
@@ -536,7 +536,7 @@ mod tests {
                 let actions: FriendActions = app_data.into();
                 let auth_eu = auth::EditUser::test(rcvr.username.clone());
                 let result = actions
-                    .respond_to_invite(&auth_eu, "sender", api::FriendLinkState::APPROVED)
+                    .respond_to_invite(&auth_eu, "sender", api::FriendLinkState::Approved)
                     .await;
 
                 assert!(matches!(result, Err(UserError::InviteNotFoundError)));

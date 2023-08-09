@@ -205,7 +205,7 @@ impl CollaborationInvite {
             sender,
             receiver,
             project_id,
-            state: InvitationState::PENDING,
+            state: InvitationState::Pending,
             created_at: DateTime::from_system_time(SystemTime::now()),
         }
     }
@@ -255,7 +255,7 @@ impl FriendLink {
             id: Uuid::new_v4().to_string(),
             sender,
             recipient,
-            state: state.unwrap_or(FriendLinkState::PENDING),
+            state: state.unwrap_or(FriendLinkState::Pending),
             created_at,
             updated_at: created_at,
         }

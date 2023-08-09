@@ -190,8 +190,8 @@ async fn lookup_friends(
         let members = lookup_members(users, group_ids).await?;
 
         let query = doc! {"$or": [
-            {"sender": &username, "state": api::FriendLinkState::APPROVED},
-            {"recipient": &username, "state": api::FriendLinkState::APPROVED}
+            {"sender": &username, "state": api::FriendLinkState::Approved},
+            {"recipient": &username, "state": api::FriendLinkState::Approved}
         ]};
         let cursor = friends
             .find(query, None)

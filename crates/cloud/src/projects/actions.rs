@@ -96,7 +96,7 @@ impl ProjectActions {
         let roles: HashMap<RoleId, RoleMetadata> =
             roles.keys().cloned().zip(role_mds.into_iter()).collect();
 
-        let save_state = project_data.save_state.unwrap_or(SaveState::CREATED);
+        let save_state = project_data.save_state.unwrap_or(SaveState::Created);
         let metadata = ProjectMetadata::new(owner, &unique_name, roles, save_state);
         self.project_metadata
             .insert_one(metadata.clone(), None)
@@ -522,7 +522,7 @@ impl ProjectActions {
         let update = doc! {
             "$set": {
                 &format!("roles.{}", role_id): role_md,
-                "saveState": SaveState::SAVED,
+                "saveState": SaveState::Saved,
                 "state": state,
             }
         };
@@ -575,7 +575,7 @@ impl ProjectActions {
         &self,
         lp: &auth::projects::ListProjects,
     ) -> Result<Vec<api::ProjectMetadata>, UserError> {
-        let query = doc! {"owner": &lp.username, "saveState": SaveState::SAVED};
+        let query = doc! {"owner": &lp.username, "saveState": SaveState::Saved};
         let cursor = self
             .project_metadata
             .find(query, None)
@@ -589,7 +589,7 @@ impl ProjectActions {
         &self,
         lp: &auth::projects::ListProjects,
     ) -> Result<Vec<api::ProjectMetadata>, UserError> {
-        let query = doc! {"collaborators": &lp.username, "saveState": SaveState::SAVED};
+        let query = doc! {"collaborators": &lp.username, "saveState": SaveState::Saved};
         let cursor = self
             .project_metadata
             .find(query, None)

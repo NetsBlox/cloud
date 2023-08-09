@@ -126,7 +126,7 @@ impl TestSetupBuilder {
                 name,
                 roles,
                 client_id: None,
-                save_state: Some(api::SaveState::SAVED),
+                save_state: Some(api::SaveState::Saved),
             };
             let metadata = actions
                 .create_project(&auth_eu, project_data)
@@ -310,7 +310,7 @@ pub(crate) mod project {
                 name: self.name.unwrap_or("my project".into()),
                 collaborators: self.collaborators,
                 roles: self.roles,
-                save_state: api::SaveState::SAVED,
+                save_state: api::SaveState::Saved,
 
                 traces: self.traces,
             }

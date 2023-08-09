@@ -25,10 +25,10 @@ impl From<LinkedAccount> for Bson {
 impl From<FriendLinkState> for Bson {
     fn from(link_state: FriendLinkState) -> Bson {
         match link_state {
-            FriendLinkState::PENDING => Bson::String("PENDING".into()),
-            FriendLinkState::APPROVED => Bson::String("APPROVED".into()),
-            FriendLinkState::REJECTED => Bson::String("REJECTED".into()),
-            FriendLinkState::BLOCKED => Bson::String("BLOCKED".into()),
+            FriendLinkState::Pending => Bson::String("Pending".into()),
+            FriendLinkState::Approved => Bson::String("Approved".into()),
+            FriendLinkState::Rejected => Bson::String("Rejected".into()),
+            FriendLinkState::Blocked => Bson::String("Blocked".into()),
         }
     }
 }
@@ -58,10 +58,10 @@ impl From<FriendInvite> for Bson {
 impl From<SaveState> for Bson {
     fn from(state: SaveState) -> Bson {
         match state {
-            SaveState::CREATED => Bson::String("CREATED".to_string()),
-            SaveState::TRANSIENT => Bson::String("TRANSIENT".to_string()),
-            SaveState::BROKEN => Bson::String("BROKEN".to_string()),
-            SaveState::SAVED => Bson::String("SAVED".to_string()),
+            SaveState::Created => Bson::String("Created".to_string()),
+            SaveState::Transient => Bson::String("Transient".to_string()),
+            SaveState::Broken => Bson::String("Broken".to_string()),
+            SaveState::Saved => Bson::String("Saved".to_string()),
         }
     }
 }
@@ -96,7 +96,7 @@ impl From<GroupId> for Bson {
 impl From<InvitationState> for Bson {
     fn from(state: InvitationState) -> Bson {
         match state {
-            InvitationState::PENDING => Bson::String("PENDING".to_owned()),
+            InvitationState::Pending => Bson::String("Pending".to_owned()),
             InvitationState::ACCEPTED => Bson::String("ACCEPTED".to_owned()),
             InvitationState::REJECTED => Bson::String("REJECTED".to_owned()),
         }

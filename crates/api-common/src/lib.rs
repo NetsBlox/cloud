@@ -175,10 +175,10 @@ pub struct FriendLink {
 
 #[derive(Deserialize, Serialize, Clone, Debug)]
 pub enum FriendLinkState {
-    PENDING,
-    APPROVED,
-    REJECTED,
-    BLOCKED,
+    Pending,
+    Approved,
+    Rejected,
+    Blocked,
 }
 
 #[derive(Debug)]
@@ -195,10 +195,10 @@ impl FromStr for FriendLinkState {
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         match s {
-            "pending" => Ok(FriendLinkState::PENDING),
-            "approved" => Ok(FriendLinkState::APPROVED),
-            "rejected" => Ok(FriendLinkState::REJECTED),
-            "blocked" => Ok(FriendLinkState::BLOCKED),
+            "pending" => Ok(FriendLinkState::Pending),
+            "approved" => Ok(FriendLinkState::Approved),
+            "rejected" => Ok(FriendLinkState::Rejected),
+            "blocked" => Ok(FriendLinkState::Blocked),
             _ => Err(ParseFriendLinkStateError),
         }
     }
@@ -252,11 +252,10 @@ pub struct ProjectMetadata {
 
 #[derive(Deserialize, Serialize, Clone, Debug)]
 pub enum SaveState {
-    // TODO: rename these to be Pascal-case
-    CREATED,
-    TRANSIENT,
-    BROKEN,
-    SAVED,
+    Created,
+    Transient,
+    Broken,
+    Saved,
 }
 
 #[derive(Deserialize, Serialize, Clone, Debug)]
@@ -486,7 +485,7 @@ pub struct UpdateGroupData {
 
 #[derive(Deserialize, Serialize, Clone, Debug)]
 pub enum InvitationState {
-    PENDING,
+    Pending,
     ACCEPTED,
     REJECTED,
 }
@@ -510,7 +509,7 @@ impl CollaborationInvite {
             sender,
             receiver,
             project_id,
-            state: InvitationState::PENDING,
+            state: InvitationState::Pending,
             created_at: SystemTime::now(),
         }
     }

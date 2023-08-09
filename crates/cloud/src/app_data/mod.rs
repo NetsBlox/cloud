@@ -255,7 +255,7 @@ impl AppData {
                         .options(
                             IndexOptions::builder()
                                 .expire_after(Duration::from_secs(60 * 60 * 24 * 7))
-                                .partial_filter_expression(doc! {"saveState": SaveState::TRANSIENT})
+                                .partial_filter_expression(doc! {"saveState": SaveState::Transient})
                                 .background(true)
                                 .build(),
                         )
@@ -470,7 +470,6 @@ impl AppData {
             .unwrap_or(false)
     }
 
-    // Friend-related features
     // Tor-related restrictions
     pub async fn ensure_not_tor_ip(&self, ip_addr: &IpAddr) -> Result<(), UserError> {
         let ip_addr = ip_addr.to_string();
