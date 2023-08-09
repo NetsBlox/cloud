@@ -1,26 +1,22 @@
 use crate::app_data::AppData;
-use crate::common::api::{FriendLinkState, UserRole};
-use crate::errors::{InternalError, UserError};
-use crate::network::topology::GetOnlineUsers;
-use crate::users::{ensure_can_edit_user, get_user_role};
-use actix_session::Session;
-use actix_web::{get, post};
+use crate::auth;
+use crate::common::api::FriendLinkState;
+use crate::errors::UserError;
+use crate::friends::actions::FriendActions;
+use actix_web::{get, post, HttpRequest};
 use actix_web::{web, HttpResponse};
-use futures::TryStreamExt;
-use mongodb::bson::doc;
-use mongodb::options::FindOptions;
 
 #[get("/{owner}/")]
 async fn list_friends(
     app: web::Data<AppData>,
     path: web::Path<(String,)>,
-    session: Session,
+    req: HttpRequest,
 ) -> Result<HttpResponse, UserError> {
     let (owner,) = path.into_inner();
-    ensure_can_edit_user(&app, &session, &owner).await?;
+    let auth_vu = auth::try_view_user(&app, &req, None, &owner).await?;
 
-    // Admins are considered a friend to everyone (at least one-way)
-    let friend_names: Vec<_> = app.get_friends(&owner).await?;
+    let actions: FriendActions = app.into();
+    let friend_names = actions.list_friends(&auth_vu).await?;
 
     Ok(HttpResponse::Ok().json(friend_names))
 }
@@ -29,25 +25,13 @@ async fn list_friends(
 async fn list_online_friends(
     app: web::Data<AppData>,
     path: web::Path<(String,)>,
-    session: Session,
+    req: HttpRequest,
 ) -> Result<HttpResponse, UserError> {
     let (owner,) = path.into_inner();
+    let auth_vu = auth::try_view_user(&app, &req, None, &owner).await?;
 
-    ensure_can_edit_user(&app, &session, &owner).await?;
-
-    let is_universal_friend = matches!(get_user_role(&app, &owner).await?, UserRole::Admin);
-    let filter_usernames = if is_universal_friend {
-        None
-    } else {
-        Some(app.get_friends(&owner).await?)
-    };
-
-    let task = app
-        .network
-        .send(GetOnlineUsers(filter_usernames))
-        .await
-        .map_err(InternalError::ActixMessageError)?;
-    let online_friends = task.run().await;
+    let actions: FriendActions = app.into();
+    let online_friends = actions.list_online_friends(&auth_vu).await?;
 
     Ok(HttpResponse::Ok().json(online_friends))
 }
@@ -56,12 +40,13 @@ async fn list_online_friends(
 async fn unfriend(
     app: web::Data<AppData>,
     path: web::Path<(String, String)>,
-    session: Session,
+    req: HttpRequest,
 ) -> Result<HttpResponse, UserError> {
     let (owner, friend) = path.into_inner();
-    ensure_can_edit_user(&app, &session, &owner).await?;
+    let auth_eu = auth::try_edit_user(&app, &req, None, &owner).await?;
 
-    app.unfriend(&owner, &friend).await?;
+    let actions: FriendActions = app.into();
+    actions.unfriend(&auth_eu, &friend).await?;
 
     // Send "true" since it was successful but there isn't anything to send
     // (w/o adding extra overhead by making assumptions like that they want
@@ -73,12 +58,13 @@ async fn unfriend(
 async fn block_user(
     app: web::Data<AppData>,
     path: web::Path<(String, String)>,
-    session: Session,
+    req: HttpRequest,
 ) -> Result<HttpResponse, UserError> {
     let (owner, friend) = path.into_inner();
+    let auth_eu = auth::try_edit_user(&app, &req, None, &owner).await?;
 
-    ensure_can_edit_user(&app, &session, &owner).await?;
-    let link = app.block_user(&owner, &friend).await?;
+    let actions: FriendActions = app.into();
+    let link = actions.block(&auth_eu, &friend).await?;
 
     Ok(HttpResponse::Ok().json(link))
 }
@@ -87,11 +73,13 @@ async fn block_user(
 async fn unblock_user(
     app: web::Data<AppData>,
     path: web::Path<(String, String)>,
-    session: Session,
+    req: HttpRequest,
 ) -> Result<HttpResponse, UserError> {
     let (owner, friend) = path.into_inner();
-    ensure_can_edit_user(&app, &session, &owner).await?;
-    app.unblock_user(&owner, &friend).await?;
+    let auth_eu = auth::try_edit_user(&app, &req, None, &owner).await?;
+
+    let actions: FriendActions = app.into();
+    actions.unblock(&auth_eu, &friend).await?;
 
     // Send "true" since it was successful but there isn't anything to send
     // (w/o adding extra overhead by making assumptions like that they want
@@ -103,12 +91,13 @@ async fn unblock_user(
 async fn list_invites(
     app: web::Data<AppData>,
     path: web::Path<(String,)>,
-    session: Session,
+    req: HttpRequest,
 ) -> Result<HttpResponse, UserError> {
     let (owner,) = path.into_inner();
-    ensure_can_edit_user(&app, &session, &owner).await?;
+    let auth_vu = auth::try_view_user(&app, &req, None, &owner).await?;
 
-    let invites = app.list_invites(&owner).await?;
+    let actions: FriendActions = app.into();
+    let invites = actions.list_invites(&auth_vu).await?;
 
     Ok(HttpResponse::Ok().json(invites))
 }
@@ -118,39 +107,14 @@ async fn send_invite(
     app: web::Data<AppData>,
     path: web::Path<(String,)>,
     recipient: web::Json<String>,
-    session: Session,
+    req: HttpRequest,
 ) -> Result<HttpResponse, UserError> {
     let (owner,) = path.into_inner();
     let recipient = recipient.into_inner();
-    ensure_can_edit_user(&app, &session, &owner).await?;
+    let auth_eu = auth::try_edit_user(&app, &req, None, &owner).await?;
 
-    // ensure users are valid
-    let query = doc! {
-        "$or": [
-            {"username": &owner},
-            {"username": &recipient},
-        ]
-    };
-    let options = FindOptions::builder().limit(Some(2)).build();
-    let users = app
-        .users
-        .find(query, options)
-        .await
-        .map_err(InternalError::DatabaseConnectionError)?
-        .try_collect::<Vec<_>>()
-        .await
-        .map_err(InternalError::DatabaseConnectionError)?;
-
-    if users.len() != 2 {
-        return Err(UserError::UserNotFoundError);
-    }
-
-    // block requests into a group
-    if users.into_iter().any(|user| user.is_member()) {
-        return Err(UserError::InviteNotAllowedError);
-    }
-
-    let state = app.send_invite(&owner, &recipient).await?;
+    let actions: FriendActions = app.into();
+    let state = actions.send_invite(&auth_eu, &recipient).await?;
 
     match state {
         FriendLinkState::Blocked => Ok(HttpResponse::Conflict().json(state)),
@@ -163,14 +127,14 @@ async fn respond_to_invite(
     app: web::Data<AppData>,
     path: web::Path<(String, String)>,
     body: web::Json<FriendLinkState>,
-    session: Session,
+    req: HttpRequest,
 ) -> Result<HttpResponse, UserError> {
     let (recipient, sender) = path.into_inner();
-    ensure_can_edit_user(&app, &session, &recipient).await?;
-    let new_state = body.into_inner();
-    let request = app
-        .respond_to_request(&recipient, &sender, new_state)
-        .await?;
+    let state = body.into_inner();
+    let auth_eu = auth::try_edit_user(&app, &req, None, &recipient).await?;
+
+    let actions: FriendActions = app.into();
+    let request = actions.respond_to_invite(&auth_eu, &sender, state).await?;
 
     Ok(HttpResponse::Ok().json(request))
 }
@@ -556,7 +520,7 @@ mod tests {
                     .cookie(cookie)
                     .to_request();
 
-                let link: FriendLink = test::call_and_read_body_json(&app, req).await;
+                let link: api::FriendLink = test::call_and_read_body_json(&app, req).await;
                 assert!(matches!(link.state, FriendLinkState::Blocked));
                 assert_ne!(link.created_at, link.updated_at);
             })

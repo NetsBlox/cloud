@@ -384,6 +384,7 @@ impl Topology {
             } else {
                 // message only allowed from group member/owner
                 join_all(members.into_iter().map(|member| async {
+                    // TODO: do we need this?
                     let friends = app.get_friends(&member).await.unwrap_or_default();
                     (member, friends.contains(sender))
                 }))

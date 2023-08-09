@@ -40,7 +40,7 @@ pub struct User {
     pub services_hosts: Option<Vec<ServiceHost>>,
 }
 
-#[derive(Serialize, Deserialize)]
+#[derive(Serialize, Deserialize, Debug)]
 pub struct NewUser {
     pub username: String,
     pub email: String,
@@ -64,6 +64,34 @@ impl PartialOrd for UserRole {
         let other_val = *other as u32;
         my_val.partial_cmp(&other_val)
     }
+}
+
+#[derive(Deserialize, Serialize, Clone, Debug)]
+#[serde(rename_all = "camelCase")]
+pub struct NetworkTraceMetadata {
+    pub id: String,
+    pub start_time: SystemTime,
+    pub end_time: Option<SystemTime>,
+}
+
+#[derive(Deserialize, Serialize, Debug, Clone)]
+#[serde(rename_all = "camelCase")]
+pub struct SentMessage {
+    pub project_id: ProjectId,
+    pub recipients: Vec<ClientState>,
+    pub time: SystemTime,
+    pub source: ClientState,
+
+    pub content: serde_json::Value,
+}
+
+#[derive(Deserialize, Serialize, Debug, Clone)]
+#[serde(rename_all = "camelCase")]
+pub struct OccupantInvite {
+    pub username: String,
+    pub project_id: ProjectId,
+    pub role_id: RoleId,
+    pub created_at: SystemTime,
 }
 
 #[derive(Debug, Display, Error)]
@@ -96,6 +124,14 @@ pub struct LinkedAccount {
     pub strategy: String,
 }
 
+#[derive(Serialize, Deserialize, Clone)]
+#[serde(rename_all = "camelCase")]
+pub struct BannedAccount {
+    pub username: String,
+    pub email: String,
+    pub banned_at: SystemTime,
+}
+
 #[derive(Serialize, Deserialize, Debug)]
 #[serde(rename_all = "camelCase")]
 pub struct LoginRequest {
@@ -123,6 +159,18 @@ impl From<Credentials> for LinkedAccount {
             },
         }
     }
+}
+
+pub type FriendLinkId = String; // FIXME: switch to newtype
+#[derive(Deserialize, Serialize, Clone, Debug)]
+#[serde(rename_all = "camelCase")]
+pub struct FriendLink {
+    pub id: FriendLinkId,
+    pub sender: String,
+    pub recipient: String,
+    pub state: FriendLinkState,
+    pub created_at: SystemTime,
+    pub updated_at: SystemTime,
 }
 
 #[derive(Deserialize, Serialize, Clone, Debug)]
@@ -196,6 +244,7 @@ pub struct ProjectMetadata {
     pub updated: SystemTime,
     pub state: PublishState,
     pub collaborators: std::vec::Vec<String>,
+    pub network_traces: Vec<NetworkTraceMetadata>,
     pub origin_time: SystemTime,
     pub save_state: SaveState,
     pub roles: HashMap<RoleId, RoleMetadata>,
@@ -244,6 +293,13 @@ impl Project {
             self.name, APP_NAME, role_str
         )
     }
+}
+
+#[derive(Deserialize, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct RoleDataResponse {
+    pub id: Uuid,
+    pub data: RoleData,
 }
 
 #[derive(Deserialize, Serialize, Debug, Clone)]
@@ -343,9 +399,30 @@ pub struct CreateLibraryData {
 #[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq)]
 pub enum PublishState {
     Private,
-    PendingApproval,
     ApprovalDenied,
+    PendingApproval,
     Public,
+}
+
+impl PartialOrd for PublishState {
+    fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
+        if self.eq(other) {
+            Some(Ordering::Equal)
+        } else if matches!(self, PublishState::Private) {
+            Some(Ordering::Greater)
+        } else if matches!(other, PublishState::Private) {
+            Some(Ordering::Less)
+        } else if matches!(self, PublishState::ApprovalDenied) {
+            Some(Ordering::Greater)
+        } else if matches!(other, PublishState::ApprovalDenied) {
+            Some(Ordering::Less)
+        } else if matches!(self, PublishState::PendingApproval) {
+            Some(Ordering::Greater)
+        } else {
+            // other must be PendingApproval and we are Public
+            Some(Ordering::Less)
+        }
+    }
 }
 
 #[derive(Serialize, Deserialize)]
@@ -408,7 +485,7 @@ pub struct UpdateGroupData {
 
 #[derive(Deserialize, Serialize, Clone, Debug)]
 pub enum InvitationState {
-    PENDING,
+    Pending,
     ACCEPTED,
     REJECTED,
 }
@@ -432,7 +509,7 @@ impl CollaborationInvite {
             sender,
             receiver,
             project_id,
-            state: InvitationState::PENDING,
+            state: InvitationState::Pending,
             created_at: SystemTime::now(),
         }
     }
@@ -460,6 +537,9 @@ pub struct CreateProjectData {
     pub roles: Option<Vec<RoleData>>,
     pub client_id: Option<ClientId>,
     pub save_state: Option<SaveState>,
+
+    #[cfg(test)]
+    pub role_dict: Option<HashMap<RoleId, RoleData>>,
 }
 
 // Network debugging data
@@ -526,6 +606,7 @@ pub struct OccupantState {
 pub struct OccupantInviteData {
     pub username: String,
     pub role_id: RoleId,
+    pub sender: Option<String>,
 }
 
 #[derive(Deserialize, Serialize, Debug, Clone)]

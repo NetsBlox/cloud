@@ -1955,6 +1955,7 @@ dependencies = [
  "serde 1.0.136",
  "serde_json",
  "tokio",
+ "uuid 1.0.0-alpha.1",
  "xmlparser",
 ]
 
@@ -3717,6 +3718,7 @@ checksum = "bb3ab47baa004111b323696c6eaa2752e7356f7f77cf6b6dc7a2087368ce1ca4"
 dependencies = [
  "getrandom",
  "rand",
+ "serde 1.0.136",
 ]
 
 [[package]]

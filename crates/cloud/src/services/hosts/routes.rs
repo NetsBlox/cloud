@@ -1,43 +1,27 @@
 use crate::app_data::AppData;
+use crate::auth;
 use crate::common::api;
 use crate::common::api::{GroupId, ServiceHost};
-use crate::common::AuthorizedServiceHost;
 use crate::errors::{InternalError, UserError};
-use crate::users::{ensure_can_edit_user, ensure_is_super_user, is_super_user};
-use actix_session::Session;
+use crate::groups::actions::GroupActions;
+use crate::services::hosts::actions::HostActions;
+use crate::users::actions::UserActions;
 use actix_web::{delete, get, post, HttpRequest};
 use actix_web::{web, HttpResponse};
 use futures::TryStreamExt;
-use lazy_static::lazy_static;
 use mongodb::bson::doc;
-use mongodb::options::{ReturnDocument, UpdateOptions};
-use regex::Regex;
 
 #[get("/group/{id}")]
 async fn list_group_hosts(
     app: web::Data<AppData>,
     path: web::Path<(GroupId,)>,
-    session: Session,
+    req: HttpRequest,
 ) -> Result<HttpResponse, UserError> {
     let (id,) = path.into_inner();
-    let username = session
-        .get::<String>("username")
-        .ok()
-        .flatten()
-        .ok_or(UserError::PermissionsError)?;
+    let auth_vg = auth::try_view_group(&app, &req, &id).await?;
 
-    let query = if is_super_user(&app, &session).await? {
-        doc! {"id": id}
-    } else {
-        doc! {"id": id, "owner": username}
-    };
-
-    let group = app
-        .groups
-        .find_one(query, None)
-        .await
-        .map_err(InternalError::DatabaseConnectionError)?
-        .ok_or(UserError::GroupNotFoundError)?;
+    let actions: GroupActions = app.into();
+    let group = actions.view_group(&auth_vg).await?;
 
     Ok(HttpResponse::Ok().json(group.services_hosts.unwrap_or_default()))
 }
@@ -47,32 +31,14 @@ async fn set_group_hosts(
     app: web::Data<AppData>,
     path: web::Path<(GroupId,)>,
     hosts: web::Json<Vec<ServiceHost>>,
-    session: Session,
+    req: HttpRequest,
 ) -> Result<HttpResponse, UserError> {
     let (id,) = path.into_inner();
 
-    let username = session
-        .get::<String>("username")
-        .ok()
-        .flatten()
-        .ok_or(UserError::PermissionsError)?;
+    let auth_eg = auth::try_edit_group(&app, &req, &id).await?;
 
-    let query = if is_super_user(&app, &session).await? {
-        doc! {"id": id}
-    } else {
-        doc! {"id": id, "owner": username}
-    };
-
-    let update = doc! {"$set": {"servicesHosts": &hosts.into_inner()}};
-    let options = mongodb::options::FindOneAndUpdateOptions::builder()
-        .return_document(ReturnDocument::After)
-        .build();
-    let group = app
-        .groups
-        .find_one_and_update(query, update, options)
-        .await
-        .map_err(InternalError::DatabaseConnectionError)?
-        .ok_or(UserError::GroupNotFoundError)?;
+    let actions: GroupActions = app.into();
+    let group = actions.set_group_hosts(&auth_eg, &hosts).await?;
 
     Ok(HttpResponse::Ok().json(group))
 }
@@ -81,19 +47,13 @@ async fn set_group_hosts(
 async fn list_user_hosts(
     app: web::Data<AppData>,
     path: web::Path<(String,)>,
-    session: Session,
+    req: HttpRequest,
 ) -> Result<HttpResponse, UserError> {
-    let username = path.into_inner().0;
+    let (username,) = path.into_inner();
+    let auth_vu = auth::try_view_user(&app, &req, None, &username).await?;
 
-    ensure_can_edit_user(&app, &session, &username).await?;
-
-    let query = doc! {"username": username};
-    let user = app
-        .users
-        .find_one(query, None)
-        .await
-        .map_err(InternalError::DatabaseConnectionError)?
-        .ok_or(UserError::UserNotFoundError)?;
+    let actions: UserActions = app.into();
+    let user = actions.get_user(&auth_vu).await?;
 
     Ok(HttpResponse::Ok().json(user.services_hosts.unwrap_or_default()))
 }
@@ -103,24 +63,13 @@ async fn set_user_hosts(
     app: web::Data<AppData>,
     path: web::Path<(String,)>,
     hosts: web::Json<Vec<ServiceHost>>,
-    session: Session,
+    req: HttpRequest,
 ) -> Result<HttpResponse, UserError> {
-    let username = path.into_inner().0;
-    ensure_can_edit_user(&app, &session, &username).await?;
+    let (username,) = path.into_inner();
+    let auth_eu = auth::try_edit_user(&app, &req, None, &username).await?;
 
-    let service_hosts: Vec<ServiceHost> = hosts.into_inner();
-    let update = doc! {"$set": {"servicesHosts": &service_hosts }};
-    let query = doc! {"username": username};
-    let options = mongodb::options::FindOneAndUpdateOptions::builder()
-        .return_document(ReturnDocument::After)
-        .build();
-    let user: api::User = app
-        .users
-        .find_one_and_update(query, update, options)
-        .await
-        .map_err(InternalError::DatabaseConnectionError)?
-        .ok_or(UserError::UserNotFoundError)?
-        .into();
+    let actions: UserActions = app.into();
+    let user = actions.set_hosts(&auth_eu, &hosts).await?;
 
     Ok(HttpResponse::Ok().json(user))
 }
@@ -129,10 +78,15 @@ async fn set_user_hosts(
 async fn list_all_hosts(
     app: web::Data<AppData>,
     path: web::Path<(String,)>,
-    session: Session,
+    req: HttpRequest,
 ) -> Result<HttpResponse, UserError> {
     let (username,) = path.into_inner();
-    ensure_can_edit_user(&app, &session, &username).await?;
+
+    // FIXME: Update this
+    let _auth_vu = auth::try_view_user(&app, &req, None, &username).await?;
+
+    // let actions: UserActions = app.into();
+    // let user = actions.get_all_hosts(&auth_vu).await?;
 
     let query = doc! {"username": &username};
     let user = app
@@ -173,24 +127,12 @@ async fn list_all_hosts(
 #[get("/authorized/")]
 async fn get_authorized_hosts(
     app: web::Data<AppData>,
-    session: Session,
+    req: HttpRequest,
 ) -> Result<HttpResponse, UserError> {
-    ensure_is_super_user(&app, &session).await?;
+    let auth_vah = auth::try_view_auth_hosts(&app, &req).await?;
 
-    let query = doc! {};
-    let cursor = app
-        .authorized_services
-        .find(query, None)
-        .await
-        .map_err(InternalError::DatabaseConnectionError)?;
-
-    let hosts: Vec<api::AuthorizedServiceHost> = cursor
-        .try_collect::<Vec<_>>()
-        .await
-        .map_err(InternalError::DatabaseConnectionError)?
-        .into_iter()
-        .map(|invite| invite.into())
-        .collect();
+    let actions: HostActions = app.into();
+    let hosts = actions.get_hosts(&auth_vah).await?;
 
     Ok(HttpResponse::Ok().json(hosts))
 }
@@ -199,99 +141,29 @@ async fn get_authorized_hosts(
 async fn authorize_host(
     app: web::Data<AppData>,
     host_data: web::Json<api::AuthorizedServiceHost>,
-    session: Session,
+    req: HttpRequest,
 ) -> Result<HttpResponse, UserError> {
-    ensure_valid_service_id(&host_data.id)?;
-    ensure_is_super_user(&app, &session).await?;
+    let auth_ah = auth::try_auth_host(&app, &req).await?;
 
-    let query = doc! {"id": &host_data.id};
-    let host: AuthorizedServiceHost = host_data.into_inner().into();
-    let update = doc! {"$setOnInsert": &host};
-    let options = UpdateOptions::builder().upsert(true).build();
-    let result = app
-        .authorized_services
-        .update_one(query, update, options)
-        .await
-        .map_err(InternalError::DatabaseConnectionError)?;
+    let actions: HostActions = app.into();
+    let secret = actions.authorize(&auth_ah, host_data.into_inner()).await?;
 
-    if result.matched_count > 0 {
-        Err(UserError::ServiceHostAlreadyAuthorizedError)
-    } else {
-        Ok(HttpResponse::Ok().json(host.secret))
-    }
+    Ok(HttpResponse::Ok().json(secret))
 }
 
 #[delete("/authorized/{id}")]
 async fn unauthorize_host(
     app: web::Data<AppData>,
     path: web::Path<(String,)>,
-    session: Session,
+    req: HttpRequest,
 ) -> Result<HttpResponse, UserError> {
-    ensure_is_super_user(&app, &session).await?;
+    let (host_id,) = path.into_inner();
+    let auth_ah = auth::try_auth_host(&app, &req).await?;
 
-    let (client_id,) = path.into_inner();
-    let query = doc! {"id": &client_id};
-    let result = app
-        .authorized_services
-        .delete_one(query, None)
-        .await
-        .map_err(InternalError::DatabaseConnectionError)?;
+    let actions: HostActions = app.into();
+    let host = actions.unauthorize(&auth_ah, &host_id).await?;
 
-    if result.deleted_count == 0 {
-        Err(UserError::ServiceHostNotFoundError)
-    } else {
-        Ok(HttpResponse::Ok().finish())
-    }
-}
-
-pub async fn ensure_is_authorized_host(
-    app: &AppData,
-    req: &HttpRequest,
-    host_id: Option<&str>,
-) -> Result<AuthorizedServiceHost, UserError> {
-    let query = req
-        .headers()
-        .get("X-Authorization")
-        .and_then(|value| value.to_str().ok())
-        .and_then(|value_str| {
-            let mut chunks = value_str.split(':');
-            let id = chunks.next();
-            let secret = chunks.next();
-            id.and_then(|id| secret.map(|s| (id, s)))
-        })
-        .map(|(id, secret)| doc! {"id": id, "secret": secret})
-        .ok_or(UserError::PermissionsError)?; // permissions error since there are no credentials
-
-    let host = app
-        .authorized_services
-        .find_one(query, None)
-        .await
-        .map_err(InternalError::DatabaseConnectionError)?
-        .ok_or(UserError::PermissionsError)?;
-
-    if let Some(host_id) = host_id {
-        if host_id != host.id {
-            return Err(UserError::PermissionsError);
-        }
-    }
-    Ok(host)
-}
-
-pub fn ensure_valid_service_id(id: &str) -> Result<(), UserError> {
-    let max_len = 25;
-    let min_len = 3;
-    let char_count = id.chars().count();
-    lazy_static! {
-        // This is safe to unwrap since it is a constant
-        static ref SERVICE_ID_REGEX: Regex = Regex::new(r"^[A-Za-z][A-Za-z0-9_\-]+$").unwrap();
-    }
-
-    let is_valid = char_count > min_len && char_count < max_len && SERVICE_ID_REGEX.is_match(id);
-    if is_valid {
-        Ok(())
-    } else {
-        Err(UserError::InvalidServiceHostIDError)
-    }
+    Ok(HttpResponse::Ok().json(host))
 }
 
 pub fn config(cfg: &mut web::ServiceConfig) {

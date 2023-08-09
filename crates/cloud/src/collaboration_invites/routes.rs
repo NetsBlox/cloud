@@ -1,38 +1,23 @@
-use actix_session::Session;
-use actix_web::{get, post};
+use actix_web::{get, post, HttpRequest};
 use actix_web::{web, HttpResponse};
-use futures::TryStreamExt;
-use mongodb::bson::doc;
 
 use crate::app_data::AppData;
-use crate::common::{api, api::InvitationState, api::ProjectId, CollaborationInvite};
-use crate::errors::{InternalError, UserError};
-use crate::network;
-use crate::users::ensure_can_edit_user;
-use mongodb::options::{FindOneAndUpdateOptions, ReturnDocument};
+use crate::auth;
+use crate::collaboration_invites::actions::CollaborationInviteActions;
+use crate::common::{api::InvitationState, api::ProjectId};
+use crate::errors::UserError;
 
 #[get("/user/{receiver}/")]
 async fn list_invites(
     app: web::Data<AppData>,
     path: web::Path<(String,)>,
-    session: Session,
+    req: HttpRequest,
 ) -> Result<HttpResponse, UserError> {
     let (receiver,) = path.into_inner();
-    ensure_can_edit_user(&app, &session, &receiver).await?;
+    let auth_vu = auth::try_view_user(&app, &req, None, &receiver).await?;
 
-    let query = doc! {"receiver": receiver};
-    let cursor = app
-        .collab_invites
-        .find(query, None)
-        .await
-        .map_err(InternalError::DatabaseConnectionError)?;
-    let invites: Vec<api::CollaborationInvite> = cursor
-        .try_collect::<Vec<_>>()
-        .await
-        .map_err(InternalError::DatabaseConnectionError)?
-        .into_iter()
-        .map(|invite| invite.into())
-        .collect();
+    let actions: CollaborationInviteActions = app.into();
+    let invites = actions.list_invites(&auth_vu).await?;
 
     Ok(HttpResponse::Ok().json(invites))
 }
@@ -40,60 +25,16 @@ async fn list_invites(
 #[post("/{project_id}/invite/{receiver}")]
 async fn send_invite(
     app: web::Data<AppData>,
-    session: Session,
+    req: HttpRequest,
     path: web::Path<(ProjectId, String)>,
 ) -> Result<HttpResponse, UserError> {
     let (project_id, receiver) = path.into_inner();
+    let auth_ic = auth::collaboration::try_invite(&app, &req, &project_id).await?;
 
-    let query = doc! {"id": &project_id};
-    let metadata = app
-        .project_metadata
-        .find_one(query, None)
-        .await
-        .map_err(InternalError::DatabaseConnectionError)?
-        .ok_or(UserError::ProjectNotFoundError)?;
+    let actions: CollaborationInviteActions = app.into();
+    let invitation = actions.send_invite(&auth_ic, &receiver).await?;
 
-    ensure_can_edit_user(&app, &session, &metadata.owner).await?;
-    let sender = session
-        .get::<String>("username")
-        .unwrap_or(None)
-        .ok_or(UserError::PermissionsError)?;
-
-    let invitation = CollaborationInvite::new(sender.clone(), receiver.clone(), project_id);
-
-    let query = doc! {
-        "sender": &sender,
-        "receiver": &receiver,
-        "projectId": &invitation.project_id
-    };
-    let update = doc! {
-        "$setOnInsert": &invitation
-    };
-    let options = mongodb::options::UpdateOptions::builder()
-        .upsert(true)
-        .build();
-
-    let result = app
-        .collab_invites
-        .update_one(query, update, Some(options))
-        .await
-        .map_err(InternalError::DatabaseConnectionError)?;
-
-    if result.matched_count == 1 {
-        Err(UserError::InviteAlreadyExistsError)
-    } else {
-        // notify the recipient of the new invitation
-        let invitation: api::CollaborationInvite = invitation.into();
-        app.network
-            .send(network::topology::CollabInviteChangeMsg::new(
-                network::topology::ChangeType::Add,
-                invitation.clone(),
-            ))
-            .await
-            .map_err(InternalError::ActixMessageError)?;
-
-        Ok(HttpResponse::Ok().json(invitation))
-    }
+    Ok(HttpResponse::Ok().json(invitation))
 }
 
 #[post("/id/{id}")]
@@ -101,55 +42,14 @@ async fn respond_to_invite(
     app: web::Data<AppData>,
     state: web::Json<InvitationState>,
     path: web::Path<(String,)>,
-    session: Session,
+    req: HttpRequest,
 ) -> Result<HttpResponse, UserError> {
     let (id,) = path.into_inner();
-    let query = doc! {"id": id};
+    let auth_ri = auth::collaboration::try_respond_to_invite(&app, &req, &id).await?;
 
-    let invite = app
-        .collab_invites
-        .find_one(query.clone(), None)
-        .await
-        .map_err(InternalError::DatabaseConnectionError)?
-        .ok_or(UserError::InviteNotFoundError)?;
-
-    ensure_can_edit_user(&app, &session, &invite.receiver).await?;
-
-    let invitation = app
-        .collab_invites
-        .find_one_and_delete(query, None)
-        .await
-        .map_err(InternalError::DatabaseConnectionError)?
-        .ok_or(UserError::InviteNotFoundError)?;
-
-    // Update the project
-    let state = state.into_inner();
-    if matches!(state, InvitationState::ACCEPTED) {
-        let query = doc! {"id": &invite.project_id};
-        let update = doc! {"$addToSet": {"collaborators": &invite.receiver}};
-        let options = FindOneAndUpdateOptions::builder()
-            .return_document(ReturnDocument::After)
-            .build();
-
-        let updated_metadata = app
-            .project_metadata
-            .find_one_and_update(query, update, options)
-            .await
-            .map_err(InternalError::DatabaseConnectionError)?
-            .ok_or(UserError::ProjectNotFoundError)?;
-
-        app.on_room_changed(updated_metadata);
-    }
-
-    // Update the project
-    let invitation: api::CollaborationInvite = invitation.into();
-    app.network
-        .send(network::topology::CollabInviteChangeMsg::new(
-            network::topology::ChangeType::Remove,
-            invitation,
-        ))
-        .await
-        .map_err(InternalError::ActixMessageError)?;
+    let actions: CollaborationInviteActions = app.into();
+    // TODO: what should the arguments be?
+    let state = actions.respond(&auth_ri, state.into_inner()).await?;
 
     Ok(HttpResponse::Ok().json(state))
 }
@@ -164,7 +64,7 @@ pub fn config(cfg: &mut web::ServiceConfig) {
 mod tests {
     use super::*;
     use actix_web::{http, test, web, App};
-    use netsblox_cloud_common::{api, User};
+    use netsblox_cloud_common::{api, CollaborationInvite, User};
 
     use crate::test_utils;
 

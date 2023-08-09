@@ -1,39 +1,23 @@
 use crate::app_data::AppData;
-use crate::errors::{InternalError, UserError};
-use crate::services::ensure_is_authorized_host;
-use crate::users::{ensure_can_edit_user, is_super_user};
-use actix_session::Session;
+use crate::auth;
+use crate::errors::UserError;
+use crate::groups::actions::GroupActions;
 use actix_web::{delete, get, patch, post, HttpRequest};
 use actix_web::{web, HttpResponse};
-use futures::stream::TryStreamExt;
-use mongodb::bson::doc;
-use mongodb::options::ReturnDocument;
-use netsblox_cloud_common::Group;
 
-use crate::common::{self, api};
+use crate::common::api;
 
 #[get("/user/{owner}")]
 async fn list_groups(
     app: web::Data<AppData>,
     path: web::Path<(String,)>,
-    session: Session,
+    req: HttpRequest,
 ) -> Result<HttpResponse, UserError> {
     let (owner,) = path.into_inner();
-    ensure_can_edit_user(&app, &session, &owner).await?;
+    let auth_vu = auth::try_view_user(&app, &req, None, &owner).await?;
 
-    let query = doc! {"owner": owner};
-    let cursor = app
-        .groups
-        .find(query, None)
-        .await
-        .map_err(InternalError::DatabaseConnectionError)?;
-    let groups: Vec<api::Group> = cursor
-        .try_collect::<Vec<_>>()
-        .await
-        .map_err(InternalError::DatabaseConnectionError)?
-        .into_iter()
-        .map(|g| g.into())
-        .collect();
+    let actions: GroupActions = app.into();
+    let groups = actions.list_groups(&auth_vu).await?;
 
     Ok(HttpResponse::Ok().json(groups))
 }
@@ -42,22 +26,13 @@ async fn list_groups(
 async fn view_group(
     app: web::Data<AppData>,
     path: web::Path<(api::GroupId,)>,
-    session: Session,
     req: HttpRequest,
 ) -> Result<HttpResponse, UserError> {
     let (id,) = path.into_inner();
-    let group = if ensure_is_authorized_host(&app, &req, None).await.is_err() {
-        ensure_can_edit_group(&app, &session, &id).await?
-    } else {
-        let query = doc! {"id": id};
-        app.groups
-            .find_one(query, None)
-            .await
-            .map_err(InternalError::DatabaseConnectionError)?
-            .ok_or(UserError::GroupNotFoundError)?
-    };
+    let auth_vg = auth::try_view_group(&app, &req, &id).await?;
 
-    let group: api::Group = group.into();
+    let actions: GroupActions = app.into();
+    let group = actions.view_group(&auth_vg).await?;
 
     Ok(HttpResponse::Ok().json(group))
 }
@@ -66,44 +41,16 @@ async fn view_group(
 async fn list_members(
     app: web::Data<AppData>,
     path: web::Path<(api::GroupId,)>,
-    session: Session,
+    req: HttpRequest,
 ) -> Result<HttpResponse, UserError> {
     let (id,) = path.into_inner();
 
-    ensure_can_edit_group(&app, &session, &id).await?;
-    let query = doc! {"groupId": id};
-    let cursor = app
-        .users
-        .find(query, None)
-        .await
-        .map_err(InternalError::DatabaseConnectionError)?;
-    let members: Vec<api::User> = cursor
-        .try_collect::<Vec<_>>()
-        .await
-        .map_err(InternalError::DatabaseConnectionError)?
-        .into_iter()
-        .map(|u| u.into())
-        .collect();
+    let auth_vg = auth::try_view_group(&app, &req, &id).await?;
+
+    let actions: GroupActions = app.into();
+    let members = actions.list_members(&auth_vg).await?;
 
     Ok(HttpResponse::Ok().json(members))
-}
-
-pub async fn ensure_can_edit_group(
-    app: &AppData,
-    session: &Session,
-    group_id: &api::GroupId,
-) -> Result<Group, UserError> {
-    let query = doc! {"id": group_id};
-    let group = app
-        .groups
-        .find_one(query, None)
-        .await
-        .map_err(InternalError::DatabaseConnectionError)?
-        .ok_or(UserError::GroupNotFoundError)?;
-
-    ensure_can_edit_user(app, session, &group.owner).await?;
-
-    Ok(group)
 }
 
 // TODO: Should this send the data, too?
@@ -111,30 +58,16 @@ pub async fn ensure_can_edit_group(
 async fn create_group(
     app: web::Data<AppData>,
     path: web::Path<(String,)>,
-    session: Session,
+    req: HttpRequest,
     body: web::Json<api::CreateGroupData>,
 ) -> Result<HttpResponse, UserError> {
     let (owner,) = path.into_inner();
-    ensure_can_edit_user(&app, &session, &owner).await?;
+    let auth_eu = auth::try_edit_user(&app, &req, None, &owner).await?;
 
-    let group = common::Group::new(owner.to_owned(), body.name.to_owned());
-    let query = doc! {"name": &group.name, "owner": &group.owner};
-    let update = doc! {"$setOnInsert": &group};
-    let options = mongodb::options::UpdateOptions::builder()
-        .upsert(true)
-        .build();
-    let result = app
-        .groups
-        .update_one(query, update, options)
-        .await
-        .map_err(InternalError::DatabaseConnectionError)?;
+    let actions: GroupActions = app.into();
+    let group = actions.create_group(&auth_eu, &body.name).await?;
 
-    if result.matched_count == 1 {
-        Err(UserError::GroupExistsError)
-    } else {
-        let group: api::Group = group.into();
-        Ok(HttpResponse::Ok().json(group))
-    }
+    Ok(HttpResponse::Ok().json(group))
 }
 
 #[patch("/id/{id}")]
@@ -142,33 +75,13 @@ async fn update_group(
     app: web::Data<AppData>,
     path: web::Path<(api::GroupId,)>,
     data: web::Json<api::UpdateGroupData>,
-    session: Session,
+    req: HttpRequest,
 ) -> Result<HttpResponse, UserError> {
     let (id,) = path.into_inner();
+    let auth_eg = auth::try_edit_group(&app, &req, &id).await?;
 
-    // TODO: Better permissions logic
-    let username = session
-        .get::<String>("username")
-        .ok()
-        .flatten()
-        .ok_or(UserError::PermissionsError)?;
-
-    let query = if is_super_user(&app, &session).await.unwrap_or(false) {
-        doc! {"id": id}
-    } else {
-        doc! {"id": id, "owner": username}
-    };
-    let update = doc! {"$set": {"name": &data.name}};
-    let options = mongodb::options::FindOneAndUpdateOptions::builder()
-        .return_document(ReturnDocument::After)
-        .build();
-
-    let group = app
-        .groups
-        .find_one_and_update(query, update, options)
-        .await
-        .map_err(InternalError::DatabaseConnectionError)?
-        .ok_or(UserError::GroupNotFoundError)?;
+    let actions: GroupActions = app.into();
+    let group = actions.rename_group(&auth_eg, &data.name).await?;
 
     Ok(HttpResponse::Ok().json(group))
 }
@@ -177,29 +90,14 @@ async fn update_group(
 async fn delete_group(
     app: web::Data<AppData>,
     path: web::Path<(api::GroupId,)>,
-    session: Session,
+    req: HttpRequest,
 ) -> Result<HttpResponse, UserError> {
     let (id,) = path.into_inner();
 
-    let username = session
-        .get::<String>("username")
-        .ok()
-        .flatten()
-        .ok_or(UserError::PermissionsError)?;
+    let auth_dg = auth::try_delete_group(&app, &req, &id).await?;
 
-    let query = if is_super_user(&app, &session).await.unwrap_or(false) {
-        doc! {"id": id}
-    } else {
-        doc! {"id": id, "owner": username}
-    };
-
-    let group: api::Group = app
-        .groups
-        .find_one_and_delete(query, None)
-        .await
-        .map_err(InternalError::DatabaseConnectionError)?
-        .ok_or(UserError::GroupNotFoundError)?
-        .into();
+    let actions: GroupActions = app.into();
+    let group = actions.delete_group(&auth_dg).await?;
 
     Ok(HttpResponse::Ok().json(group))
 }
@@ -216,6 +114,7 @@ pub fn config(cfg: &mut web::ServiceConfig) {
 #[cfg(test)]
 mod tests {
     use actix_web::{body::MessageBody, http, test, App};
+    use mongodb::bson::doc;
     use netsblox_cloud_common::{Group, User};
 
     use super::*;
@@ -372,9 +271,7 @@ mod tests {
                     .to_request();
 
                 let response = test::call_service(&app, req).await;
-
-                // Not found is fine since it is technically more secure
-                assert_eq!(response.status(), http::StatusCode::NOT_FOUND);
+                assert_eq!(response.status(), http::StatusCode::FORBIDDEN);
             })
             .await;
     }

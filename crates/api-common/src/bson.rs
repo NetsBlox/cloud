@@ -96,7 +96,7 @@ impl From<GroupId> for Bson {
 impl From<InvitationState> for Bson {
     fn from(state: InvitationState) -> Bson {
         match state {
-            InvitationState::PENDING => Bson::String("PENDING".to_owned()),
+            InvitationState::Pending => Bson::String("Pending".to_owned()),
             InvitationState::ACCEPTED => Bson::String("ACCEPTED".to_owned()),
             InvitationState::REJECTED => Bson::String("REJECTED".to_owned()),
         }

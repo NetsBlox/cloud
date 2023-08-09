@@ -9,17 +9,16 @@ use futures::TryStreamExt;
 use mongodb::{
     bson::{doc, DateTime},
     options::UpdateOptions,
+    Collection,
 };
 use reqwest::{Method, Response};
 use serde::Deserialize;
 
+use crate::utils::sha512;
 use crate::{
-    app_data::AppData,
     common::User,
     errors::{InternalError, UserError},
 };
-
-use super::sha512;
 
 #[allow(dead_code)]
 #[derive(Deserialize)]
@@ -55,7 +54,7 @@ pub async fn authenticate(credentials: &Credentials) -> Result<Option<Response>,
     }
 }
 
-pub async fn login(app: &AppData, credentials: Credentials) -> Result<User, UserError> {
+pub async fn login(users: &Collection<User>, credentials: Credentials) -> Result<User, UserError> {
     match credentials {
         Credentials::Snap { ref username, .. } => {
             let response = authenticate(&credentials)
@@ -68,8 +67,7 @@ pub async fn login(app: &AppData, credentials: Credentials) -> Result<User, User
             };
 
             let query = doc! {"linkedAccounts": {"$elemMatch": &account}};
-            let user_opt = app
-                .users
+            let user_opt = users
                 .find_one(query, None)
                 .await
                 .map_err(InternalError::DatabaseConnectionError)?;
@@ -96,15 +94,14 @@ pub async fn login(app: &AppData, credentials: Credentials) -> Result<User, User
 
                 // TODO: ensure email isn't banned?
 
-                create_account(app, user_data.email, &account).await?
+                create_account(users, user_data.email, &account).await?
             };
 
             Ok(user)
         }
         Credentials::NetsBlox { username, password } => {
             let query = doc! {"username": &username};
-            let user = app
-                .users
+            let user = users
                 .find_one(query, None)
                 .await
                 .map_err(InternalError::DatabaseConnectionError)?
@@ -120,11 +117,11 @@ pub async fn login(app: &AppData, credentials: Credentials) -> Result<User, User
 }
 
 async fn create_account(
-    app: &AppData,
+    users: &Collection<User>,
     email: String,
     account: &api::LinkedAccount,
 ) -> Result<User, UserError> {
-    let username = username_from(app, account).await?;
+    let username = username_from(users, account).await?;
     let query = doc! {"username": &username};
     let salt = passwords::PasswordGenerator::new()
         .length(8)
@@ -151,7 +148,7 @@ async fn create_account(
 
     let update = doc!("$setOnInsert": &user);
     let options = UpdateOptions::builder().upsert(true).build();
-    app.users
+    users
         .update_one(query, update, options)
         .await
         .map_err(InternalError::DatabaseConnectionError)?;
@@ -160,7 +157,7 @@ async fn create_account(
 }
 
 async fn username_from(
-    app: &AppData,
+    users: &Collection<User>,
     credentials: &api::LinkedAccount,
 ) -> Result<String, UserError> {
     let basename = credentials.username.to_owned();
@@ -170,8 +167,7 @@ async fn username_from(
     };
     let query = doc! {"username": {"$regex": starts_with_name}};
     // TODO: this could be optimized to map on the stream...
-    let existing_names = app
-        .users
+    let existing_names = users
         .find(query, None)
         .await
         .map_err(InternalError::DatabaseConnectionError)?

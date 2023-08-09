@@ -1,32 +1,17 @@
 use crate::app_data::AppData;
-use crate::common::api::{CreateLibraryData, LibraryMetadata, PublishState};
-use crate::errors::{InternalError, UserError};
-use crate::users::{can_edit_user, ensure_is_moderator, is_moderator};
-use actix_session::Session;
-use actix_web::{delete, get, post};
+use crate::auth;
+use crate::common::api::{CreateLibraryData, PublishState};
+use crate::errors::UserError;
+use crate::libraries::actions::LibraryActions;
+use actix_web::{delete, get, post, HttpRequest};
 use actix_web::{web, HttpResponse};
-use futures::stream::TryStreamExt;
-use lazy_static::lazy_static;
-use mongodb::bson::doc;
-use mongodb::options::{FindOneAndUpdateOptions, FindOptions};
-use regex::Regex;
-use rustrict::CensorStr;
 
 // TODO: add an endpoint for the official ones?
 #[get("/community/")]
 async fn list_community_libraries(app: web::Data<AppData>) -> Result<HttpResponse, UserError> {
-    let options = FindOptions::builder().sort(doc! {"name": 1}).build();
-    let public_filter = doc! {"state": PublishState::Public};
-    let cursor = app
-        .library_metadata
-        .find(public_filter, options)
-        .await
-        .map_err(InternalError::DatabaseConnectionError)?;
+    let actions: LibraryActions = app.into();
+    let libraries = actions.list_community_libraries().await?;
 
-    let libraries = cursor
-        .try_collect::<Vec<_>>()
-        .await
-        .map_err(InternalError::DatabaseConnectionError)?;
     Ok(HttpResponse::Ok().json(libraries))
 }
 
@@ -34,27 +19,13 @@ async fn list_community_libraries(app: web::Data<AppData>) -> Result<HttpRespons
 async fn list_user_libraries(
     app: web::Data<AppData>,
     path: web::Path<(String,)>,
-    session: Session,
+    req: HttpRequest,
 ) -> Result<HttpResponse, UserError> {
     let (username,) = path.into_inner();
-    let query = doc! {"owner": username};
-    let options = FindOptions::builder().sort(doc! {"name": 1}).build();
-    let mut cursor = app
-        .library_metadata
-        .find(query, options)
-        .await
-        .map_err(InternalError::DatabaseConnectionError)?;
+    let auth_ll = auth::try_list_libraries(&app, &req, &username).await?;
 
-    let mut libraries = Vec::new();
-    while let Some(library) = cursor.try_next().await.expect("Could not fetch library") {
-        if can_view_library(&app, &session, &library)
-            .await
-            .unwrap_or(false)
-        {
-            // TODO: do this in the outer loop
-            libraries.push(library);
-        }
-    }
+    let actions: LibraryActions = app.into();
+    let libraries = actions.list_user_libraries(&auth_ll).await?;
 
     Ok(HttpResponse::Ok().json(libraries))
 }
@@ -63,19 +34,14 @@ async fn list_user_libraries(
 async fn get_user_library(
     app: web::Data<AppData>,
     path: web::Path<(String, String)>,
-    session: Session,
+    req: HttpRequest,
 ) -> Result<HttpResponse, UserError> {
     let (owner, name) = path.into_inner();
-    let query = doc! {"owner": owner, "name": name};
-    let library = app
-        .libraries
-        .find_one(query, None)
-        .await
-        .map_err(InternalError::DatabaseConnectionError)?
-        .ok_or(UserError::LibraryNotFoundError)?;
+    let auth_vl = auth::try_view_library(&app, &req, &owner, &name).await?;
 
-    let blocks = library.blocks.to_owned();
-    ensure_can_view_library(&app, &session, &library.into()).await?;
+    let actions: LibraryActions = app.into();
+    let blocks = actions.get_library_code(&auth_vl);
+
     Ok(HttpResponse::Ok().body(blocks))
 }
 
@@ -84,216 +50,72 @@ async fn save_user_library(
     app: web::Data<AppData>,
     path: web::Path<(String,)>,
     data: web::Json<CreateLibraryData>,
-    session: Session,
+    req: HttpRequest,
 ) -> Result<HttpResponse, UserError> {
     let (owner,) = path.into_inner();
 
-    ensure_valid_name(&data.name)?;
-    ensure_can_edit_library(&app, &session, &owner).await?;
+    let auth_el = auth::try_edit_library(&app, &req, &owner).await?;
 
-    let query = doc! {"owner": &owner, "name": &data.name};
-    let update = doc! {
-        "$set": {
-            "notes": &data.notes,
-            "blocks": &data.blocks,
-        },
-        "$setOnInsert": {
-            "owner": &owner,
-            "name": &data.name,
-            "state": PublishState::Private,
-        }
-    };
-    let options = FindOneAndUpdateOptions::builder().upsert(true).build();
-    match app
-        .libraries
-        .find_one_and_update(query.clone(), update, options)
-        .await
-        .map_err(InternalError::DatabaseConnectionError)?
-    {
-        Some(library) => {
-            let needs_approval = match library.state {
-                PublishState::Private => false,
-                _ => is_approval_required(&data.blocks),
-            };
+    let actions: LibraryActions = app.into();
+    let library = actions.save_library(&auth_el, &data.into_inner()).await?;
 
-            let publish_state = if needs_approval {
-                let update = doc! {"state": PublishState::PendingApproval};
-                app.libraries
-                    .update_one(query, update, None)
-                    .await
-                    .map_err(InternalError::DatabaseConnectionError)?;
-                PublishState::PendingApproval
-            } else {
-                library.state
-            };
-
-            Ok(HttpResponse::Ok().json(publish_state))
-        }
-        None => Ok(HttpResponse::Created().json(PublishState::Private)),
-    }
-}
-
-fn ensure_valid_name(name: &str) -> Result<(), UserError> {
-    if is_valid_name(name) {
-        Ok(())
-    } else {
-        Err(UserError::InvalidLibraryName)
-    }
-}
-
-fn is_valid_name(name: &str) -> bool {
-    lazy_static! {
-        static ref LIBRARY_NAME: Regex = Regex::new(r"^[A-zÀ-ÿ0-9 \(\)_-]+$").unwrap();
-    }
-    LIBRARY_NAME.is_match(name) && !name.is_inappropriate()
-}
-
-// TODO: move this somewhere common to projects, libraries...
-pub fn is_approval_required(text: &str) -> bool {
-    text.contains("reportJSFunction") || text.is_inappropriate()
+    Ok(HttpResponse::Ok().json(library))
 }
 
 #[delete("/user/{owner}/{name}")]
 async fn delete_user_library(
     app: web::Data<AppData>,
     path: web::Path<(String, String)>,
-    session: Session,
+    req: HttpRequest,
 ) -> Result<HttpResponse, UserError> {
     let (owner, name) = path.into_inner();
-    ensure_can_edit_library(&app, &session, &owner).await?;
+    let auth_el = auth::try_edit_library(&app, &req, &owner).await?;
 
-    let query = doc! {"owner": owner, "name": name};
-    let result = app
-        .library_metadata
-        .delete_one(query, None)
-        .await
-        .map_err(InternalError::DatabaseConnectionError)?;
+    let actions: LibraryActions = app.into();
+    let library = actions.delete_library(&auth_el, &name).await?;
 
-    if result.deleted_count == 0 {
-        Err(UserError::LibraryNotFoundError)
-    } else {
-        Ok(HttpResponse::Ok().finish())
-    }
+    Ok(HttpResponse::Ok().json(library))
 }
 
 #[post("/user/{owner}/{name}/publish")]
 async fn publish_user_library(
     app: web::Data<AppData>,
     path: web::Path<(String, String)>,
-    session: Session,
+    req: HttpRequest,
 ) -> Result<HttpResponse, UserError> {
     let (owner, name) = path.into_inner();
-    ensure_can_edit_library(&app, &session, &owner).await?;
+    let auth_pl = auth::try_publish_library(&app, &req, &owner).await?;
 
-    let query = doc! {"owner": owner, "name": name};
-    let update = doc! {"$set": {"state": PublishState::PendingApproval}};
+    let actions: LibraryActions = app.into();
+    let library = actions.publish(&auth_pl, &name).await?;
 
-    let library = app
-        .libraries
-        .find_one_and_update(query.clone(), update, None)
-        .await
-        .map_err(InternalError::DatabaseConnectionError)?
-        .ok_or(UserError::LibraryNotFoundError)?;
-
-    if !is_approval_required(&library.blocks) || is_moderator(&app, &session).await? {
-        let update = doc! {"$set": {"state": PublishState::Public}};
-        app.library_metadata
-            .update_one(query, update, None)
-            .await
-            .map_err(InternalError::DatabaseConnectionError)?;
-        Ok(HttpResponse::Ok().json(PublishState::Public))
-    } else {
-        Ok(HttpResponse::Ok().json(PublishState::PendingApproval))
-    }
+    Ok(HttpResponse::Ok().json(library.state))
 }
 
 #[post("/user/{owner}/{name}/unpublish")]
 async fn unpublish_user_library(
     app: web::Data<AppData>,
     path: web::Path<(String, String)>,
-    session: Session,
+    req: HttpRequest,
 ) -> Result<HttpResponse, UserError> {
     let (owner, name) = path.into_inner();
-    ensure_can_edit_library(&app, &session, &owner).await?;
+    let auth_pl = auth::try_publish_library(&app, &req, &owner).await?;
 
-    let query = doc! {"owner": owner, "name": name};
-    let update = doc! {"$set": {"state": PublishState::Private}};
-    let result = app
-        .library_metadata
-        .update_one(query, update, None)
-        .await
-        .map_err(InternalError::DatabaseConnectionError)?;
+    let actions: LibraryActions = app.into();
+    let library = actions.unpublish(&auth_pl, &name).await?;
 
-    if result.matched_count == 0 {
-        Err(UserError::LibraryNotFoundError)
-    } else {
-        Ok(HttpResponse::Ok().finish())
-    }
-}
-
-async fn ensure_can_edit_library(
-    app: &AppData,
-    session: &Session,
-    owner: &str,
-) -> Result<(), UserError> {
-    if !can_edit_library(app, session, owner).await? {
-        Err(UserError::PermissionsError)
-    } else {
-        Ok(())
-    }
-}
-
-async fn can_edit_library(
-    app: &AppData,
-    session: &Session,
-    owner: &str,
-) -> Result<bool, UserError> {
-    match session.get::<String>("username").unwrap_or(None) {
-        Some(_username) => can_edit_user(app, session, owner).await,
-        None => Ok(false),
-    }
-}
-
-async fn ensure_can_view_library(
-    app: &AppData,
-    session: &Session,
-    library: &LibraryMetadata,
-) -> Result<(), UserError> {
-    if !can_view_library(app, session, library).await? {
-        Err(UserError::PermissionsError)
-    } else {
-        Ok(())
-    }
-}
-
-async fn can_view_library(
-    app: &AppData,
-    session: &Session,
-    library: &LibraryMetadata,
-) -> Result<bool, UserError> {
-    match library.state {
-        PublishState::Public => Ok(true),
-        _ => can_edit_library(app, session, &library.owner).await,
-    }
+    Ok(HttpResponse::Ok().json(library))
 }
 
 #[get("/mod/pending")]
 async fn list_pending_libraries(
     app: web::Data<AppData>,
-    session: Session,
+    req: HttpRequest,
 ) -> Result<HttpResponse, UserError> {
-    ensure_is_moderator(&app, &session).await?;
+    let auth_lpl = auth::try_moderate_libraries(&app, &req).await?;
 
-    let cursor = app
-        .library_metadata
-        .find(doc! {"state": PublishState::PendingApproval}, None)
-        .await
-        .map_err(InternalError::DatabaseConnectionError)?;
-
-    let libraries = cursor
-        .try_collect::<Vec<_>>()
-        .await
-        .map_err(InternalError::DatabaseConnectionError)?;
+    let actions: LibraryActions = app.into();
+    let libraries = actions.list_pending_libraries(&auth_lpl).await?;
 
     Ok(HttpResponse::Ok().json(libraries))
 }
@@ -303,24 +125,17 @@ async fn set_library_state(
     app: web::Data<AppData>,
     path: web::Path<(String, String)>,
     state: web::Json<PublishState>,
-    session: Session,
+    req: HttpRequest,
 ) -> Result<HttpResponse, UserError> {
-    ensure_is_moderator(&app, &session).await?;
-
     let (owner, name) = path.into_inner();
-    let query = doc! {"owner": owner, "name": name};
-    let update = doc! {"$set": {"state": state.into_inner()}};
-    let result = app
-        .library_metadata
-        .update_one(query, update, None)
-        .await
-        .map_err(InternalError::DatabaseConnectionError)?;
+    let auth_ml = auth::try_moderate_libraries(&app, &req).await?;
 
-    if result.matched_count == 0 {
-        Err(UserError::LibraryNotFoundError)
-    } else {
-        Ok(HttpResponse::Ok().finish())
-    }
+    let actions: LibraryActions = app.into();
+    let library = actions
+        .set_library_state(&auth_ml, &owner, &name, state.into_inner())
+        .await?;
+
+    Ok(HttpResponse::Ok().json(library))
 }
 
 pub fn config(cfg: &mut web::ServiceConfig) {
@@ -525,10 +340,32 @@ mod tests {
     // async fn test_publish_user_library_approval_req() {
     //     unimplemented!();
     // }
+
+    #[actix_web::test]
+    #[ignore]
+    async fn test_publish_user_library() {
+        // TODO: auto-publish if not needed
+        todo!();
+    }
+
+    #[actix_web::test]
+    #[ignore]
+    async fn test_publish_user_library_mod() {
+        // TODO: auto-publish if mod
+        todo!();
+    }
+
+    #[actix_web::test]
+    #[ignore]
+    async fn test_publish_user_library_admin() {
+        // TODO: auto-publish if mod
+        todo!();
+    }
+
     #[actix_web::test]
     #[ignore]
     async fn test_publish_user_library_403() {
-        unimplemented!();
+        todo!();
     }
 
     #[actix_web::test]
@@ -541,35 +378,5 @@ mod tests {
     #[ignore]
     async fn test_unpublish_user_library_403() {
         unimplemented!();
-    }
-
-    #[test]
-    async fn test_is_valid_name() {
-        assert!(is_valid_name("hello library"));
-    }
-
-    #[test]
-    async fn test_is_valid_name_diacritic() {
-        assert!(is_valid_name("hola libré"));
-    }
-
-    #[test]
-    async fn test_is_valid_name_weird_symbol() {
-        assert!(!is_valid_name("<hola libré>"));
-    }
-
-    #[test]
-    async fn test_ensure_valid_name() {
-        ensure_valid_name("hello library").unwrap();
-    }
-
-    #[test]
-    async fn test_ensure_valid_name_diacritic() {
-        ensure_valid_name("hola libré").unwrap();
-    }
-
-    #[test]
-    async fn test_ensure_valid_name_weird_symbol() {
-        assert!(ensure_valid_name("<hola libré>").is_err());
     }
 }

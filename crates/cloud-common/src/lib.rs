@@ -1,8 +1,7 @@
 use mongodb::bson::{self, doc, document::Document, Bson, DateTime};
 pub use netsblox_api_common as api;
 use netsblox_api_common::{
-    oauth, ClientState, LibraryMetadata, NewUser, OccupantInviteData, PublishState, RoleId,
-    UserRole,
+    oauth, ClientState, LibraryMetadata, NewUser, PublishState, RoleId, UserRole,
 };
 use netsblox_api_common::{
     FriendInvite, FriendLinkState, GroupId, InvitationState, LinkedAccount, ProjectId, RoleData,
@@ -128,6 +127,16 @@ impl From<BannedAccount> for Bson {
     }
 }
 
+impl From<BannedAccount> for api::BannedAccount {
+    fn from(account: BannedAccount) -> Self {
+        api::BannedAccount {
+            username: account.username,
+            email: account.email,
+            banned_at: account.banned_at.into(),
+        }
+    }
+}
+
 #[derive(Serialize, Deserialize, Clone, Debug)]
 #[serde(rename_all = "camelCase")]
 pub struct Group {
@@ -196,7 +205,7 @@ impl CollaborationInvite {
             sender,
             receiver,
             project_id,
-            state: InvitationState::PENDING,
+            state: InvitationState::Pending,
             created_at: DateTime::from_system_time(SystemTime::now()),
         }
     }
@@ -228,11 +237,10 @@ impl From<CollaborationInvite> for netsblox_api_common::CollaborationInvite {
     }
 }
 
-type FriendLinkId = String; // FIXME: switch to newtype
 #[derive(Deserialize, Serialize, Clone, Debug)]
 #[serde(rename_all = "camelCase")]
 pub struct FriendLink {
-    pub id: FriendLinkId,
+    pub id: api::FriendLinkId,
     pub sender: String,
     pub recipient: String,
     pub state: FriendLinkState,
@@ -250,6 +258,19 @@ impl FriendLink {
             state: state.unwrap_or(FriendLinkState::Pending),
             created_at,
             updated_at: created_at,
+        }
+    }
+}
+
+impl From<FriendLink> for api::FriendLink {
+    fn from(link: FriendLink) -> api::FriendLink {
+        api::FriendLink {
+            id: link.id,
+            sender: link.sender,
+            recipient: link.recipient,
+            state: link.state,
+            created_at: link.created_at.into(),
+            updated_at: link.updated_at.into(),
         }
     }
 }
@@ -303,6 +324,16 @@ impl From<NetworkTraceMetadata> for Bson {
             "startTime": link.start_time,
             "endTime": link.end_time,
         })
+    }
+}
+
+impl From<NetworkTraceMetadata> for netsblox_api_common::NetworkTraceMetadata {
+    fn from(trace: NetworkTraceMetadata) -> netsblox_api_common::NetworkTraceMetadata {
+        netsblox_api_common::NetworkTraceMetadata {
+            id: trace.id,
+            start_time: trace.start_time.into(),
+            end_time: trace.end_time.map(|t| t.into()),
+        }
     }
 }
 
@@ -385,6 +416,11 @@ impl From<ProjectMetadata> for netsblox_api_common::ProjectMetadata {
             state: metadata.state,
             collaborators: metadata.collaborators,
             save_state: metadata.save_state,
+            network_traces: metadata
+                .network_traces
+                .into_iter()
+                .map(|t| t.into())
+                .collect(),
             roles: metadata
                 .roles
                 .into_iter()
@@ -464,12 +500,23 @@ pub struct OccupantInvite {
 }
 
 impl OccupantInvite {
-    pub fn new(project_id: ProjectId, req: OccupantInviteData) -> Self {
+    pub fn new(target: String, project_id: ProjectId, role_id: RoleId) -> Self {
         OccupantInvite {
             project_id,
-            username: req.username,
-            role_id: req.role_id,
+            username: target,
+            role_id,
             created_at: DateTime::from_system_time(SystemTime::now()),
+        }
+    }
+}
+
+impl From<OccupantInvite> for api::OccupantInvite {
+    fn from(invite: OccupantInvite) -> api::OccupantInvite {
+        api::OccupantInvite {
+            username: invite.username,
+            project_id: invite.project_id,
+            role_id: invite.role_id,
+            created_at: invite.created_at.into(),
         }
     }
 }
@@ -499,6 +546,18 @@ impl SentMessage {
             time,
             source,
             content,
+        }
+    }
+}
+
+impl From<SentMessage> for api::SentMessage {
+    fn from(msg: SentMessage) -> api::SentMessage {
+        api::SentMessage {
+            project_id: msg.project_id,
+            recipients: msg.recipients,
+            time: msg.time.into(),
+            source: msg.source,
+            content: msg.content,
         }
     }
 }
