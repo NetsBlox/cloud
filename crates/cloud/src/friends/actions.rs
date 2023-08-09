@@ -448,7 +448,7 @@ mod tests {
         let link = FriendLink::new(
             sender.username.clone(),
             rcvr.username.clone(),
-            Some(FriendLinkState::REJECTED),
+            Some(FriendLinkState::Rejected),
         );
 
         test_utils::setup()
