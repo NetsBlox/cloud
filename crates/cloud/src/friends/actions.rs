@@ -242,7 +242,7 @@ impl FriendActions {
             return Err(UserError::InviteNotAllowedError);
         }
 
-        self.send_invite_unchecked(eu, &recipient).await
+        self.send_invite_unchecked(eu, recipient).await
     }
 
     async fn send_invite_unchecked(
@@ -274,12 +274,11 @@ impl FriendActions {
 
             FriendLinkState::Approved
         } else {
+            // Don't add the link if one already exists
             let query = doc! {
                 "$or": [
-                    {"sender": &eu.username, "recipient": &recipient, "state": FriendLinkState::Blocked},
-                    {"sender": &recipient, "recipient": &eu.username, "state": FriendLinkState::Blocked},
-                    {"sender": &eu.username, "recipient": &recipient, "state": FriendLinkState::Approved},
-                    {"sender": &recipient, "recipient": &eu.username, "state": FriendLinkState::Approved},
+                    {"sender": &eu.username, "recipient": &recipient},
+                    {"sender": &recipient, "recipient": &eu.username},
                 ]
             };
 
@@ -324,18 +323,26 @@ impl FriendActions {
           "sender": &sender,
           "state": FriendLinkState::Pending
         };
-        let update = doc! {"$set": {"state": &resp}};
 
-        let options = FindOneAndUpdateOptions::builder()
-            .return_document(ReturnDocument::After)
-            .build();
-
-        let link = self
-            .friends
-            .find_one_and_update(query, update, options)
-            .await
-            .map_err(InternalError::DatabaseConnectionError)?
-            .ok_or(UserError::InviteNotFoundError)?;
+        let link = match resp {
+            FriendLinkState::Rejected => self
+                .friends
+                .find_one_and_delete(query, None)
+                .await
+                .map_err(InternalError::DatabaseConnectionError)?
+                .ok_or(UserError::InviteNotFoundError)?,
+            _ => {
+                let update = doc! {"$set": {"state": &resp}};
+                let options = FindOneAndUpdateOptions::builder()
+                    .return_document(ReturnDocument::After)
+                    .build();
+                self.friends
+                    .find_one_and_update(query, update, options)
+                    .await
+                    .map_err(InternalError::DatabaseConnectionError)?
+                    .ok_or(UserError::InviteNotFoundError)?
+            }
+        };
 
         let friend_list_changed = matches!(resp, FriendLinkState::Approved);
         if friend_list_changed {
@@ -362,7 +369,6 @@ impl FriendActions {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::app_data::*;
     use crate::{errors::UserError, test_utils};
     use netsblox_cloud_common::{api, User};
 
@@ -540,6 +546,122 @@ mod tests {
                     .await;
 
                 assert!(matches!(result, Err(UserError::InviteNotFoundError)));
+            })
+            .await;
+    }
+
+    #[actix_web::test]
+    async fn test_send_invite() {
+        let sender: User = api::NewUser {
+            username: "sender".into(),
+            email: "sender@netsblox.org".into(),
+            password: None,
+            group_id: None,
+            role: None,
+        }
+        .into();
+        let rcvr: User = api::NewUser {
+            username: "rcvr".into(),
+            email: "rcvr@netsblox.org".into(),
+            password: None,
+            group_id: None,
+            role: None,
+        }
+        .into();
+
+        test_utils::setup()
+            .with_users(&[sender.clone(), rcvr.clone()])
+            .run(|app_data| async move {
+                let actions: FriendActions = app_data.into();
+                let auth_eu = auth::EditUser::test(sender.username.clone());
+                actions.send_invite(&auth_eu, &rcvr.username).await.unwrap();
+
+                let auth_vu = auth::ViewUser::test(rcvr.username.clone());
+                let links = actions.list_invites(&auth_vu).await.unwrap();
+                assert_eq!(links.len(), 1);
+            })
+            .await;
+    }
+
+    #[actix_web::test]
+    async fn test_send_invite_multiple() {
+        let sender: User = api::NewUser {
+            username: "sender".into(),
+            email: "sender@netsblox.org".into(),
+            password: None,
+            group_id: None,
+            role: None,
+        }
+        .into();
+        let rcvr: User = api::NewUser {
+            username: "rcvr".into(),
+            email: "rcvr@netsblox.org".into(),
+            password: None,
+            group_id: None,
+            role: None,
+        }
+        .into();
+
+        test_utils::setup()
+            .with_users(&[sender.clone(), rcvr.clone()])
+            .run(|app_data| async move {
+                let actions: FriendActions = app_data.into();
+                let auth_eu = auth::EditUser::test(sender.username.clone());
+                actions.send_invite(&auth_eu, &rcvr.username).await.unwrap();
+                actions.send_invite(&auth_eu, &rcvr.username).await.unwrap();
+
+                let auth_vu = auth::ViewUser::test(rcvr.username.clone());
+                let links = actions.list_invites(&auth_vu).await.unwrap();
+                assert_eq!(links.len(), 1);
+            })
+            .await;
+    }
+
+    #[actix_web::test]
+    async fn test_send_invite_reject_resend() {
+        let sender: User = api::NewUser {
+            username: "sender".into(),
+            email: "sender@netsblox.org".into(),
+            password: None,
+            group_id: None,
+            role: None,
+        }
+        .into();
+        let rcvr: User = api::NewUser {
+            username: "rcvr".into(),
+            email: "rcvr@netsblox.org".into(),
+            password: None,
+            group_id: None,
+            role: None,
+        }
+        .into();
+
+        test_utils::setup()
+            .with_users(&[sender.clone(), rcvr.clone()])
+            .run(|app_data| async move {
+                let actions: FriendActions = app_data.into();
+
+                // Send an invite
+                let auth_eu = auth::EditUser::test(sender.username.clone());
+                actions.send_invite(&auth_eu, &rcvr.username).await.unwrap();
+
+                // reject it...
+                let auth_eu = auth::EditUser::test(rcvr.username.clone());
+                actions
+                    .respond_to_invite(&auth_eu, &sender.username, api::FriendLinkState::Rejected)
+                    .await
+                    .unwrap();
+                let auth_vu = auth::ViewUser::test(rcvr.username.clone());
+                let links = actions.list_invites(&auth_vu).await.unwrap();
+                assert_eq!(links.len(), 0);
+
+                // send another!
+                let auth_eu = auth::EditUser::test(sender.username.clone());
+                actions.send_invite(&auth_eu, &rcvr.username).await.unwrap();
+
+                let auth_vu = auth::ViewUser::test(rcvr.username.clone());
+                let links = actions.list_invites(&auth_vu).await.unwrap();
+                assert_eq!(links.len(), 1);
             })
             .await;
     }
