@@ -55,6 +55,16 @@ impl EditUser {
     }
 }
 
+#[cfg(test)]
+impl ViewUser {
+    pub(crate) fn test(username: String) -> Self {
+        Self {
+            username,
+            _private: (),
+        }
+    }
+}
+
 /// Try to get privileges to create the given user. Must be able
 /// to edit the target group (if user is in a group). Moderators
 /// or admins can only be created by others with their role (or
