@@ -281,10 +281,10 @@ async fn send_message(
 ) -> Result<HttpResponse, UserError> {
     // TODO: Should this be used to send messages from the CLI?
     let message = message.into_inner();
-    let auth_sm = auth::try_send_message(&app, &req, &message).await?;
+    let auth_sm = auth::try_send_message(&app, &req, message).await?;
 
     let actions: NetworkActions = app.into();
-    actions.send_message(&auth_sm, message);
+    actions.send_message(&auth_sm);
 
     Ok(HttpResponse::Ok().finish())
 }

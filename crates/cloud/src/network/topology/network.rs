@@ -769,18 +769,11 @@ impl Topology {
                     Vec::new()
                 }
             }
-            api::SendMessageTarget::Client {
-                project_id,
-                role_id,
-                client_id,
-            } => {
-                let state = self.states.get(&client_id);
+            api::SendMessageTarget::Client { state, client_id } => {
+                let current_state = self.states.get(&client_id);
                 let has_state = match state {
-                    Some(ClientState::Browser(BrowserClientState {
-                        role_id: role,
-                        project_id: project,
-                    })) => &role_id == role && &project_id == project,
-                    _ => false,
+                    Some(state) => current_state.map(|s| s == &state).unwrap_or(false),
+                    None => true,
                 };
 
                 let mut clients = Vec::new();

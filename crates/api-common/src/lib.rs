@@ -636,15 +636,23 @@ pub struct ServiceSettings {
 }
 
 /// Send message request (for authorized services)
-#[derive(Deserialize, Serialize, Debug)]
+#[derive(Deserialize, Serialize, Debug, Clone)]
 #[serde(rename_all = "camelCase")]
 pub struct SendMessage {
+    pub sender: Option<SendMessageSender>,
     pub target: SendMessageTarget,
     // TODO: Should we only allow "message" types or any sort of message?
     pub content: Value,
 }
 
-#[derive(Deserialize, Serialize, Debug)]
+#[derive(Deserialize, Serialize, Debug, Clone)]
+#[serde(rename_all = "camelCase")]
+pub enum SendMessageSender {
+    Username(String),
+    Client(ClientId),
+}
+
+#[derive(Deserialize, Serialize, Debug, Clone)]
 #[serde(rename_all = "camelCase")]
 pub enum SendMessageTarget {
     Address {
@@ -661,8 +669,7 @@ pub enum SendMessageTarget {
     },
     #[serde(rename_all = "camelCase")]
     Client {
-        project_id: ProjectId,
-        role_id: RoleId,
+        state: Option<ClientState>,
         client_id: ClientId,
     },
 }

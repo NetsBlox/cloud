@@ -328,8 +328,9 @@ impl NetworkActions {
         Ok(clients)
     }
 
-    pub(crate) fn send_message(&self, _lc: &auth::SendMessage, message: api::SendMessage) {
-        self.network
-            .do_send(topology::SendMessageFromServices { message });
+    pub(crate) fn send_message(&self, sm: &auth::SendMessage) {
+        self.network.do_send(topology::SendMessageFromServices {
+            message: sm.msg.clone(),
+        });
     }
 }
