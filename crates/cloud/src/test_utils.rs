@@ -3,7 +3,9 @@ use std::sync::{Arc, Mutex};
 use futures::{future::join_all, Future};
 use lazy_static::lazy_static;
 use mongodb::{bson::doc, Client};
-use netsblox_cloud_common::{api, BannedAccount, CollaborationInvite, FriendLink, Group, User};
+use netsblox_cloud_common::{
+    api, AuthorizedServiceHost, BannedAccount, CollaborationInvite, FriendLink, Group, User,
+};
 
 use crate::{
     app_data::AppData,
@@ -29,6 +31,7 @@ pub(crate) fn setup() -> TestSetupBuilder {
         clients: Vec::new(),
         friends: Vec::new(),
         collab_invites: Vec::new(),
+        authorized_services: Vec::new(),
         // network: None,
     }
 }
@@ -42,6 +45,7 @@ pub(crate) struct TestSetupBuilder {
     friends: Vec<FriendLink>,
     banned_users: Vec<String>,
     collab_invites: Vec<CollaborationInvite>,
+    authorized_services: Vec<AuthorizedServiceHost>,
     //network: Option<Addr<TopologyActor>>,
 }
 
@@ -68,6 +72,11 @@ impl TestSetupBuilder {
 
     pub(crate) fn with_collab_invites(mut self, invites: &[CollaborationInvite]) -> Self {
         self.collab_invites.extend_from_slice(invites);
+        self
+    }
+
+    pub(crate) fn with_authorized_services(mut self, hosts: &[AuthorizedServiceHost]) -> Self {
+        self.authorized_services.extend_from_slice(hosts);
         self
     }
 
@@ -187,6 +196,13 @@ impl TestSetupBuilder {
             app_data
                 .collab_invites
                 .insert_many(self.collab_invites, None)
+                .await
+                .unwrap();
+        }
+        if !self.authorized_services.is_empty() {
+            app_data
+                .authorized_services
+                .insert_many(self.authorized_services, None)
                 .await
                 .unwrap();
         }
