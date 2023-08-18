@@ -91,6 +91,7 @@ async fn main() -> std::io::Result<()> {
             .allow_any_method()
             .supports_credentials();
 
+        let size_32_mb = 1 << 25;
         App::new()
             .wrap(cors)
             .wrap(app_data.metrics.handler())
@@ -112,6 +113,7 @@ async fn main() -> std::io::Result<()> {
                     }
                 }
             })
+            .app_data(web::PayloadConfig::new(size_32_mb))
             .app_data(web::Data::new(app_data.clone()))
             .service(web::scope("/libraries").configure(libraries::routes::config))
             .service(web::scope("/users").configure(users::routes::config))
