@@ -198,16 +198,46 @@ async fn get_project_for_client(
 #[cfg(test)]
 mod tests {
     use actix_web::{http, post, test, web, App, HttpResponse};
-    use netsblox_cloud_common::User;
+    use netsblox_cloud_common::{AuthorizedServiceHost, User};
     use serde_json::json;
 
     use super::*;
     use crate::{errors::UserError, test_utils};
 
     #[actix_web::test]
-    #[ignore]
     async fn test_try_send_msg_auth_host() {
-        todo!();
+        let msg = api::SendMessage {
+            sender: None,
+            target: api::SendMessageTarget::Client {
+                client_id: ClientId::new("_test_client_id".into()),
+                state: None,
+            },
+            content: json!({"test": "hello!"}),
+        };
+        let host =
+            AuthorizedServiceHost::new("http://localhost:5656".into(), "TestServices".into(), true);
+
+        test_utils::setup()
+            .with_authorized_services(&[host.clone()])
+            .run(|app_data| async move {
+                let app = test::init_service(
+                    App::new()
+                        .wrap(test_utils::cookie::middleware())
+                        .app_data(web::Data::new(app_data.clone()))
+                        .service(send_msg_test),
+                )
+                .await;
+
+                let req = test::TestRequest::post()
+                    .append_header(host.auth_header())
+                    .uri("/send")
+                    .set_json(msg)
+                    .to_request();
+
+                let response = test::call_service(&app, req).await;
+                assert_eq!(response.status(), http::StatusCode::OK);
+            })
+            .await;
     }
 
     #[actix_web::test]
@@ -240,7 +270,7 @@ mod tests {
                 )
                 .await;
 
-                let req = test::TestRequest::get()
+                let req = test::TestRequest::post()
                     .cookie(test_utils::cookie::new(&user.username))
                     .uri("/send")
                     .set_json(msg)
@@ -253,9 +283,47 @@ mod tests {
     }
 
     #[actix_web::test]
-    #[ignore]
     async fn test_try_send_msg_self_client_id() {
-        todo!();
+        let user: User = api::NewUser {
+            username: "user".into(),
+            email: "user@netsblox.org".into(),
+            password: None,
+            group_id: None,
+            role: None,
+        }
+        .into();
+        let sender_client = test_utils::network::Client::new(Some(user.username.clone()), None);
+        let msg = api::SendMessage {
+            sender: Some(api::SendMessageSender::Client(sender_client.id.clone())),
+            target: api::SendMessageTarget::Client {
+                client_id: ClientId::new("_test_client_id".into()),
+                state: None,
+            },
+            content: json!({"test": "hello!"}),
+        };
+
+        test_utils::setup()
+            .with_users(&[user.clone()])
+            .with_clients(&[sender_client])
+            .run(|app_data| async move {
+                let app = test::init_service(
+                    App::new()
+                        .wrap(test_utils::cookie::middleware())
+                        .app_data(web::Data::new(app_data.clone()))
+                        .service(send_msg_test),
+                )
+                .await;
+
+                let req = test::TestRequest::post()
+                    .cookie(test_utils::cookie::new(&user.username))
+                    .uri("/send")
+                    .set_json(msg)
+                    .to_request();
+
+                let response = test::call_service(&app, req).await;
+                assert_eq!(response.status(), http::StatusCode::OK);
+            })
+            .await;
     }
 
     #[actix_web::test]
@@ -296,7 +364,7 @@ mod tests {
                 )
                 .await;
 
-                let req = test::TestRequest::get()
+                let req = test::TestRequest::post()
                     .cookie(test_utils::cookie::new(&admin.username))
                     .uri("/send")
                     .set_json(msg)
@@ -309,21 +377,145 @@ mod tests {
     }
 
     #[actix_web::test]
-    #[ignore]
     async fn test_try_send_msg_moderator() {
-        todo!();
+        let msg = api::SendMessage {
+            sender: Some(api::SendMessageSender::Username("user".into())),
+            target: api::SendMessageTarget::Client {
+                client_id: ClientId::new("_test_client_id".into()),
+                state: None,
+            },
+            content: json!({"test": "hello!"}),
+        };
+        let moderator: User = api::NewUser {
+            username: "moderator".into(),
+            email: "moderator@netsblox.org".into(),
+            password: None,
+            group_id: None,
+            role: Some(api::UserRole::Moderator),
+        }
+        .into();
+        let user: User = api::NewUser {
+            username: "user".into(),
+            email: "user@netsblox.org".into(),
+            password: None,
+            group_id: None,
+            role: None,
+        }
+        .into();
+
+        test_utils::setup()
+            .with_users(&[moderator.clone(), user])
+            .run(|app_data| async move {
+                let app = test::init_service(
+                    App::new()
+                        .wrap(test_utils::cookie::middleware())
+                        .app_data(web::Data::new(app_data.clone()))
+                        .service(send_msg_test),
+                )
+                .await;
+
+                let req = test::TestRequest::post()
+                    .cookie(test_utils::cookie::new(&moderator.username))
+                    .uri("/send")
+                    .set_json(msg)
+                    .to_request();
+
+                let response = test::call_service(&app, req).await;
+                assert_eq!(response.status(), http::StatusCode::OK);
+            })
+            .await;
     }
 
     #[actix_web::test]
-    #[ignore]
     async fn test_try_send_msg_other_user() {
-        todo!();
+        let user: User = api::NewUser {
+            username: "user".into(),
+            email: "user@netsblox.org".into(),
+            password: None,
+            group_id: None,
+            role: None,
+        }
+        .into();
+        let other_user: User = api::NewUser {
+            username: "other_user".into(),
+            email: "other_user@netsblox.org".into(),
+            password: None,
+            group_id: None,
+            role: None,
+        }
+        .into();
+        let msg = api::SendMessage {
+            sender: Some(api::SendMessageSender::Username(user.username.clone())),
+            target: api::SendMessageTarget::Client {
+                client_id: ClientId::new("_test_client_id".into()),
+                state: None,
+            },
+            content: json!({"test": "hello!"}),
+        };
+
+        test_utils::setup()
+            .with_users(&[other_user.clone(), user])
+            .run(|app_data| async move {
+                let app = test::init_service(
+                    App::new()
+                        .wrap(test_utils::cookie::middleware())
+                        .app_data(web::Data::new(app_data.clone()))
+                        .service(send_msg_test),
+                )
+                .await;
+
+                let req = test::TestRequest::post()
+                    .cookie(test_utils::cookie::new(&other_user.username))
+                    .uri("/send")
+                    .set_json(msg)
+                    .to_request();
+
+                let response = test::call_service(&app, req).await;
+                assert_eq!(response.status(), http::StatusCode::FORBIDDEN);
+            })
+            .await;
     }
 
     #[actix_web::test]
-    #[ignore]
     async fn test_try_send_msg_other_user_no_sender() {
-        todo!();
+        let user: User = api::NewUser {
+            username: "user".into(),
+            email: "user@netsblox.org".into(),
+            password: None,
+            group_id: None,
+            role: None,
+        }
+        .into();
+        let msg = api::SendMessage {
+            sender: None,
+            target: api::SendMessageTarget::Client {
+                client_id: ClientId::new("_test_client_id".into()),
+                state: None,
+            },
+            content: json!({"test": "hello!"}),
+        };
+
+        test_utils::setup()
+            .with_users(&[user.clone()])
+            .run(|app_data| async move {
+                let app = test::init_service(
+                    App::new()
+                        .wrap(test_utils::cookie::middleware())
+                        .app_data(web::Data::new(app_data.clone()))
+                        .service(send_msg_test),
+                )
+                .await;
+
+                let req = test::TestRequest::post()
+                    .cookie(test_utils::cookie::new(&user.username))
+                    .uri("/send")
+                    .set_json(msg)
+                    .to_request();
+
+                let response = test::call_service(&app, req).await;
+                assert_eq!(response.status(), http::StatusCode::FORBIDDEN);
+            })
+            .await;
     }
 
     #[post("/send")]

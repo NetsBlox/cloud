@@ -612,6 +612,11 @@ impl AuthorizedServiceHost {
             secret,
         }
     }
+
+    pub fn auth_header(&self) -> (&'static str, String) {
+        let token = self.id.clone() + ":" + &self.secret;
+        ("X-Authorization", token)
+    }
 }
 
 impl From<AuthorizedServiceHost> for Bson {
