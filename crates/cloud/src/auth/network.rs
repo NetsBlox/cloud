@@ -140,6 +140,30 @@ pub(crate) async fn try_send_message(
     req: &HttpRequest,
     msg: api::SendMessage,
 ) -> Result<SendMessage, UserError> {
+    // Allow extension messages where the inner msg type is prefixed with "unauth".
+    // Check out the tests for an example.
+    let is_unauth_ok = msg
+        .content
+        .as_object()
+        .and_then(|msg| {
+            msg.get("type").and_then(|name| {
+                if name == "extension" {
+                    msg.get("data")
+                } else {
+                    None
+                }
+            })
+        })
+        .and_then(|inner_msg| inner_msg.as_object())
+        .and_then(|inner_msg| inner_msg.get("type"))
+        .and_then(|inner_type| inner_type.as_str())
+        .map(|inner_type| inner_type.starts_with("unauth:"))
+        .unwrap_or(false);
+
+    if is_unauth_ok {
+        return Ok(SendMessage { _private: (), msg });
+    }
+
     let host = utils::get_authorized_host(&app.authorized_services, req).await?;
 
     // Sending messages is allowed if you:
@@ -514,6 +538,43 @@ mod tests {
 
                 let response = test::call_service(&app, req).await;
                 assert_eq!(response.status(), http::StatusCode::FORBIDDEN);
+            })
+            .await;
+    }
+
+    #[actix_web::test]
+    async fn test_try_send_msg_unauth() {
+        let msg = api::SendMessage {
+            sender: None,
+            target: api::SendMessageTarget::Client {
+                client_id: ClientId::new("_test_client_id".into()),
+                state: None,
+            },
+            content: json!({
+                "type": "extension",
+                "data": {
+                    "type": "unauth:test",
+                }
+            }),
+        };
+
+        test_utils::setup()
+            .run(|app_data| async move {
+                let app = test::init_service(
+                    App::new()
+                        .wrap(test_utils::cookie::middleware())
+                        .app_data(web::Data::new(app_data.clone()))
+                        .service(send_msg_test),
+                )
+                .await;
+
+                let req = test::TestRequest::post()
+                    .uri("/send")
+                    .set_json(msg)
+                    .to_request();
+
+                let response = test::call_service(&app, req).await;
+                assert_eq!(response.status(), http::StatusCode::OK);
             })
             .await;
     }
