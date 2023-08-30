@@ -36,6 +36,6 @@ jobs:
         with:
           name: netsblox/cloud
           username: ${{ secrets.DOCKER_HUB_USERNAME }}
-          password: ${{ secrets.DOCKER_HUB_PASSWORD }}
+          password: ${{ secrets.DOCKER_HUB_ACCESS_TOKEN }}
           tags: "${{ env.TAG }},${{ env.RELEASE_TAG }}"
           dockerfile: docker/Dockerfile.cloud
