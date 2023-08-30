@@ -76,7 +76,6 @@ impl CollaborationInviteActions {
             CollaborationInvite::new(sender.clone(), target.to_owned(), ep.project.id.clone());
 
         let query = doc! {
-            "sender": &sender,
             "receiver": &target,
             "projectId": &invitation.project_id
         };

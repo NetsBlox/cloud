@@ -340,7 +340,7 @@ mod tests {
             .with_owner("sender".to_string())
             .build();
         let invite = CollaborationInvite::new(
-            sender.username.clone(),
+            "anySender".into(),
             rcvr.username.clone(),
             project.id.clone(),
         );
