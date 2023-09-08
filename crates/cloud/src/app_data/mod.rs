@@ -702,10 +702,6 @@ fn is_opera_vpn(addr: &str) -> bool {
 
 #[cfg(test)]
 mod tests {
-    use netsblox_cloud_common::api;
-
-    use super::*;
-    use crate::test_utils;
 
     #[actix_web::test]
     #[ignore]

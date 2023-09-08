@@ -52,6 +52,9 @@ struct Args {
     /// Only migrate users, projects, or libraries
     #[clap(long)]
     only: Option<Migration>,
+    /// Only migrate the given user (for testing purposes)
+    #[clap(long)]
+    user: Option<String>,
 }
 
 #[tokio::main]
@@ -64,14 +67,14 @@ async fn main() {
 
     if let Some(migration) = args.only {
         match migration {
-            Migration::Users => migrate_users(&src_db, &dst_db).await,
+            Migration::Users => migrate_users(&src_db, &dst_db, args.user).await,
             Migration::Libraries => migrate_libraries(&src_db, &dst_db).await,
             Migration::Projects => migrate_projects(&config, &src_db, &dst_db).await,
             Migration::BannedAccounts => migrate_banned_accts(&src_db, &dst_db).await,
         }
     } else {
         // migrate everything
-        migrate_users(&src_db, &dst_db).await;
+        migrate_users(&src_db, &dst_db, args.user).await;
         migrate_libraries(&src_db, &dst_db).await;
         migrate_banned_accts(&src_db, &dst_db).await;
         migrate_projects(&config, &src_db, &dst_db).await;
@@ -251,7 +254,7 @@ async fn download_s3(client: &S3Client, bucket: &str, key: &str) -> String {
     String::from_utf8(byte_str).unwrap()
 }
 
-async fn migrate_users(src_db: &Database, dst_db: &Database) {
+async fn migrate_users(src_db: &Database, dst_db: &Database, target_user: Option<String>) {
     let src_users = src_db.collection::<origin::User>("users");
     let dst_users = dst_db.collection::<cloud::User>("users");
     let count = src_users
@@ -260,15 +263,28 @@ async fn migrate_users(src_db: &Database, dst_db: &Database) {
         .expect("Unable to estimate document count for users");
     let progress = ProgressBar::new(count);
     progress.println("Migrating users...");
+    let query = target_user.map(|username| doc! {"username": username});
     let mut cursor = src_users
-        .find(None, None)
+        .find(query, None)
         .await
         .expect("Unable to fetch users");
 
     while let Some(user) = cursor.next().await {
-        let new_user: cloud::User = user.expect("Unable to retrieve user").into();
+        let src_user: origin::User = user.expect("Unable to retrieve user");
+        let src_hash = src_user.hash.clone();
+        let new_user: cloud::User = src_user.into();
         let query = doc! {"username": &new_user.username};
-        let update = doc! {"$setOnInsert": &new_user};
+        // set the user password to the current password on editor
+        // (set the salt to None and keep the hash)
+        let update = doc! {
+            "$setOnInsert": &new_user,
+            "$set": {
+                "hash": src_hash,  // technically src_hash == new_user.hash so either could be used here
+            },
+            "$unset": {
+                "salt": "",
+            }
+        };
         let opts = UpdateOptions::builder().upsert(true).build();
         dst_users
             .update_one(query, update, opts)

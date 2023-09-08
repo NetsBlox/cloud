@@ -12,7 +12,7 @@ use serde::Deserialize;
 pub(crate) struct User {
     username: String,
     email: String,
-    //hash: String,
+    pub(crate) hash: String,
 
     //last_login_at: Option<f32>,
     group_id: Option<ObjectId>,
@@ -23,14 +23,6 @@ pub(crate) struct User {
 
 impl From<User> for cloud::User {
     fn from(user: User) -> cloud::User {
-        let salt = passwords::PasswordGenerator::new()
-            .length(8)
-            .exclude_similar_characters(true)
-            .numbers(true)
-            .spaces(false)
-            .generate_one()
-            .expect("Unable to generate salt");
-
         cloud::User {
             username: user.username,
             email: user.email,
@@ -42,8 +34,8 @@ impl From<User> for cloud::User {
                 .map(|unix_ts| DateTime::from_millis(unix_ts as i64))
                 .unwrap_or_else(|| DateTime::from_system_time(SystemTime::now())),
             role: UserRole::User,
-            salt,
-            hash: "None".to_owned(), // Password needs to be reset
+            salt: None,
+            hash: user.hash,
             linked_accounts: user
                 .linked_accounts
                 .map(|accounts| {

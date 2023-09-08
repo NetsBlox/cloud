@@ -21,7 +21,7 @@ pub struct User {
     pub username: String,
     pub email: String,
     pub hash: String,
-    pub salt: String,
+    pub salt: Option<String>,
     pub group_id: Option<GroupId>,
     pub role: UserRole,
     pub created_at: DateTime,
@@ -86,7 +86,7 @@ impl From<NewUser> for User {
         User {
             username: user_data.username,
             hash,
-            salt,
+            salt: Some(salt),
             email: user_data.email,
             group_id: user_data.group_id,
             created_at: DateTime::from_system_time(SystemTime::now()),

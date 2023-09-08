@@ -139,7 +139,7 @@ pub struct LoginRequest {
     pub client_id: Option<ClientId>, // TODO: add a secret token for the client?
 }
 
-#[derive(Deserialize, Serialize, Debug)]
+#[derive(Deserialize, Serialize, Debug, Clone)]
 pub enum Credentials {
     Snap { username: String, password: String },
     NetsBlox { username: String, password: String },
