@@ -69,7 +69,8 @@ pub async fn login(mut cfg: Config, credentials: &LoginRequest) -> Result<Config
 
     let token = cookie.value().to_owned();
 
-    cfg.username = Some(response.text().await.unwrap());
+    let user = response.json::<User>().await.unwrap();
+    cfg.username = Some(user.username);
     cfg.token = Some(token);
     Ok(cfg)
 }
