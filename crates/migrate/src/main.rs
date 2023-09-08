@@ -275,7 +275,7 @@ async fn migrate_users(src_db: &Database, dst_db: &Database) {
         let update = doc! {
             "$setOnInsert": &new_user,
             "$set": {
-                "hash": src_hash,
+                "hash": src_hash,  // technically src_hash == new_user.hash so either could be used here
             },
             "$unset": {
                 "salt": "",
