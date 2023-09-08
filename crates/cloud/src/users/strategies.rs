@@ -247,6 +247,7 @@ mod tests {
     use crate::test_utils;
 
     use super::*;
+
     #[actix_web::test]
     async fn test_login_update_salt() {
         let password: String = "somePassword...".into();
@@ -278,6 +279,67 @@ mod tests {
 
                 // check that we can login again
                 login(&app_data.users, credentials).await.unwrap();
+            })
+            .await;
+    }
+
+    #[actix_web::test]
+    async fn test_login_dont_update_salt_failed_login() {
+        let password: String = "somePassword...".into();
+        let mut user: User = api::NewUser {
+            username: "user".to_string(),
+            email: "user@netsblox.org".into(),
+            password: Some(password.clone()),
+            group_id: None,
+            role: None,
+        }
+        .into();
+        user.salt = None;
+        user.hash = sha512(&password);
+
+        test_utils::setup()
+            .with_users(&[user.clone()])
+            .run(|app_data| async move {
+                // check initial login
+                let credentials = Credentials::NetsBlox {
+                    username: user.username.clone(),
+                    password: "badPassword".into(),
+                };
+                let result = login(&app_data.users, credentials.clone()).await;
+                assert!(result.is_err());
+
+                // salt should still be none
+                assert!(user.salt.is_none());
+            })
+            .await;
+    }
+
+    #[actix_web::test]
+    async fn test_login_dont_update_existing_salt() {
+        let password: String = "somePassword...".into();
+        let user: User = api::NewUser {
+            username: "user".to_string(),
+            email: "user@netsblox.org".into(),
+            password: Some(password.clone()),
+            group_id: None,
+            role: None,
+        }
+        .into();
+
+        test_utils::setup()
+            .with_users(&[user.clone()])
+            .run(|app_data| async move {
+                // check initial login
+                let credentials = Credentials::NetsBlox {
+                    username: user.username.clone(),
+                    password,
+                };
+                login(&app_data.users, credentials.clone()).await.unwrap();
+
+                // check that the salt has been set
+                let query = doc! {"username": &user.username};
+                let updated_user = app_data.users.find_one(query, None).await.unwrap().unwrap();
+                assert_eq!(user.salt.unwrap(), updated_user.salt.unwrap());
             })
             .await;
     }
