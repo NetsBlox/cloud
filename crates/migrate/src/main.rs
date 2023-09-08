@@ -11,6 +11,7 @@ use cloud::api::SaveState;
 use derive_more::{Display, Error};
 use futures::{future::join_all, stream::StreamExt, TryStreamExt};
 use indicatif::ProgressBar;
+use mongodb::bson::Bson;
 use mongodb::{
     bson::{doc, DateTime},
     options::UpdateOptions,
@@ -274,10 +275,16 @@ async fn migrate_users(src_db: &Database, dst_db: &Database, target_user: Option
         let src_hash = src_user.hash.clone();
         let new_user: cloud::User = src_user.into();
         let query = doc! {"username": &new_user.username};
+
         // set the user password to the current password on editor
         // (set the salt to None and keep the hash)
+        let mut new_user_bson: Bson = std::convert::Into::<Bson>::into(new_user.clone());
+        let new_user_doc = new_user_bson.as_document_mut().unwrap();
+        new_user_doc.remove("hash"); // remove these to avoid write conflicts
+        new_user_doc.remove("salt");
+
         let update = doc! {
-            "$setOnInsert": &new_user,
+            "$setOnInsert": new_user_bson,
             "$set": {
                 "hash": src_hash,  // technically src_hash == new_user.hash so either could be used here
             },
@@ -289,7 +296,7 @@ async fn migrate_users(src_db: &Database, dst_db: &Database, target_user: Option
         dst_users
             .update_one(query, update, opts)
             .await
-            .unwrap_or_else(|_err| panic!("Unable to update username: {}", &new_user.username));
+            .unwrap_or_else(|err| panic!("Unable to update {}: {:?}", &new_user.username, err));
 
         progress.inc(1);
     }
