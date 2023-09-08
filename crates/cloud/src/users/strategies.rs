@@ -8,7 +8,7 @@ use crate::common::api::{self, UserRole};
 use futures::TryStreamExt;
 use mongodb::{
     bson::{doc, DateTime},
-    options::UpdateOptions,
+    options::{FindOneAndUpdateOptions, ReturnDocument, UpdateOptions},
     Collection,
 };
 use reqwest::{Method, Response};
@@ -102,18 +102,62 @@ pub async fn login(users: &Collection<User>, credentials: Credentials) -> Result
         Credentials::NetsBlox { username, password } => {
             let query = doc! {"username": &username};
             let user = users
-                .find_one(query, None)
+                .find_one(query.clone(), None)
                 .await
                 .map_err(InternalError::DatabaseConnectionError)?
                 .ok_or(UserError::UserNotFoundError)?;
 
-            let hash = sha512(&(password + &user.salt));
+            let needs_update = user.salt.is_none();
+            let salt = user.salt.clone().unwrap_or_default();
+            let hash = sha512(&(password.clone() + &salt));
             if hash != user.hash {
                 return Err(UserError::IncorrectPasswordError);
             }
+
+            // Ensure they have a salt (empty until first login for migrated accounts)
+            let user = if needs_update {
+                update_salt(users, &username, password).await?
+            } else {
+                user
+            };
+
             Ok(user)
         }
     }
+}
+
+async fn update_salt(
+    users: &Collection<User>,
+    username: &str,
+    password: String,
+) -> Result<User, UserError> {
+    let query = doc! {"username": &username};
+    let salt = passwords::PasswordGenerator::new()
+        .length(8)
+        .exclude_similar_characters(true)
+        .numbers(true)
+        .spaces(false)
+        .generate_one()
+        .unwrap_or_else(|_err| "salt".to_owned());
+
+    let hash = sha512(&(password + &salt));
+
+    let options = FindOneAndUpdateOptions::builder()
+        .return_document(ReturnDocument::After)
+        .build();
+
+    let update = doc! {
+        "$set": {
+            "salt": &salt,
+            "hash": hash
+        }
+    };
+
+    users
+        .find_one_and_update(query, update, options)
+        .await
+        .map_err(InternalError::DatabaseConnectionError)?
+        .ok_or(UserError::UserNotFoundError)
 }
 
 async fn create_account(
@@ -136,7 +180,7 @@ async fn create_account(
         // TODO: impl From instead?
         username,
         hash,
-        salt,
+        salt: Some(salt),
         email,
         group_id: None,
         created_at: DateTime::from_system_time(SystemTime::now()),
@@ -195,5 +239,46 @@ async fn username_from(
         Ok(username)
     } else {
         Ok(basename)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use crate::test_utils;
+
+    use super::*;
+    #[actix_web::test]
+    async fn test_login_update_salt() {
+        let password: String = "somePassword...".into();
+        let mut user: User = api::NewUser {
+            username: "user".to_string(),
+            email: "user@netsblox.org".into(),
+            password: Some(password.clone()),
+            group_id: None,
+            role: None,
+        }
+        .into();
+        user.salt = None;
+        user.hash = sha512(&password);
+
+        test_utils::setup()
+            .with_users(&[user.clone()])
+            .run(|app_data| async move {
+                // check initial login
+                let credentials = Credentials::NetsBlox {
+                    username: user.username.clone(),
+                    password,
+                };
+                login(&app_data.users, credentials.clone()).await.unwrap();
+
+                // check that the salt has been set
+                let query = doc! {"username": &user.username};
+                let user = app_data.users.find_one(query, None).await.unwrap().unwrap();
+                assert!(user.salt.is_some());
+
+                // check that we can login again
+                login(&app_data.users, credentials).await.unwrap();
+            })
+            .await;
     }
 }

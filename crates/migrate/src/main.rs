@@ -269,6 +269,8 @@ async fn migrate_users(src_db: &Database, dst_db: &Database) {
         let new_user: cloud::User = user.expect("Unable to retrieve user").into();
         let query = doc! {"username": &new_user.username};
         let update = doc! {"$setOnInsert": &new_user};
+        // TODO: set the user password to the current password on editor
+        // (set the salt to "" or None)
         let opts = UpdateOptions::builder().upsert(true).build();
         dst_users
             .update_one(query, update, opts)

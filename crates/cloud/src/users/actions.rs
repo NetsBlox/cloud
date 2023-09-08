@@ -241,7 +241,7 @@ impl UserActions {
 
         let update = doc! {
             "$set": {
-                "hash": utils::sha512(&(password + &user.salt))
+                "hash": utils::sha512(&(password + &user.salt.unwrap_or_default()))
             }
         };
         let user = self
