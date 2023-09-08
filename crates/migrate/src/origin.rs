@@ -12,7 +12,7 @@ use serde::Deserialize;
 pub(crate) struct User {
     username: String,
     email: String,
-    hash: String,
+    pub(crate) hash: String,
 
     //last_login_at: Option<f32>,
     group_id: Option<ObjectId>,
