@@ -33,4 +33,4 @@ jobs:
           override: true
       - run: cargo install cargo-audit
       - run: cargo generate-lockfile
-      - run: cargo audit
+      - run: cargo audit --deny warnings
