@@ -15,7 +15,7 @@ path = "src/main.rs"
 
 [dependencies]
 uuid = { version = "1.0.0-alpha.1", features = ["v4", "fast-rng", "serde"] }
-clap = { version = "3.0.13", features = ["derive"] }
+clap = { version = "4.4.3", features = ["derive"] }
 tokio = { version = "1", features = ["full"] }
 confy = "0.4.0"
 serde = { version = "1.0.130", features = ["derive"] }
