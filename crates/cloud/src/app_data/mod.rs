@@ -27,6 +27,7 @@ use rusoto_core::Region;
 use serde::{Deserialize, Serialize};
 use std::collections::HashSet;
 use std::net::IpAddr;
+use std::num::NonZeroUsize;
 use std::sync::{Arc, RwLock};
 use std::time::Duration;
 use tokio::sync::RwLock as AsyncRwLock;
@@ -49,21 +50,23 @@ use rusoto_s3::{CreateBucketRequest, S3Client, S3};
 // TODO: it would be nice to be able to configure the cache size from the settings
 // TODO: move the cache to something that isn't shared btwn tests...
 lazy_static! {
-    static ref MEMBERSHIP_CACHE: Arc<AsyncRwLock<LruCache<String, bool>>> =
-        Arc::new(AsyncRwLock::new(LruCache::new(1000)));
+    static ref MEMBERSHIP_CACHE: Arc<AsyncRwLock<LruCache<String, bool>>> = Arc::new(
+        AsyncRwLock::new(LruCache::new(NonZeroUsize::new(1000).unwrap()))
+    );
 }
 lazy_static! {
     static ref PROJECT_CACHE: Arc<RwLock<LruCache<api::ProjectId, ProjectMetadata>>> =
-        Arc::new(RwLock::new(LruCache::new(500)));
+        Arc::new(RwLock::new(LruCache::new(NonZeroUsize::new(500).unwrap())));
 }
 lazy_static! {
-    static ref ADMIN_CACHE: Arc<AsyncRwLock<LruCache<String, bool>>> =
-        Arc::new(AsyncRwLock::new(LruCache::new(1000)));
+    static ref ADMIN_CACHE: Arc<AsyncRwLock<LruCache<String, bool>>> = Arc::new(AsyncRwLock::new(
+        LruCache::new(NonZeroUsize::new(1000).unwrap())
+    ));
 }
 
 lazy_static! {
     static ref FRIEND_CACHE: Arc<RwLock<LruCache<String, Vec<String>>>> =
-        Arc::new(RwLock::new(LruCache::new(1000)));
+        Arc::new(RwLock::new(LruCache::new(NonZeroUsize::new(1000).unwrap())));
 }
 
 #[derive(Clone)]

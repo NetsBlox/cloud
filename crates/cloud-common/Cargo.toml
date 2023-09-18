@@ -12,7 +12,7 @@ A crate containing the types used internally by the NetsBlox cloud (stored in th
 [dependencies]
 serde = "1.0.130"
 serde_json = "1.0.59"
-mongodb = "2.1.0"
+mongodb = "2.6.1"
 passwords = "3.1.8"
 netsblox-api-common = { path = "../api-common", version = "0.6.0", features = ["to_bson"] }
 uuid = { version = "1.0.0-alpha.1", features = ["v4", "fast-rng"] }

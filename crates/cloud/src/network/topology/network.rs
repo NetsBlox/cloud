@@ -11,6 +11,7 @@ use mongodb::bson::{doc, DateTime};
 use netsblox_cloud_common::SentMessage;
 use serde_json::{json, Value};
 use std::collections::{HashMap, HashSet};
+use std::num::NonZeroUsize;
 use std::str::FromStr;
 use std::sync::{Arc, RwLock};
 use std::time::{Duration, SystemTime};
@@ -129,7 +130,7 @@ impl ProjectNetwork {
 
 lazy_static! {
     static ref ADDRESS_CACHE: Arc<RwLock<LruCache<ClientAddress, Vec<BrowserAddress>>>> =
-        Arc::new(RwLock::new(LruCache::new(500)));
+        Arc::new(RwLock::new(LruCache::new(NonZeroUsize::new(500).unwrap())));
 }
 
 pub struct Topology {
