@@ -7,6 +7,12 @@ public_url = "http://127.0.0.1:7777"
 # password = "somePassword"
 # email = "admin@netsblox.org"
 
+# [authorized_host]
+# id = "LocalServices"
+# url = "http://localhost:8080"
+# secret = "SuperSecret"
+# public = true
+
 [database]
 url = "mongodb://127.0.0.1:27017/"
 name = "netsblox-rs"

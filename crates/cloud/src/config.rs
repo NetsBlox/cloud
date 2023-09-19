@@ -1,6 +1,7 @@
 use std::env;
 
 use config::{Config, ConfigError, File};
+use netsblox_cloud_common::AuthorizedServiceHost;
 use serde::Deserialize;
 
 #[derive(Clone, Deserialize)]
@@ -66,6 +67,7 @@ pub struct Settings {
     pub email: EmailSettings,
     pub security: SecuritySettings,
     pub admin: Option<UserCreds>,
+    pub authorized_host: Option<AuthorizedServiceHost>,
 }
 
 impl Settings {
