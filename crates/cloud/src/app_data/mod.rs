@@ -20,7 +20,7 @@ use lettre::SmtpTransport;
 use log::{error, info, warn};
 use lru::LruCache;
 use mongodb::bson::{doc, Document};
-use mongodb::options::{FindOptions, IndexOptions};
+use mongodb::options::{FindOptions, IndexOptions, UpdateOptions};
 use netsblox_cloud_common::api;
 use rusoto_core::credential::StaticProvider;
 use rusoto_core::Region;
@@ -297,6 +297,16 @@ impl AppData {
 
             self.users
                 .find_one_and_update(query, update, options)
+                .await
+                .map_err(InternalError::DatabaseConnectionError)?;
+        }
+
+        if let Some(host) = self.settings.authorized_host.as_ref() {
+            let query = doc! {"id": &host.id};
+            let update = doc! {"$setOnInsert": &host};
+            let options = UpdateOptions::builder().upsert(true).build();
+            self.authorized_services
+                .update_one(query, update, options)
                 .await
                 .map_err(InternalError::DatabaseConnectionError)?;
         }
