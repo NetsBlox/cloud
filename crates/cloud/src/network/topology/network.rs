@@ -4,7 +4,6 @@ use crate::common::api::{
     RoomState,
 };
 use futures::future::join_all;
-use lazy_static::lazy_static;
 use log::warn;
 use lru::LruCache;
 use mongodb::bson::{doc, DateTime};

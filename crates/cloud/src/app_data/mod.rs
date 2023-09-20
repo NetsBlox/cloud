@@ -145,6 +145,19 @@ impl AppData {
         let tor_exit_nodes = db.collection::<TorNode>(&(prefix.to_owned() + "torExitNodes"));
         let bucket = settings.s3.bucket.clone();
 
+        let project_cache = Arc::new(RwLock::new(LruCache::new(
+            settings.cache_settings.num_projects,
+        )));
+        let membership_cache = Arc::new(AsyncRwLock::new(LruCache::new(
+            settings.cache_settings.num_users_membership_data,
+        )));
+        let admin_cache = Arc::new(AsyncRwLock::new(LruCache::new(
+            settings.cache_settings.num_users_admin_data,
+        )));
+        let friend_cache = Arc::new(RwLock::new(LruCache::new(
+            settings.cache_settings.num_users_friend_data,
+        )));
+
         AppData {
             settings,
             network,
@@ -173,10 +186,10 @@ impl AppData {
 
             tor_exit_nodes,
             recorded_messages,
-            project_cache: Arc::new(RwLock::new(LruCache::new(500))),
-            membership_cache: Arc::new(AsyncRwLock::new(LruCache::new(1000))),
-            admin_cache: Arc::new(AsyncRwLock::new(LruCache::new(1000))),
-            friend_cache: Arc::new(RwLock::new(LruCache::new(1000))),
+            project_cache,
+            membership_cache,
+            admin_cache,
+            friend_cache,
         }
     }
 
