@@ -127,11 +127,6 @@ impl ProjectNetwork {
     }
 }
 
-lazy_static! {
-    static ref ADDRESS_CACHE: Arc<RwLock<LruCache<ClientAddress, Vec<BrowserAddress>>>> =
-        Arc::new(RwLock::new(LruCache::new(500)));
-}
-
 pub struct Topology {
     app_data: Option<AppData>,
 
@@ -141,6 +136,8 @@ pub struct Topology {
 
     rooms: HashMap<ProjectId, ProjectNetwork>,
     external: HashMap<AppId, HashMap<String, ClientId>>,
+
+    address_cache: Arc<RwLock<LruCache<ClientAddress, Vec<BrowserAddress>>>>,
 }
 
 #[derive(Debug)]
@@ -159,6 +156,8 @@ impl Topology {
             states: HashMap::new(),
             usernames: HashMap::new(),
             external: HashMap::new(),
+
+            address_cache: Arc::new(RwLock::new(LruCache::new(1000))),
         }
     }
 
@@ -199,7 +198,7 @@ impl Topology {
     }
 
     fn resolve_address_from_cache(&self, addr: &ClientAddress) -> Option<Vec<BrowserAddress>> {
-        ADDRESS_CACHE
+        self.address_cache
             .write()
             .unwrap()
             .get(addr)
@@ -207,7 +206,7 @@ impl Topology {
     }
 
     fn cache_address(&self, addr: &ClientAddress, b_addrs: &[BrowserAddress]) {
-        ADDRESS_CACHE
+        self.address_cache
             .write()
             .unwrap()
             .put(addr.clone(), b_addrs.to_vec());
@@ -655,7 +654,7 @@ impl Topology {
     }
 
     fn invalidate_cached_addresses(&self, project: &ProjectMetadata) {
-        let mut address_cache = ADDRESS_CACHE.write().unwrap();
+        let mut address_cache = self.address_cache.write().unwrap();
         let invalid_addrs: Vec<_> = address_cache
             .iter()
             .filter_map(|(client_addr, browser_addrs)| {

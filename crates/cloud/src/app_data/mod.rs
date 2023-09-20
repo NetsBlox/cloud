@@ -11,9 +11,7 @@ use crate::projects::ProjectActions;
 use crate::services::hosts::actions::HostActions;
 use crate::services::settings::actions::SettingsActions;
 use crate::users::actions::{UserActionData, UserActions};
-//pub use self::
 use actix_web::rt::time;
-use lazy_static::lazy_static;
 use lettre::message::Mailbox;
 use lettre::transport::smtp::authentication::Credentials;
 use lettre::SmtpTransport;
@@ -45,27 +43,7 @@ use futures::TryStreamExt;
 use mongodb::{Client, Collection, IndexModel};
 use rusoto_s3::{CreateBucketRequest, S3Client, S3};
 
-// This is lazy_static to ensure it is shared between threads
 // TODO: it would be nice to be able to configure the cache size from the settings
-// TODO: move the cache to something that isn't shared btwn tests...
-lazy_static! {
-    static ref MEMBERSHIP_CACHE: Arc<AsyncRwLock<LruCache<String, bool>>> =
-        Arc::new(AsyncRwLock::new(LruCache::new(1000)));
-}
-lazy_static! {
-    static ref PROJECT_CACHE: Arc<RwLock<LruCache<api::ProjectId, ProjectMetadata>>> =
-        Arc::new(RwLock::new(LruCache::new(500)));
-}
-lazy_static! {
-    static ref ADMIN_CACHE: Arc<AsyncRwLock<LruCache<String, bool>>> =
-        Arc::new(AsyncRwLock::new(LruCache::new(1000)));
-}
-
-lazy_static! {
-    static ref FRIEND_CACHE: Arc<RwLock<LruCache<String, Vec<String>>>> =
-        Arc::new(RwLock::new(LruCache::new(1000)));
-}
-
 #[derive(Clone)]
 pub struct AppData {
     bucket: String,
@@ -94,6 +72,12 @@ pub struct AppData {
     pub(crate) metrics: metrics::Metrics,
     mailer: SmtpTransport,
     sender: Mailbox,
+
+    // cached data
+    project_cache: Arc<RwLock<LruCache<api::ProjectId, ProjectMetadata>>>,
+    membership_cache: Arc<AsyncRwLock<LruCache<String, bool>>>,
+    admin_cache: Arc<AsyncRwLock<LruCache<String, bool>>>,
+    friend_cache: Arc<RwLock<LruCache<String, Vec<String>>>>,
 }
 
 impl AppData {
@@ -189,6 +173,10 @@ impl AppData {
 
             tor_exit_nodes,
             recorded_messages,
+            project_cache: Arc::new(RwLock::new(LruCache::new(500))),
+            membership_cache: Arc::new(AsyncRwLock::new(LruCache::new(1000))),
+            admin_cache: Arc::new(AsyncRwLock::new(LruCache::new(1000))),
+            friend_cache: Arc::new(RwLock::new(LruCache::new(1000))),
         }
     }
 
@@ -358,7 +346,7 @@ impl AppData {
                 .await
                 .map_err(InternalError::DatabaseConnectionError)?;
 
-            let mut cache = PROJECT_CACHE.write().unwrap();
+            let mut cache = self.project_cache.write().unwrap();
             projects.iter().for_each(|project| {
                 cache.put(project.id.clone(), project.clone());
             });
@@ -374,7 +362,7 @@ impl AppData {
     ) -> (Vec<ProjectMetadata>, Vec<&'a api::ProjectId>) {
         let mut results = Vec::new();
         let mut missing_projects = Vec::new();
-        let mut cache = PROJECT_CACHE.write().unwrap();
+        let mut cache = self.project_cache.write().unwrap();
         for id in ids {
             match cache.get(id) {
                 Some(project_metadata) => results.push(project_metadata.clone()),
@@ -385,7 +373,7 @@ impl AppData {
     }
 
     fn get_cached_project(&self, id: &ProjectId) -> Option<ProjectMetadata> {
-        let mut cache = PROJECT_CACHE.write().unwrap();
+        let mut cache = self.project_cache.write().unwrap();
         cache.get(id).map(|md| md.to_owned())
     }
 
@@ -397,14 +385,14 @@ impl AppData {
             .map_err(InternalError::DatabaseConnectionError)?
             .ok_or(UserError::ProjectNotFoundError)?;
 
-        let mut cache = PROJECT_CACHE.write().unwrap();
+        let mut cache = self.project_cache.write().unwrap();
         cache.put(id.clone(), metadata);
         Ok(cache.get(id).unwrap().clone())
     }
 
     // Membership queries (cached)
     pub async fn keep_members(&self, usernames: HashSet<String>) -> Result<Vec<String>, UserError> {
-        let cache = MEMBERSHIP_CACHE.write().await;
+        let cache = self.membership_cache.write().await;
         let unknown_users: Vec<_> = usernames
             .iter()
             .filter(|name| !cache.contains(*name))
@@ -426,13 +414,13 @@ impl AppData {
                 .await
                 .map_err(InternalError::DatabaseConnectionError)?;
 
-            let mut cache = MEMBERSHIP_CACHE.write().await;
+            let mut cache = self.membership_cache.write().await;
             users.into_iter().for_each(|usr| {
                 cache.put(usr.username, usr.group_id.is_some());
             });
         }
 
-        let mut cache = MEMBERSHIP_CACHE.write().await;
+        let mut cache = self.membership_cache.write().await;
         let members: Vec<_> = usernames
             .into_iter()
             .filter(|name| {
@@ -450,7 +438,7 @@ impl AppData {
 
     // Cached admin-checking
     pub async fn is_admin(&self, username: &str) -> bool {
-        let cache = ADMIN_CACHE.write().await;
+        let cache = self.admin_cache.write().await;
         let needs_lookup = !cache.contains(username);
         drop(cache); // don't hold the lock during the database query
 
@@ -469,11 +457,11 @@ impl AppData {
                 .map(|user| matches!(user.role, UserRole::Admin))
                 .unwrap_or(false);
 
-            let mut cache = ADMIN_CACHE.write().await;
+            let mut cache = self.admin_cache.write().await;
             cache.put(username.to_owned(), is_admin);
         }
 
-        let mut cache = ADMIN_CACHE.write().await;
+        let mut cache = self.admin_cache.write().await;
         cache
             .get(username)
             .map(|is_admin| is_admin.to_owned())
@@ -507,7 +495,7 @@ impl AppData {
             .map_err(InternalError::DatabaseConnectionError)?;
 
         // clear the friend cache
-        let mut cache = FRIEND_CACHE.write().unwrap();
+        let mut cache = self.friend_cache.write().unwrap();
         cache.clear();
 
         Ok(())
@@ -518,7 +506,7 @@ impl AppData {
             &self.users,
             &self.groups,
             &self.friends,
-            FRIEND_CACHE.clone(),
+            self.friend_cache.clone(),
             username,
         )
         .await
@@ -544,7 +532,7 @@ impl From<actix_web::web::Data<AppData>> for ProjectActions {
     fn from(app: actix_web::web::Data<AppData>) -> ProjectActions {
         ProjectActions::new(
             app.project_metadata.clone(),
-            PROJECT_CACHE.clone(),
+            app.project_cache.clone(),
             app.network.clone(),
             app.bucket.clone(),
             app.s3.clone(),
@@ -557,10 +545,10 @@ impl From<AppData> for ProjectActions {
     fn from(app: AppData) -> ProjectActions {
         ProjectActions::new(
             app.project_metadata.clone(),
-            PROJECT_CACHE.clone(),
+            app.project_cache.clone(),
             app.network.clone(),
             app.bucket.clone(),
-            app.s3.clone(),
+            app.s3,
         )
     }
 }
@@ -570,7 +558,7 @@ impl From<actix_web::web::Data<AppData>> for FriendActions {
     fn from(app: actix_web::web::Data<AppData>) -> FriendActions {
         FriendActions::new(
             app.friends.clone(),
-            FRIEND_CACHE.clone(),
+            app.friend_cache.clone(),
             app.users.clone(),
             app.groups.clone(),
             app.network.clone(),
@@ -582,7 +570,7 @@ impl From<AppData> for FriendActions {
     fn from(app: AppData) -> FriendActions {
         FriendActions::new(
             app.friends.clone(),
-            FRIEND_CACHE.clone(),
+            app.friend_cache.clone(),
             app.users.clone(),
             app.groups.clone(),
             app.network.clone(),
@@ -595,7 +583,7 @@ impl From<actix_web::web::Data<AppData>> for CollaborationInviteActions {
         CollaborationInviteActions::new(
             app.collab_invites.clone(),
             app.project_metadata.clone(),
-            PROJECT_CACHE.clone(),
+            app.project_cache.clone(),
             app.network.clone(),
         )
     }
@@ -605,7 +593,7 @@ impl From<actix_web::web::Data<AppData>> for NetworkActions {
     fn from(app: actix_web::web::Data<AppData>) -> NetworkActions {
         NetworkActions::new(
             app.project_metadata.clone(),
-            PROJECT_CACHE.clone(),
+            app.project_cache.clone(),
             app.network.clone(),
             app.occupant_invites.clone(),
             app.recorded_messages.clone(),
@@ -649,11 +637,11 @@ impl From<actix_web::web::Data<AppData>> for UserActions {
             password_tokens: app.password_tokens.clone(),
             metrics: app.metrics.clone(),
 
-            project_cache: PROJECT_CACHE.clone(),
+            project_cache: app.project_cache.clone(),
             project_metadata: app.project_metadata.clone(),
             network: app.network.clone(),
 
-            friend_cache: FRIEND_CACHE.clone(),
+            friend_cache: app.friend_cache.clone(),
 
             mailer: app.mailer.clone(),
             sender: app.sender.clone(),
