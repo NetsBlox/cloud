@@ -4,7 +4,6 @@ use crate::common::api::{
     RoomState,
 };
 use futures::future::join_all;
-use lazy_static::lazy_static;
 use log::warn;
 use lru::LruCache;
 use mongodb::bson::{doc, DateTime};
@@ -148,7 +147,7 @@ enum ProjectCleanup {
 }
 
 impl Topology {
-    pub fn new() -> Topology {
+    pub fn new(cache_size: usize) -> Topology {
         Topology {
             clients: HashMap::new(),
             app_data: None,
@@ -157,7 +156,7 @@ impl Topology {
             usernames: HashMap::new(),
             external: HashMap::new(),
 
-            address_cache: Arc::new(RwLock::new(LruCache::new(1000))),
+            address_cache: Arc::new(RwLock::new(LruCache::new(cache_size))),
         }
     }
 
@@ -934,7 +933,7 @@ mod tests {
         test_utils::setup()
             .with_users(&[owner, member.clone(), outsider.clone()])
             .run(|app_data| async move {
-                let topology = Topology::new();
+                let topology = Topology::new(10);
                 // topology.set_app_data(app_data);
 
                 // TODO: mock the clients?
