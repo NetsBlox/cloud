@@ -156,7 +156,7 @@ impl Topology {
             usernames: HashMap::new(),
             external: HashMap::new(),
 
-            address_cache: Arc::new(RwLock::new(LruCache::new(1000))),
+            address_cache: Arc::new(RwLock::new(LruCache::new(cache_size))),
         }
     }
 
