@@ -25,8 +25,8 @@ pub struct TopologyActor {
 }
 
 impl TopologyActor {
-    pub(crate) fn new() -> Self {
-        let network = Arc::new(RwLock::new(Topology::new()));
+    pub(crate) fn new(cache_size: usize) -> Self {
+        let network = Arc::new(RwLock::new(Topology::new(cache_size)));
         Self { network }
     }
 }

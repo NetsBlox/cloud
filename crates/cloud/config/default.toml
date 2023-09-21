@@ -47,3 +47,4 @@ num_projects = 500
 num_users_membership_data = 1000
 num_users_admin_data = 1000
 num_users_friend_data = 1000
+num_addresses = 1000

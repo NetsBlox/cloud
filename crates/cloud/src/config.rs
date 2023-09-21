@@ -62,6 +62,7 @@ pub struct CacheSettings {
     pub num_users_membership_data: usize,
     pub num_users_admin_data: usize,
     pub num_users_friend_data: usize,
+    pub num_addresses: usize,
 }
 
 #[derive(Clone, Deserialize)]

@@ -138,7 +138,8 @@ impl AppData {
         let friends = db.collection::<FriendLink>(&(prefix.to_owned() + "friends"));
         let recorded_messages =
             db.collection::<SentMessage>(&(prefix.to_owned() + "recordedMessages"));
-        let network = network.unwrap_or_else(|| TopologyActor::new().start());
+        let network = network
+            .unwrap_or_else(|| TopologyActor::new(settings.cache_settings.num_addresses).start());
         let oauth_clients = db.collection::<OAuthClient>(&(prefix.to_owned() + "oauthClients"));
         let oauth_tokens = db.collection::<OAuthToken>(&(prefix.to_owned() + "oauthToken"));
         let oauth_codes = db.collection::<oauth::Code>(&(prefix.to_owned() + "oauthCode"));

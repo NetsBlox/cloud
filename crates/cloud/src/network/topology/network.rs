@@ -147,7 +147,7 @@ enum ProjectCleanup {
 }
 
 impl Topology {
-    pub fn new() -> Topology {
+    pub fn new(cache_size: usize) -> Topology {
         Topology {
             clients: HashMap::new(),
             app_data: None,
@@ -933,7 +933,7 @@ mod tests {
         test_utils::setup()
             .with_users(&[owner, member.clone(), outsider.clone()])
             .run(|app_data| async move {
-                let topology = Topology::new();
+                let topology = Topology::new(10);
                 // topology.set_app_data(app_data);
 
                 // TODO: mock the clients?
