@@ -868,6 +868,8 @@ impl Topology {
 
 #[cfg(test)]
 mod tests {
+    use std::num::NonZeroUsize;
+
     use netsblox_cloud_common::{
         api::{self, AppId, ClientId, ClientState, ExternalClientState},
         Group, User,
@@ -934,7 +936,7 @@ mod tests {
         test_utils::setup()
             .with_users(&[owner, member.clone(), outsider.clone()])
             .run(|app_data| async move {
-                let topology = Topology::new(10);
+                let topology = Topology::new(NonZeroUsize::new(10).unwrap());
                 // topology.set_app_data(app_data);
 
                 // TODO: mock the clients?

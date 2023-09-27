@@ -25,7 +25,6 @@ use rusoto_core::Region;
 use serde::{Deserialize, Serialize};
 use std::collections::HashSet;
 use std::net::IpAddr;
-
 use std::sync::{Arc, RwLock};
 use std::time::Duration;
 use tokio::sync::RwLock as AsyncRwLock;

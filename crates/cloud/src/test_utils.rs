@@ -123,7 +123,6 @@ impl TestSetupBuilder {
                 owner,
                 name,
                 roles,
-                save_state,
                 traces,
                 ..
             } = fixture;
