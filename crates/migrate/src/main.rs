@@ -21,7 +21,7 @@ use netsblox_cloud_common as cloud;
 use rusoto_core::{credential::StaticProvider, Region};
 use rusoto_s3::{GetObjectRequest, PutObjectRequest, S3Client, S3};
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 enum Migration {
     Libraries,
     Users,

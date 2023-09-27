@@ -1,4 +1,4 @@
-use std::env;
+use std::{env, num::NonZeroUsize};
 
 use config::{Config, ConfigError, File};
 use netsblox_cloud_common::AuthorizedServiceHost;
@@ -58,11 +58,11 @@ pub struct UserCreds {
 
 #[derive(Clone, Deserialize)]
 pub struct CacheSettings {
-    pub num_projects: usize,
-    pub num_users_membership_data: usize,
-    pub num_users_admin_data: usize,
-    pub num_users_friend_data: usize,
-    pub num_addresses: usize,
+    pub num_projects: NonZeroUsize,
+    pub num_users_membership_data: NonZeroUsize,
+    pub num_users_admin_data: NonZeroUsize,
+    pub num_users_friend_data: NonZeroUsize,
+    pub num_addresses: NonZeroUsize,
 }
 
 #[derive(Clone, Deserialize)]
