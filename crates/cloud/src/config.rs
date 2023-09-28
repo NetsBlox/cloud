@@ -10,7 +10,7 @@ pub struct Database {
     pub name: String,
 }
 
-#[derive(Clone, Deserialize)]
+#[derive(Clone, Deserialize, Debug)]
 pub struct S3 {
     pub bucket: String,
     pub endpoint: String,
@@ -18,7 +18,7 @@ pub struct S3 {
     pub credentials: S3Credentials,
 }
 
-#[derive(Clone, Deserialize)]
+#[derive(Clone, Deserialize, Debug)]
 pub struct S3Credentials {
     pub access_key: String,
     pub secret_key: String,

@@ -20,7 +20,7 @@ name = "netsblox-rs"
 [s3]
 bucket = "netsbloxrs"
 endpoint = "http://127.0.0.1:9000"
-region_name = ""
+region_name = "us-east-1"  # default in minio
 
 [s3.credentials]
 access_key = "KEY"

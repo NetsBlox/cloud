@@ -9,6 +9,7 @@ use crate::network::topology::{self, TopologyActor};
 use crate::utils;
 use actix::Addr;
 use actix_web::web::Bytes;
+use aws_sdk_s3 as s3;
 use futures::future::join_all;
 use futures::stream::FuturesUnordered;
 use futures::{join, TryStreamExt};
@@ -27,9 +28,7 @@ use netsblox_cloud_common::{
     ProjectMetadata,
 };
 use netsblox_cloud_common::{Project, RoleMetadata};
-use rusoto_s3::{
-    DeleteObjectRequest, GetObjectRequest, PutObjectOutput, PutObjectRequest, S3Client, S3,
-};
+use s3::operation::put_object::PutObjectOutput;
 use uuid::Uuid;
 
 // FIXME: pass this as an argument to ProjectActions
@@ -39,7 +38,7 @@ pub(crate) struct ProjectActions {
     network: Addr<TopologyActor>,
 
     bucket: String,
-    s3: S3Client,
+    s3: s3::Client,
 }
 
 impl ProjectActions {
@@ -49,7 +48,7 @@ impl ProjectActions {
         network: Addr<TopologyActor>,
 
         bucket: String,
-        s3: S3Client,
+        s3: s3::Client,
     ) -> Self {
         Self {
             project_metadata,
@@ -613,37 +612,30 @@ impl ProjectActions {
     }
 
     async fn download(&self, key: &str) -> Result<String, InternalError> {
-        let request = GetObjectRequest {
-            bucket: self.bucket.clone(),
-            key: String::from(key),
-            ..Default::default()
-        };
-
         let output = self
             .s3
-            .get_object(request)
+            .get_object()
+            .bucket(self.bucket.clone())
+            .key(key)
+            .send()
             .await
             .map_err(|_err| InternalError::S3Error)?;
-        let byte_str = output
+        let bytes: Vec<u8> = output
             .body
-            .unwrap()
-            .map_ok(|b| b.to_vec())
-            .try_concat()
+            .collect()
             .await
+            .map(|data| data.to_vec())
             .map_err(|_err| InternalError::S3ContentError)?;
 
-        String::from_utf8(byte_str).map_err(|_err| InternalError::S3ContentError)
+        String::from_utf8(bytes).map_err(|_err| InternalError::S3ContentError)
     }
 
     async fn delete(&self, key: String) -> Result<(), UserError> {
-        let request = DeleteObjectRequest {
-            bucket: self.bucket.clone(),
-            key,
-            ..Default::default()
-        };
-
         self.s3
-            .delete_object(request)
+            .delete_object()
+            .bucket(self.bucket.clone())
+            .key(key)
+            .send()
             .await
             .map_err(|_err| InternalError::S3Error)?;
 
@@ -684,16 +676,18 @@ impl ProjectActions {
     }
 
     async fn upload(&self, key: &str, body: String) -> Result<PutObjectOutput, InternalError> {
-        let request = PutObjectRequest {
-            bucket: self.bucket.clone(),
-            key: String::from(key),
-            body: Some(String::into_bytes(body).into()),
-            ..Default::default()
-        };
-        self.s3.put_object(request).await.map_err(|err| {
-            warn!("Unable to upload to s3: {}", err);
-            InternalError::S3Error
-        })
+        self.s3
+            .put_object()
+            .bucket(self.bucket.clone())
+            .key(key)
+            .body(String::into_bytes(body).into())
+            .send()
+            .await
+            .map_err(|err| {
+                println!("Unable to upload to s3: {}", err);
+                warn!("Unable to upload to s3: {}", err);
+                InternalError::S3Error
+            })
     }
 }
 
