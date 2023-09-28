@@ -20,7 +20,6 @@ use lru::LruCache;
 use mongodb::bson::{doc, Document};
 use mongodb::options::{FindOptions, IndexOptions, UpdateOptions};
 use netsblox_cloud_common::api;
-use s3::config::Region;
 use serde::{Deserialize, Serialize};
 use std::collections::HashSet;
 use std::net::IpAddr;
@@ -40,7 +39,7 @@ use crate::network::topology::{SetStorage, TopologyActor};
 use actix::{Actor, Addr};
 use aws_config::SdkConfig;
 use aws_credential_types::{provider::SharedCredentialsProvider, Credentials as S3Credentials};
-use aws_sdk_s3 as s3;
+use aws_sdk_s3::{self as s3, config::Region};
 use futures::TryStreamExt;
 use mongodb::{Client, Collection, IndexModel};
 
@@ -204,9 +203,7 @@ impl AppData {
         // FIXME: check if bucket exists or invalid bucket name
 
         let create_result = self.s3.create_bucket().bucket(bucket.clone()).send().await;
-        dbg!(&create_result);
         if create_result.is_err() {
-            println!("Using existing s3 bucket.");
             info!("Using existing s3 bucket.");
         }
 
