@@ -6,10 +6,13 @@ use std::time::Duration;
 use std::{collections::HashMap, thread};
 
 use crate::config::Config;
+use aws_config::SdkConfig;
+use aws_credential_types::{provider::SharedCredentialsProvider, Credentials as S3Credentials};
+use aws_sdk_s3::{self as s3, config::Region};
 use clap::Parser;
 use cloud::api::SaveState;
 use derive_more::{Display, Error};
-use futures::{future::join_all, stream::StreamExt, TryStreamExt};
+use futures::{future::join_all, stream::StreamExt};
 use indicatif::ProgressBar;
 use mongodb::bson::Bson;
 use mongodb::{
@@ -18,10 +21,8 @@ use mongodb::{
     Client, Database,
 };
 use netsblox_cloud_common as cloud;
-use rusoto_core::{credential::StaticProvider, Region};
-use rusoto_s3::{GetObjectRequest, PutObjectRequest, S3Client, S3};
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 enum Migration {
     Libraries,
     Users,
@@ -82,21 +83,24 @@ async fn main() {
     }
 }
 
-fn get_s3_client(config: &config::S3) -> S3Client {
-    let region = Region::Custom {
-        name: config.region_name.clone(),
-        endpoint: config.endpoint.clone(),
-    };
-    S3Client::new_with(
-        rusoto_core::request::HttpClient::new().expect("Failed to create HTTP client"),
-        StaticProvider::new(
-            config.credentials.access_key.clone(),
-            config.credentials.secret_key.clone(),
+fn get_s3_client(config: &config::S3) -> s3::Client {
+    let access_key = config.credentials.access_key.clone();
+    let secret_key = config.credentials.secret_key.clone();
+    let region = Region::new(config.region_name.clone());
+
+    let config = SdkConfig::builder()
+        .region(region)
+        .endpoint_url(config.endpoint.clone())
+        .credentials_provider(SharedCredentialsProvider::new(S3Credentials::new(
+            access_key,
+            secret_key,
             None,
             None,
-        ),
-        region,
-    )
+            "NetsBloxConfig",
+        )))
+        .build();
+
+    s3::Client::new(&config)
 }
 
 async fn connect_db(mongo_uri: &str) -> Database {
@@ -108,7 +112,7 @@ async fn connect_db(mongo_uri: &str) -> Database {
 }
 
 async fn download(
-    client: &S3Client,
+    client: &s3::Client,
     bucket: &str,
     metadata: origin::ProjectMetadata,
 ) -> cloud::Project {
@@ -148,7 +152,7 @@ async fn download(
 }
 
 async fn download_role(
-    client: &S3Client,
+    client: &s3::Client,
     bucket: &str,
     id: String,
     role_md: origin::RoleMetadata,
@@ -173,7 +177,7 @@ async fn download_role(
 }
 
 async fn upload(
-    client: &S3Client,
+    client: &s3::Client,
     bucket: &str,
     project: cloud::Project,
 ) -> cloud::ProjectMetadata {
@@ -203,7 +207,7 @@ async fn upload(
 }
 
 async fn upload_role(
-    client: &S3Client,
+    client: &s3::Client,
     bucket: &str,
     owner: &str,
     project_name: &str,
@@ -226,33 +230,34 @@ async fn upload_role(
     }
 }
 
-async fn upload_s3(client: &S3Client, bucket: &str, key: &str, body: String) {
-    let request = PutObjectRequest {
-        bucket: bucket.to_owned(),
-        key: String::from(key),
-        body: Some(String::into_bytes(body).into()),
-        ..Default::default()
-    };
-    client.put_object(request).await.unwrap();
+async fn upload_s3(client: &s3::Client, bucket: &str, key: &str, body: String) {
+    client
+        .put_object()
+        .bucket(bucket.to_owned())
+        .key(key)
+        .body(String::into_bytes(body).into())
+        .send()
+        .await
+        .unwrap();
 }
 
-async fn download_s3(client: &S3Client, bucket: &str, key: &str) -> String {
-    let request = GetObjectRequest {
-        bucket: bucket.to_owned(),
-        key: String::from(key),
-        ..Default::default()
-    };
-
-    let output = client.get_object(request).await.unwrap();
-    let byte_str = output
-        .body
-        .unwrap()
-        .map_ok(|b| b.to_vec())
-        .try_concat()
+async fn download_s3(client: &s3::Client, bucket: &str, key: &str) -> String {
+    let output = client
+        .get_object()
+        .bucket(bucket.to_owned())
+        .key(key)
+        .send()
         .await
         .unwrap();
 
-    String::from_utf8(byte_str).unwrap()
+    let bytes: Vec<u8> = output
+        .body
+        .collect()
+        .await
+        .map(|data| data.to_vec())
+        .expect("Could not download from s3");
+
+    String::from_utf8(bytes).expect("convert u8 body to string")
 }
 
 async fn migrate_users(src_db: &Database, dst_db: &Database, target_user: Option<String>) {

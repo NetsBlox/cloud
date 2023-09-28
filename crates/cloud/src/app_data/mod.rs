@@ -20,8 +20,6 @@ use lru::LruCache;
 use mongodb::bson::{doc, Document};
 use mongodb::options::{FindOptions, IndexOptions, UpdateOptions};
 use netsblox_cloud_common::api;
-use rusoto_core::credential::StaticProvider;
-use rusoto_core::Region;
 use serde::{Deserialize, Serialize};
 use std::collections::HashSet;
 use std::net::IpAddr;
@@ -39,16 +37,17 @@ use crate::config::Settings;
 use crate::errors::{InternalError, UserError};
 use crate::network::topology::{SetStorage, TopologyActor};
 use actix::{Actor, Addr};
+use aws_config::SdkConfig;
+use aws_credential_types::{provider::SharedCredentialsProvider, Credentials as S3Credentials};
+use aws_sdk_s3::{self as s3, config::Region};
 use futures::TryStreamExt;
 use mongodb::{Client, Collection, IndexModel};
-use rusoto_s3::{CreateBucketRequest, S3Client, S3};
 
-// TODO: it would be nice to be able to configure the cache size from the settings
 #[derive(Clone)]
 pub struct AppData {
     bucket: String,
     tor_exit_nodes: Collection<TorNode>,
-    s3: S3Client,
+    s3: s3::Client,
     pub(crate) settings: Settings,
     pub(crate) network: Addr<TopologyActor>,
     pub(crate) groups: Collection<Group>,
@@ -88,20 +87,23 @@ impl AppData {
         prefix: Option<&str>,
     ) -> AppData {
         // Blob storage
-        let region = Region::Custom {
-            name: settings.s3.region_name.clone(),
-            endpoint: settings.s3.endpoint.clone(),
-        };
-        let s3 = S3Client::new_with(
-            rusoto_core::request::HttpClient::new().expect("Failed to create HTTP client"),
-            StaticProvider::new(
-                settings.s3.credentials.access_key.clone(),
-                settings.s3.credentials.secret_key.clone(),
+        let access_key = settings.s3.credentials.access_key.clone();
+        let secret_key = settings.s3.credentials.secret_key.clone();
+        let region = Region::new(settings.s3.region_name.clone());
+
+        let config = SdkConfig::builder()
+            .region(region)
+            .endpoint_url(settings.s3.endpoint.clone())
+            .credentials_provider(SharedCredentialsProvider::new(S3Credentials::new(
+                access_key,
+                secret_key,
                 None,
                 None,
-            ),
-            region,
-        );
+                "NetsBloxConfig",
+            )))
+            .build();
+
+        let s3 = s3::Client::new(&config);
 
         // Email
         let credentials = Credentials::new(
@@ -197,15 +199,13 @@ impl AppData {
     pub async fn initialize(&self) -> Result<(), InternalError> {
         // Create the s3 bucket
         let bucket = &self.settings.s3.bucket;
-        let request = CreateBucketRequest {
-            bucket: bucket.clone(),
-            ..Default::default()
-        };
 
         // FIXME: check if bucket exists or invalid bucket name
-        if self.s3.create_bucket(request).await.is_err() {
-            info!("Using existing s3 bucket.")
-        };
+
+        let create_result = self.s3.create_bucket().bucket(bucket.clone()).send().await;
+        if create_result.is_err() {
+            info!("Using existing s3 bucket.");
+        }
 
         // Add database indexes
         let index_opts = IndexOptions::builder()
@@ -529,12 +529,15 @@ impl AppData {
     #[cfg(test)]
     pub(crate) async fn drop_all_data(&self) -> Result<(), InternalError> {
         let bucket = &self.settings.s3.bucket;
-        let request = rusoto_s3::DeleteBucketRequest {
-            bucket: bucket.clone(),
-            ..Default::default()
-        };
 
-        if self.s3.delete_bucket(request).await.is_err() {
+        if self
+            .s3
+            .delete_bucket()
+            .bucket(bucket.clone())
+            .send()
+            .await
+            .is_err()
+        {
             info!("Bucket does not exist");
         }
 
@@ -587,7 +590,7 @@ impl From<AppData> for FriendActions {
             app.friend_cache.clone(),
             app.users.clone(),
             app.groups.clone(),
-            app.network.clone(),
+            app.network,
         )
     }
 }

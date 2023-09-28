@@ -11,6 +11,7 @@ use log::warn;
 use netsblox_cloud_common::api::CollaborationInvite;
 use serde::Serialize;
 use serde_json::Value;
+use std::num::NonZeroUsize;
 use std::sync::Arc;
 use tokio::sync::RwLock;
 use uuid::Uuid;
@@ -25,7 +26,7 @@ pub struct TopologyActor {
 }
 
 impl TopologyActor {
-    pub(crate) fn new(cache_size: usize) -> Self {
+    pub(crate) fn new(cache_size: NonZeroUsize) -> Self {
         let network = Arc::new(RwLock::new(Topology::new(cache_size)));
         Self { network }
     }

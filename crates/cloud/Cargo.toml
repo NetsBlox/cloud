@@ -10,36 +10,36 @@ A cloud server for the NetsBlox programming environment. Provides user/project m
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-actix-web = { version = "4.2.1", features = ["cookies"] }
+actix-web = { version = "4.4.0", features = ["cookies"] }
 actix-cors = "0.6.0"
 serde = "1.0.130"
 serde_json = "1.0.59"
-mongodb = "2.1.0"
+mongodb = "2.6.1"
 futures = "0.3.0"
-env_logger = "0.9.0"
+env_logger = "0.10.0"
 log = "0.4.16"
 rustrict = "0.1.30"
 regex = "1"
 lazy_static = "1.4.0"
 actix-session = { version = "0.7.2", features = ["cookie-session"] }
-actix-web-actors = "4.0.0"
+actix-web-actors = "4.2.0"
 actix = "0.12.0"
-sha2 = "0.10.0"
+sha2 = "0.10.7"
 passwords = "3.1.8"
 hex = "0.4.3"
-rusoto_core = "0.47.0"
-rusoto_s3 = "0.47.0"
-rusoto_signature = "0.47.0"
 config = "0.11.0"
 itertools = "0.10.3"
 uuid = { version = "1.0.0-alpha.1", features = ["v4", "fast-rng", "serde"] }
 derive_more = "0.99.17"
 netsblox-cloud-common = { path = "../cloud-common", version = "0.6.0" }
-reqwest = {version = "0.11.9", features = ["cookies", "json"]}
-lru = "0.7.3"
+reqwest = {version = "0.11.20", features = ["cookies", "json"]}
+lru = "0.11.1"
 lettre = {version = "0.10.0-rc.4", features = ["smtp-transport", "builder"]}
-image = "0.24.2"
+image = "0.24.7"
 base64 = "0.13.0"
 tokio = { version = "1.13.1", features = ["sync", "time"]}
 actix-web-prom = "0.6.0"
 prometheus = "0.13.3"
+aws-sdk-s3 = "0.31.2"
+aws-credential-types = "0.56.1"
+aws-config = "0.56.1"

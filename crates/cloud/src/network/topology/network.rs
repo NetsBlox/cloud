@@ -10,6 +10,7 @@ use mongodb::bson::{doc, DateTime};
 use netsblox_cloud_common::SentMessage;
 use serde_json::{json, Value};
 use std::collections::{HashMap, HashSet};
+use std::num::NonZeroUsize;
 use std::str::FromStr;
 use std::sync::{Arc, RwLock};
 use std::time::{Duration, SystemTime};
@@ -147,7 +148,7 @@ enum ProjectCleanup {
 }
 
 impl Topology {
-    pub fn new(cache_size: usize) -> Topology {
+    pub fn new(cache_size: NonZeroUsize) -> Topology {
         Topology {
             clients: HashMap::new(),
             app_data: None,
@@ -867,6 +868,8 @@ impl Topology {
 
 #[cfg(test)]
 mod tests {
+    use std::num::NonZeroUsize;
+
     use netsblox_cloud_common::{
         api::{self, AppId, ClientId, ClientState, ExternalClientState},
         Group, User,
@@ -933,7 +936,7 @@ mod tests {
         test_utils::setup()
             .with_users(&[owner, member.clone(), outsider.clone()])
             .run(|app_data| async move {
-                let topology = Topology::new(10);
+                let topology = Topology::new(NonZeroUsize::new(10).unwrap());
                 // topology.set_app_data(app_data);
 
                 // TODO: mock the clients?

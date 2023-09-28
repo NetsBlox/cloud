@@ -20,3 +20,17 @@ jobs:
       - uses: actions-rs/cargo@v1
         with:
           command: test
+
+  audit:
+    name: audit
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v2
+      - uses: actions-rs/toolchain@v1
+        with:
+          profile: minimal
+          toolchain: stable
+          override: true
+      - run: cargo install cargo-audit
+      - run: cargo generate-lockfile
+      - run: cargo audit --deny warnings
