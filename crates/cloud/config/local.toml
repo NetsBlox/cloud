@@ -1,0 +1,11 @@
+[admin]
+username = "admin"
+password = "somePassword"
+email = "admin@netsblox.org"
+
+[authorized_host]
+id = "LocalServices"
+url = "http://localhost:8080"
+secret = "SuperSecret"
+public = true
+
