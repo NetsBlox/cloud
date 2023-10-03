@@ -283,8 +283,7 @@ impl Project {
     pub fn to_xml(&self) -> String {
         let role_str: String = self
             .roles
-            .clone()
-            .into_values()
+            .values()
             .map(|role| role.to_xml())
             .collect::<Vec<_>>()
             .join(" ");
@@ -310,7 +309,7 @@ pub struct RoleData {
 }
 
 impl RoleData {
-    pub fn to_xml(self) -> String {
+    pub fn to_xml(&self) -> String {
         let name = self.name.replace('\"', "\\\"");
         format!("<role name=\"{}\">{}{}</role>", name, self.code, self.media)
     }
