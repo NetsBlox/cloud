@@ -126,7 +126,7 @@ async fn get_room_state(
     let (project_id,) = path.into_inner();
     let auth_vp = auth::try_view_project(&app, &req, None, &project_id).await?;
 
-    let actions: NetworkActions = app.into();
+    let actions: NetworkActions = app.to_network_actions();
     let state = actions.get_room_state(&auth_vp).await?;
 
     Ok(HttpResponse::Ok().json(state))
@@ -136,7 +136,7 @@ async fn get_room_state(
 async fn get_rooms(app: web::Data<AppData>, req: HttpRequest) -> Result<HttpResponse, UserError> {
     let auth_lr = auth::try_list_rooms(&app, &req).await?;
 
-    let actions: NetworkActions = app.into();
+    let actions: NetworkActions = app.to_network_actions();
     let rooms = actions.list_rooms(&auth_lr).await?;
 
     Ok(HttpResponse::Ok().json(rooms))
@@ -149,7 +149,7 @@ async fn get_external_clients(
 ) -> Result<HttpResponse, UserError> {
     let auth_lc = auth::try_list_clients(&app, &req).await?;
 
-    let actions: NetworkActions = app.into();
+    let actions: NetworkActions = app.to_network_actions();
     let clients = actions.list_external_clients(&auth_lc).await?;
 
     Ok(HttpResponse::Ok().json(clients))
@@ -173,7 +173,7 @@ async fn invite_occupant(
     let auth_ep = auth::try_edit_project(&app, &req, None, &project_id).await?;
     let auth_link = auth::try_invite_link(&app, &req, &sender, &data.username).await?;
 
-    let actions: NetworkActions = app.into();
+    let actions: NetworkActions = app.to_network_actions();
     let invite = actions
         .invite_occupant(&auth_ep, &auth_link, &data.role_id)
         .await?;
@@ -191,7 +191,7 @@ async fn evict_occupant(
 
     let auth_eo = auth::try_evict_client(&app, &req, &client_id).await?;
 
-    let actions: NetworkActions = app.into();
+    let actions: NetworkActions = app.to_network_actions();
     let room_state = actions.evict_occupant(&auth_eo).await?;
 
     Ok(HttpResponse::Ok().json(room_state))
@@ -207,7 +207,7 @@ async fn start_network_trace(
     let (project_id,) = path.into_inner();
     let auth_vp = auth::try_view_project(&app, &req, None, &project_id).await?;
 
-    let actions: NetworkActions = app.into();
+    let actions: NetworkActions = app.to_network_actions();
     let new_trace = actions.start_network_trace(&auth_vp).await?;
 
     Ok(HttpResponse::Ok().json(new_trace))
@@ -222,7 +222,7 @@ async fn stop_network_trace(
     let (project_id, trace_id) = path.into_inner();
     let auth_vp = auth::try_view_project(&app, &req, None, &project_id).await?;
 
-    let actions: NetworkActions = app.into();
+    let actions: NetworkActions = app.to_network_actions();
     let trace = actions.stop_network_trace(&auth_vp, &trace_id).await?;
 
     Ok(HttpResponse::Ok().json(trace))
@@ -237,7 +237,7 @@ async fn get_network_trace_metadata(
     let (project_id, trace_id) = path.into_inner();
     let auth_vp = auth::try_view_project(&app, &req, None, &project_id).await?;
 
-    let actions: NetworkActions = app.into();
+    let actions: NetworkActions = app.to_network_actions();
     let trace = actions.get_network_trace_metadata(&auth_vp, &trace_id)?;
 
     Ok(HttpResponse::Ok().json(trace))
@@ -252,7 +252,7 @@ async fn get_network_trace(
     let (project_id, trace_id) = path.into_inner();
     let auth_vp = auth::try_view_project(&app, &req, None, &project_id).await?;
 
-    let actions: NetworkActions = app.into();
+    let actions: NetworkActions = app.to_network_actions();
     let messages = actions.get_network_trace(&auth_vp, &trace_id).await?;
 
     Ok(HttpResponse::Ok().json(messages))
@@ -267,7 +267,7 @@ async fn delete_network_trace(
     let (project_id, trace_id) = path.into_inner();
     let auth_vp = auth::try_view_project(&app, &req, None, &project_id).await?;
 
-    let actions: NetworkActions = app.into();
+    let actions: NetworkActions = app.to_network_actions();
     let metadata = actions.delete_network_trace(&auth_vp, &trace_id).await?;
 
     Ok(HttpResponse::Ok().json(metadata))
@@ -283,7 +283,7 @@ async fn send_message(
     let message = message.into_inner();
     let auth_sm = auth::try_send_message(&app, &req, message).await?;
 
-    let actions: NetworkActions = app.into();
+    let actions: NetworkActions = app.to_network_actions();
     actions.send_message(&auth_sm);
 
     Ok(HttpResponse::Ok().finish())
@@ -298,7 +298,7 @@ async fn get_client_state(
     let (client_id,) = path.into_inner();
     let auth_vc = auth::try_view_client(&app, &req, &client_id).await?;
 
-    let actions: NetworkActions = app.into();
+    let actions: NetworkActions = app.to_network_actions();
     let client_info = actions.get_client_state(&auth_vc).await?;
 
     Ok(HttpResponse::Ok().json(client_info))

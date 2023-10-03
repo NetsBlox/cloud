@@ -31,24 +31,23 @@ use netsblox_cloud_common::{Project, RoleMetadata};
 use s3::operation::put_object::PutObjectOutput;
 use uuid::Uuid;
 
-// FIXME: pass this as an argument to ProjectActions
-pub(crate) struct ProjectActions {
-    project_metadata: Collection<ProjectMetadata>,
-    project_cache: Arc<RwLock<LruCache<api::ProjectId, ProjectMetadata>>>,
-    network: Addr<TopologyActor>,
+pub(crate) struct ProjectActions<'a> {
+    project_metadata: &'a Collection<ProjectMetadata>,
+    project_cache: &'a Arc<RwLock<LruCache<api::ProjectId, ProjectMetadata>>>,
+    network: &'a Addr<TopologyActor>,
 
-    bucket: String,
-    s3: s3::Client,
+    bucket: &'a String,
+    s3: &'a s3::Client,
 }
 
-impl ProjectActions {
+impl<'a> ProjectActions<'a> {
     pub(crate) fn new(
-        project_metadata: Collection<ProjectMetadata>,
-        project_cache: Arc<RwLock<LruCache<api::ProjectId, ProjectMetadata>>>,
-        network: Addr<TopologyActor>,
+        project_metadata: &'a Collection<ProjectMetadata>,
+        project_cache: &'a Arc<RwLock<LruCache<api::ProjectId, ProjectMetadata>>>,
+        network: &'a Addr<TopologyActor>,
 
-        bucket: String,
-        s3: s3::Client,
+        bucket: &'a String,
+        s3: &'a s3::Client,
     ) -> Self {
         Self {
             project_metadata,

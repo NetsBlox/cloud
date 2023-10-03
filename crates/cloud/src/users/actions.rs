@@ -26,46 +26,46 @@ use crate::{
 
 use super::{email_template, strategies};
 
-pub(crate) struct UserActions {
-    users: Collection<User>,
-    banned_accounts: Collection<BannedAccount>,
-    password_tokens: Collection<SetPasswordToken>,
-    metrics: metrics::Metrics,
+pub(crate) struct UserActions<'a> {
+    users: &'a Collection<User>,
+    banned_accounts: &'a Collection<BannedAccount>,
+    password_tokens: &'a Collection<SetPasswordToken>,
+    metrics: &'a metrics::Metrics,
 
-    project_metadata: Collection<ProjectMetadata>,
-    project_cache: Arc<RwLock<LruCache<api::ProjectId, ProjectMetadata>>>,
-    network: Addr<TopologyActor>,
+    project_metadata: &'a Collection<ProjectMetadata>,
+    project_cache: &'a Arc<RwLock<LruCache<api::ProjectId, ProjectMetadata>>>,
+    network: &'a Addr<TopologyActor>,
 
-    friend_cache: Arc<RwLock<LruCache<String, Vec<String>>>>,
+    friend_cache: &'a Arc<RwLock<LruCache<String, Vec<String>>>>,
 
     // email support
-    mailer: SmtpTransport,
-    sender: Mailbox,
-    public_url: String,
+    mailer: &'a SmtpTransport,
+    sender: &'a Mailbox,
+    public_url: &'a String,
 }
 
 /// A struct for passing data to the constructor of `UserActions` w/o either 1) making
 /// all fields public on UserActions or 2) having *way* too many arguments
-pub(crate) struct UserActionData {
-    pub(crate) users: Collection<User>,
-    pub(crate) banned_accounts: Collection<BannedAccount>,
-    pub(crate) password_tokens: Collection<SetPasswordToken>,
-    pub(crate) metrics: metrics::Metrics,
+pub(crate) struct UserActionData<'a> {
+    pub(crate) users: &'a Collection<User>,
+    pub(crate) banned_accounts: &'a Collection<BannedAccount>,
+    pub(crate) password_tokens: &'a Collection<SetPasswordToken>,
+    pub(crate) metrics: &'a metrics::Metrics,
 
-    pub(crate) project_metadata: Collection<ProjectMetadata>,
-    pub(crate) project_cache: Arc<RwLock<LruCache<api::ProjectId, ProjectMetadata>>>,
-    pub(crate) network: Addr<TopologyActor>,
+    pub(crate) project_metadata: &'a Collection<ProjectMetadata>,
+    pub(crate) project_cache: &'a Arc<RwLock<LruCache<api::ProjectId, ProjectMetadata>>>,
+    pub(crate) network: &'a Addr<TopologyActor>,
 
-    pub(crate) friend_cache: Arc<RwLock<LruCache<String, Vec<String>>>>,
+    pub(crate) friend_cache: &'a Arc<RwLock<LruCache<String, Vec<String>>>>,
 
     // email support
-    pub(crate) mailer: SmtpTransport,
-    pub(crate) sender: Mailbox,
-    pub(crate) public_url: String,
+    pub(crate) mailer: &'a SmtpTransport,
+    pub(crate) sender: &'a Mailbox,
+    pub(crate) public_url: &'a String,
 }
 
-impl UserActions {
-    pub(crate) fn new(data: UserActionData) -> Self {
+impl<'a> UserActions<'a> {
+    pub(crate) fn new(data: UserActionData<'a>) -> Self {
         UserActions {
             users: data.users,
             banned_accounts: data.banned_accounts,

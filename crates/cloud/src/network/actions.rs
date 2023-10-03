@@ -20,22 +20,22 @@ use crate::{
 
 use super::topology::{self, TopologyActor};
 
-pub(crate) struct NetworkActions {
-    project_metadata: Collection<ProjectMetadata>,
-    occupant_invites: Collection<OccupantInvite>,
-    project_cache: Arc<RwLock<LruCache<api::ProjectId, ProjectMetadata>>>,
-    recorded_messages: Collection<SentMessage>,
-    network: Addr<TopologyActor>,
+pub(crate) struct NetworkActions<'a> {
+    project_metadata: &'a Collection<ProjectMetadata>,
+    occupant_invites: &'a Collection<OccupantInvite>,
+    project_cache: &'a Arc<RwLock<LruCache<api::ProjectId, ProjectMetadata>>>,
+    recorded_messages: &'a Collection<SentMessage>,
+    network: &'a Addr<TopologyActor>,
 }
 
-impl NetworkActions {
+impl<'a> NetworkActions<'a> {
     pub(crate) fn new(
-        project_metadata: Collection<ProjectMetadata>,
-        project_cache: Arc<RwLock<LruCache<api::ProjectId, ProjectMetadata>>>,
-        network: Addr<TopologyActor>,
+        project_metadata: &'a Collection<ProjectMetadata>,
+        project_cache: &'a Arc<RwLock<LruCache<api::ProjectId, ProjectMetadata>>>,
+        network: &'a Addr<TopologyActor>,
 
-        occupant_invites: Collection<OccupantInvite>,
-        recorded_messages: Collection<SentMessage>,
+        occupant_invites: &'a Collection<OccupantInvite>,
+        recorded_messages: &'a Collection<SentMessage>,
     ) -> Self {
         Self {
             project_metadata,

@@ -9,7 +9,7 @@ use actix_web::{web, HttpResponse};
 // TODO: add an endpoint for the official ones?
 #[get("/community/")]
 async fn list_community_libraries(app: web::Data<AppData>) -> Result<HttpResponse, UserError> {
-    let actions: LibraryActions = app.into();
+    let actions: LibraryActions = app.to_library_actions();
     let libraries = actions.list_community_libraries().await?;
 
     Ok(HttpResponse::Ok().json(libraries))
@@ -24,7 +24,7 @@ async fn list_user_libraries(
     let (username,) = path.into_inner();
     let auth_ll = auth::try_list_libraries(&app, &req, &username).await?;
 
-    let actions: LibraryActions = app.into();
+    let actions: LibraryActions = app.to_library_actions();
     let libraries = actions.list_user_libraries(&auth_ll).await?;
 
     Ok(HttpResponse::Ok().json(libraries))
@@ -39,7 +39,7 @@ async fn get_user_library(
     let (owner, name) = path.into_inner();
     let auth_vl = auth::try_view_library(&app, &req, &owner, &name).await?;
 
-    let actions: LibraryActions = app.into();
+    let actions: LibraryActions = app.to_library_actions();
     let blocks = actions.get_library_code(&auth_vl);
 
     Ok(HttpResponse::Ok().body(blocks))
@@ -56,7 +56,7 @@ async fn save_user_library(
 
     let auth_el = auth::try_edit_library(&app, &req, &owner).await?;
 
-    let actions: LibraryActions = app.into();
+    let actions: LibraryActions = app.to_library_actions();
     let library = actions.save_library(&auth_el, &data.into_inner()).await?;
 
     Ok(HttpResponse::Ok().json(library))
@@ -71,7 +71,7 @@ async fn delete_user_library(
     let (owner, name) = path.into_inner();
     let auth_el = auth::try_edit_library(&app, &req, &owner).await?;
 
-    let actions: LibraryActions = app.into();
+    let actions: LibraryActions = app.to_library_actions();
     let library = actions.delete_library(&auth_el, &name).await?;
 
     Ok(HttpResponse::Ok().json(library))
@@ -86,7 +86,7 @@ async fn publish_user_library(
     let (owner, name) = path.into_inner();
     let auth_pl = auth::try_publish_library(&app, &req, &owner).await?;
 
-    let actions: LibraryActions = app.into();
+    let actions: LibraryActions = app.to_library_actions();
     let library = actions.publish(&auth_pl, &name).await?;
 
     Ok(HttpResponse::Ok().json(library.state))
@@ -101,7 +101,7 @@ async fn unpublish_user_library(
     let (owner, name) = path.into_inner();
     let auth_pl = auth::try_publish_library(&app, &req, &owner).await?;
 
-    let actions: LibraryActions = app.into();
+    let actions: LibraryActions = app.to_library_actions();
     let library = actions.unpublish(&auth_pl, &name).await?;
 
     Ok(HttpResponse::Ok().json(library))
@@ -114,7 +114,7 @@ async fn list_pending_libraries(
 ) -> Result<HttpResponse, UserError> {
     let auth_lpl = auth::try_moderate_libraries(&app, &req).await?;
 
-    let actions: LibraryActions = app.into();
+    let actions: LibraryActions = app.to_library_actions();
     let libraries = actions.list_pending_libraries(&auth_lpl).await?;
 
     Ok(HttpResponse::Ok().json(libraries))
@@ -130,7 +130,7 @@ async fn set_library_state(
     let (owner, name) = path.into_inner();
     let auth_ml = auth::try_moderate_libraries(&app, &req).await?;
 
-    let actions: LibraryActions = app.into();
+    let actions: LibraryActions = app.to_library_actions();
     let library = actions
         .set_library_state(&auth_ml, &owner, &name, state.into_inner())
         .await?;

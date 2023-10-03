@@ -9,12 +9,12 @@ use crate::{
     errors::{InternalError, UserError},
 };
 
-pub(crate) struct HostActions {
-    authorized_services: Collection<AuthorizedServiceHost>,
+pub(crate) struct HostActions<'a> {
+    authorized_services: &'a Collection<AuthorizedServiceHost>,
 }
 
-impl HostActions {
-    pub(crate) fn new(authorized_services: Collection<AuthorizedServiceHost>) -> Self {
+impl<'a> HostActions<'a> {
+    pub(crate) fn new(authorized_services: &'a Collection<AuthorizedServiceHost>) -> Self {
         Self {
             authorized_services,
         }
