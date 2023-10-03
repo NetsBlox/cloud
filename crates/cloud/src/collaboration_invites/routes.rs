@@ -16,7 +16,7 @@ async fn list_invites(
     let (receiver,) = path.into_inner();
     let auth_vu = auth::try_view_user(&app, &req, None, &receiver).await?;
 
-    let actions: CollaborationInviteActions = app.to_collab_invite_actions();
+    let actions: CollaborationInviteActions = app.as_collab_invite_actions();
     let invites = actions.list_invites(&auth_vu).await?;
 
     Ok(HttpResponse::Ok().json(invites))
@@ -31,7 +31,7 @@ async fn send_invite(
     let (project_id, receiver) = path.into_inner();
     let auth_ic = auth::collaboration::try_invite(&app, &req, &project_id).await?;
 
-    let actions: CollaborationInviteActions = app.to_collab_invite_actions();
+    let actions: CollaborationInviteActions = app.as_collab_invite_actions();
     let invitation = actions.send_invite(&auth_ic, &receiver).await?;
 
     Ok(HttpResponse::Ok().json(invitation))
@@ -47,7 +47,7 @@ async fn respond_to_invite(
     let (id,) = path.into_inner();
     let auth_ri = auth::collaboration::try_respond_to_invite(&app, &req, &id).await?;
 
-    let actions: CollaborationInviteActions = app.to_collab_invite_actions();
+    let actions: CollaborationInviteActions = app.as_collab_invite_actions();
     // TODO: what should the arguments be?
     let state = actions.respond(&auth_ri, state.into_inner()).await?;
 

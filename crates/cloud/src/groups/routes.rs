@@ -16,7 +16,7 @@ async fn list_groups(
     let (owner,) = path.into_inner();
     let auth_vu = auth::try_view_user(&app, &req, None, &owner).await?;
 
-    let actions: GroupActions = app.to_group_actions();
+    let actions: GroupActions = app.as_group_actions();
     let groups = actions.list_groups(&auth_vu).await?;
 
     Ok(HttpResponse::Ok().json(groups))
@@ -31,7 +31,7 @@ async fn view_group(
     let (id,) = path.into_inner();
     let auth_vg = auth::try_view_group(&app, &req, &id).await?;
 
-    let actions: GroupActions = app.to_group_actions();
+    let actions: GroupActions = app.as_group_actions();
     let group = actions.view_group(&auth_vg).await?;
 
     Ok(HttpResponse::Ok().json(group))
@@ -47,7 +47,7 @@ async fn list_members(
 
     let auth_vg = auth::try_view_group(&app, &req, &id).await?;
 
-    let actions: GroupActions = app.to_group_actions();
+    let actions: GroupActions = app.as_group_actions();
     let members = actions.list_members(&auth_vg).await?;
 
     Ok(HttpResponse::Ok().json(members))
@@ -64,7 +64,7 @@ async fn create_group(
     let (owner,) = path.into_inner();
     let auth_eu = auth::try_edit_user(&app, &req, None, &owner).await?;
 
-    let actions: GroupActions = app.to_group_actions();
+    let actions: GroupActions = app.as_group_actions();
     let group = actions.create_group(&auth_eu, &body.name).await?;
 
     Ok(HttpResponse::Ok().json(group))
@@ -80,7 +80,7 @@ async fn update_group(
     let (id,) = path.into_inner();
     let auth_eg = auth::try_edit_group(&app, &req, &id).await?;
 
-    let actions: GroupActions = app.to_group_actions();
+    let actions: GroupActions = app.as_group_actions();
     let group = actions.rename_group(&auth_eg, &data.name).await?;
 
     Ok(HttpResponse::Ok().json(group))
@@ -96,7 +96,7 @@ async fn delete_group(
 
     let auth_dg = auth::try_delete_group(&app, &req, &id).await?;
 
-    let actions: GroupActions = app.to_group_actions();
+    let actions: GroupActions = app.as_group_actions();
     let group = actions.delete_group(&auth_dg).await?;
 
     Ok(HttpResponse::Ok().json(group))

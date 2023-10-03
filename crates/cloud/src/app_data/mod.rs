@@ -526,11 +526,11 @@ impl AppData {
     }
 
     // get resource actions (eg, libraries, users, etc)
-    pub(crate) fn to_library_actions(&self) -> LibraryActions {
+    pub(crate) fn as_library_actions(&self) -> LibraryActions {
         LibraryActions::new(&self.libraries)
     }
 
-    pub(crate) fn to_project_actions(&self) -> ProjectActions {
+    pub(crate) fn as_project_actions(&self) -> ProjectActions {
         ProjectActions::new(
             &self.project_metadata,
             &self.project_cache,
@@ -540,12 +540,11 @@ impl AppData {
         )
     }
 
-    pub(crate) fn to_group_actions(&self) -> GroupActions {
+    pub(crate) fn as_group_actions(&self) -> GroupActions {
         GroupActions::new(&self.groups, &self.users)
     }
 
-    // TODO: can we pass references instead of cloning everything?
-    pub(crate) fn to_friend_actions(&self) -> FriendActions {
+    pub(crate) fn as_friend_actions(&self) -> FriendActions {
         FriendActions::new(
             &self.friends,
             &self.friend_cache,
@@ -555,7 +554,7 @@ impl AppData {
         )
     }
 
-    pub(crate) fn to_collab_invite_actions(&self) -> CollaborationInviteActions {
+    pub(crate) fn as_collab_invite_actions(&self) -> CollaborationInviteActions {
         CollaborationInviteActions::new(
             &self.collab_invites,
             &self.project_metadata,
@@ -564,7 +563,7 @@ impl AppData {
         )
     }
 
-    pub(crate) fn to_network_actions(&self) -> NetworkActions {
+    pub(crate) fn as_network_actions(&self) -> NetworkActions {
         NetworkActions::new(
             &self.project_metadata,
             &self.project_cache,
@@ -574,15 +573,15 @@ impl AppData {
         )
     }
 
-    pub(crate) fn to_settings_actions(&self) -> SettingsActions {
+    pub(crate) fn as_settings_actions(&self) -> SettingsActions {
         SettingsActions::new(&self.users, &self.groups)
     }
 
-    pub(crate) fn to_oauth_actions(&self) -> OAuthActions {
+    pub(crate) fn as_oauth_actions(&self) -> OAuthActions {
         OAuthActions::new(&self.oauth_clients, &self.oauth_tokens, &self.oauth_codes)
     }
 
-    pub(crate) fn to_user_actions(&self) -> UserActions {
+    pub(crate) fn as_user_actions(&self) -> UserActions {
         let data = UserActionData {
             users: &self.users,
             banned_accounts: &self.banned_accounts,
@@ -602,7 +601,7 @@ impl AppData {
         UserActions::new(data)
     }
 
-    pub(crate) fn to_host_actions(&self) -> HostActions {
+    pub(crate) fn as_host_actions(&self) -> HostActions {
         HostActions::new(&self.authorized_services)
     }
 

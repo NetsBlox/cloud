@@ -17,7 +17,7 @@ use serde::Deserialize;
 async fn list_users(app: web::Data<AppData>, req: HttpRequest) -> Result<HttpResponse, UserError> {
     let auth_lu = auth::try_list_users(&app, &req).await?;
 
-    let actions: UserActions = app.to_user_actions();
+    let actions: UserActions = app.as_user_actions();
     let users = actions.list_users(&auth_lu).await?;
 
     Ok(HttpResponse::Ok().json(users))
@@ -38,7 +38,7 @@ async fn create_user(
     // TODO: add more security features. Maybe activate accounts?
 
     let auth_cu = auth::try_create_user(&app, &req, user_data.into_inner()).await?;
-    let actions: UserActions = app.to_user_actions();
+    let actions: UserActions = app.as_user_actions();
     let user = actions.create_user(auth_cu).await?;
 
     Ok(HttpResponse::Ok().json(user))
@@ -58,7 +58,7 @@ async fn login(
 
     let request = request.into_inner();
 
-    let actions: UserActions = app.to_user_actions();
+    let actions: UserActions = app.as_user_actions();
     let user = actions.login(request).await?;
 
     session.insert("username", &user.username).unwrap();
@@ -83,7 +83,7 @@ async fn logout(
 
     if let Some(client_id) = &params.client_id {
         // FIXME: this method should be updated as it currently could be used to half logout other users...
-        let actions: UserActions = app.to_user_actions();
+        let actions: UserActions = app.as_user_actions();
         actions.logout(&client_id);
     }
 
@@ -108,7 +108,7 @@ async fn ban_user(
     let (username,) = path.into_inner();
     let auth_bu = auth::try_ban_user(&app, &req, &username).await?;
 
-    let actions: UserActions = app.to_user_actions();
+    let actions: UserActions = app.as_user_actions();
     let account = actions.ban_user(&auth_bu).await?;
 
     Ok(HttpResponse::Ok().json(account))
@@ -123,7 +123,7 @@ async fn unban_user(
     let (username,) = path.into_inner();
     let auth_bu = auth::try_ban_user(&app, &req, &username).await?;
 
-    let actions: UserActions = app.to_user_actions();
+    let actions: UserActions = app.as_user_actions();
     let account = actions.unban_user(&auth_bu).await?;
 
     Ok(HttpResponse::Ok().json(account))
@@ -139,7 +139,7 @@ async fn delete_user(
 
     let auth_eu = auth::try_edit_user(&app, &req, None, &username).await?;
 
-    let actions: UserActions = app.to_user_actions();
+    let actions: UserActions = app.as_user_actions();
     let user = actions.delete_user(&auth_eu).await?;
 
     Ok(HttpResponse::Ok().json(user))
@@ -159,7 +159,7 @@ async fn reset_password(
     let (username,) = path.into_inner();
     let auth_eu = auth::try_edit_user(&app, &req, None, &username).await?;
 
-    let actions: UserActions = app.to_user_actions();
+    let actions: UserActions = app.as_user_actions();
     actions.reset_password(&auth_eu).await?;
 
     Ok(HttpResponse::Ok().finish())
@@ -193,7 +193,7 @@ async fn change_password(
     let (username,) = path.into_inner();
 
     let auth_sp = auth::try_set_password(&app, &req, &username, params.into_inner().token).await?;
-    let actions: UserActions = app.to_user_actions();
+    let actions: UserActions = app.as_user_actions();
     let user = actions.set_password(&auth_sp, data.into_inner()).await?;
 
     Ok(HttpResponse::Ok().json(user))
@@ -208,7 +208,7 @@ async fn view_user(
     let (username,) = path.into_inner();
     let auth_vu = auth::try_view_user(&app, &req, None, &username).await?;
 
-    let actions: UserActions = app.to_user_actions();
+    let actions: UserActions = app.as_user_actions();
     let user = actions.get_user(&auth_vu).await?;
 
     Ok(HttpResponse::Ok().json(user))
@@ -226,7 +226,7 @@ async fn link_account(
     let creds = creds.into_inner();
     let auth_eu = auth::try_edit_user(&app, &req, None, &username).await?;
 
-    let actions: UserActions = app.to_user_actions();
+    let actions: UserActions = app.as_user_actions();
     let user = actions.link_account(&auth_eu, creds).await?;
 
     Ok(HttpResponse::Ok().json(user))
@@ -242,7 +242,7 @@ async fn unlink_account(
     let (username,) = path.into_inner();
     let auth_eu = auth::try_edit_user(&app, &req, None, &username).await?;
 
-    let actions: UserActions = app.to_user_actions();
+    let actions: UserActions = app.as_user_actions();
     let user = actions
         .unlink_account(&auth_eu, account.into_inner())
         .await?;

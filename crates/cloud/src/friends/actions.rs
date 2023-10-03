@@ -396,7 +396,7 @@ mod tests {
             .with_users(&[sender.clone(), rcvr.clone()])
             .with_friend_links(&[link])
             .run(|app_data| async move {
-                let actions: FriendActions = app_data.to_friend_actions();
+                let actions: FriendActions = app_data.as_friend_actions();
                 let auth_eu = auth::EditUser::test(rcvr.username.clone());
                 let link = actions
                     .respond_to_invite(&auth_eu, &sender.username, api::FriendLinkState::Approved)
@@ -422,7 +422,7 @@ mod tests {
         test_utils::setup()
             .with_users(&[rcvr.clone()])
             .run(|app_data| async move {
-                let actions: FriendActions = app_data.to_friend_actions();
+                let actions: FriendActions = app_data.as_friend_actions();
                 let auth_eu = auth::EditUser::test(rcvr.username.clone());
                 let result = actions
                     .respond_to_invite(&auth_eu, "sender", api::FriendLinkState::Approved)
@@ -461,7 +461,7 @@ mod tests {
             .with_users(&[sender.clone(), rcvr.clone()])
             .with_friend_links(&[link])
             .run(|app_data| async move {
-                let actions: FriendActions = app_data.to_friend_actions();
+                let actions: FriendActions = app_data.as_friend_actions();
                 let auth_eu = auth::EditUser::test(rcvr.username.clone());
                 let result = actions
                     .respond_to_invite(&auth_eu, "sender", api::FriendLinkState::Approved)
@@ -500,7 +500,7 @@ mod tests {
             .with_users(&[sender.clone(), rcvr.clone()])
             .with_friend_links(&[link])
             .run(|app_data| async move {
-                let actions: FriendActions = app_data.to_friend_actions();
+                let actions: FriendActions = app_data.as_friend_actions();
                 let auth_eu = auth::EditUser::test(rcvr.username.clone());
                 let result = actions
                     .respond_to_invite(&auth_eu, "sender", api::FriendLinkState::Approved)
@@ -539,7 +539,7 @@ mod tests {
             .with_users(&[sender.clone(), rcvr.clone()])
             .with_friend_links(&[link])
             .run(|app_data| async move {
-                let actions: FriendActions = app_data.to_friend_actions();
+                let actions: FriendActions = app_data.as_friend_actions();
                 let auth_eu = auth::EditUser::test(rcvr.username.clone());
                 let result = actions
                     .respond_to_invite(&auth_eu, "sender", api::FriendLinkState::Approved)
@@ -572,7 +572,7 @@ mod tests {
         test_utils::setup()
             .with_users(&[sender.clone(), rcvr.clone()])
             .run(|app_data| async move {
-                let actions: FriendActions = app_data.to_friend_actions();
+                let actions: FriendActions = app_data.as_friend_actions();
                 let auth_eu = auth::EditUser::test(sender.username.clone());
                 actions.send_invite(&auth_eu, &rcvr.username).await.unwrap();
 
@@ -605,7 +605,7 @@ mod tests {
         test_utils::setup()
             .with_users(&[sender.clone(), rcvr.clone()])
             .run(|app_data| async move {
-                let actions: FriendActions = app_data.to_friend_actions();
+                let actions: FriendActions = app_data.as_friend_actions();
                 let auth_eu = auth::EditUser::test(sender.username.clone());
                 actions.send_invite(&auth_eu, &rcvr.username).await.unwrap();
                 actions.send_invite(&auth_eu, &rcvr.username).await.unwrap();
@@ -639,7 +639,7 @@ mod tests {
         test_utils::setup()
             .with_users(&[sender.clone(), rcvr.clone()])
             .run(|app_data| async move {
-                let actions: FriendActions = app_data.to_friend_actions();
+                let actions: FriendActions = app_data.as_friend_actions();
 
                 // Send an invite
                 let auth_eu = auth::EditUser::test(sender.username.clone());

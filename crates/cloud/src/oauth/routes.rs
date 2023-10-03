@@ -42,7 +42,7 @@ async fn authorization_page(
     };
 
     let response = if let Ok(auth_eu) = auth_eu {
-        let actions: OAuthActions = app.to_oauth_actions();
+        let actions: OAuthActions = app.as_oauth_actions();
         let html = actions
             .render_auth_page(&auth_eu, &params.client_id)
             .await?;
@@ -85,7 +85,7 @@ async fn authorize_client(
     let (username,) = path.into_inner();
     let auth_eu = auth::try_edit_user(&app, &req, None, &username).await?;
 
-    let actions: OAuthActions = app.to_oauth_actions();
+    let actions: OAuthActions = app.as_oauth_actions();
     let url = actions.authorize(&auth_eu, &params.into_inner()).await?;
     let response = HttpResponse::Found()
         .insert_header(("Location", url.as_str()))
@@ -178,7 +178,7 @@ async fn create_client(
 ) -> Result<HttpResponse, UserError> {
     let auth_cc = auth::try_manage_client(&app, &req).await?;
 
-    let actions: OAuthActions = app.to_oauth_actions();
+    let actions: OAuthActions = app.as_oauth_actions();
     let client = actions.create_client(&auth_cc, &params.name).await?;
     Ok(HttpResponse::Ok().json(client))
 }
@@ -190,7 +190,7 @@ async fn list_clients(
 ) -> Result<HttpResponse, UserError> {
     let auth_cc = auth::try_manage_client(&app, &req).await?;
 
-    let actions: OAuthActions = app.to_oauth_actions();
+    let actions: OAuthActions = app.as_oauth_actions();
     let clients = actions.list_clients(&auth_cc).await?;
 
     Ok(HttpResponse::Ok().json(clients))
@@ -205,7 +205,7 @@ async fn remove_client(
     let auth_cc = auth::try_manage_client(&app, &req).await?;
     let (client_id,) = path.into_inner();
 
-    let actions: OAuthActions = app.to_oauth_actions();
+    let actions: OAuthActions = app.as_oauth_actions();
     let client = actions.delete_client(&auth_cc, &client_id).await?;
 
     Ok(HttpResponse::Ok().json(client))

@@ -16,7 +16,7 @@ async fn list_user_hosts_with_settings(
     let (username,) = path.into_inner();
     let auth_vu = auth::try_view_user(&app, &req, None, &username).await?;
 
-    let actions: UserActions = app.to_user_actions();
+    let actions: UserActions = app.as_user_actions();
     let settings = actions.get_service_settings(&auth_vu).await?;
     let hosts: Vec<_> = settings.keys().collect();
 
@@ -32,7 +32,7 @@ async fn get_user_settings(
     let (username, host) = path.into_inner();
     let auth_vu = auth::try_view_user(&app, &req, None, &username).await?;
 
-    let actions: UserActions = app.to_user_actions();
+    let actions: UserActions = app.as_user_actions();
     let settings = actions.get_service_settings(&auth_vu).await?;
     let empty_string = String::default();
     let settings = settings.get(&host).unwrap_or(&empty_string).to_owned();
@@ -49,7 +49,7 @@ async fn get_all_settings(
     let (username, host) = path.into_inner();
 
     let auth_vu = auth::try_view_user(&app, &req, None, &username).await?;
-    let actions: SettingsActions = app.to_settings_actions();
+    let actions: SettingsActions = app.as_settings_actions();
     let all_settings = actions.get_settings(&auth_vu, &host).await?;
 
     Ok(HttpResponse::Ok().json(all_settings))
@@ -67,7 +67,7 @@ async fn set_user_settings(
 
     let settings = std::str::from_utf8(&body).map_err(|_err| UserError::InternalError)?;
 
-    let actions: UserActions = app.to_user_actions();
+    let actions: UserActions = app.as_user_actions();
     actions.set_user_settings(&auth_eu, &host, settings).await?;
 
     Ok(HttpResponse::Ok().finish())
@@ -82,7 +82,7 @@ async fn delete_user_settings(
     let (username, host) = path.into_inner();
     let auth_eu = auth::try_edit_user(&app, &req, None, &username).await?;
 
-    let actions: UserActions = app.to_user_actions();
+    let actions: UserActions = app.as_user_actions();
     actions.delete_user_settings(&auth_eu, &host).await?;
 
     Ok(HttpResponse::Ok().finish())
@@ -98,7 +98,7 @@ async fn list_group_hosts_with_settings(
 
     let auth_vg = auth::try_view_group(&app, &req, &group_id).await?;
 
-    let actions: GroupActions = app.to_group_actions();
+    let actions: GroupActions = app.as_group_actions();
     let settings = actions.get_service_settings(&auth_vg).await?;
     let hosts: Vec<_> = settings.keys().collect();
 
@@ -114,7 +114,7 @@ async fn get_group_settings(
     let (group_id, host) = path.into_inner();
     let auth_vg = auth::try_view_group(&app, &req, &group_id).await?;
 
-    let actions: GroupActions = app.to_group_actions();
+    let actions: GroupActions = app.as_group_actions();
     let settings = actions.get_service_settings(&auth_vg).await?;
 
     let empty_string = String::default();
@@ -135,7 +135,7 @@ async fn set_group_settings(
 
     let auth_eg = auth::try_edit_group(&app, &req, &group_id).await?;
 
-    let actions: GroupActions = app.to_group_actions();
+    let actions: GroupActions = app.as_group_actions();
     actions
         .set_service_settings(&auth_eg, &host, &settings)
         .await?;
@@ -153,7 +153,7 @@ async fn delete_group_settings(
 
     let auth_eg = auth::try_edit_group(&app, &req, &group_id).await?;
 
-    let actions: GroupActions = app.to_group_actions();
+    let actions: GroupActions = app.as_group_actions();
     actions.delete_service_settings(&auth_eg, &host).await?;
 
     Ok(HttpResponse::Ok().finish())
