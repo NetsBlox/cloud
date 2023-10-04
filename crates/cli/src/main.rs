@@ -624,15 +624,21 @@ enum Command {
     Login,
     /// Logout of current cloud account
     Logout,
+    #[clap(alias = "user")]
     Users(UserCommand),
+    #[clap(alias = "project")]
     Projects(ProjectCommand),
     Network(NetworkCommand),
+    #[clap(alias = "group")]
     Groups(GroupCommand),
+    #[clap(alias = "friend")]
     Friends(FriendCommand),
     ServiceHosts(ServiceHostCommand),
     ServiceSettings(ServiceSettingsCommand),
+    #[clap(alias = "library")]
     Libraries(LibraryCommand),
     Oauth(OauthCommand),
+    #[clap(alias = "hosts")]
     Host(HostCommand),
 }
 
