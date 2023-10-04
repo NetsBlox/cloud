@@ -124,6 +124,7 @@ impl TestSetupBuilder {
                 name,
                 roles,
                 traces,
+                state,
                 ..
             } = fixture;
 
@@ -135,6 +136,7 @@ impl TestSetupBuilder {
                 roles,
                 client_id: None,
                 save_state: Some(api::SaveState::Saved),
+                state,
             };
             let metadata = actions
                 .create_project(&auth_eu, project_data)
@@ -256,7 +258,7 @@ pub(crate) mod project {
     use std::collections::HashMap;
 
     use netsblox_cloud_common::{
-        api::{self, RoleData, RoleId},
+        api::{self, PublishState, RoleData, RoleId},
         NetworkTraceMetadata,
     };
     use uuid::Uuid;
@@ -268,6 +270,7 @@ pub(crate) mod project {
         collaborators: Vec<String>,
         roles: HashMap<api::RoleId, api::RoleData>,
         traces: Vec<NetworkTraceMetadata>,
+        state: PublishState,
     }
 
     impl ProjectBuilder {
@@ -301,6 +304,11 @@ pub(crate) mod project {
             self
         }
 
+        pub(crate) fn with_state(mut self, state: PublishState) -> Self {
+            self.state = state;
+            self
+        }
+
         pub(crate) fn build(mut self) -> ProjectFixture {
             let id = self
                 .id
@@ -325,6 +333,7 @@ pub(crate) mod project {
                 name: self.name.unwrap_or("my project".into()),
                 collaborators: self.collaborators,
                 roles: self.roles,
+                state: self.state,
                 //save_state: api::SaveState::Saved,
                 traces: self.traces,
             }
@@ -340,6 +349,7 @@ pub(crate) mod project {
         //pub(crate) save_state: api::SaveState,
         pub(crate) roles: HashMap<RoleId, RoleData>,
         pub(crate) traces: Vec<NetworkTraceMetadata>,
+        pub(crate) state: PublishState,
     }
 
     // impl ProjectFixture {
@@ -366,6 +376,7 @@ pub(crate) mod project {
             collaborators: Vec::new(),
             roles: HashMap::new(),
             traces: Vec::new(),
+            state: PublishState::Private,
         }
     }
 }

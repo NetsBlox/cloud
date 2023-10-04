@@ -29,6 +29,26 @@ pub(crate) struct DeleteProject {
     _private: (),
 }
 
+#[cfg(test)]
+impl ViewProject {
+    pub(crate) fn test(metadata: ProjectMetadata) -> Self {
+        Self {
+            metadata,
+            _private: (),
+        }
+    }
+}
+
+#[cfg(test)]
+impl EditProject {
+    pub(crate) fn test(metadata: ProjectMetadata) -> Self {
+        Self {
+            metadata,
+            _private: (),
+        }
+    }
+}
+
 pub(crate) async fn try_view_project(
     app: &AppData,
     req: &HttpRequest,

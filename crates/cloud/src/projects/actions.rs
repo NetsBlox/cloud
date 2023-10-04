@@ -95,7 +95,9 @@ impl<'a> ProjectActions<'a> {
             roles.keys().cloned().zip(role_mds.into_iter()).collect();
 
         let save_state = project_data.save_state.unwrap_or(SaveState::Created);
-        let metadata = ProjectMetadata::new(owner, &unique_name, roles, save_state);
+        let mut metadata = ProjectMetadata::new(owner, &unique_name, roles, save_state);
+        metadata.state = project_data.state;
+
         self.project_metadata
             .insert_one(metadata.clone(), None)
             .await
@@ -323,10 +325,14 @@ impl<'a> ProjectActions<'a> {
 
         let query = doc! {"id": &ep.metadata.id};
         let update = doc! {"$set": {"state": &state}};
-        self.project_metadata
-            .update_one(query, update, None)
+        let updated_metadata = self
+            .project_metadata
+            .find_one_and_update(query, update, None)
             .await
-            .map_err(InternalError::DatabaseConnectionError)?;
+            .map_err(InternalError::DatabaseConnectionError)?
+            .ok_or(UserError::ProjectNotFoundError)?;
+
+        utils::on_room_changed(self.network, self.project_cache, updated_metadata);
 
         Ok(state)
     }
@@ -338,11 +344,14 @@ impl<'a> ProjectActions<'a> {
         let query = doc! {"id": &edit.metadata.id};
         let state = PublishState::Private;
         let update = doc! {"$set": {"state": &state}};
-        self.project_metadata
+        let metadata = self
+            .project_metadata
             .find_one_and_update(query, update, None)
             .await
             .map_err(InternalError::DatabaseConnectionError)?
             .ok_or(UserError::ProjectNotFoundError)?;
+
+        utils::on_room_changed(self.network, self.project_cache, metadata);
 
         Ok(state)
     }
@@ -713,6 +722,7 @@ pub(crate) struct CreateProjectDataDict {
     pub client_id: Option<api::ClientId>,
     pub save_state: Option<SaveState>,
     pub roles: HashMap<RoleId, RoleData>,
+    pub state: PublishState,
 }
 
 impl From<api::CreateProjectData> for CreateProjectDataDict {
@@ -729,7 +739,143 @@ impl From<api::CreateProjectData> for CreateProjectDataDict {
             name: data.name,
             client_id: data.client_id,
             save_state: data.save_state,
+            state: api::PublishState::Private,
             roles,
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use mongodb::bson::doc;
+    use netsblox_cloud_common::api;
+
+    use crate::{auth, test_utils};
+
+    #[actix_web::test]
+    async fn test_set_pending_approval_on_save_role_name() {
+        let role_id = api::RoleId::new("someRole".into());
+        let role_data = api::RoleData {
+            name: "role".into(),
+            code: "<code/>".into(),
+            media: "<media/>".into(),
+        };
+        let project = test_utils::project::builder()
+            .with_owner("sender".to_string())
+            .with_state(api::PublishState::Public)
+            .with_roles([(role_id.clone(), role_data)].into_iter().collect())
+            .build();
+
+        test_utils::setup()
+            .with_projects(&[project.clone()])
+            .run(|app_data| async move {
+                let actions = app_data.as_project_actions();
+
+                let query = doc! {};
+                let metadata = app_data
+                    .project_metadata
+                    .find_one(query, None)
+                    .await
+                    .expect("database lookup")
+                    .unwrap();
+                let auth_ep = auth::EditProject::test(metadata);
+
+                let data = api::RoleData {
+                    name: "some damn role".into(),
+                    code: "<code/>".into(),
+                    media: "<media/>".into(),
+                };
+                dbg!(&auth_ep.metadata.state);
+                let metadata = actions.save_role(&auth_ep, &role_id, data).await.unwrap();
+                dbg!(&metadata.state);
+                assert!(matches!(metadata.state, api::PublishState::PendingApproval));
+            })
+            .await;
+    }
+
+    #[actix_web::test]
+    async fn test_set_pending_approval_on_save_role_code() {
+        let role_id = api::RoleId::new("someRole".into());
+        let role_data = api::RoleData {
+            name: "role".into(),
+            code: "<code/>".into(),
+            media: "<media/>".into(),
+        };
+        let project = test_utils::project::builder()
+            .with_owner("sender".to_string())
+            .with_state(api::PublishState::Public)
+            .with_roles([(role_id.clone(), role_data)].into_iter().collect())
+            .build();
+
+        test_utils::setup()
+            .with_projects(&[project.clone()])
+            .run(|app_data| async move {
+                let actions = app_data.as_project_actions();
+
+                let query = doc! {};
+                let metadata = app_data
+                    .project_metadata
+                    .find_one(query, None)
+                    .await
+                    .expect("database lookup")
+                    .unwrap();
+                let auth_ep = auth::EditProject::test(metadata);
+
+                let data = api::RoleData {
+                    name: "some role".into(),
+                    code: "<damn code/>".into(),
+                    media: "<media/>".into(),
+                };
+                dbg!(&auth_ep.metadata.state);
+                let metadata = actions.save_role(&auth_ep, &role_id, data).await.unwrap();
+                dbg!(&metadata.state);
+                assert!(matches!(metadata.state, api::PublishState::PendingApproval));
+            })
+            .await;
+    }
+
+    #[actix_web::test]
+    async fn test_publish_clear_cache() {
+        let role_id = api::RoleId::new("someRole".into());
+        let role_data = api::RoleData {
+            name: "role".into(),
+            code: "<code/>".into(),
+            media: "<media/>".into(),
+        };
+        let project = test_utils::project::builder()
+            .with_owner("sender".to_string())
+            .with_state(api::PublishState::Public)
+            .with_roles([(role_id.clone(), role_data)].into_iter().collect())
+            .build();
+
+        test_utils::setup()
+            .with_projects(&[project.clone()])
+            .run(|app_data| async move {
+                let actions = app_data.as_project_actions();
+
+                let query = doc! {};
+                let metadata = app_data
+                    .project_metadata
+                    .find_one(query, None)
+                    .await
+                    .unwrap()
+                    .unwrap();
+
+                // ensure the project is cached
+                let mut cache = actions.project_cache.write().unwrap();
+                cache.put(metadata.id.clone(), metadata.clone());
+                drop(cache);
+
+                // update the publish state
+                let ep = auth::EditProject::test(metadata.clone());
+                actions.publish_project(&ep).await.unwrap();
+
+                // ensure the correct state is cached
+                let mut cache = actions.project_cache.write().unwrap();
+                let metadata = cache.get(&metadata.id).unwrap();
+
+                assert!(matches!(metadata.state, api::PublishState::Public));
+            })
+            .await;
     }
 }
