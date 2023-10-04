@@ -68,7 +68,7 @@ impl<'a> ProjectActions<'a> {
 
         let owner = &eu.username;
         let unique_name =
-            utils::get_valid_project_name(&self.project_metadata, owner, &name).await?;
+            utils::get_valid_project_name(self.project_metadata, owner, &name).await?;
 
         // Prepare the roles (ensure >=1 exists; upload them)
         if roles.is_empty() {
@@ -260,7 +260,7 @@ impl<'a> ProjectActions<'a> {
             .map_err(InternalError::DatabaseConnectionError)?
             .ok_or(UserError::ProjectNotFoundError)?;
 
-        utils::on_room_changed(&self.network, &self.project_cache, updated_metadata.clone());
+        utils::on_room_changed(self.network, self.project_cache, updated_metadata.clone());
         Ok(updated_metadata.into())
     }
 
@@ -286,7 +286,7 @@ impl<'a> ProjectActions<'a> {
             .map_err(InternalError::DatabaseConnectionError)?
             .ok_or(UserError::ProjectNotFoundError)?;
 
-        utils::on_room_changed(&self.network, &self.project_cache, metadata.clone());
+        utils::on_room_changed(self.network, self.project_cache, metadata.clone());
 
         Ok(metadata.into())
     }
@@ -418,7 +418,7 @@ impl<'a> ProjectActions<'a> {
             .map_err(InternalError::DatabaseConnectionError)?
             .ok_or(UserError::ProjectNotFoundError)?;
 
-        utils::on_room_changed(&self.network, &self.project_cache, updated_metadata.clone());
+        utils::on_room_changed(self.network, self.project_cache, updated_metadata.clone());
         Ok(updated_metadata)
     }
 
@@ -443,7 +443,7 @@ impl<'a> ProjectActions<'a> {
                 .map_err(InternalError::DatabaseConnectionError)?
                 .ok_or(UserError::ProjectNotFoundError)?;
 
-            utils::on_room_changed(&self.network, &self.project_cache, updated_metadata.clone());
+            utils::on_room_changed(self.network, self.project_cache, updated_metadata.clone());
             Ok(updated_metadata.into())
         } else {
             Err(UserError::RoleNotFoundError)
@@ -472,7 +472,7 @@ impl<'a> ProjectActions<'a> {
             .map_err(InternalError::DatabaseConnectionError)?
             .ok_or(UserError::ProjectNotFoundError)?;
 
-        utils::on_room_changed(&self.network, &self.project_cache, updated_metadata.clone());
+        utils::on_room_changed(self.network, self.project_cache, updated_metadata.clone());
         Ok(updated_metadata)
     }
 
@@ -535,7 +535,7 @@ impl<'a> ProjectActions<'a> {
             .map_err(InternalError::DatabaseConnectionError)?
             .ok_or(UserError::ProjectNotFoundError)?;
 
-        utils::on_room_changed(&self.network, &self.project_cache, updated_metadata.clone());
+        utils::on_room_changed(self.network, self.project_cache, updated_metadata.clone());
 
         Ok(updated_metadata)
     }
@@ -683,7 +683,6 @@ impl<'a> ProjectActions<'a> {
             .send()
             .await
             .map_err(|err| {
-                println!("Unable to upload to s3: {}", err);
                 warn!("Unable to upload to s3: {}", err);
                 InternalError::S3Error
             })
