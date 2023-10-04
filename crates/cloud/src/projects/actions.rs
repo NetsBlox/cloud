@@ -515,7 +515,8 @@ impl<'a> ProjectActions<'a> {
         // check if the (public) project needs to be re-approved
         let state = match metadata.state {
             PublishState::Public => {
-                let needs_approval = utils::is_approval_required(&role.code);
+                let needs_approval = utils::is_approval_required(&role.name)
+                    || utils::is_approval_required(&role.code);
                 if needs_approval {
                     PublishState::PendingApproval
                 } else {
