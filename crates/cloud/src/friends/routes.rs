@@ -15,7 +15,7 @@ async fn list_friends(
     let (owner,) = path.into_inner();
     let auth_vu = auth::try_view_user(&app, &req, None, &owner).await?;
 
-    let actions: FriendActions = app.into();
+    let actions: FriendActions = app.as_friend_actions();
     let friend_names = actions.list_friends(&auth_vu).await?;
 
     Ok(HttpResponse::Ok().json(friend_names))
@@ -30,7 +30,7 @@ async fn list_online_friends(
     let (owner,) = path.into_inner();
     let auth_vu = auth::try_view_user(&app, &req, None, &owner).await?;
 
-    let actions: FriendActions = app.into();
+    let actions: FriendActions = app.as_friend_actions();
     let online_friends = actions.list_online_friends(&auth_vu).await?;
 
     Ok(HttpResponse::Ok().json(online_friends))
@@ -45,7 +45,7 @@ async fn unfriend(
     let (owner, friend) = path.into_inner();
     let auth_eu = auth::try_edit_user(&app, &req, None, &owner).await?;
 
-    let actions: FriendActions = app.into();
+    let actions: FriendActions = app.as_friend_actions();
     actions.unfriend(&auth_eu, &friend).await?;
 
     // Send "true" since it was successful but there isn't anything to send
@@ -63,7 +63,7 @@ async fn block_user(
     let (owner, friend) = path.into_inner();
     let auth_eu = auth::try_edit_user(&app, &req, None, &owner).await?;
 
-    let actions: FriendActions = app.into();
+    let actions: FriendActions = app.as_friend_actions();
     let link = actions.block(&auth_eu, &friend).await?;
 
     Ok(HttpResponse::Ok().json(link))
@@ -78,7 +78,7 @@ async fn unblock_user(
     let (owner, friend) = path.into_inner();
     let auth_eu = auth::try_edit_user(&app, &req, None, &owner).await?;
 
-    let actions: FriendActions = app.into();
+    let actions: FriendActions = app.as_friend_actions();
     actions.unblock(&auth_eu, &friend).await?;
 
     // Send "true" since it was successful but there isn't anything to send
@@ -96,7 +96,7 @@ async fn list_invites(
     let (owner,) = path.into_inner();
     let auth_vu = auth::try_view_user(&app, &req, None, &owner).await?;
 
-    let actions: FriendActions = app.into();
+    let actions: FriendActions = app.as_friend_actions();
     let invites = actions.list_invites(&auth_vu).await?;
 
     Ok(HttpResponse::Ok().json(invites))
@@ -113,7 +113,7 @@ async fn send_invite(
     let recipient = recipient.into_inner();
     let auth_eu = auth::try_edit_user(&app, &req, None, &owner).await?;
 
-    let actions: FriendActions = app.into();
+    let actions: FriendActions = app.as_friend_actions();
     let state = actions.send_invite(&auth_eu, &recipient).await?;
 
     match state {
@@ -133,7 +133,7 @@ async fn respond_to_invite(
     let state = body.into_inner();
     let auth_eu = auth::try_edit_user(&app, &req, None, &recipient).await?;
 
-    let actions: FriendActions = app.into();
+    let actions: FriendActions = app.as_friend_actions();
     let request = actions.respond_to_invite(&auth_eu, &sender, state).await?;
 
     Ok(HttpResponse::Ok().json(request))

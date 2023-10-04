@@ -20,21 +20,21 @@ use crate::{
     utils,
 };
 
-pub(crate) struct CollaborationInviteActions {
-    collab_invites: Collection<CollaborationInvite>,
+pub(crate) struct CollaborationInviteActions<'a> {
+    collab_invites: &'a Collection<CollaborationInvite>,
 
-    project_metadata: Collection<ProjectMetadata>,
-    project_cache: Arc<RwLock<LruCache<api::ProjectId, ProjectMetadata>>>,
-    network: Addr<TopologyActor>,
+    project_metadata: &'a Collection<ProjectMetadata>,
+    project_cache: &'a Arc<RwLock<LruCache<api::ProjectId, ProjectMetadata>>>,
+    network: &'a Addr<TopologyActor>,
 }
 
-impl CollaborationInviteActions {
+impl<'a> CollaborationInviteActions<'a> {
     pub(crate) fn new(
-        collab_invites: Collection<CollaborationInvite>,
+        collab_invites: &'a Collection<CollaborationInvite>,
 
-        project_metadata: Collection<ProjectMetadata>,
-        project_cache: Arc<RwLock<LruCache<api::ProjectId, ProjectMetadata>>>,
-        network: Addr<TopologyActor>,
+        project_metadata: &'a Collection<ProjectMetadata>,
+        project_cache: &'a Arc<RwLock<LruCache<api::ProjectId, ProjectMetadata>>>,
+        network: &'a Addr<TopologyActor>,
     ) -> Self {
         Self {
             collab_invites,

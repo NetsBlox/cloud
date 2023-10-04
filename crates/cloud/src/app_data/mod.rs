@@ -54,7 +54,6 @@ pub struct AppData {
     pub(crate) users: Collection<User>,
     pub(crate) banned_accounts: Collection<BannedAccount>,
     friends: Collection<FriendLink>,
-    // TODO: make a "cached collection type"?
     pub(crate) project_metadata: Collection<ProjectMetadata>,
     pub(crate) libraries: Collection<Library>,
     pub(crate) authorized_services: Collection<AuthorizedServiceHost>,
@@ -526,6 +525,86 @@ impl AppData {
         .await
     }
 
+    // get resource actions (eg, libraries, users, etc)
+    pub(crate) fn as_library_actions(&self) -> LibraryActions {
+        LibraryActions::new(&self.libraries)
+    }
+
+    pub(crate) fn as_project_actions(&self) -> ProjectActions {
+        ProjectActions::new(
+            &self.project_metadata,
+            &self.project_cache,
+            &self.network,
+            &self.bucket,
+            &self.s3,
+        )
+    }
+
+    pub(crate) fn as_group_actions(&self) -> GroupActions {
+        GroupActions::new(&self.groups, &self.users)
+    }
+
+    pub(crate) fn as_friend_actions(&self) -> FriendActions {
+        FriendActions::new(
+            &self.friends,
+            &self.friend_cache,
+            &self.users,
+            &self.groups,
+            &self.network,
+        )
+    }
+
+    pub(crate) fn as_collab_invite_actions(&self) -> CollaborationInviteActions {
+        CollaborationInviteActions::new(
+            &self.collab_invites,
+            &self.project_metadata,
+            &self.project_cache,
+            &self.network,
+        )
+    }
+
+    pub(crate) fn as_network_actions(&self) -> NetworkActions {
+        NetworkActions::new(
+            &self.project_metadata,
+            &self.project_cache,
+            &self.network,
+            &self.occupant_invites,
+            &self.recorded_messages,
+        )
+    }
+
+    pub(crate) fn as_settings_actions(&self) -> SettingsActions {
+        SettingsActions::new(&self.users, &self.groups)
+    }
+
+    pub(crate) fn as_oauth_actions(&self) -> OAuthActions {
+        OAuthActions::new(&self.oauth_clients, &self.oauth_tokens, &self.oauth_codes)
+    }
+
+    pub(crate) fn as_user_actions(&self) -> UserActions {
+        let data = UserActionData {
+            users: &self.users,
+            banned_accounts: &self.banned_accounts,
+            password_tokens: &self.password_tokens,
+            metrics: &self.metrics,
+
+            project_cache: &self.project_cache,
+            project_metadata: &self.project_metadata,
+            network: &self.network,
+
+            friend_cache: &self.friend_cache,
+
+            mailer: &self.mailer,
+            sender: &self.sender,
+            public_url: &self.settings.public_url,
+        };
+        UserActions::new(data)
+    }
+
+    pub(crate) fn as_host_actions(&self) -> HostActions {
+        HostActions::new(&self.authorized_services)
+    }
+
     #[cfg(test)]
     pub(crate) async fn drop_all_data(&self) -> Result<(), InternalError> {
         let bucket = &self.settings.s3.bucket;
@@ -542,135 +621,6 @@ impl AppData {
         }
 
         Ok(())
-    }
-}
-
-impl From<actix_web::web::Data<AppData>> for ProjectActions {
-    fn from(app: actix_web::web::Data<AppData>) -> ProjectActions {
-        ProjectActions::new(
-            app.project_metadata.clone(),
-            app.project_cache.clone(),
-            app.network.clone(),
-            app.bucket.clone(),
-            app.s3.clone(),
-        )
-    }
-}
-
-// TODO: replace this with a macro
-impl From<AppData> for ProjectActions {
-    fn from(app: AppData) -> ProjectActions {
-        ProjectActions::new(
-            app.project_metadata.clone(),
-            app.project_cache.clone(),
-            app.network.clone(),
-            app.bucket.clone(),
-            app.s3,
-        )
-    }
-}
-
-// TODO: can we pass references instead of cloning everything?
-impl From<actix_web::web::Data<AppData>> for FriendActions {
-    fn from(app: actix_web::web::Data<AppData>) -> FriendActions {
-        FriendActions::new(
-            app.friends.clone(),
-            app.friend_cache.clone(),
-            app.users.clone(),
-            app.groups.clone(),
-            app.network.clone(),
-        )
-    }
-}
-
-impl From<AppData> for FriendActions {
-    fn from(app: AppData) -> FriendActions {
-        FriendActions::new(
-            app.friends.clone(),
-            app.friend_cache.clone(),
-            app.users.clone(),
-            app.groups.clone(),
-            app.network,
-        )
-    }
-}
-
-impl From<actix_web::web::Data<AppData>> for CollaborationInviteActions {
-    fn from(app: actix_web::web::Data<AppData>) -> CollaborationInviteActions {
-        CollaborationInviteActions::new(
-            app.collab_invites.clone(),
-            app.project_metadata.clone(),
-            app.project_cache.clone(),
-            app.network.clone(),
-        )
-    }
-}
-
-impl From<actix_web::web::Data<AppData>> for NetworkActions {
-    fn from(app: actix_web::web::Data<AppData>) -> NetworkActions {
-        NetworkActions::new(
-            app.project_metadata.clone(),
-            app.project_cache.clone(),
-            app.network.clone(),
-            app.occupant_invites.clone(),
-            app.recorded_messages.clone(),
-        )
-    }
-}
-
-impl From<actix_web::web::Data<AppData>> for GroupActions {
-    fn from(app: actix_web::web::Data<AppData>) -> GroupActions {
-        GroupActions::new(app.groups.clone(), app.users.clone())
-    }
-}
-
-impl From<actix_web::web::Data<AppData>> for SettingsActions {
-    fn from(app: actix_web::web::Data<AppData>) -> SettingsActions {
-        SettingsActions::new(app.users.clone(), app.groups.clone())
-    }
-}
-
-impl From<actix_web::web::Data<AppData>> for OAuthActions {
-    fn from(app: actix_web::web::Data<AppData>) -> OAuthActions {
-        OAuthActions::new(
-            app.oauth_clients.clone(),
-            app.oauth_tokens.clone(),
-            app.oauth_codes.clone(),
-        )
-    }
-}
-
-impl From<actix_web::web::Data<AppData>> for LibraryActions {
-    fn from(app: actix_web::web::Data<AppData>) -> LibraryActions {
-        LibraryActions::new(app.libraries.clone())
-    }
-}
-
-impl From<actix_web::web::Data<AppData>> for UserActions {
-    fn from(app: actix_web::web::Data<AppData>) -> UserActions {
-        let data = UserActionData {
-            users: app.users.clone(),
-            banned_accounts: app.banned_accounts.clone(),
-            password_tokens: app.password_tokens.clone(),
-            metrics: app.metrics.clone(),
-
-            project_cache: app.project_cache.clone(),
-            project_metadata: app.project_metadata.clone(),
-            network: app.network.clone(),
-
-            friend_cache: app.friend_cache.clone(),
-
-            mailer: app.mailer.clone(),
-            sender: app.sender.clone(),
-            public_url: app.settings.public_url.clone(),
-        };
-        UserActions::new(data)
-    }
-}
-
-impl From<actix_web::web::Data<AppData>> for HostActions {
-    fn from(app: actix_web::web::Data<AppData>) -> HostActions {
-        HostActions::new(app.authorized_services.clone())
     }
 }
 

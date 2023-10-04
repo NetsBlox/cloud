@@ -128,7 +128,7 @@ impl TestSetupBuilder {
             } = fixture;
 
             let auth_eu = auth::EditUser::test(owner.clone());
-            let actions: ProjectActions = app_data.clone().into();
+            let actions: ProjectActions = app_data.as_project_actions();
             let project_data = CreateProjectDataDict {
                 owner: Some(owner),
                 name,
@@ -325,8 +325,7 @@ pub(crate) mod project {
                 name: self.name.unwrap_or("my project".into()),
                 collaborators: self.collaborators,
                 roles: self.roles,
-                save_state: api::SaveState::Saved,
-
+                //save_state: api::SaveState::Saved,
                 traces: self.traces,
             }
         }
@@ -338,7 +337,7 @@ pub(crate) mod project {
         pub(crate) owner: String,
         pub(crate) name: String,
         pub(crate) collaborators: std::vec::Vec<String>,
-        pub(crate) save_state: api::SaveState,
+        //pub(crate) save_state: api::SaveState,
         pub(crate) roles: HashMap<RoleId, RoleData>,
         pub(crate) traces: Vec<NetworkTraceMetadata>,
     }

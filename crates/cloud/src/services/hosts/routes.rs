@@ -20,7 +20,7 @@ async fn list_group_hosts(
     let (id,) = path.into_inner();
     let auth_vg = auth::try_view_group(&app, &req, &id).await?;
 
-    let actions: GroupActions = app.into();
+    let actions: GroupActions = app.as_group_actions();
     let group = actions.view_group(&auth_vg).await?;
 
     Ok(HttpResponse::Ok().json(group.services_hosts.unwrap_or_default()))
@@ -37,7 +37,7 @@ async fn set_group_hosts(
 
     let auth_eg = auth::try_edit_group(&app, &req, &id).await?;
 
-    let actions: GroupActions = app.into();
+    let actions: GroupActions = app.as_group_actions();
     let group = actions.set_group_hosts(&auth_eg, &hosts).await?;
 
     Ok(HttpResponse::Ok().json(group))
@@ -52,7 +52,7 @@ async fn list_user_hosts(
     let (username,) = path.into_inner();
     let auth_vu = auth::try_view_user(&app, &req, None, &username).await?;
 
-    let actions: UserActions = app.into();
+    let actions: UserActions = app.as_user_actions();
     let user = actions.get_user(&auth_vu).await?;
 
     Ok(HttpResponse::Ok().json(user.services_hosts.unwrap_or_default()))
@@ -68,7 +68,7 @@ async fn set_user_hosts(
     let (username,) = path.into_inner();
     let auth_eu = auth::try_edit_user(&app, &req, None, &username).await?;
 
-    let actions: UserActions = app.into();
+    let actions: UserActions = app.as_user_actions();
     let user = actions.set_hosts(&auth_eu, &hosts).await?;
 
     Ok(HttpResponse::Ok().json(user))
@@ -131,7 +131,7 @@ async fn get_authorized_hosts(
 ) -> Result<HttpResponse, UserError> {
     let auth_vah = auth::try_view_auth_hosts(&app, &req).await?;
 
-    let actions: HostActions = app.into();
+    let actions: HostActions = app.as_host_actions();
     let hosts = actions.get_hosts(&auth_vah).await?;
 
     Ok(HttpResponse::Ok().json(hosts))
@@ -145,7 +145,7 @@ async fn authorize_host(
 ) -> Result<HttpResponse, UserError> {
     let auth_ah = auth::try_auth_host(&app, &req).await?;
 
-    let actions: HostActions = app.into();
+    let actions: HostActions = app.as_host_actions();
     let secret = actions.authorize(&auth_ah, host_data.into_inner()).await?;
 
     Ok(HttpResponse::Ok().json(secret))
@@ -160,7 +160,7 @@ async fn unauthorize_host(
     let (host_id,) = path.into_inner();
     let auth_ah = auth::try_auth_host(&app, &req).await?;
 
-    let actions: HostActions = app.into();
+    let actions: HostActions = app.as_host_actions();
     let host = actions.unauthorize(&auth_ah, &host_id).await?;
 
     Ok(HttpResponse::Ok().json(host))

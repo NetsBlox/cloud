@@ -18,12 +18,12 @@ use crate::{
     utils,
 };
 
-pub(crate) struct LibraryActions {
-    libraries: Collection<Library>,
+pub(crate) struct LibraryActions<'a> {
+    libraries: &'a Collection<Library>,
 }
 
-impl LibraryActions {
-    pub(crate) fn new(libraries: Collection<Library>) -> Self {
+impl<'a> LibraryActions<'a> {
+    pub(crate) fn new(libraries: &'a Collection<Library>) -> Self {
         Self { libraries }
     }
 

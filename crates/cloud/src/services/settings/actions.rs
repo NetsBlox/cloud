@@ -9,13 +9,13 @@ use crate::{
     errors::{InternalError, UserError},
 };
 
-pub(crate) struct SettingsActions {
-    users: Collection<User>,
-    groups: Collection<Group>,
+pub(crate) struct SettingsActions<'a> {
+    users: &'a Collection<User>,
+    groups: &'a Collection<Group>,
 }
 
-impl SettingsActions {
-    pub(crate) fn new(users: Collection<User>, groups: Collection<Group>) -> Self {
+impl<'a> SettingsActions<'a> {
+    pub(crate) fn new(users: &'a Collection<User>, groups: &'a Collection<Group>) -> Self {
         Self { users, groups }
     }
     pub(crate) async fn get_settings(

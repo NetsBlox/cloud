@@ -17,17 +17,17 @@ use super::{
     routes::{AuthorizeClientParams, Scope},
 };
 
-pub(crate) struct OAuthActions {
-    clients: Collection<OAuthClient>,
-    tokens: Collection<OAuthToken>,
-    codes: Collection<oauth::Code>,
+pub(crate) struct OAuthActions<'a> {
+    clients: &'a Collection<OAuthClient>,
+    tokens: &'a Collection<OAuthToken>,
+    codes: &'a Collection<oauth::Code>,
 }
 
-impl OAuthActions {
+impl<'a> OAuthActions<'a> {
     pub(crate) fn new(
-        clients: Collection<OAuthClient>,
-        tokens: Collection<OAuthToken>,
-        codes: Collection<oauth::Code>,
+        clients: &'a Collection<OAuthClient>,
+        tokens: &'a Collection<OAuthToken>,
+        codes: &'a Collection<oauth::Code>,
     ) -> Self {
         Self {
             clients,

@@ -7,13 +7,13 @@ use netsblox_cloud_common::{api, Group, User};
 use crate::auth;
 use crate::errors::{InternalError, UserError};
 
-pub(crate) struct GroupActions {
-    groups: Collection<Group>,
-    users: Collection<User>,
+pub(crate) struct GroupActions<'a> {
+    groups: &'a Collection<Group>,
+    users: &'a Collection<User>,
 }
 
-impl GroupActions {
-    pub(crate) fn new(groups: Collection<Group>, users: Collection<User>) -> Self {
+impl<'a> GroupActions<'a> {
+    pub(crate) fn new(groups: &'a Collection<Group>, users: &'a Collection<User>) -> Self {
         Self { groups, users }
     }
 
