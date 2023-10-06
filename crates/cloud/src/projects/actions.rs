@@ -66,10 +66,6 @@ impl<'a> ProjectActions<'a> {
         let name = project_data.name.to_owned();
         let mut roles = project_data.roles;
 
-        let owner = &eu.username;
-        let unique_name =
-            utils::get_valid_project_name(self.project_metadata, owner, &name).await?;
-
         // Prepare the roles (ensure >=1 exists; upload them)
         if roles.is_empty() {
             roles.insert(
@@ -82,22 +78,30 @@ impl<'a> ProjectActions<'a> {
             );
         };
 
+        // Upload the role contents to s3
+        let owner = &eu.username;
+        let project_id = api::ProjectId::new(Uuid::new_v4().to_string());
         let role_mds: Vec<RoleMetadata> = join_all(
             roles
-                .values()
-                .map(|role| self.upload_role(owner, &unique_name, role)),
+                .iter()
+                .map(|(role_id, role)| self.upload_role(owner, &project_id, role_id, role)),
         )
         .await
         .into_iter()
         .collect::<Result<Vec<RoleMetadata>, _>>()?;
 
+        // Create project metadata
         let roles: HashMap<RoleId, RoleMetadata> =
             roles.keys().cloned().zip(role_mds.into_iter()).collect();
 
         let save_state = project_data.save_state.unwrap_or(SaveState::Created);
+        let unique_name =
+            utils::get_valid_project_name(self.project_metadata, owner, &name).await?;
         let mut metadata = ProjectMetadata::new(owner, &unique_name, roles, save_state);
+        metadata.id = project_id;
         metadata.state = project_data.state;
 
+        // Store project metadata in database
         self.project_metadata
             .insert_one(metadata.clone(), None)
             .await
@@ -400,8 +404,9 @@ impl<'a> ProjectActions<'a> {
         ep: &auth::projects::EditProject,
         role_data: RoleData,
     ) -> Result<ProjectMetadata, UserError> {
+        let role_id = api::RoleId::new(Uuid::new_v4().to_string());
         let mut role_md = self
-            .upload_role(&ep.metadata.owner, &ep.metadata.name, &role_data)
+            .upload_role(&ep.metadata.owner, &ep.metadata.id, &role_id, &role_data)
             .await?;
 
         let options = FindOneAndUpdateOptions::builder()
@@ -414,10 +419,10 @@ impl<'a> ProjectActions<'a> {
             .values()
             .map(|r| r.name.to_owned())
             .collect::<Vec<_>>();
+
         let role_name = utils::get_unique_name(role_names, &role_md.name);
         role_md.name = role_name;
 
-        let role_id = Uuid::new_v4();
         let query = doc! {"id": &ep.metadata.id};
         let update = doc! {"$set": {&format!("roles.{}", role_id): role_md}};
         let updated_metadata = self
@@ -509,7 +514,7 @@ impl<'a> ProjectActions<'a> {
     ) -> Result<ProjectMetadata, UserError> {
         let metadata = &ep.metadata;
         let role_md = self
-            .upload_role(&metadata.owner, &metadata.name, &role)
+            .upload_role(&metadata.owner, &metadata.id, role_id, &role)
             .await?;
 
         // check if the (public) project needs to be re-approved
@@ -664,12 +669,13 @@ impl<'a> ProjectActions<'a> {
     async fn upload_role(
         &self,
         owner: &str,
-        project_name: &str,
+        project_id: &api::ProjectId,
+        role_id: &api::RoleId,
         role: &RoleData,
     ) -> Result<RoleMetadata, UserError> {
         let is_guest = owner.starts_with('_');
         let top_level = if is_guest { "guests" } else { "users" };
-        let basepath = format!("{}/{}/{}/{}", top_level, owner, project_name, &role.name);
+        let basepath = format!("{}/{}/{}/{}", top_level, owner, project_id, &role_id);
         let src_path = format!("{}/code.xml", &basepath);
         let media_path = format!("{}/media.xml", &basepath);
 
@@ -747,6 +753,9 @@ impl From<api::CreateProjectData> for CreateProjectDataDict {
 
 #[cfg(test)]
 mod tests {
+    use std::collections::HashSet;
+
+    use futures::future::join_all;
     use mongodb::bson::doc;
     use netsblox_cloud_common::api;
 
@@ -875,6 +884,69 @@ mod tests {
                 let metadata = cache.get(&metadata.id).unwrap();
 
                 assert!(matches!(metadata.state, api::PublishState::Public));
+            })
+            .await;
+    }
+
+    #[actix_web::test]
+    async fn test_save_role_content_collision() {
+        let role_id = api::RoleId::new("someRole".into());
+        let role_data = api::RoleData {
+            name: "role".into(),
+            code: "<code/>".into(),
+            media: "<media/>".into(),
+        };
+        let project = test_utils::project::builder()
+            .with_owner("sender".to_string())
+            .with_state(api::PublishState::Public)
+            .with_roles([(role_id.clone(), role_data)].into_iter().collect())
+            .build();
+
+        test_utils::setup()
+            .with_projects(&[project.clone()])
+            .run(|app_data| async move {
+                let actions = app_data.as_project_actions();
+                let query = doc! {};
+                let metadata = app_data
+                    .project_metadata
+                    .find_one(query, None)
+                    .await
+                    .unwrap()
+                    .unwrap();
+
+                let ep = auth::EditProject::test(metadata.clone());
+                actions
+                    .rename_role(&ep, role_id, "secondRole".into())
+                    .await
+                    .unwrap();
+
+                let role_data = api::RoleData {
+                    name: "role".into(),
+                    code: "<NEW code/>".into(),
+                    media: "<NEW media/>".into(),
+                };
+                let metadata = actions.create_role(&ep, role_data).await.unwrap();
+
+                // check that the code at both roles is unique
+                let vp = auth::ViewProject::test(metadata.clone());
+                let roles = join_all(
+                    metadata
+                        .roles
+                        .into_keys()
+                        .map(|role_id| actions.get_role(&vp, role_id)),
+                )
+                .await
+                .into_iter()
+                .collect::<Result<Vec<_>, _>>()
+                .unwrap();
+
+                assert_eq!(roles.len(), 2);
+                let codes: HashSet<String> = roles
+                    .into_iter()
+                    .map(|data| data.code)
+                    .collect::<HashSet<String>>();
+                dbg!(&codes);
+                assert_eq!(codes.len(), 2);
             })
             .await;
     }
