@@ -83,7 +83,7 @@ fn is_valid_name(name: &str) -> bool {
     let min_len = 1;
     let char_count = name.chars().count();
     lazy_static! {
-        static ref NAME_REGEX: Regex = Regex::new(r"^[a-zA-Z][a-zA-Z0-9_ \(\)\-]*$").unwrap();
+        static ref NAME_REGEX: Regex = Regex::new(r"^[a-zA-Z0-9][a-zA-Z0-9_ \(\)\-]*$").unwrap();
     }
 
     char_count >= min_len
@@ -331,6 +331,11 @@ mod tests {
     #[actix_web::test]
     async fn test_is_valid_name_spaces() {
         assert!(is_valid_name("Player 1"));
+    }
+
+    #[actix_web::test]
+    async fn test_is_valid_name_leading_nums() {
+        assert!(is_valid_name("2048 Game"));
     }
 
     #[actix_web::test]
