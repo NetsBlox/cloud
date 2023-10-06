@@ -747,6 +747,9 @@ impl From<api::CreateProjectData> for CreateProjectDataDict {
 
 #[cfg(test)]
 mod tests {
+    use std::collections::HashSet;
+
+    use futures::future::join_all;
     use mongodb::bson::doc;
     use netsblox_cloud_common::api;
 
@@ -875,6 +878,69 @@ mod tests {
                 let metadata = cache.get(&metadata.id).unwrap();
 
                 assert!(matches!(metadata.state, api::PublishState::Public));
+            })
+            .await;
+    }
+
+    #[actix_web::test]
+    async fn test_save_role_content_collision() {
+        let role_id = api::RoleId::new("someRole".into());
+        let role_data = api::RoleData {
+            name: "role".into(),
+            code: "<code/>".into(),
+            media: "<media/>".into(),
+        };
+        let project = test_utils::project::builder()
+            .with_owner("sender".to_string())
+            .with_state(api::PublishState::Public)
+            .with_roles([(role_id.clone(), role_data)].into_iter().collect())
+            .build();
+
+        test_utils::setup()
+            .with_projects(&[project.clone()])
+            .run(|app_data| async move {
+                let actions = app_data.as_project_actions();
+                let query = doc! {};
+                let metadata = app_data
+                    .project_metadata
+                    .find_one(query, None)
+                    .await
+                    .unwrap()
+                    .unwrap();
+
+                let ep = auth::EditProject::test(metadata.clone());
+                actions
+                    .rename_role(&ep, role_id, "secondRole".into())
+                    .await
+                    .unwrap();
+
+                let role_data = api::RoleData {
+                    name: "role".into(),
+                    code: "<NEW code/>".into(),
+                    media: "<NEW media/>".into(),
+                };
+                let metadata = actions.create_role(&ep, role_data).await.unwrap();
+
+                // check that the code at both roles is unique
+                let vp = auth::ViewProject::test(metadata.clone());
+                let roles = join_all(
+                    metadata
+                        .roles
+                        .into_keys()
+                        .map(|role_id| actions.get_role(&vp, role_id)),
+                )
+                .await
+                .into_iter()
+                .collect::<Result<Vec<_>, _>>()
+                .unwrap();
+
+                assert_eq!(roles.len(), 2);
+                let codes: HashSet<String> = roles
+                    .into_iter()
+                    .map(|data| data.code)
+                    .collect::<HashSet<String>>();
+                dbg!(&codes);
+                assert_eq!(codes.len(), 2);
             })
             .await;
     }
