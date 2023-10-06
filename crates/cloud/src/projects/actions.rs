@@ -2,7 +2,6 @@ use std::collections::HashMap;
 use std::io::BufWriter;
 use std::sync::{Arc, RwLock};
 
-// TODO: is there any shared fn-ality across actions?
 use crate::auth;
 use crate::errors::{InternalError, UserError};
 use crate::network::topology::{self, TopologyActor};
@@ -513,6 +512,7 @@ impl<'a> ProjectActions<'a> {
         role: RoleData,
     ) -> Result<ProjectMetadata, UserError> {
         let metadata = &ep.metadata;
+        // TODO: clean up s3 on failed upload
         let role_md = self
             .upload_role(&metadata.owner, &metadata.id, role_id, &role)
             .await?;
@@ -581,6 +581,7 @@ impl<'a> ProjectActions<'a> {
         self.network
             .do_send(topology::ProjectDeleted::new(metadata.clone()));
 
+        // TODO: is the cache cleared?
         Ok(metadata)
     }
 
@@ -947,6 +948,53 @@ mod tests {
                     .collect::<HashSet<String>>();
                 dbg!(&codes);
                 assert_eq!(codes.len(), 2);
+            })
+            .await;
+    }
+
+    // TODO: check if the upload to s3 fails
+
+    #[actix_web::test]
+    async fn test_delete_clear_cache() {
+        let role_id = api::RoleId::new("someRole".into());
+        let role_data = api::RoleData {
+            name: "role".into(),
+            code: "<code/>".into(),
+            media: "<media/>".into(),
+        };
+        let project = test_utils::project::builder()
+            .with_owner("sender".to_string())
+            .with_state(api::PublishState::Public)
+            .with_roles([(role_id.clone(), role_data)].into_iter().collect())
+            .build();
+
+        test_utils::setup()
+            .with_projects(&[project.clone()])
+            .run(|app_data| async move {
+                let actions = app_data.as_project_actions();
+
+                let query = doc! {};
+                let metadata = app_data
+                    .project_metadata
+                    .find_one(query, None)
+                    .await
+                    .unwrap()
+                    .unwrap();
+
+                // ensure the project is cached
+                let mut cache = actions.project_cache.write().unwrap();
+                cache.put(metadata.id.clone(), metadata.clone());
+                drop(cache);
+
+                // update the publish state
+                let dp = auth::DeleteProject::test(metadata.clone());
+                actions.delete_project(&dp).await.unwrap();
+
+                // ensure the cache is cleared
+                let cache = actions.project_cache.write().unwrap();
+                let is_cached = cache.contains(&metadata.id);
+
+                assert!(!is_cached, "Project is still cached");
             })
             .await;
     }

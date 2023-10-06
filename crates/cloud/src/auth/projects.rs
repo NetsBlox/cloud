@@ -40,6 +40,16 @@ impl ViewProject {
 }
 
 #[cfg(test)]
+impl DeleteProject {
+    pub(crate) fn test(metadata: ProjectMetadata) -> Self {
+        Self {
+            metadata,
+            _private: (),
+        }
+    }
+}
+
+#[cfg(test)]
 impl EditProject {
     pub(crate) fn test(metadata: ProjectMetadata) -> Self {
         Self {
