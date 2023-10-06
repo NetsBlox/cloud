@@ -853,7 +853,7 @@ mod tests {
         };
         let project = test_utils::project::builder()
             .with_owner("sender".to_string())
-            .with_state(api::PublishState::Public)
+            .with_state(api::PublishState::Private)
             .with_roles([(role_id.clone(), role_data)].into_iter().collect())
             .build();
 
