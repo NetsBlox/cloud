@@ -326,11 +326,14 @@ impl<'a> ProjectActions<'a> {
             PublishState::Public
         };
 
+        let options = mongodb::options::FindOneAndUpdateOptions::builder()
+            .return_document(ReturnDocument::After)
+            .build();
         let query = doc! {"id": &ep.metadata.id};
         let update = doc! {"$set": {"state": &state}};
         let updated_metadata = self
             .project_metadata
-            .find_one_and_update(query, update, None)
+            .find_one_and_update(query, update, options)
             .await
             .map_err(InternalError::DatabaseConnectionError)?
             .ok_or(UserError::ProjectNotFoundError)?;
@@ -856,7 +859,7 @@ mod tests {
         };
         let project = test_utils::project::builder()
             .with_owner("sender".to_string())
-            .with_state(api::PublishState::Public)
+            .with_state(api::PublishState::Private)
             .with_roles([(role_id.clone(), role_data)].into_iter().collect())
             .build();
 
