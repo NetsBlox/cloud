@@ -314,7 +314,6 @@ pub(crate) fn send_email(
 }
 
 // TODO: tests for cache invalidation
-// - [ ] projects
 // - [ ] friends
 
 // TODO: tests for friend-checking
