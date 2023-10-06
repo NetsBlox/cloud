@@ -469,7 +469,42 @@ mod tests {
     #[actix_web::test]
     #[ignore]
     async fn test_get_project() {
-        todo!();
+        let user: User = api::NewUser {
+            username: "user".into(),
+            email: "admin@netsblox.org".into(),
+            password: None,
+            group_id: None,
+            role: Some(UserRole::User),
+        }
+        .into();
+        let project = test_utils::project::builder()
+            .with_owner(user.username.clone())
+            .with_name("project name".into())
+            .build();
+
+        test_utils::setup()
+            .with_users(&[user.clone()])
+            .with_projects(&[project.clone()])
+            .run(|app_data| async move {
+                let app = test::init_service(
+                    App::new()
+                        .wrap(test_utils::cookie::middleware())
+                        .app_data(web::Data::new(app_data.clone()))
+                        .configure(config),
+                )
+                .await;
+
+                let cookie = test_utils::cookie::new(&user.username);
+                let req = test::TestRequest::post()
+                    .uri(&format!("/id/{}", &project.id))
+                    .cookie(cookie)
+                    .to_request();
+
+                let data: api::Project = test::call_and_read_body_json(&app, req).await;
+                assert_eq!(data.id, project.id);
+                assert_eq!(data.name, project.name);
+            })
+            .await;
     }
 
     #[actix_web::test]

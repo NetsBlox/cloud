@@ -167,15 +167,105 @@ mod tests {
     use crate::test_utils;
 
     #[actix_web::test]
-    #[ignore]
     async fn test_list_friends() {
-        todo!();
+        // Define users
+        let user: User = api::NewUser {
+            username: "user".into(),
+            email: "user@netsblox.org".into(),
+            password: None,
+            group_id: None,
+            role: Some(UserRole::User),
+        }
+        .into();
+        let f1: User = api::NewUser {
+            username: "f1".into(),
+            email: "user@netsblox.org".into(),
+            password: None,
+            group_id: None,
+            role: Some(UserRole::User),
+        }
+        .into();
+        let nonfriend: User = api::NewUser {
+            username: "nonfriend".into(),
+            email: "user@netsblox.org".into(),
+            password: None,
+            group_id: None,
+            role: Some(UserRole::User),
+        }
+        .into();
+
+        // Define the friend relationships
+        let l1 = FriendLink::new(
+            user.username.clone(),
+            f1.username.clone(),
+            Some(FriendLinkState::Approved),
+        );
+
+        test_utils::setup()
+            .with_users(&[user.clone(), f1.clone(), nonfriend])
+            .with_friend_links(&[l1])
+            .run(|app_data| async move {
+                let app = test::init_service(
+                    App::new()
+                        .wrap(test_utils::cookie::middleware())
+                        .app_data(web::Data::new(app_data.clone()))
+                        .configure(config),
+                )
+                .await;
+
+                let cookie = test_utils::cookie::new(&user.username);
+                let req = test::TestRequest::get()
+                    .uri(&format!("/{}/", &user.username))
+                    .cookie(cookie)
+                    .to_request();
+
+                let friends: Vec<String> = test::call_and_read_body_json(&app, req).await;
+                assert_eq!(friends.len(), 1);
+                assert_eq!(friends[0], f1.username);
+            })
+            .await;
     }
 
     #[actix_web::test]
-    #[ignore]
     async fn test_list_friends_403() {
-        todo!();
+        let user: User = api::NewUser {
+            username: "user".into(),
+            email: "user@netsblox.org".into(),
+            password: None,
+            group_id: None,
+            role: Some(UserRole::User),
+        }
+        .into();
+        let other: User = api::NewUser {
+            username: "other".into(),
+            email: "user@netsblox.org".into(),
+            password: None,
+            group_id: None,
+            role: Some(UserRole::User),
+        }
+        .into();
+
+        test_utils::setup()
+            .with_users(&[user.clone(), other.clone()])
+            .run(|app_data| async move {
+                let app = test::init_service(
+                    App::new()
+                        .wrap(test_utils::cookie::middleware())
+                        .app_data(web::Data::new(app_data.clone()))
+                        .configure(config),
+                )
+                .await;
+
+                let cookie = test_utils::cookie::new(&user.username);
+                let req = test::TestRequest::get()
+                    .uri(&format!("/{}/", &other.username))
+                    .cookie(cookie)
+                    .to_request();
+
+                let response = test::call_service(&app, req).await;
+                assert_eq!(response.status(), http::StatusCode::FORBIDDEN);
+            })
+            .await;
     }
 
     #[actix_web::test]
@@ -256,9 +346,47 @@ mod tests {
     }
 
     #[actix_web::test]
-    #[ignore]
     async fn test_list_online_friends_403() {
-        todo!();
+        // Define users
+        let user: User = api::NewUser {
+            username: "user".into(),
+            email: "user@netsblox.org".into(),
+            password: None,
+            group_id: None,
+            role: Some(UserRole::User),
+        }
+        .into();
+        let other: User = api::NewUser {
+            username: "other".into(),
+            email: "user@netsblox.org".into(),
+            password: None,
+            group_id: None,
+            role: Some(UserRole::User),
+        }
+        .into();
+
+        // Connect f1, nonfriend
+        test_utils::setup()
+            .with_users(&[user.clone(), other.clone()])
+            .run(|app_data| async move {
+                let app = test::init_service(
+                    App::new()
+                        .wrap(test_utils::cookie::middleware())
+                        .app_data(web::Data::new(app_data.clone()))
+                        .configure(config),
+                )
+                .await;
+
+                let cookie = test_utils::cookie::new(&user.username);
+                let req = test::TestRequest::get()
+                    .uri(&format!("/{}/online", &other.username))
+                    .cookie(cookie)
+                    .to_request();
+
+                let response = test::call_service(&app, req).await;
+                assert_eq!(response.status(), http::StatusCode::FORBIDDEN);
+            })
+            .await;
     }
 
     #[actix_web::test]
@@ -528,9 +656,62 @@ mod tests {
     }
 
     #[actix_web::test]
-    #[ignore]
     async fn test_block_user_403() {
-        todo!();
+        let user: User = api::NewUser {
+            username: "user".into(),
+            email: "user@netsblox.org".into(),
+            password: None,
+            group_id: None,
+            role: Some(UserRole::User),
+        }
+        .into();
+        let other: User = api::NewUser {
+            username: "other".into(),
+            email: "other@netsblox.org".into(),
+            password: None,
+            group_id: None,
+            role: Some(UserRole::User),
+        }
+        .into();
+        let f1: User = api::NewUser {
+            username: "f1".into(),
+            email: "user@netsblox.org".into(),
+            password: None,
+            group_id: None,
+            role: Some(UserRole::User),
+        }
+        .into();
+        let mut l1 = FriendLink::new(
+            user.username.clone(),
+            f1.username.clone(),
+            Some(FriendLinkState::Approved),
+        );
+
+        // Roll back the creation date to make it obvious that the update time is different
+        l1.created_at = DateTime::from_system_time(SystemTime::now() - Duration::from_secs(100));
+
+        test_utils::setup()
+            .with_users(&[user.clone(), f1.clone(), other.clone()])
+            .with_friend_links(&[l1.clone()])
+            .run(|app_data| async move {
+                let app = test::init_service(
+                    App::new()
+                        .wrap(test_utils::cookie::middleware())
+                        .app_data(web::Data::new(app_data.clone()))
+                        .configure(config),
+                )
+                .await;
+
+                let cookie = test_utils::cookie::new(&user.username);
+                let req = test::TestRequest::post()
+                    .uri(&format!("/{}/block/{}", &other.username, &f1.username))
+                    .cookie(cookie)
+                    .to_request();
+
+                let response = test::call_service(&app, req).await;
+                assert_eq!(response.status(), http::StatusCode::FORBIDDEN);
+            })
+            .await;
     }
 
     #[actix_web::test]
@@ -793,13 +974,8 @@ mod tests {
 
     #[actix_web::test]
     #[ignore]
-    async fn test_invite_user_no_duplicates() {
-        todo!();
-    }
-
-    #[actix_web::test]
-    #[ignore]
     async fn test_respond_to_invite() {
+        // #[post("/{recipient}/invites/{sender}")]
         todo!();
     }
 
