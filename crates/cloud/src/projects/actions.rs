@@ -327,11 +327,14 @@ impl<'a> ProjectActions<'a> {
             PublishState::Public
         };
 
+        let options = mongodb::options::FindOneAndUpdateOptions::builder()
+            .return_document(ReturnDocument::After)
+            .build();
         let query = doc! {"id": &ep.metadata.id};
         let update = doc! {"$set": {"state": &state}};
         let updated_metadata = self
             .project_metadata
-            .find_one_and_update(query, update, None)
+            .find_one_and_update(query, update, options)
             .await
             .map_err(InternalError::DatabaseConnectionError)?
             .ok_or(UserError::ProjectNotFoundError)?;
