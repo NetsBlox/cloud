@@ -578,10 +578,12 @@ impl<'a> ProjectActions<'a> {
             .into_iter()
             .collect::<Result<Vec<_>, _>>()?;
 
+        let mut cache = self.project_cache.write().unwrap();
+        cache.pop(&metadata.id);
+
         self.network
             .do_send(topology::ProjectDeleted::new(metadata.clone()));
 
-        // TODO: is the cache cleared?
         Ok(metadata)
     }
 
