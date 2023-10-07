@@ -494,7 +494,7 @@ mod tests {
                 .await;
 
                 let cookie = test_utils::cookie::new(&user.username);
-                let req = test::TestRequest::post()
+                let req = test::TestRequest::get()
                     .uri(&format!("/id/{}", &project.id))
                     .cookie(cookie)
                     .to_request();
@@ -542,7 +542,7 @@ mod tests {
                 .await;
 
                 let cookie = test_utils::cookie::new(&other.username);
-                let req = test::TestRequest::post()
+                let req = test::TestRequest::get()
                     .uri(&format!("/id/{}", &project.id))
                     .cookie(cookie)
                     .to_request();
@@ -589,7 +589,7 @@ mod tests {
                 .await;
 
                 let cookie = test_utils::cookie::new(&admin.username);
-                let req = test::TestRequest::post()
+                let req = test::TestRequest::get()
                     .uri(&format!("/id/{}", &project.id))
                     .cookie(cookie)
                     .to_request();
