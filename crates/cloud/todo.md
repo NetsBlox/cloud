@@ -1,36 +1,37 @@
 # To Do
 
-- [ ] document URL tips
+- [ ] document changes!
+  - friends system
+  - URL "tips and tricks"
 
-- [ ] fix failing tests
+- [ ] update docker-compose file (use "local" config)
+
+- [ ] check client tests
+  - what tests are failing?
+  - it would be nice to add these to CI...
+  - [x] name validation bug...
 
 - [ ] add CLI tests
-
-- [ ] 
+  - [ ] testing the API is more important really
+  - [ ] can I start the server and run the API tests?
 
 - [ ] deleting user should delete groups
   - what about members? maybe release them into the wild?
-  - [ ] delete projects, too
-
-- [ ] test...
-  - [ ] recording messages
-  - [ ] save as should set project name, etc
-  - [x] message caching
-  - [x] created (but never occupied) projects - they should be automatically
-        deleted after 15 minutes or so
+  - [ ] delete projects, too?
 
 - [ ] Block messages between users that don't share a group (+admin)
   - add the group IDs (+ GLOBAL) to the clients in the network topology?
   - admins should be able to send a message to anyone
   - these would be the user's group + any owned groups
   - the sender and receiver must share at least one
+  - what if we just allow all messages?
 
 ## Future stuff
 
 - [ ] generic library for collaborative editing (different CRDTs, etc)
   - use the concept of streams/pipes?
 
-- [ ] connect the client code and start testing things!
+- [x] connect the client code and start testing things!
 
 - [ ] add benchmarks for message passing??
 
@@ -38,28 +39,14 @@
 
 - [ ] allow moderators to bypass profanity checker?
 
-- [ ] require login to send messages?
-
-- [ ] better pwd reset process (send link instead)
-  - IP-based rate limiting...
-
-- [ ] store additional info in the cookie? (optimize lookups)
-  - groups (for networking things)?
-  - admin?
-
 ## Related project updates/migrations
-
-- [ ] unban?
-
-- [ ] project \_id -> id
-  - migrate the data
 
 - [ ] update the compiler for resolving addresses
   - should be pretty easy to just copy the logic over
 
 - [ ] ensure no usernames have @ symbol in them
 
-- [ ] update mobile apps
+- [x] update mobile apps
 
 - [ ] email Tom about the big update?
 
@@ -896,4 +883,27 @@
   - set all projects to BROKEN
   - can we differentiate btwn server initiated Away and client?
   - unsaved projects will lose other role info but that's it
+
+- [x] fix failing tests
+
+- [x] unban?
+
+- [x] project \_id -> id
+  - migrate the data
+
+- [-] require login to send messages?
+
+- [x] better pwd reset process (send link instead)
+  - IP-based rate limiting...
+
+- [-] store additional info in the cookie? (optimize lookups)
+  - groups (for networking things)?
+  - admin?
+
+- [x] test...
+  - [x] recording messages
+  - [x] save as should set project name, etc
+  - [x] message caching
+  - [x] created (but never occupied) projects - they should be automatically
+        deleted after 15 minutes or so
 
