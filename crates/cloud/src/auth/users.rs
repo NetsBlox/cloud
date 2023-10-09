@@ -77,10 +77,8 @@ pub(crate) async fn try_create_user(
     // make sure we can:
     // - edit the target group
     // - make the target user role
-    println!("group is {:?}", &data.group_id);
     if let Some(group_id) = data.group_id.clone() {
         auth::try_edit_group(app, req, &group_id).await?;
-        println!("can edit group?!");
     }
 
     let new_user_role = data.role.unwrap_or(UserRole::User);
@@ -158,7 +156,6 @@ pub(crate) async fn try_edit_user(
     username: &str,
 ) -> Result<EditUser, UserError> {
     if let Some(requestor) = utils::get_username(req) {
-        println!("requestor is {}", &requestor);
         let can_edit = requestor == username
             || get_user_role(app, &requestor).await? >= UserRole::Moderator
             || has_group_containing(app, &requestor, username).await?;
@@ -229,7 +226,6 @@ pub(crate) async fn try_ban_user(
 ) -> Result<BanUser, UserError> {
     let session = req.get_session();
     if is_moderator(app, &session).await? {
-        println!("is moderator!");
         Ok(BanUser {
             username: username.to_owned(),
             _private: (),
