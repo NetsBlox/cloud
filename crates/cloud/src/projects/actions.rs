@@ -147,7 +147,7 @@ impl<'a> ProjectActions<'a> {
         let roles = metadata
             .roles
             .keys()
-            .map(|role_id| self.fetch_role_data(vp.clone(), role_id.to_owned()))
+            .map(|role_id| self.fetch_role_data(vp, role_id.to_owned()))
             .collect::<FuturesUnordered<_>>()
             .try_collect::<HashMap<RoleId, RoleData>>()
             .await?;
@@ -249,8 +249,7 @@ impl<'a> ProjectActions<'a> {
     ) -> Result<api::ProjectMetadata, UserError> {
         let metadata = &ep.metadata;
         let name =
-            utils::get_valid_project_name(&self.project_metadata, &metadata.owner, &new_name)
-                .await?;
+            utils::get_valid_project_name(self.project_metadata, &metadata.owner, new_name).await?;
 
         let query = doc! {"id": &metadata.id};
         let update = doc! {"$set": {"name": &name}};
@@ -922,7 +921,7 @@ mod tests {
 
                 let ep = auth::EditProject::test(metadata.clone());
                 actions
-                    .rename_role(&ep, role_id, "secondRole".into())
+                    .rename_role(&ep, role_id, "secondRole")
                     .await
                     .unwrap();
 

@@ -146,7 +146,7 @@ impl<'a> UserActions<'a> {
             .ok_or(UserError::UserNotFoundError)?;
 
         if let Some(group_id) = user.group_id.as_ref() {
-            utils::group_members_updated(&self.users, self.friend_cache.clone(), group_id).await;
+            utils::group_members_updated(self.users, self.friend_cache.clone(), group_id).await;
         }
 
         Ok(user.into())
@@ -154,7 +154,7 @@ impl<'a> UserActions<'a> {
 
     pub(crate) async fn login(&self, request: api::LoginRequest) -> Result<api::User, UserError> {
         let client_id = request.client_id.clone();
-        let user = strategies::login(&self.users, request.credentials).await?;
+        let user = strategies::login(self.users, request.credentials).await?;
 
         let query = doc! {"$or": [
             {"username": &user.username},
@@ -221,7 +221,7 @@ impl<'a> UserActions<'a> {
             token,
         };
 
-        utils::send_email(&self.mailer, email)?;
+        utils::send_email(self.mailer, email)?;
 
         Ok(())
     }
@@ -451,7 +451,7 @@ impl<'a> UserActions<'a> {
         {
             // No project will be found for non-NetsBlox clients such as PyBlox
             let name =
-                utils::get_valid_project_name(&self.project_metadata, username, &metadata.name)
+                utils::get_valid_project_name(self.project_metadata, username, &metadata.name)
                     .await?;
             let update = doc! {"$set": {"owner": username, "name": name}};
             let options = mongodb::options::FindOneAndUpdateOptions::builder()
@@ -464,7 +464,7 @@ impl<'a> UserActions<'a> {
                 .map_err(InternalError::DatabaseConnectionError)?
                 .ok_or(UserError::ProjectNotFoundError)?;
 
-            utils::on_room_changed(&self.network, &self.project_cache, new_metadata);
+            utils::on_room_changed(self.network, self.project_cache, new_metadata);
         }
         Ok(())
     }
