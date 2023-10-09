@@ -115,7 +115,7 @@ impl<'a> UserActions<'a> {
             Err(UserError::UserExistsError)
         } else {
             if let Some(group_id) = user.group_id.clone() {
-                utils::group_members_updated(&self.users, self.friend_cache.clone(), &group_id)
+                utils::group_members_updated(self.users, self.friend_cache.clone(), &group_id)
                     .await;
             }
             self.metrics.record_signup();

@@ -665,4 +665,46 @@ mod tests {
             })
             .await;
     }
+
+    #[actix_web::test]
+    async fn test_send_invite_no_duplicates() {
+        let user: User = api::NewUser {
+            username: "someUser".into(),
+            email: "someUser@netsblox.org".into(),
+            password: None,
+            group_id: None,
+            role: None,
+        }
+        .into();
+        let other_user: User = api::NewUser {
+            username: "otherUser".into(),
+            email: "otherUser@netsblox.org".into(),
+            password: None,
+            group_id: None,
+            role: None,
+        }
+        .into();
+        test_utils::setup()
+            .with_users(&[user.clone(), other_user.clone()])
+            .run(|app_data| async move {
+                let actions = app_data.as_friend_actions();
+
+                let query = doc! {};
+                let user = app_data.users.find_one(query, None).await.unwrap().unwrap();
+                let eu = auth::EditUser::test(user.username.clone());
+                actions
+                    .send_invite(&eu, &other_user.username)
+                    .await
+                    .unwrap();
+                actions
+                    .send_invite(&eu, &other_user.username)
+                    .await
+                    .unwrap();
+
+                let vu = auth::ViewUser::test(other_user.username);
+                let invites = actions.list_invites(&vu).await.unwrap();
+                assert_eq!(invites.len(), 1);
+            })
+            .await;
+    }
 }

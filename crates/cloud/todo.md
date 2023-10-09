@@ -1,56 +1,29 @@
 # To Do
 
-- [ ] use mockall to mock the appstate?
-  - or should I restore the version using the database?
+- [ ] document URL tips
 
-- [ ] finish updating the browser
-  - [ ] error with sharing msgs
-    - it appears the project is missing
-      - not actually the case...
-      - doesn't seem to join the role when running all the tests...
-  - [ ] what other failures are there?
+- [ ] fix failing tests
+
+- [ ] add CLI tests
+
+- [ ] 
 
 - [ ] deleting user should delete groups
   - what about members? maybe release them into the wild?
-
-- [ ] what to do about oauth?
-  - should we support it in the rust server? Seems reasonable...
-    - if so, how should we interoperate with the services server?
-  - ## should we just support it in the services server?
-  - skip this for now?
-
-  - this should probably be added to the cloud server
-
-- [ ] add email support
-  - [ ] new account creation
-  - [x] password reset
-
-  - [x] lettre crate?
-    - smtp or ses?
-    - mock the method now?
+  - [ ] delete projects, too
 
 - [ ] test...
   - [ ] recording messages
   - [ ] save as should set project name, etc
   - [x] message caching
-  - [ ] created (but never occupied) projects - they should be automatically
+  - [x] created (but never occupied) projects - they should be automatically
         deleted after 15 minutes or so
-
-- [ ] public URL is set when opening role
-
-- [ ] don't clean up projects when server goes down? (The ws close reason seems
-      to be Away when the browser tab closes _and_ when the server is
-      terminated)
-  - set all projects to BROKEN
-  - can we differentiate btwn server initiated Away and client?
 
 - [ ] Block messages between users that don't share a group (+admin)
   - add the group IDs (+ GLOBAL) to the clients in the network topology?
   - admins should be able to send a message to anyone
   - these would be the user's group + any owned groups
   - the sender and receiver must share at least one
-
-- [ ] make sure email works
 
 ## Future stuff
 
@@ -886,3 +859,41 @@
         - moving a block
         - relabeling? This could change the number of inputs which affects the
           tree...
+
+- [-] use mockall to mock the appstate?
+  - or should I restore the version using the database?
+
+- [x] finish updating the browser
+  - [x] error with sharing msgs
+    - it appears the project is missing
+      - not actually the case...
+      - doesn't seem to join the role when running all the tests...
+  - [x] what other failures are there?
+
+- [x] what to do about oauth?
+  - should we support it in the rust server? Seems reasonable...
+    - if so, how should we interoperate with the services server?
+  - ## should we just support it in the services server?
+  - skip this for now?
+
+  - this should probably be added to the cloud server
+
+- [x] add email support
+  - [ ] new account creation
+  - [x] password reset
+
+  - [x] lettre crate?
+    - smtp or ses?
+    - mock the method now?
+
+- [x] make sure email works
+
+- [x] public URL is set when opening role
+
+- [/] don't clean up projects when server goes down? (The ws close reason seems
+      to be Away when the browser tab closes _and_ when the server is
+      terminated)
+  - set all projects to BROKEN
+  - can we differentiate btwn server initiated Away and client?
+  - unsaved projects will lose other role info but that's it
+

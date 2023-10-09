@@ -60,7 +60,7 @@ impl<'a> ProjectActions<'a> {
         &self,
         eu: &auth::EditUser,
         project_data: impl Into<CreateProjectDataDict>,
-    ) -> Result<ProjectMetadata, UserError> {
+    ) -> Result<api::ProjectMetadata, UserError> {
         let project_data: CreateProjectDataDict = project_data.into();
         let name = project_data.name.to_owned();
         let mut roles = project_data.roles;
@@ -106,7 +106,7 @@ impl<'a> ProjectActions<'a> {
             .await
             .map_err(InternalError::DatabaseConnectionError)?;
 
-        Ok(metadata)
+        Ok(metadata.into())
     }
 
     pub(crate) async fn get_project(
@@ -147,7 +147,7 @@ impl<'a> ProjectActions<'a> {
         let roles = metadata
             .roles
             .keys()
-            .map(|role_id| self.fetch_role_data(&vp.clone(), role_id.to_owned()))
+            .map(|role_id| self.fetch_role_data(vp.clone(), role_id.to_owned()))
             .collect::<FuturesUnordered<_>>()
             .try_collect::<HashMap<RoleId, RoleData>>()
             .await?;
@@ -405,7 +405,7 @@ impl<'a> ProjectActions<'a> {
         &self,
         ep: &auth::projects::EditProject,
         role_data: RoleData,
-    ) -> Result<ProjectMetadata, UserError> {
+    ) -> Result<api::ProjectMetadata, UserError> {
         let role_id = api::RoleId::new(Uuid::new_v4().to_string());
         let mut role_md = self
             .upload_role(&ep.metadata.owner, &ep.metadata.id, &role_id, &role_data)
@@ -435,7 +435,7 @@ impl<'a> ProjectActions<'a> {
             .ok_or(UserError::ProjectNotFoundError)?;
 
         utils::on_room_changed(self.network, self.project_cache, updated_metadata.clone());
-        Ok(updated_metadata)
+        Ok(updated_metadata.into())
     }
 
     pub(crate) async fn rename_role(
@@ -470,7 +470,7 @@ impl<'a> ProjectActions<'a> {
         &self,
         ep: &auth::projects::EditProject,
         role_id: RoleId,
-    ) -> Result<ProjectMetadata, UserError> {
+    ) -> Result<api::ProjectMetadata, UserError> {
         if ep.metadata.roles.keys().count() == 1 {
             return Err(UserError::CannotDeleteLastRoleError);
         }
@@ -489,7 +489,7 @@ impl<'a> ProjectActions<'a> {
             .ok_or(UserError::ProjectNotFoundError)?;
 
         utils::on_room_changed(self.network, self.project_cache, updated_metadata.clone());
-        Ok(updated_metadata)
+        Ok(updated_metadata.into())
     }
 
     pub(crate) async fn get_role(
@@ -513,7 +513,7 @@ impl<'a> ProjectActions<'a> {
         ep: &auth::projects::EditProject,
         role_id: &RoleId,
         role: RoleData,
-    ) -> Result<ProjectMetadata, UserError> {
+    ) -> Result<api::ProjectMetadata, UserError> {
         let metadata = &ep.metadata;
         // TODO: clean up s3 on failed upload
         let role_md = self
@@ -555,13 +555,13 @@ impl<'a> ProjectActions<'a> {
 
         utils::on_room_changed(self.network, self.project_cache, updated_metadata.clone());
 
-        Ok(updated_metadata)
+        Ok(updated_metadata.into())
     }
 
     pub(crate) async fn delete_project(
         &self,
         dp: &auth::projects::DeleteProject,
-    ) -> Result<ProjectMetadata, UserError> {
+    ) -> Result<api::ProjectMetadata, UserError> {
         let query = doc! {"id": &dp.metadata.id};
         let metadata = self
             .project_metadata
@@ -587,7 +587,7 @@ impl<'a> ProjectActions<'a> {
         self.network
             .do_send(topology::ProjectDeleted::new(metadata.clone()));
 
-        Ok(metadata)
+        Ok(metadata.into())
     }
 
     pub(crate) async fn list_projects(
@@ -934,6 +934,13 @@ mod tests {
                 let metadata = actions.create_role(&ep, role_data).await.unwrap();
 
                 // check that the code at both roles is unique
+                let query = doc! {"id": metadata.id};
+                let metadata = app_data
+                    .project_metadata
+                    .find_one(query, None)
+                    .await
+                    .unwrap()
+                    .unwrap();
                 let vp = auth::ViewProject::test(metadata.clone());
                 let roles = join_all(
                     metadata
