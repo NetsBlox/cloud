@@ -79,11 +79,11 @@ pub(crate) fn ensure_valid_name(name: &str) -> Result<(), UserError> {
 }
 
 fn is_valid_name(name: &str) -> bool {
-    let max_len = 25;
+    let max_len = 50;
     let min_len = 1;
     let char_count = name.chars().count();
     lazy_static! {
-        static ref NAME_REGEX: Regex = Regex::new(r"^[a-zA-Z0-9][a-zA-Z0-9_ \(\)\-]*$").unwrap();
+        static ref NAME_REGEX: Regex = Regex::new(r"^[\w\d][\w\d_ \(\)-]*$").unwrap();
     }
 
     char_count >= min_len
@@ -340,6 +340,11 @@ mod tests {
     #[actix_web::test]
     async fn test_is_valid_name_dashes() {
         assert!(is_valid_name("Player-i"));
+    }
+
+    #[actix_web::test]
+    async fn test_is_valid_name_long_name() {
+        assert!(is_valid_name("RENAMED-rename-test-1696865702584"));
     }
 
     #[actix_web::test]
