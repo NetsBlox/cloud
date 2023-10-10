@@ -487,6 +487,18 @@ impl<'a> ProjectActions<'a> {
             .map_err(InternalError::DatabaseConnectionError)?
             .ok_or(UserError::ProjectNotFoundError)?;
 
+        let role = ep
+            .metadata
+            .roles
+            .get(&role_id)
+            .ok_or(UserError::RoleNotFoundError)?;
+
+        let RoleMetadata { media, code, .. } = role;
+        join_all([self.delete(media.to_owned()), self.delete(code.to_owned())].into_iter())
+            .await
+            .into_iter()
+            .collect::<Result<_, _>>()?;
+
         utils::on_room_changed(self.network, self.project_cache, updated_metadata.clone());
         Ok(updated_metadata.into())
     }
@@ -1004,6 +1016,95 @@ mod tests {
                 let is_cached = cache.contains(&metadata.id);
 
                 assert!(!is_cached, "Project is still cached");
+            })
+            .await;
+    }
+
+    #[actix_web::test]
+    async fn test_delete_clear_s3() {
+        let role_id = api::RoleId::new("someRole".into());
+        let role_data = api::RoleData {
+            name: "role".into(),
+            code: "<code/>".into(),
+            media: "<media/>".into(),
+        };
+        let project = test_utils::project::builder()
+            .with_owner("sender".to_string())
+            .with_state(api::PublishState::Public)
+            .with_roles([(role_id.clone(), role_data)].into_iter().collect())
+            .build();
+
+        test_utils::setup()
+            .with_projects(&[project.clone()])
+            .run(|app_data| async move {
+                let actions = app_data.as_project_actions();
+
+                let query = doc! {};
+                let metadata = app_data
+                    .project_metadata
+                    .find_one(query, None)
+                    .await
+                    .unwrap()
+                    .unwrap();
+
+                // delete
+                let dp = auth::DeleteProject::test(metadata.clone());
+                actions.delete_project(&dp).await.unwrap();
+
+                // ensure the s3 content is empty
+                let role = metadata.roles.values().next().unwrap();
+                let content = actions.download(&role.media).await;
+                dbg!(&content, &role.media);
+                assert!(content.is_err(), "S3 content is not cleared.");
+            })
+            .await;
+    }
+
+    #[actix_web::test]
+    async fn test_delete_role_clear_s3() {
+        let role_id = api::RoleId::new("someRole".into());
+        let role_data = api::RoleData {
+            name: "role".into(),
+            code: "<code/>".into(),
+            media: "<media/>".into(),
+        };
+        let role2_id = api::RoleId::new("someRole2".into());
+        let role2_data = api::RoleData {
+            name: "role2".into(),
+            code: "<code/>".into(),
+            media: "<media/>".into(),
+        };
+        let project = test_utils::project::builder()
+            .with_owner("sender".to_string())
+            .with_state(api::PublishState::Public)
+            .with_roles(
+                [(role_id.clone(), role_data), (role2_id.clone(), role2_data)]
+                    .into_iter()
+                    .collect(),
+            )
+            .build();
+
+        test_utils::setup()
+            .with_projects(&[project.clone()])
+            .run(|app_data| async move {
+                let actions = app_data.as_project_actions();
+
+                let query = doc! {};
+                let metadata = app_data
+                    .project_metadata
+                    .find_one(query, None)
+                    .await
+                    .unwrap()
+                    .unwrap();
+
+                // delete
+                let dp = auth::EditProject::test(metadata.clone());
+                actions.delete_role(&dp, role_id.clone()).await.unwrap();
+
+                // ensure the s3 content is empty
+                let role = metadata.roles.get(&role_id).unwrap();
+                let content = actions.download(&role.media).await;
+                assert!(content.is_err(), "S3 content is not cleared.");
             })
             .await;
     }
