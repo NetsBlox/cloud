@@ -276,7 +276,7 @@ impl Topology {
     pub async fn send_msg(&self, msg: SendMessage) {
         if let Some(app) = &self.app_data {
             let message = ClientCommand::SendMessage(msg.content.clone());
-            let recipients = join_all(
+            let recipients: Vec<_> = join_all(
                 msg.addresses
                     .iter()
                     .filter_map(|addr_str| ClientAddress::from_str(addr_str).ok())
@@ -284,12 +284,14 @@ impl Topology {
             )
             .await
             .into_iter()
-            .flatten();
+            .flatten()
+            .collect();
 
             // check if the message is allowed
-            let recipients = self
-                .allowed_recipients(app, &msg.sender, recipients.collect())
-                .await;
+            // Since the likelihood of malicious projects being able to send a meaningful
+            // message (ie, that has the correct message type and is listened to by the
+            // target) is quite low, we will allow all messages to be sent for now.
+            //let recipients = self.allowed_recipients(app, &msg.sender, recipients).await;
 
             recipients.iter().for_each(|client| {
                 client.addr.do_send(message.clone()).unwrap();
@@ -366,11 +368,11 @@ impl Topology {
         &self,
         app: &AppData,
         sender: &ClientId,
-        recipients: Vec<&'a Client>,
+        recipients: impl Iterator<Item = &'a Client> + Clone,
     ) -> Vec<&'a Client> {
         let sender = self.usernames.get(sender);
         let recipient_names: HashSet<_> = recipients
-            .iter()
+            .clone()
             .filter_map(|rcp| self.usernames.get(&rcp.id))
             .cloned()
             .collect();
@@ -946,7 +948,7 @@ mod tests {
 
                 let recipients = vec![]; // TODO: create `Client`s in the list of recipients
                 let recipients = topology
-                    .allowed_recipients(&app_data, &outsider_id, recipients)
+                    .allowed_recipients(&app_data, &outsider_id, recipients.iter())
                     .await;
 
                 assert!(
