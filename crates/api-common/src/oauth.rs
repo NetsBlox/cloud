@@ -77,3 +77,10 @@ pub struct Token {
     pub username: String,
     pub created_at: SystemTime,
 }
+
+#[derive(Deserialize, Serialize, Clone, Debug)]
+pub struct CreateTokenParams {
+    pub code: Option<String>,
+    pub redirect_uri: Option<String>,
+    pub grant_type: Option<String>,
+}

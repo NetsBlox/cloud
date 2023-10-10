@@ -100,7 +100,7 @@ pub enum UserError {
     #[display(fmt = "OAuth token not found.")]
     OAuthTokenNotFoundError,
 
-    #[display(fmt = "Error occurred during ")]
+    #[display(fmt = "Error occurred during OAuth authentication")]
     OAuthFlowError(OAuthFlowError),
 }
 

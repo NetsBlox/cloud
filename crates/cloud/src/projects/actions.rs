@@ -728,9 +728,7 @@ async fn get_visible_projects(
 }
 
 pub(crate) struct CreateProjectDataDict {
-    pub owner: Option<String>,
     pub name: String,
-    pub client_id: Option<api::ClientId>,
     pub save_state: Option<SaveState>,
     pub roles: HashMap<RoleId, RoleData>,
     pub state: PublishState,
@@ -745,10 +743,10 @@ impl From<api::CreateProjectData> for CreateProjectDataDict {
             .map(|role| (RoleId::new(Uuid::new_v4().to_string()), role))
             .collect::<HashMap<_, _>>();
 
+        // owner and client ID are not copied over since they are encoded in the
+        // EditUser witness (more secure since we don't have to ensure they match)
         Self {
-            owner: data.owner,
             name: data.name,
-            client_id: data.client_id,
             save_state: data.save_state,
             state: api::PublishState::Private,
             roles,

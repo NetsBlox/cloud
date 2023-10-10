@@ -2,7 +2,10 @@ use std::time::SystemTime;
 
 use futures::TryStreamExt;
 use mongodb::{bson::doc, options::ReturnDocument, Collection};
-use netsblox_cloud_common::{api::oauth, OAuthClient, OAuthToken};
+use netsblox_cloud_common::{
+    api::{self, oauth},
+    OAuthClient, OAuthToken,
+};
 use passwords::PasswordGenerator;
 use uuid::Uuid;
 
@@ -201,5 +204,50 @@ impl<'a> OAuthActions<'a> {
             .collect();
 
         Ok(clients)
+    }
+
+    // There is no witness used here since it is covered by the auth code in the params
+    pub(crate) async fn create_token(
+        &self,
+        params: api::oauth::CreateTokenParams,
+    ) -> Result<OAuthToken, UserError> {
+        let is_valid_grant = params
+            .grant_type
+            .as_ref()
+            .map(|grant_type| grant_type == "authorization_code")
+            .unwrap_or(false);
+
+        if !is_valid_grant {
+            return Err(OAuthFlowError::InvalidGrantTypeError.into());
+        }
+
+        let code_id = params
+            .code
+            .as_ref()
+            .ok_or(OAuthFlowError::NoAuthorizationCodeError)?;
+        let redirect_uri = params
+            .redirect_uri
+            .as_ref()
+            .ok_or(OAuthFlowError::InvalidRedirectUrlError)?;
+
+        let query = doc! {"id": &code_id};
+        let code = self
+            .codes
+            .find_one(query, None)
+            .await
+            .map_err(InternalError::DatabaseConnectionError)?
+            .ok_or(OAuthFlowError::InvalidAuthorizationCodeError)?;
+
+        if redirect_uri != &code.redirect_uri {
+            return Err(OAuthFlowError::InvalidRedirectUrlError.into());
+        }
+
+        let token = OAuthToken::new(code.client_id, code.username);
+        self.tokens
+            .insert_one(&token, None)
+            .await
+            .map_err(InternalError::DatabaseConnectionError)?;
+
+        Ok(token)
     }
 }
