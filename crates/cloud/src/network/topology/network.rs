@@ -364,6 +364,7 @@ impl Topology {
 
     /// Get the allowed recipients of a message. If the recipient is a
     /// member of a group, ensure that the sender can message that group.
+    #[allow(dead_code)] // This is temporarily disabled until msg filtering is fleshed out further
     async fn allowed_recipients<'a>(
         &self,
         app: &AppData,

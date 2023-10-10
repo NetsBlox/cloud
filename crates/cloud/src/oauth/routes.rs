@@ -2,12 +2,12 @@ use actix_web::http::header;
 use actix_web::{delete, get, post, web, HttpRequest, HttpResponse};
 use derive_more::Display;
 use mongodb::bson::doc;
+use netsblox_cloud_common::api;
 use serde::Deserialize;
 
 use crate::app_data::AppData;
 use crate::common::api::oauth;
-use crate::common::OAuthToken;
-use crate::errors::{InternalError, OAuthFlowError, UserError};
+use crate::errors::{InternalError, UserError};
 use crate::oauth::actions::OAuthActions;
 use crate::{auth, utils};
 
@@ -94,59 +94,19 @@ async fn authorize_client(
     Ok(response)
 }
 
-#[derive(Deserialize)]
-struct CreateTokenParams {
-    code: Option<String>,
-    redirect_uri: Option<String>,
-    grant_type: Option<String>,
-}
-
 #[post("/token/")]
 async fn create_token(
     app: web::Data<AppData>,
-    params: web::Json<CreateTokenParams>,
+    params: web::Json<api::oauth::CreateTokenParams>,
 ) -> Result<HttpResponse, UserError> {
-    let is_valid_grant = params
-        .grant_type
-        .as_ref()
-        .map(|grant_type| grant_type == "authorization_code")
-        .unwrap_or(false);
-
-    if !is_valid_grant {
-        return Err(OAuthFlowError::InvalidGrantTypeError.into());
-    }
-
-    let code_id = params
-        .code
-        .as_ref()
-        .ok_or(OAuthFlowError::NoAuthorizationCodeError)?;
-    let redirect_uri = params
-        .redirect_uri
-        .as_ref()
-        .ok_or(OAuthFlowError::InvalidRedirectUrlError)?;
-
-    let query = doc! {"id": &code_id};
-    let code = app
-        .oauth_codes
-        .find_one(query, None)
-        .await
-        .map_err(InternalError::DatabaseConnectionError)?
-        .ok_or(OAuthFlowError::InvalidAuthorizationCodeError)?;
-
-    if redirect_uri != &code.redirect_uri {
-        return Err(OAuthFlowError::InvalidRedirectUrlError.into());
-    }
-
-    let token = OAuthToken::new(code.client_id, code.username);
-    app.oauth_tokens
-        .insert_one(&token, None)
-        .await
-        .map_err(InternalError::DatabaseConnectionError)?;
+    let actions: OAuthActions = app.as_oauth_actions();
+    let token = actions.create_token(params.into_inner()).await?;
 
     let response = HttpResponse::Ok()
         .insert_header(header::CacheControl(vec![header::CacheDirective::NoStore]))
         .insert_header(("Pragma", "no-cache"))
         .json(token.id);
+
     Ok(response)
 }
 
