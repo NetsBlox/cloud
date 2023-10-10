@@ -12,7 +12,11 @@ use lettre::{
     Address, Message, SmtpTransport,
 };
 use lru::LruCache;
-use mongodb::{bson::doc, options::ReturnDocument, Collection};
+use mongodb::{
+    bson::doc,
+    options::{FindOneAndUpdateOptions, ReturnDocument},
+    Collection,
+};
 use netsblox_cloud_common::{api, BannedAccount, ProjectMetadata, SetPasswordToken, User};
 use regex::Regex;
 use rustrict::CensorStr;
@@ -286,9 +290,16 @@ impl<'a> UserActions<'a> {
             .map_err(InternalError::DatabaseConnectionError)?
             .ok_or(UserError::UserNotFoundError)?;
 
+        let query = doc! {"username": &user.username};
         let account = BannedAccount::new(user.username, user.email);
+        let update = doc! {"$setOnInsert": &account};
+        let options = FindOneAndUpdateOptions::builder()
+            .return_document(ReturnDocument::After)
+            .upsert(true)
+            .build();
+
         self.banned_accounts
-            .insert_one(&account, None)
+            .find_one_and_update(query, update, options)
             .await
             .map_err(InternalError::DatabaseConnectionError)?;
 
@@ -542,7 +553,49 @@ impl TryFrom<SetPasswordEmail> for lettre::Message {
 
 #[cfg(test)]
 mod tests {
+    use crate::test_utils;
+
     use super::*;
+
+    #[actix_web::test]
+    async fn test_ban_idempotent() {
+        let user: User = api::NewUser {
+            username: "user".into(),
+            email: "user@netsblox.org".into(),
+            password: None,
+            group_id: None,
+            role: None,
+        }
+        .into();
+        let other: User = api::NewUser {
+            username: "other".into(),
+            email: "other@netsblox.org".into(),
+            password: None,
+            group_id: None,
+            role: None,
+        }
+        .into();
+
+        test_utils::setup()
+            .with_users(&[user.clone(), other])
+            .run(|app_data| async move {
+                let actions = app_data.as_user_actions();
+
+                let auth_bu = auth::BanUser::test(user.username.clone());
+                actions.ban_user(&auth_bu).await.unwrap();
+                actions.ban_user(&auth_bu).await.unwrap();
+
+                actions.unban_user(&auth_bu).await.unwrap();
+                // Check that the user is not banned
+                let query = doc! {"username": &auth_bu.username};
+                let account = actions.banned_accounts.find_one(query, None).await.unwrap();
+                assert!(
+                    account.is_none(),
+                    "Double ban wasn't undone by single unban."
+                );
+            })
+            .await;
+    }
 
     #[actix_web::test]
     async fn test_is_valid_username_caps() {

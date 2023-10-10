@@ -56,6 +56,16 @@ impl EditUser {
 }
 
 #[cfg(test)]
+impl BanUser {
+    pub(crate) fn test(username: String) -> Self {
+        Self {
+            username,
+            _private: (),
+        }
+    }
+}
+
+#[cfg(test)]
 impl ViewUser {
     pub(crate) fn test(username: String) -> Self {
         Self {
