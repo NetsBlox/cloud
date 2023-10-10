@@ -131,10 +131,8 @@ impl TestSetupBuilder {
             let auth_eu = auth::EditUser::test(owner.clone());
             let actions: ProjectActions = app_data.as_project_actions();
             let project_data = CreateProjectDataDict {
-                owner: Some(owner),
                 name,
                 roles,
-                client_id: None,
                 save_state: Some(api::SaveState::Saved),
                 state,
             };
