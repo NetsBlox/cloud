@@ -366,22 +366,25 @@ impl<'a> UserActions<'a> {
         Ok(user.into())
     }
 
-    pub(crate) async fn list_users(&self, _lu: &auth::ListUsers) -> Result<Vec<String>, UserError> {
+    pub(crate) async fn list_users(
+        &self,
+        _lu: &auth::ListUsers,
+    ) -> Result<Vec<api::User>, UserError> {
         let query = doc! {};
         let cursor = self
             .users
             .find(query, None)
             .await
             .map_err(InternalError::DatabaseConnectionError)?;
-        let usernames: Vec<String> = cursor
+        let users: Vec<_> = cursor
             .try_collect::<Vec<_>>()
             .await
             .map_err(InternalError::DatabaseConnectionError)?
             .into_iter()
-            .map(|user| user.username)
+            .map(|user| user.into())
             .collect();
 
-        Ok(usernames)
+        Ok(users)
     }
 
     pub(crate) async fn set_user_settings(
