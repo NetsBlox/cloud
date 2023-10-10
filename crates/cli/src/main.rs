@@ -63,6 +63,10 @@ enum Users {
         /// NetsBlox user to ban
         username: String,
     },
+    Unban {
+        /// NetsBlox user to unban
+        username: String,
+    },
     /// Link an account to a Snap! account (for login)
     Link {
         /// Snap! username to link to NetsBlox account
@@ -818,6 +822,9 @@ async fn do_command(mut cfg: Config, args: Cli) -> Result<(), error::Error> {
             }
             Users::Ban { username } => {
                 client.ban_user(username).await?;
+            }
+            Users::Unban { username } => {
+                client.unban_user(username).await?;
             }
         },
         Command::Projects(cmd) => match &cmd.subcmd {
