@@ -71,15 +71,15 @@ async fn main() {
         match migration {
             Migration::Users => migrate_users(&src_db, &dst_db, args.user).await,
             Migration::Libraries => migrate_libraries(&src_db, &dst_db).await,
-            Migration::Projects => migrate_projects(&config, &src_db, &dst_db).await,
+            Migration::Projects => migrate_projects(&config, &src_db, &dst_db, args.user).await,
             Migration::BannedAccounts => migrate_banned_accts(&src_db, &dst_db).await,
         }
     } else {
         // migrate everything
-        migrate_users(&src_db, &dst_db, args.user).await;
+        migrate_users(&src_db, &dst_db, args.user.clone()).await;
         migrate_libraries(&src_db, &dst_db).await;
         migrate_banned_accts(&src_db, &dst_db).await;
-        migrate_projects(&config, &src_db, &dst_db).await;
+        migrate_projects(&config, &src_db, &dst_db, args.user).await;
     }
 }
 
@@ -420,13 +420,25 @@ async fn migrate_banned_accts(src_db: &Database, dst_db: &Database) {
     progress.finish();
 }
 
-async fn migrate_projects(config: &Config, src_db: &Database, dst_db: &Database) {
+async fn migrate_projects(
+    config: &Config,
+    src_db: &Database,
+    dst_db: &Database,
+    user: Option<String>,
+) {
     let src_projects = src_db.collection::<origin::ProjectMetadata>("projects");
     let dst_projects = dst_db.collection::<cloud::ProjectMetadata>("projects");
     let src_s3 = get_s3_client(&config.source.s3);
     let dst_s3 = get_s3_client(&config.target.s3);
 
-    let query = doc! {"transient": false}; // FIXME: what if transient isn't set
+    let query = if let Some(username) = user {
+        doc! {
+            "owner": &username,
+            "transient": false,
+        } // FIXME: what if transient isn't set
+    } else {
+        doc! {"transient": false} // FIXME: what if transient isn't set
+    };
     let count = src_projects
         .count_documents(query.clone(), None)
         .await
@@ -464,7 +476,7 @@ async fn migrate_projects(config: &Config, src_db: &Database, dst_db: &Database)
 
         if needs_throttle {
             // throttle to about 2k req/sec to avoid 503 errors from AWS
-            thread::sleep(Duration::from_millis(10));
+            thread::sleep(Duration::from_millis(config.sleep.unwrap_or(10)));
         }
     }
     progress.println("Project migration complete.");
