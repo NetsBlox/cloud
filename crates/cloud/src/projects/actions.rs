@@ -181,15 +181,18 @@ impl<'a> ProjectActions<'a> {
 
         // TODO: only fetch the code
         let role = self.fetch_role(role_metadata).await?;
-        let thumbnail = role
-            .code
-            .split("<thumbnail>data:image/png;base64,")
-            .nth(1)
-            .and_then(|text| text.split("</thumbnail>").next())
-            .ok_or(UserError::ThumbnailNotFoundError)
-            .and_then(|thumbnail_str| {
-                base64::decode(thumbnail_str)
-                    .map_err(|err| InternalError::Base64DecodeError(err).into())
+        self.get_thumbnail(&role.code, aspect_ratio)
+    }
+
+    pub(crate) fn get_thumbnail(
+        &self,
+        xml: &str,
+        aspect_ratio: Option<f32>,
+    ) -> Result<Bytes, UserError> {
+        let thumbnail_str = self.get_thumbnail_str(&xml);
+        let thumbnail = base64::decode(thumbnail_str)
+            .map_err(|err| {
+                std::convert::Into::<UserError>::into(InternalError::Base64DecodeError(err))
             })
             .and_then(|image_data| {
                 image::load_from_memory_with_format(&image_data, ImageFormat::Png)
@@ -236,6 +239,13 @@ impl<'a> ProjectActions<'a> {
         };
 
         Ok(image_content)
+    }
+
+    fn get_thumbnail_str<'b>(&self, xml: &'b str) -> &'b str {
+        xml.split("<thumbnail>data:image/png;base64,")
+            .nth(1)
+            .and_then(|text| text.split("</thumbnail>").next())
+            .unwrap_or(xml)
     }
 
     pub(crate) fn get_project_metadata(&self, vp: &auth::ViewProject) -> api::ProjectMetadata {
