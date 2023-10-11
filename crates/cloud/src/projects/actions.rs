@@ -656,12 +656,16 @@ impl<'a> ProjectActions<'a> {
             .return_document(ReturnDocument::After)
             .build();
 
-        self.project_metadata
+        let updated_metadata = self
+            .project_metadata
             .find_one_and_update(query, update, options)
             .await
             .map_err(InternalError::DatabaseConnectionError)?
-            .ok_or(UserError::ProjectNotFoundError)
-            .map(|project| project.into())
+            .ok_or(UserError::ProjectNotFoundError)?;
+
+        utils::on_room_changed(self.network, self.project_cache, updated_metadata.clone());
+
+        Ok(updated_metadata.into())
     }
 
     pub(crate) async fn list_shared_projects(
