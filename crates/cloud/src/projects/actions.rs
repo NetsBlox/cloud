@@ -798,7 +798,7 @@ impl From<api::CreateProjectData> for CreateProjectDataDict {
 mod tests {
     use std::{
         collections::{HashMap, HashSet},
-        time::Duration,
+        time::{Duration, SystemTime},
     };
 
     use futures::future::join_all;
@@ -1197,15 +1197,15 @@ mod tests {
                 private.clone(),
             ])
             .run(|app_data| async move {
-                let t2 = DateTime::now();
+                let t2 = SystemTime::now();
                 let t1 = t2 - Duration::from_secs(60);
                 let t3 = t2 + Duration::from_secs(60);
 
                 app_data
                     .project_metadata
                     .update_one(
-                        doc! {"id": public_old.id},
-                        doc! {"$set": {"updated": t1}},
+                        doc! {"id": &public_old.id},
+                        doc! {"$set": {"updated": DateTime::from_system_time(t1)}},
                         None,
                     )
                     .await
@@ -1213,8 +1213,8 @@ mod tests {
                 app_data
                     .project_metadata
                     .update_one(
-                        doc! {"id": public_new.id},
-                        doc! {"$set": {"updated": t2}},
+                        doc! {"id": &public_new.id},
+                        doc! {"$set": {"updated": DateTime::from_system_time(t2)}},
                         None,
                     )
                     .await
@@ -1222,8 +1222,8 @@ mod tests {
                 app_data
                     .project_metadata
                     .update_one(
-                        doc! {"id": public_newest.id},
-                        doc! {"$set": {"updated": t3}},
+                        doc! {"id": &public_newest.id},
+                        doc! {"$set": {"updated": DateTime::from_system_time(t3)}},
                         None,
                     )
                     .await
@@ -1233,8 +1233,9 @@ mod tests {
                 let projects = actions.list_public_projects().await.unwrap();
 
                 // Check that the correct ones were returned (and in the right order!)
-                assert_eq!(projects.get(0).unwrap().id, public_new.id);
-                assert_eq!(projects.get(1).unwrap().id, public_old.id);
+                assert_eq!(projects.get(0).unwrap().id, public_newest.id);
+                assert_eq!(projects.get(1).unwrap().id, public_new.id);
+                assert_eq!(projects.get(2).unwrap().id, public_old.id);
             })
             .await;
     }
