@@ -181,8 +181,15 @@ impl<'a> ProjectActions<'a> {
 
         // TODO: only fetch the code
         let role = self.fetch_role(role_metadata).await?;
-        let thumbnail = role
-            .code
+        self.get_thumbnail(&role.code, aspect_ratio)
+    }
+
+    pub(crate) fn get_thumbnail(
+        &self,
+        xml: &str,
+        aspect_ratio: Option<f32>,
+    ) -> Result<Bytes, UserError> {
+        let thumbnail = xml
             .split("<thumbnail>data:image/png;base64,")
             .nth(1)
             .and_then(|text| text.split("</thumbnail>").next())

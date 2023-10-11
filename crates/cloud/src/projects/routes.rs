@@ -245,6 +245,24 @@ async fn get_project_thumbnail(
 }
 
 #[derive(Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct GetThumbnailParams {
+    xml: String,
+    aspect_ratio: Option<f32>,
+}
+
+#[get("/thumbnail")]
+async fn get_thumbnail(
+    app: web::Data<AppData>,
+    params: web::Query<GetThumbnailParams>,
+) -> Result<HttpResponse, UserError> {
+    let actions: ProjectActions = app.as_project_actions();
+    let thumbnail = actions.get_thumbnail(&params.xml, params.aspect_ratio)?;
+
+    Ok(HttpResponse::Ok().content_type("image/png").body(thumbnail))
+}
+
+#[derive(Deserialize)]
 struct CreateRoleData {
     name: String,
     code: Option<String>,
