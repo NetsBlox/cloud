@@ -253,6 +253,31 @@ async fn get_project_thumbnail(
     Ok(HttpResponse::Ok().content_type("image/png").body(thumbnail))
 }
 
+#[get("/user/{owner}/{name}/thumbnail")]
+async fn get_user_project_thumbnail(
+    app: web::Data<AppData>,
+    path: web::Path<(String, String)>,
+    params: web::Query<ThumbnailParams>,
+    req: HttpRequest,
+) -> Result<HttpResponse, UserError> {
+    let (owner, name) = path.into_inner();
+    let query = doc! {"owner": owner, "name": name};
+    let metadata = app
+        .project_metadata
+        .find_one(query, None)
+        .await
+        .map_err(InternalError::DatabaseConnectionError)?
+        .ok_or(UserError::ProjectNotFoundError)?;
+
+    let auth_vp = auth::try_view_project(&app, &req, None, &metadata.id).await?;
+    let actions: ProjectActions = app.as_project_actions();
+    let thumbnail = actions
+        .get_project_thumbnail(&auth_vp, params.aspect_ratio)
+        .await?;
+
+    Ok(HttpResponse::Ok().content_type("image/png").body(thumbnail))
+}
+
 #[derive(Deserialize)]
 #[serde(rename_all = "camelCase")]
 struct GetThumbnailParams {
@@ -478,6 +503,7 @@ pub fn config(cfg: &mut web::ServiceConfig) {
         .service(unpublish_project)
         .service(get_latest_project)
         .service(get_project_thumbnail)
+        .service(get_user_project_thumbnail)
         .service(get_thumbnail)
         .service(get_role)
         .service(get_latest_role)
