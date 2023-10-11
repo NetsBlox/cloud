@@ -448,6 +448,7 @@ pub fn config(cfg: &mut web::ServiceConfig) {
         .service(unpublish_project)
         .service(get_latest_project)
         .service(get_project_thumbnail)
+        .service(get_thumbnail)
         .service(get_role)
         .service(get_latest_role)
         .service(report_latest_role)
