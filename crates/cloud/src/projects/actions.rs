@@ -625,6 +625,45 @@ impl<'a> ProjectActions<'a> {
         get_visible_projects(cursor, lp.visibility.clone()).await
     }
 
+    pub(crate) async fn list_pending_projects(
+        &self,
+        _mp: &auth::ModerateProjects,
+    ) -> Result<Vec<api::ProjectMetadata>, UserError> {
+        let query = doc! {"state": PublishState::PendingApproval};
+
+        let projects: Vec<api::ProjectMetadata> = self
+            .project_metadata
+            .find(query, None)
+            .await
+            .map_err(InternalError::DatabaseConnectionError)?
+            .map_ok(|project| project.into())
+            .try_collect::<Vec<_>>()
+            .await
+            .map_err(InternalError::DatabaseConnectionError)?;
+
+        Ok(projects)
+    }
+
+    pub(crate) async fn set_project_state(
+        &self,
+        _mp: &auth::ModerateProjects,
+        id: &api::ProjectId,
+        state: PublishState,
+    ) -> Result<api::ProjectMetadata, UserError> {
+        let query = doc! {"id": id};
+        let update = doc! {"$set": {"state": state}};
+        let options = FindOneAndUpdateOptions::builder()
+            .return_document(ReturnDocument::After)
+            .build();
+
+        self.project_metadata
+            .find_one_and_update(query, update, options)
+            .await
+            .map_err(InternalError::DatabaseConnectionError)?
+            .ok_or(UserError::ProjectNotFoundError)
+            .map(|project| project.into())
+    }
+
     pub(crate) async fn list_shared_projects(
         &self,
         lp: &auth::projects::ListProjects,
