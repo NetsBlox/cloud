@@ -66,6 +66,14 @@ async fn list_shared_projects(
     Ok(HttpResponse::Ok().json(projects))
 }
 
+#[get("/public/")]
+async fn list_public_projects(app: web::Data<AppData>) -> Result<HttpResponse, UserError> {
+    let actions: ProjectActions = app.as_project_actions();
+    let projects = actions.list_public_projects().await?;
+
+    Ok(HttpResponse::Ok().json(projects))
+}
+
 #[get("/user/{owner}/{name}")]
 async fn get_project_named(
     app: web::Data<AppData>,
@@ -461,6 +469,7 @@ pub fn config(cfg: &mut web::ServiceConfig) {
         .service(delete_project)
         .service(list_user_projects)
         .service(list_shared_projects)
+        .service(list_public_projects)
         .service(get_project)
         .service(get_project_named)
         .service(get_project_metadata)
