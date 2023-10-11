@@ -84,7 +84,7 @@ async fn logout(
     if let Some(client_id) = &params.client_id {
         // FIXME: this method should be updated as it currently could be used to half logout other users...
         let actions: UserActions = app.as_user_actions();
-        actions.logout(&client_id);
+        actions.logout(client_id);
     }
 
     HttpResponse::Ok().finish()
