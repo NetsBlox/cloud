@@ -9,6 +9,7 @@ use crate::{auth, utils};
 use actix_web::{delete, get, patch, post, HttpRequest};
 use actix_web::{web, HttpResponse};
 use mongodb::bson::doc;
+use reqwest::Method;
 use serde::Deserialize;
 
 #[post("/")]
@@ -247,7 +248,10 @@ async fn get_project_thumbnail(
 #[derive(Deserialize)]
 #[serde(rename_all = "camelCase")]
 struct GetThumbnailParams {
-    xml: String,
+    /// XML or base64-encoded string for the thumbnail
+    xml: Option<String>,
+    /// URL of XML of which to extract, pad the thumbnail
+    url: Option<String>,
     aspect_ratio: Option<f32>,
 }
 
@@ -257,7 +261,24 @@ async fn get_thumbnail(
     params: web::Query<GetThumbnailParams>,
 ) -> Result<HttpResponse, UserError> {
     let actions: ProjectActions = app.as_project_actions();
-    let thumbnail = actions.get_thumbnail(&params.xml, params.aspect_ratio)?;
+    let xml = if let Some(xml) = params.xml.as_ref() {
+        xml.to_owned()
+    } else if let Some(url) = params.url.as_ref() {
+        let client = reqwest::Client::new();
+        let response = client
+            .request(Method::GET, url)
+            .send()
+            .await
+            .map_err(|_err| UserError::ProjectUnavailableError)?;
+
+        response
+            .text()
+            .await
+            .map_err(|_err| UserError::ProjectUnavailableError)?
+    } else {
+        return Err(UserError::MissingUrlOrXmlError);
+    };
+    let thumbnail = actions.get_thumbnail(&xml, params.aspect_ratio)?;
 
     Ok(HttpResponse::Ok().content_type("image/png").body(thumbnail))
 }

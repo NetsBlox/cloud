@@ -29,6 +29,10 @@ pub enum UserError {
     ProjectNotFoundError,
     #[display(fmt = "Thumbnail not available.")]
     ThumbnailNotFoundError,
+    #[display(fmt = "Unable to retrieve project.")]
+    ProjectUnavailableError,
+    #[display(fmt = "Must specify project either using url or xml")]
+    MissingUrlOrXmlError,
     #[display(fmt = "Password reset link already sent. Only 1 can be sent per hour.")]
     PasswordResetLinkSentError,
     #[display(fmt = "Network trace not found.")]
@@ -195,6 +199,8 @@ impl error::ResponseError for UserError {
             | Self::ServiceHostAlreadyAuthorizedError
             | Self::InviteNotAllowedError
             | Self::OAuthFlowError(..)
+            | Self::ProjectUnavailableError
+            | Self::MissingUrlOrXmlError
             | Self::ProjectNotActiveError => StatusCode::BAD_REQUEST,
             Self::InviteAlreadyExistsError => StatusCode::CONFLICT,
         }
