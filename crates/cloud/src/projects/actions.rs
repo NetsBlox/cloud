@@ -19,7 +19,7 @@ use image::{
 use log::warn;
 use lru::LruCache;
 use mongodb::bson::{doc, DateTime};
-use mongodb::options::{FindOneAndUpdateOptions, ReturnDocument};
+use mongodb::options::{FindOneAndUpdateOptions, FindOptions, ReturnDocument};
 use mongodb::{Collection, Cursor};
 use netsblox_cloud_common::api::{BrowserClientState, RoleData, RoleId, SaveState};
 use netsblox_cloud_common::{
@@ -639,6 +639,24 @@ impl<'a> ProjectActions<'a> {
         get_visible_projects(cursor, lp.visibility.clone()).await
     }
 
+    pub(crate) async fn list_public_projects(
+        &self,
+    ) -> Result<Vec<api::ProjectMetadata>, UserError> {
+        let query = doc! {
+            "state": PublishState::Public,
+            "saveState": SaveState::Saved
+        };
+        let sort = doc! {"updated": -1};
+        let opts = FindOptions::builder().sort(sort).limit(25).build();
+        let cursor = self
+            .project_metadata
+            .find(query, opts)
+            .await
+            .map_err(InternalError::DatabaseConnectionError)?;
+
+        get_visible_projects(cursor, PublishState::Public).await
+    }
+
     // Helper functions
     async fn fetch_role(&self, metadata: &RoleMetadata) -> Result<RoleData, InternalError> {
         let (code, media) = join!(
@@ -778,10 +796,13 @@ impl From<api::CreateProjectData> for CreateProjectDataDict {
 
 #[cfg(test)]
 mod tests {
-    use std::collections::HashSet;
+    use std::{
+        collections::{HashMap, HashSet},
+        time::{Duration, SystemTime},
+    };
 
     use futures::future::join_all;
-    use mongodb::bson::doc;
+    use mongodb::bson::{doc, DateTime};
     use netsblox_cloud_common::api;
 
     use crate::{auth, test_utils};
@@ -1115,6 +1136,106 @@ mod tests {
                 let role = metadata.roles.get(&role_id).unwrap();
                 let content = actions.download(&role.media).await;
                 assert!(content.is_err(), "S3 content is not cleared.");
+            })
+            .await;
+    }
+
+    #[actix_web::test]
+    async fn test_list_public() {
+        let role_id = api::RoleId::new("someRole".into());
+        let role_data = api::RoleData {
+            name: "role".into(),
+            code: "<code/>".into(),
+            media: "<media/>".into(),
+        };
+        let role2_id = api::RoleId::new("someRole2".into());
+        let role2_data = api::RoleData {
+            name: "role2".into(),
+            code: "<code/>".into(),
+            media: "<media/>".into(),
+        };
+        let roles: HashMap<_, _> = [
+            (role_id.clone(), role_data.clone()),
+            (role2_id.clone(), role2_data.clone()),
+        ]
+        .into_iter()
+        .collect();
+        let public_newest = test_utils::project::builder()
+            .with_owner("sender".to_string())
+            .with_state(api::PublishState::Public)
+            .with_roles(roles.clone())
+            .build();
+        let public_old = test_utils::project::builder()
+            .with_owner("sender".to_string())
+            .with_state(api::PublishState::Public)
+            .with_roles(roles.clone())
+            .build();
+        let pending = test_utils::project::builder()
+            .with_owner("sender".to_string())
+            .with_state(api::PublishState::PendingApproval)
+            .with_roles(roles.clone())
+            .build();
+        let private = test_utils::project::builder()
+            .with_owner("someUser".to_string())
+            .with_state(api::PublishState::Private)
+            .with_roles(roles.clone())
+            .build();
+
+        tokio::time::sleep(Duration::from_millis(25)).await;
+        let public_new = test_utils::project::builder()
+            .with_owner("sender".to_string())
+            .with_state(api::PublishState::Public)
+            .with_roles(roles.clone())
+            .build();
+
+        test_utils::setup()
+            .with_projects(&[
+                public_newest.clone(),
+                public_old.clone(),
+                public_new.clone(),
+                pending.clone(),
+                private.clone(),
+            ])
+            .run(|app_data| async move {
+                let t2 = SystemTime::now();
+                let t1 = t2 - Duration::from_secs(60);
+                let t3 = t2 + Duration::from_secs(60);
+
+                app_data
+                    .project_metadata
+                    .update_one(
+                        doc! {"id": &public_old.id},
+                        doc! {"$set": {"updated": DateTime::from_system_time(t1)}},
+                        None,
+                    )
+                    .await
+                    .unwrap();
+                app_data
+                    .project_metadata
+                    .update_one(
+                        doc! {"id": &public_new.id},
+                        doc! {"$set": {"updated": DateTime::from_system_time(t2)}},
+                        None,
+                    )
+                    .await
+                    .unwrap();
+                app_data
+                    .project_metadata
+                    .update_one(
+                        doc! {"id": &public_newest.id},
+                        doc! {"$set": {"updated": DateTime::from_system_time(t3)}},
+                        None,
+                    )
+                    .await
+                    .unwrap();
+
+                let actions = app_data.as_project_actions();
+                let projects = actions.list_public_projects().await.unwrap();
+
+                // Check that the correct ones were returned (and in the right order!)
+                assert_eq!(projects.get(0).unwrap().id, public_newest.id);
+                assert_eq!(projects.get(1).unwrap().id, public_new.id);
+                assert_eq!(projects.get(2).unwrap().id, public_old.id);
             })
             .await;
     }
