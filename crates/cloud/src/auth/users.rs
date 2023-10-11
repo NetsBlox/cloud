@@ -117,10 +117,7 @@ pub(crate) async fn try_view_user(
     client_id: Option<&ClientId>,
     username: &str,
 ) -> Result<ViewUser, UserError> {
-    // can view user if:
-    // - self
-    // - moderator/admin
-    // - group owner
+    // Anyone can view guest accounts
     let is_guest = client_id.map(|id| id.as_str() == username).unwrap_or(false);
     if is_guest {
         return Ok(ViewUser {
@@ -129,12 +126,24 @@ pub(crate) async fn try_view_user(
         });
     }
 
-    let viewer = utils::get_username(req).ok_or(UserError::LoginRequiredError)?;
+    // Check if authorized host
+    let is_authorized_host = utils::get_authorized_host(&app.authorized_services, req)
+        .await?
+        .is_some();
+    if is_authorized_host {
+        return Ok(ViewUser {
+            username: username.to_owned(),
+            _private: (),
+        });
+    }
 
+    // Authorize the user
+    // can view user if:
+    // - self
+    // - moderator/admin
+    // - group owner
+    let viewer = utils::get_username(req).ok_or(UserError::LoginRequiredError)?;
     let authorized = viewer == username
-        || utils::get_authorized_host(&app.authorized_services, req)
-            .await?
-            .is_some()
         || get_user_role(app, &viewer).await? >= UserRole::Moderator
         || has_group_containing(app, &viewer, username).await?;
 
