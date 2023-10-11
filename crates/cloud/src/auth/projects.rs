@@ -1,3 +1,4 @@
+use actix_session::SessionExt;
 use actix_web::HttpRequest;
 use mongodb::bson::doc;
 use netsblox_cloud_common::{api, ProjectMetadata};
@@ -5,6 +6,8 @@ use netsblox_cloud_common::{api, ProjectMetadata};
 use crate::app_data::AppData;
 use crate::errors::UserError;
 use crate::utils;
+
+use super::is_moderator;
 
 /// Permissions to view a specific project
 pub(crate) struct ViewProject {
@@ -26,6 +29,11 @@ pub(crate) struct EditProject {
 
 pub(crate) struct DeleteProject {
     pub(crate) metadata: ProjectMetadata,
+    _private: (),
+}
+
+/// Permissions to approve projects that trigger manual approval
+pub(crate) struct ModerateProjects {
     _private: (),
 }
 
@@ -186,6 +194,18 @@ pub(crate) async fn can_edit_project(
         metadata: project.to_owned(),
         _private: (),
     })
+}
+
+pub(crate) async fn try_moderate_projects(
+    app: &AppData,
+    req: &HttpRequest,
+) -> Result<ModerateProjects, UserError> {
+    let session = req.get_session();
+    if is_moderator(app, &session).await? {
+        Ok(ModerateProjects { _private: () })
+    } else {
+        Err(UserError::PermissionsError)
+    }
 }
 
 fn flatten<T>(nested: Option<Option<T>>) -> Option<T> {

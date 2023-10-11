@@ -175,6 +175,37 @@ async fn unpublish_project(
     Ok(HttpResponse::Ok().json(state))
 }
 
+#[get("/mod/pending/")]
+async fn list_pending_projects(
+    app: web::Data<AppData>,
+    req: HttpRequest,
+) -> Result<HttpResponse, UserError> {
+    let auth_mp = auth::try_moderate_projects(&app, &req).await?;
+
+    let actions = app.as_project_actions();
+    let projects = actions.list_pending_projects(&auth_mp).await?;
+
+    Ok(HttpResponse::Ok().json(projects))
+}
+
+#[post("/mod/id/{projectId}")]
+async fn set_project_state(
+    app: web::Data<AppData>,
+    path: web::Path<(ProjectId,)>,
+    state: web::Json<api::PublishState>,
+    req: HttpRequest,
+) -> Result<HttpResponse, UserError> {
+    let (id,) = path.into_inner();
+    let auth_mp = auth::try_moderate_projects(&app, &req).await?;
+
+    let actions = app.as_project_actions();
+    let project = actions
+        .set_project_state(&auth_mp, &id, state.into_inner())
+        .await?;
+
+    Ok(HttpResponse::Ok().json(project))
+}
+
 #[delete("/id/{projectID}")]
 async fn delete_project(
     app: web::Data<AppData>,
@@ -501,6 +532,8 @@ pub fn config(cfg: &mut web::ServiceConfig) {
         .service(get_project_id_metadata)
         .service(publish_project)
         .service(unpublish_project)
+        .service(list_pending_projects)
+        .service(set_project_state)
         .service(get_latest_project)
         .service(get_project_thumbnail)
         .service(get_user_project_thumbnail)
@@ -894,6 +927,106 @@ mod tests {
     #[ignore]
     async fn test_unpublish_project_admin() {
         todo!();
+    }
+
+    #[actix_web::test]
+    async fn test_list_pending() {
+        let user: User = api::NewUser {
+            username: "user".to_string(),
+            email: "user@netsblox.org".into(),
+            password: None,
+            group_id: None,
+            role: Some(UserRole::Moderator),
+        }
+        .into();
+        let u2: User = api::NewUser {
+            username: "u2".to_string(),
+            email: "u2@netsblox.org".into(),
+            password: None,
+            group_id: None,
+            role: None,
+        }
+        .into();
+        let project = test_utils::project::builder()
+            .with_name("pending".into())
+            .with_owner(user.username.clone())
+            .with_state(api::PublishState::PendingApproval)
+            .build();
+        let project2 = test_utils::project::builder()
+            .with_name("pending2".into())
+            .with_owner(u2.username.clone())
+            .with_state(api::PublishState::PendingApproval)
+            .build();
+        let project3 = test_utils::project::builder()
+            .with_name("name".into())
+            .with_owner(u2.username.clone())
+            .with_state(api::PublishState::Private)
+            .build();
+        let project4 = test_utils::project::builder()
+            .with_name("name".into())
+            .with_owner(u2.username.clone())
+            .with_state(api::PublishState::Public)
+            .build();
+
+        test_utils::setup()
+            .with_projects(&[project, project2, project3, project4])
+            .with_users(&[user.clone(), u2.clone()])
+            .run(|app_data| async move {
+                let app = test::init_service(
+                    App::new()
+                        .wrap(test_utils::cookie::middleware())
+                        .app_data(web::Data::new(app_data.clone()))
+                        .configure(config),
+                )
+                .await;
+
+                let req = test::TestRequest::get()
+                    .cookie(test_utils::cookie::new(&user.username))
+                    .uri("/mod/pending/")
+                    .to_request();
+
+                let projects: Vec<api::ProjectMetadata> =
+                    test::call_and_read_body_json(&app, req).await;
+                assert_eq!(projects.len(), 2);
+                projects.into_iter().for_each(|project| {
+                    assert!(matches!(project.state, api::PublishState::PendingApproval));
+                    assert!(project.name.starts_with("pending"));
+                })
+            })
+            .await;
+    }
+
+    #[actix_web::test]
+    async fn test_list_pending_403() {
+        let user: User = api::NewUser {
+            username: "user".to_string(),
+            email: "user@netsblox.org".into(),
+            password: None,
+            group_id: None,
+            role: None,
+        }
+        .into();
+
+        test_utils::setup()
+            .with_users(&[user.clone()])
+            .run(|app_data| async move {
+                let app = test::init_service(
+                    App::new()
+                        .wrap(test_utils::cookie::middleware())
+                        .app_data(web::Data::new(app_data.clone()))
+                        .configure(config),
+                )
+                .await;
+
+                let req = test::TestRequest::get()
+                    .cookie(test_utils::cookie::new(&user.username))
+                    .uri("/mod/pending/")
+                    .to_request();
+
+                let response = test::call_service(&app, req).await;
+                assert_eq!(response.status(), http::StatusCode::FORBIDDEN);
+            })
+            .await;
     }
 
     #[actix_web::test]
