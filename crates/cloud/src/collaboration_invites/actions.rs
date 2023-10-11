@@ -137,7 +137,7 @@ impl<'a> CollaborationInviteActions<'a> {
                 .map_err(InternalError::DatabaseConnectionError)?
                 .ok_or(UserError::ProjectNotFoundError)?;
 
-            utils::on_room_changed(&self.network, &self.project_cache, updated_metadata);
+            utils::on_room_changed(self.network, self.project_cache, updated_metadata);
         }
         // Update the project
         let invitation: api::CollaborationInvite = invitation.into();
