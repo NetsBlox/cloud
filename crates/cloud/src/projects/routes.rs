@@ -924,7 +924,7 @@ mod tests {
         let role_id = api::RoleId::new("someRole".into());
         let role_data = api::RoleData {
             name: "some damn role".into(),
-            code: "<code/>".into(),
+            code: "<code>reportJSFunction</code>".into(),
             media: "<media/>".into(),
         };
         let project = test_utils::project::builder()
@@ -933,8 +933,8 @@ mod tests {
             .build();
 
         test_utils::setup()
-            .with_projects(&[project.clone()])
             .with_users(&[user.clone()])
+            .with_projects(&[project.clone()])
             .run(|app_data| async move {
                 let app = test::init_service(
                     App::new()
