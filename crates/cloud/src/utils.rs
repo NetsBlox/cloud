@@ -4,7 +4,7 @@ use actix_web::HttpRequest;
 use futures::TryStreamExt;
 use lazy_static::lazy_static;
 use lettre::{Message, SmtpTransport, Transport};
-use log::error;
+use log::{error, warn};
 use lru::LruCache;
 use mongodb::{bson::doc, Collection};
 use netsblox_cloud_common::{
@@ -298,17 +298,21 @@ pub(crate) async fn get_authorized_host(
     Ok(host)
 }
 
-pub(crate) fn send_email(
-    mailer: &SmtpTransport,
+pub(crate) fn send_email<T: lettre::Transport>(
+    mailer: &T,
     email: impl TryInto<Message>,
-) -> Result<(), UserError> {
+) -> Result<(), UserError>
+where
+    <T as Transport>::Error: std::fmt::Debug,
+{
     let message = email
         .try_into()
         .map_err(|_err| InternalError::EmailBuildError)?;
 
-    mailer
-        .send(&message)
-        .map_err(InternalError::SendEmailError)?;
+    mailer.send(&message).map_err(|err| {
+        warn!("Unable to send email: {:?}", err);
+        InternalError::SendEmailError
+    })?;
 
     Ok(())
 }

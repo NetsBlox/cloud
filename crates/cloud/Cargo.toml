@@ -43,3 +43,6 @@ prometheus = "0.13.3"
 aws-sdk-s3 = "0.31.2"
 aws-credential-types = "0.56.1"
 aws-config = "0.56.1"
+
+[dev-dependencies]
+lettre = {version = "0.10.0-rc.4", features = ["file-transport", "builder"]}
