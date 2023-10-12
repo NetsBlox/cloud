@@ -192,18 +192,18 @@ impl<'a> UserActions<'a> {
         });
     }
 
-    pub(crate) async fn reset_password(&self, eu: &auth::EditUser) -> Result<(), UserError> {
+    pub(crate) async fn reset_password(&self, username: &str) -> Result<(), UserError> {
         let user = self
             .users
-            .find_one(doc! {"username": &eu.username}, None)
+            .find_one(doc! {"username": username}, None)
             .await
             .map_err(InternalError::DatabaseConnectionError)?
             .ok_or(UserError::UserNotFoundError)?;
 
-        let token = SetPasswordToken::new(eu.username.clone());
-
+        // Create the set password token
+        let token = SetPasswordToken::new(username.to_owned());
         let update = doc! {"$setOnInsert": &token};
-        let query = doc! {"username": &eu.username};
+        let query = doc! {"username": username};
         let options = mongodb::options::UpdateOptions::builder()
             .upsert(true)
             .build();
@@ -218,6 +218,7 @@ impl<'a> UserActions<'a> {
             return Err(UserError::PasswordResetLinkSentError);
         }
 
+        // Send the reset password email
         let email = SetPasswordEmail {
             sender: self.sender.clone(),
             public_url: self.public_url.clone(),
