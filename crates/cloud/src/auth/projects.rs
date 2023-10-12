@@ -27,6 +27,17 @@ pub(crate) struct EditProject {
     _private: (),
 }
 
+pub(crate) struct PublishProject {
+    pub(crate) id: api::ProjectId,
+    pub(crate) scope: PublishScope,
+    _private: (),
+}
+
+pub(crate) enum PublishScope {
+    AnyProject,
+    Project(ProjectMetadata),
+}
+
 pub(crate) struct DeleteProject {
     pub(crate) metadata: ProjectMetadata,
     _private: (),
@@ -132,6 +143,29 @@ pub(crate) async fn try_edit_project(
     let metadata = app.get_project_metadatum(project_id).await?;
 
     can_edit_project(app, req, client_id.as_ref(), &metadata).await
+}
+
+pub(crate) async fn try_publish_project(
+    app: &AppData,
+    req: &HttpRequest,
+    project_id: &api::ProjectId,
+) -> Result<PublishProject, UserError> {
+    let session = req.get_session();
+    if is_moderator(app, &session).await? {
+        Ok(PublishProject {
+            id: project_id.to_owned(),
+            scope: PublishScope::AnyProject,
+            _private: (),
+        })
+    } else {
+        try_edit_project(app, req, None, project_id)
+            .await
+            .map(|ep| PublishProject {
+                id: project_id.to_owned(),
+                scope: PublishScope::Project(ep.metadata),
+                _private: (),
+            })
+    }
 }
 
 pub(crate) async fn try_delete_project(

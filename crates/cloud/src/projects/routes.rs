@@ -912,6 +912,50 @@ mod tests {
     }
 
     #[actix_web::test]
+    async fn test_publish_project_auto_approve_mod() {
+        let user: User = api::NewUser {
+            username: "user".to_string(),
+            email: "user@netsblox.org".into(),
+            password: None,
+            group_id: None,
+            role: Some(UserRole::Moderator),
+        }
+        .into();
+        let role_id = api::RoleId::new("someRole".into());
+        let role_data = api::RoleData {
+            name: "some damn role".into(),
+            code: "<code/>".into(),
+            media: "<media/>".into(),
+        };
+        let project = test_utils::project::builder()
+            .with_owner(user.username.to_string())
+            .with_roles([(role_id.clone(), role_data)].into_iter().collect())
+            .build();
+
+        test_utils::setup()
+            .with_projects(&[project.clone()])
+            .with_users(&[user.clone()])
+            .run(|app_data| async move {
+                let app = test::init_service(
+                    App::new()
+                        .wrap(test_utils::cookie::middleware())
+                        .app_data(web::Data::new(app_data.clone()))
+                        .configure(config),
+                )
+                .await;
+
+                let req = test::TestRequest::post()
+                    .cookie(test_utils::cookie::new(&user.username))
+                    .uri(&format!("/id/{}/publish", &project.id))
+                    .to_request();
+
+                let state: api::PublishState = test::call_and_read_body_json(&app, req).await;
+                assert!(matches!(state, api::PublishState::Public));
+            })
+            .await;
+    }
+
+    #[actix_web::test]
     #[ignore]
     async fn test_unpublish_project() {
         todo!();
