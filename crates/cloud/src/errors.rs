@@ -11,7 +11,7 @@ pub enum InternalError {
     S3ContentError,
     TorNodeListFetchError(reqwest::Error),
     ActixMessageError(actix::MailboxError),
-    SendEmailError(lettre::transport::smtp::Error),
+    SendEmailError,
     EmailBuildError,
     Base64DecodeError(base64::DecodeError),
     ThumbnailDecodeError(image::ImageError),
