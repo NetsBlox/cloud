@@ -747,7 +747,9 @@ impl<'a> ProjectActions<'a> {
     async fn is_approval_required(&self, metadata: &ProjectMetadata) -> Result<bool, UserError> {
         for role_md in metadata.roles.values() {
             let role = self.fetch_role(role_md).await?;
-            if utils::is_approval_required(&role.code) {
+            let is_required =
+                utils::is_approval_required(&role.name) && utils::is_approval_required(&role.code);
+            if is_required {
                 return Ok(true);
             }
         }
