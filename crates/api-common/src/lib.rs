@@ -9,7 +9,7 @@ use serde::{
     Deserialize, Deserializer, Serialize,
 };
 use serde_json::Value;
-use std::{cmp::Ordering, collections::HashMap, str::FromStr, time::SystemTime};
+use std::{collections::HashMap, str::FromStr, time::SystemTime};
 use uuid::Uuid;
 
 const APP_NAME: &str = "NetsBlox";
@@ -49,21 +49,13 @@ pub struct NewUser {
     pub role: Option<UserRole>,
 }
 
-#[derive(Serialize, Deserialize, Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Serialize, Deserialize, Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord)]
 #[serde(rename_all = "camelCase")]
 pub enum UserRole {
-    User = 0,
-    Teacher = 1,
-    Moderator = 2,
-    Admin = 3,
-}
-
-impl PartialOrd for UserRole {
-    fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
-        let my_val = *self as u32;
-        let other_val = *other as u32;
-        my_val.partial_cmp(&other_val)
-    }
+    User,
+    Teacher,
+    Moderator,
+    Admin,
 }
 
 #[derive(Deserialize, Serialize, Clone, Debug)]
@@ -395,33 +387,12 @@ pub struct CreateLibraryData {
     pub blocks: String,
 }
 
-#[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq)]
+#[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
 pub enum PublishState {
     Private,
     ApprovalDenied,
     PendingApproval,
     Public,
-}
-
-impl PartialOrd for PublishState {
-    fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
-        if self.eq(other) {
-            Some(Ordering::Equal)
-        } else if matches!(self, PublishState::Private) {
-            Some(Ordering::Less)
-        } else if matches!(other, PublishState::Private) {
-            Some(Ordering::Greater)
-        } else if matches!(self, PublishState::ApprovalDenied) {
-            Some(Ordering::Less)
-        } else if matches!(other, PublishState::ApprovalDenied) {
-            Some(Ordering::Greater)
-        } else if matches!(self, PublishState::PendingApproval) {
-            Some(Ordering::Less)
-        } else {
-            // other must be PendingApproval and we are Public
-            Some(Ordering::Greater)
-        }
-    }
 }
 
 #[derive(Serialize, Deserialize)]
