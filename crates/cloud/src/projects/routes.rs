@@ -119,6 +119,30 @@ async fn get_project_metadata(
     Ok(HttpResponse::Ok().json(metadata))
 }
 
+#[get("/user/{owner}/{name}/xml")]
+async fn get_project_named_xml(
+    app: web::Data<AppData>,
+    path: web::Path<(String, String)>,
+    req: HttpRequest,
+) -> Result<HttpResponse, UserError> {
+    let (owner, name) = path.into_inner();
+    let query = doc! {"owner": owner, "name": name};
+    let metadata = app
+        .project_metadata
+        .find_one(query, None)
+        .await
+        .map_err(InternalError::DatabaseConnectionError)?
+        .ok_or(UserError::ProjectNotFoundError)?;
+
+    let auth_vp = auth::try_view_project(&app, &req, None, &metadata.id).await?;
+    let actions: ProjectActions = app.as_project_actions();
+
+    let project = actions.get_project(&auth_vp).await?;
+    Ok(HttpResponse::Ok()
+        .content_type("application/xml")
+        .body(project.to_xml()))
+}
+
 #[get("/id/{id}/metadata")]
 async fn get_project_id_metadata(
     app: web::Data<AppData>,
@@ -147,6 +171,23 @@ async fn get_project(
     let project = actions.get_project(&auth_vp).await?;
 
     Ok(HttpResponse::Ok().json(project))
+}
+
+#[get("/id/{projectID}/xml")]
+async fn get_project_xml(
+    app: web::Data<AppData>,
+    path: web::Path<(ProjectId,)>,
+    req: HttpRequest,
+) -> Result<HttpResponse, UserError> {
+    let (project_id,) = path.into_inner();
+    let auth_vp = auth::try_view_project(&app, &req, None, &project_id).await?;
+
+    let actions: ProjectActions = app.as_project_actions();
+    let project = actions.get_project(&auth_vp).await?;
+
+    Ok(HttpResponse::Ok()
+        .content_type("application/xml")
+        .body(project.to_xml()))
 }
 
 #[post("/id/{projectID}/publish")]
@@ -527,7 +568,9 @@ pub fn config(cfg: &mut web::ServiceConfig) {
         .service(list_shared_projects)
         .service(list_public_projects)
         .service(get_project)
+        .service(get_project_xml)
         .service(get_project_named)
+        .service(get_project_named_xml)
         .service(get_project_metadata)
         .service(get_project_id_metadata)
         .service(publish_project)
@@ -709,9 +752,84 @@ mod tests {
     }
 
     #[actix_web::test]
-    #[ignore]
+    async fn test_get_project_xml() {
+        let user: User = api::NewUser {
+            username: "user".into(),
+            email: "admin@netsblox.org".into(),
+            password: None,
+            group_id: None,
+            role: Some(UserRole::User),
+        }
+        .into();
+        let project = test_utils::project::builder()
+            .with_owner(user.username.clone())
+            .with_name("project name".into())
+            .build();
+
+        test_utils::setup()
+            .with_users(&[user.clone()])
+            .with_projects(&[project.clone()])
+            .run(|app_data| async move {
+                let app = test::init_service(
+                    App::new()
+                        .wrap(test_utils::cookie::middleware())
+                        .app_data(web::Data::new(app_data.clone()))
+                        .configure(config),
+                )
+                .await;
+
+                let cookie = test_utils::cookie::new(&user.username);
+                let req = test::TestRequest::get()
+                    .uri(&format!("/id/{}/xml", &project.id))
+                    .cookie(cookie)
+                    .to_request();
+
+                let xml = test::call_and_read_body(&app, req).await;
+                let chars: Vec<_> = xml.into_iter().take_while(|c| *c != b' ').collect();
+                let start = String::from_utf8(chars).unwrap();
+                assert_eq!(&start, "<room");
+            })
+            .await;
+    }
+
+    #[actix_web::test]
     async fn test_get_project_named() {
-        todo!();
+        let user: User = api::NewUser {
+            username: "user".into(),
+            email: "admin@netsblox.org".into(),
+            password: None,
+            group_id: None,
+            role: Some(UserRole::User),
+        }
+        .into();
+        let project = test_utils::project::builder()
+            .with_owner(user.username.clone())
+            .with_name("superDuperProject".into())
+            .build();
+
+        test_utils::setup()
+            .with_users(&[user.clone()])
+            .with_projects(&[project.clone()])
+            .run(|app_data| async move {
+                let app = test::init_service(
+                    App::new()
+                        .wrap(test_utils::cookie::middleware())
+                        .app_data(web::Data::new(app_data.clone()))
+                        .configure(config),
+                )
+                .await;
+
+                let cookie = test_utils::cookie::new(&user.username);
+                let req = test::TestRequest::get()
+                    .uri(&format!("/user/{}/{}/xml", &project.owner, &project.name))
+                    .cookie(cookie)
+                    .to_request();
+
+                let data: api::Project = test::call_and_read_body_json(&app, req).await;
+                assert_eq!(data.id, project.id);
+                assert_eq!(data.name, project.name);
+            })
+            .await;
     }
 
     #[actix_web::test]
@@ -724,6 +842,47 @@ mod tests {
     #[ignore]
     async fn test_get_project_named_admin() {
         todo!();
+    }
+
+    #[actix_web::test]
+    async fn test_get_project_named_xml() {
+        let user: User = api::NewUser {
+            username: "user".into(),
+            email: "admin@netsblox.org".into(),
+            password: None,
+            group_id: None,
+            role: Some(UserRole::User),
+        }
+        .into();
+        let project = test_utils::project::builder()
+            .with_owner(user.username.clone())
+            .with_name("superDuperProject".into())
+            .build();
+
+        test_utils::setup()
+            .with_users(&[user.clone()])
+            .with_projects(&[project.clone()])
+            .run(|app_data| async move {
+                let app = test::init_service(
+                    App::new()
+                        .wrap(test_utils::cookie::middleware())
+                        .app_data(web::Data::new(app_data.clone()))
+                        .configure(config),
+                )
+                .await;
+
+                let cookie = test_utils::cookie::new(&user.username);
+                let req = test::TestRequest::get()
+                    .uri(&format!("/user/{}/{}/xml", &project.owner, &project.name))
+                    .cookie(cookie)
+                    .to_request();
+
+                let xml = test::call_and_read_body(&app, req).await;
+                let chars: Vec<_> = xml.into_iter().take_while(|c| *c != b' ').collect();
+                let start = String::from_utf8(chars).unwrap();
+                assert_eq!(&start, "<room");
+            })
+            .await;
     }
 
     #[actix_web::test]
