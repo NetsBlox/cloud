@@ -821,7 +821,7 @@ mod tests {
 
                 let cookie = test_utils::cookie::new(&user.username);
                 let req = test::TestRequest::get()
-                    .uri(&format!("/user/{}/{}/xml", &project.owner, &project.name))
+                    .uri(&format!("/user/{}/{}", &project.owner, &project.name))
                     .cookie(cookie)
                     .to_request();
 
