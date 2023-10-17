@@ -114,6 +114,7 @@ async fn main() -> std::io::Result<()> {
                 }
             })
             .app_data(web::PayloadConfig::new(size_32_mb))
+            .app_data(web::JsonConfig::default().limit(size_32_mb))
             .app_data(web::Data::new(app_data.clone()))
             .service(web::scope("/libraries").configure(libraries::routes::config))
             .service(web::scope("/users").configure(users::routes::config))
