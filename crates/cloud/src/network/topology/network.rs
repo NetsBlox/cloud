@@ -45,9 +45,12 @@ impl From<BrowserClientState> for BrowserAddress {
 
 impl From<RoomState> for ClientCommand {
     fn from(msg: RoomState) -> ClientCommand {
-        let mut value = serde_json::to_value(msg).unwrap();
-        let msg = value.as_object_mut().unwrap();
-        msg.insert("type".into(), serde_json::to_value("room-roles").unwrap());
+        let mut value = serde_json::to_value(msg).unwrap(); // safe to unwrap since RoomState is serializable
+        let msg = value.as_object_mut().unwrap(); // safe to unwrap since RoomState is serialized as a JSON object
+        msg.insert(
+            "type".into(),
+            serde_json::to_value("room-roles").unwrap(), // save to unwrap since it is just a string
+        );
         ClientCommand::SendMessage(value)
     }
 }
@@ -113,16 +116,22 @@ impl ProjectNetwork {
             })
             .collect();
 
+        let version = SystemTime::now()
+            .duration_since(SystemTime::UNIX_EPOCH)
+            .map(|dur| dur.as_secs())
+            .map(|err| {
+                log::error!("Unable to compute unix timestamp: {}", &err);
+                err
+            })
+            .unwrap_or_default();
+
         RoomState {
             id: self.id.to_owned(),
             owner: project.owner,
             name: project.name,
             roles,
             collaborators: project.collaborators,
-            version: SystemTime::now()
-                .duration_since(SystemTime::UNIX_EPOCH)
-                .expect("Could not get system time")
-                .as_secs(),
+            version,
         }
     }
 }
@@ -138,6 +147,7 @@ pub struct Topology {
     external: HashMap<AppId, HashMap<String, ClientId>>,
 
     address_cache: Arc<RwLock<LruCache<ClientAddress, Vec<BrowserAddress>>>>,
+    cache_size: NonZeroUsize,
 }
 
 #[derive(Debug)]
@@ -158,6 +168,7 @@ impl Topology {
             external: HashMap::new(),
 
             address_cache: Arc::new(RwLock::new(LruCache::new(cache_size))),
+            cache_size,
         }
     }
 
@@ -200,17 +211,25 @@ impl Topology {
     fn resolve_address_from_cache(&self, addr: &ClientAddress) -> Option<Vec<BrowserAddress>> {
         self.address_cache
             .write()
-            .unwrap()
-            .get(addr)
-            .map(|addresses| addresses.to_vec())
+            .map_err(|err| {
+                log::error!("Unable to acquire mutex for address cache to resolve address");
+                err
+            })
+            .ok()
+            .and_then(|mut cache| cache.get(addr).map(|addresses| addresses.to_vec()))
     }
 
     fn cache_address(&self, addr: &ClientAddress, b_addrs: &[BrowserAddress]) {
-        self.address_cache
+        if let Err(err) = self
+            .address_cache
             .write()
-            .unwrap()
-            .put(addr.clone(), b_addrs.to_vec());
-        // TODO: clear cache on room close?
+            .map(|mut cache| cache.put(addr.clone(), b_addrs.to_vec()))
+        {
+            log::error!(
+                "Unable to acquire mutex for address cache to add address: {}",
+                err
+            );
+        }
     }
 
     async fn resolve_address(&self, addr: &ClientAddress) -> Vec<BrowserAddress> {
@@ -233,7 +252,7 @@ impl Topology {
         };
 
         let mut chunks = addr.address.split('@').rev();
-        let project = chunks.next().unwrap();
+        let project = chunks.next().unwrap(); // safe to unwrap: we know there is at least one chunk
         let role = chunks.next();
 
         let query = doc! {"name": project, "owner": &addr.user_id};
@@ -294,7 +313,9 @@ impl Topology {
             //let recipients = self.allowed_recipients(app, &msg.sender, recipients).await;
 
             recipients.iter().for_each(|client| {
-                client.addr.do_send(message.clone()).unwrap();
+                if let Err(err) = client.addr.do_send(message.clone()) {
+                    log::error!("Unable to send message to client: {}", err);
+                }
             });
 
             // maybe record the message
@@ -417,7 +438,9 @@ impl Topology {
 
     pub fn disconnect_client(&self, id: &ClientId) {
         if let Some(client) = self.clients.get(id) {
-            client.addr.do_send(ClientCommand::Close).unwrap();
+            if let Err(err) = client.addr.do_send(ClientCommand::Close) {
+                log::error!("Unable to send close command to client: {}", err);
+            }
         }
     }
 
@@ -442,13 +465,11 @@ impl Topology {
 
         match &msg.state {
             ClientState::Browser(state) => {
-                if !self.rooms.contains_key(&state.project_id) {
-                    self.rooms.insert(
-                        state.project_id.to_owned(),
-                        ProjectNetwork::new(state.project_id.to_owned()),
-                    );
-                }
-                let room = self.rooms.get_mut(&state.project_id).unwrap();
+                let room = self
+                    .rooms
+                    .entry(state.project_id.clone())
+                    .or_insert(ProjectNetwork::new(state.project_id.to_owned()));
+
                 if let Some(occupants) = room.roles.get_mut(&state.role_id) {
                     occupants.push(msg.id.clone());
                 } else {
@@ -547,8 +568,9 @@ impl Topology {
                             update_needed = false;
                         } else {
                             // remove the role
-                            let room = self.rooms.get_mut(&state.project_id).unwrap();
-                            room.roles.remove(&state.role_id);
+                            self.rooms
+                                .get_mut(&state.project_id)
+                                .and_then(|room| room.roles.remove(&state.role_id));
                         }
                     }
                 }
@@ -608,10 +630,17 @@ impl Topology {
                 }
                 ProjectCleanup::Delayed => {
                     let ten_minutes = Duration::new(10 * 60, 0);
-                    let delete_at = DateTime::from_system_time(
-                        SystemTime::now().checked_add(ten_minutes).unwrap(),
-                    );
-                    let update = doc! {"$set": {"deleteAt": delete_at}};
+                    let delete_at = if let Some(delete_at) =
+                        SystemTime::now().checked_add(ten_minutes)
+                    {
+                        delete_at
+                    } else {
+                        log::warn!("Unable to compute the time 10 minutes from now. Deleting project immediately.");
+                        SystemTime::now()
+                    };
+                    let update = doc! {"$set": {
+                        "deleteAt": DateTime::from_system_time(delete_at)}
+                    };
                     app.project_metadata
                         .update_one(query, update, None)
                         .await
@@ -639,7 +668,9 @@ impl Topology {
         }
     }
 
-    pub fn send_room_state(&self, msg: SendRoomState) {
+    pub fn send_room_state(&mut self, msg: SendRoomState) {
+        // The room changed so the address cache may contain stale data
+        // (ie, the room or role may have been renamed - or the occupancy changed)
         self.invalidate_cached_addresses(&msg.project);
 
         if let Some(room) = self.rooms.get(&msg.project.id) {
@@ -651,26 +682,44 @@ impl Topology {
 
             let room_state = room.get_state(msg.project, &self.usernames);
             clients.for_each(|client| {
-                let _ = client.addr.do_send(room_state.clone().into()); // TODO: handle error?
+                if let Err(err) = client.addr.do_send(room_state.clone().into()) {
+                    log::error!("Unable to send room state to client: {}", err);
+                }
             });
         }
     }
 
-    fn invalidate_cached_addresses(&self, project: &ProjectMetadata) {
-        let mut address_cache = self.address_cache.write().unwrap();
-        let invalid_addrs: Vec<_> = address_cache
-            .iter()
-            .filter_map(|(client_addr, browser_addrs)| {
-                browser_addrs
-                    .iter()
-                    .find(|addr| addr.project_id == project.id)
-                    .map(|_| client_addr.clone())
-            })
-            .collect();
+    fn reset_address_cache(&mut self) {
+        self.address_cache = Arc::new(RwLock::new(LruCache::new(self.cache_size)));
+    }
 
-        invalid_addrs.into_iter().for_each(|addr| {
-            address_cache.pop(&addr);
+    /// Invalidate the cached addresses for the given project as it (or the
+    // occupancy) has changed.
+    fn invalidate_cached_addresses(&mut self, project: &ProjectMetadata) {
+        // reset the whole cache if mutex is poisoned
+        if self.address_cache.is_poisoned() {
+            self.reset_address_cache();
+        }
+
+        let invalidate_result = self.address_cache.write().map(|mut address_cache| {
+            let invalid_addrs: Vec<_> = address_cache
+                .iter()
+                .filter_map(|(client_addr, browser_addrs)| {
+                    browser_addrs
+                        .iter()
+                        .find(|addr| addr.project_id == project.id)
+                        .map(|_| client_addr.clone())
+                })
+                .collect();
+
+            invalid_addrs.into_iter().for_each(|addr| {
+                address_cache.pop(&addr);
+            });
         });
+
+        if let Err(err) = invalidate_result {
+            log::error!("Unable to invalidate address cache: {}", err);
+        }
     }
 
     pub fn get_role_request(&self, state: BrowserClientState) -> Option<RoleRequest> {
@@ -814,7 +863,9 @@ impl Topology {
 
         let message = ClientCommand::SendMessage(msg.content);
         recipients.iter().for_each(|client| {
-            client.addr.do_send(message.clone()).unwrap();
+            if let Err(err) = client.addr.do_send(message.clone()) {
+                log::error!("Unable to send message to client: {}", err);
+            }
         });
     }
 
@@ -826,7 +877,9 @@ impl Topology {
 
         let message = ClientCommand::SendMessage(msg.content);
         recipients.for_each(|client| {
-            client.addr.do_send(message.clone()).unwrap();
+            if let Err(err) = client.addr.do_send(message.clone()) {
+                log::error!("Unable to send IDE message to client: {}", err);
+            }
         });
     }
 
@@ -845,7 +898,9 @@ impl Topology {
 
         let message = ClientCommand::SendMessage(msg);
         recipients.for_each(|client| {
-            client.addr.do_send(message.clone()).unwrap();
+            if let Err(err) = client.addr.do_send(message.clone()) {
+                log::error!("Unable to send message to user: {}", err);
+            }
         });
     }
 
@@ -864,7 +919,12 @@ impl Topology {
 
         let message = ClientCommand::SendMessage(msg);
         recipients.into_iter().for_each(|client| {
-            client.addr.do_send(message.clone()).unwrap();
+            if let Err(err) = client.addr.do_send(message.clone()) {
+                log::error!(
+                    "Unable to send message to client (sending to room): {}",
+                    err
+                );
+            }
         });
     }
 }

@@ -36,7 +36,7 @@ use crate::common::{OccupantInvite, SentMessage};
 use crate::config::Settings;
 use crate::errors::{InternalError, UserError};
 use crate::network::topology::{SetStorage, TopologyActor};
-use actix::{Actor, Addr};
+use actix::Addr;
 use aws_config::SdkConfig;
 use aws_credential_types::{provider::SharedCredentialsProvider, Credentials as S3Credentials};
 use aws_sdk_s3::{self as s3, config::Region};
