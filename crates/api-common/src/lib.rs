@@ -669,12 +669,15 @@ mod tests {
         assert!(UserRole::Moderator > UserRole::User);
         assert!(UserRole::Admin > UserRole::User);
 
+        assert!(UserRole::Moderator > UserRole::Teacher);
+        assert!(UserRole::Admin > UserRole::Teacher);
+
+        assert!(UserRole::Admin > UserRole::Moderator);
+
         assert!(UserRole::User == UserRole::User);
         assert!(UserRole::Teacher == UserRole::Teacher);
         assert!(UserRole::Moderator == UserRole::Moderator);
         assert!(UserRole::Admin == UserRole::Admin);
-
-        assert!(UserRole::Admin > UserRole::Moderator);
     }
 
     #[test]
