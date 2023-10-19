@@ -374,7 +374,7 @@ impl WsSession {
             }
             "ping" => ctx.text("{\"type\": \"pong\"}"),
             _ => {
-                println!("unrecognized message type: {}", msg_type);
+                log::warn!("unrecognized message type: {}", msg_type);
             }
         }
     }
@@ -392,8 +392,6 @@ impl Actor for WsSession {
     }
 
     fn stopping(&mut self, _: &mut Self::Context) -> actix::Running {
-        // TODO: wait a little bit?
-        println!("stopping! {:?}", self.client_id);
         self.topology_addr.do_send(topology::RemoveClient {
             id: self.client_id.clone(),
         });
@@ -423,7 +421,6 @@ impl StreamHandler<Result<ws::Message, ws::ProtocolError>> for WsSession {
                 }
             }
             Ok(ws::Message::Close(reason_opt)) => {
-                println!("Closing! Reason: {:?}", &reason_opt);
                 let is_broken = reason_opt
                     .map(|reason| !matches!(reason.code, CloseCode::Normal | CloseCode::Away))
                     .unwrap_or(true);
@@ -674,7 +671,6 @@ mod tests {
                 });
 
                 let messages = messages.collect::<Vec<_>>();
-                println!("sending {} messages", messages.len());
                 for msg in messages {
                     app_data.network.send(msg).await.unwrap();
                     tokio::time::sleep(Duration::from_millis(5)).await;
@@ -702,14 +698,6 @@ mod tests {
                         .into_iter()
                         .map(|msg| msg.time)
                         .collect::<Vec<_>>();
-
-                    dbg!(&times);
-                    println!(
-                        "count is {} ({}) as of {:?}",
-                        &count,
-                        times.len(),
-                        DateTime::now()
-                    );
 
                     count = app_data
                         .recorded_messages
