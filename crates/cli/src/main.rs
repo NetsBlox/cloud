@@ -653,7 +653,6 @@ struct Cli {
 }
 
 fn prompt_credentials() -> (String, String, bool) {
-    // FIXME: can't delete w/ backspace???
     let use_snap = inquire::Confirm::new("Would you like to login using Snap?")
         .with_default(false)
         .prompt()
@@ -666,6 +665,7 @@ fn prompt_credentials() -> (String, String, bool) {
     let password = Password::new("Password:")
         .with_display_toggle_enabled()
         .with_display_mode(PasswordDisplayMode::Masked)
+        .without_confirmation()
         .prompt()
         .expect("Unable to prompt password");
 
