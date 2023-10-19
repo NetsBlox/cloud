@@ -181,9 +181,7 @@ pub(crate) async fn can_edit_project(
         .unwrap_or(false);
 
     if !is_owner {
-        println!("not the owner");
         let username = utils::get_username(req).ok_or(UserError::LoginRequiredError)?;
-        println!("username: {}", &username);
         if !project.collaborators.contains(&username) {
             // if we are not a collaborator, then we must be able to edit the owner
             super::try_edit_user(app, req, client_id, &project.owner).await?;

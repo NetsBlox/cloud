@@ -270,7 +270,6 @@ fn get_cached_friends(
 
 pub(crate) fn get_username(req: &HttpRequest) -> Option<String> {
     let session = req.get_session();
-    println!("{:?}", session.get::<String>("username"));
     session.get::<String>("username").unwrap_or(None)
 }
 
