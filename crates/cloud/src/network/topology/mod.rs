@@ -208,7 +208,7 @@ impl Handler<SendRoomState> for TopologyActor {
     fn handle(&mut self, msg: SendRoomState, ctx: &mut Context<Self>) -> Self::Result {
         let network = self.network.clone();
         let fut = async move {
-            let topology = network.read().await;
+            let mut topology = network.write().await;
             topology.send_room_state(msg);
         };
         let fut = actix::fut::wrap_future(fut);
