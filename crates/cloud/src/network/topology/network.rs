@@ -630,14 +630,7 @@ impl Topology {
                 }
                 ProjectCleanup::Delayed => {
                     let ten_minutes = Duration::new(10 * 60, 0);
-                    let delete_at = if let Some(delete_at) =
-                        SystemTime::now().checked_add(ten_minutes)
-                    {
-                        delete_at
-                    } else {
-                        log::warn!("Unable to compute the time 10 minutes from now. Deleting project immediately.");
-                        SystemTime::now()
-                    };
+                    let delete_at = SystemTime::now() + ten_minutes;
                     let update = doc! {"$set": {
                         "deleteAt": DateTime::from_system_time(delete_at)}
                     };
