@@ -119,7 +119,7 @@ impl ProjectNetwork {
         let version = SystemTime::now()
             .duration_since(SystemTime::UNIX_EPOCH)
             .map(|dur| dur.as_secs())
-            .map(|err| {
+            .map_err(|err| {
                 log::error!("Unable to compute unix timestamp: {}", &err);
                 err
             })
