@@ -776,7 +776,7 @@ async fn do_command(mut cfg: Config, args: Cli) -> Result<(), error::Error> {
             }
             Users::List => {
                 for user in client.list_users().await? {
-                    println!("{}", user.username);
+                    println!("{}", serde_json::to_string(&user).unwrap());
                 }
             }
             Users::Delete {
