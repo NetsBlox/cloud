@@ -5,6 +5,7 @@ mod network;
 use crate::app_data::AppData;
 use crate::common::api::{ClientId, ExternalClient, ProjectId, RoleData, RoomState};
 use crate::common::{api, OccupantInvite, ProjectMetadata};
+use actix::dev::OneshotSender;
 use actix::prelude::*;
 use actix::{Actor, AsyncContext, Context, Handler};
 use log::warn;
@@ -13,6 +14,7 @@ use serde::Serialize;
 use serde_json::Value;
 use std::num::NonZeroUsize;
 use std::sync::Arc;
+use std::thread;
 use tokio::sync::RwLock;
 use uuid::Uuid;
 
@@ -23,17 +25,30 @@ use crate::common::api::{BrowserClientState, ClientState};
 
 pub struct TopologyActor {
     network: Arc<RwLock<Topology>>,
+    tx: Option<OneshotSender<TopologyPanic>>,
 }
 
+pub struct TopologyPanic;
 impl TopologyActor {
-    pub(crate) fn new(cache_size: NonZeroUsize) -> Self {
+    pub(crate) fn new(cache_size: NonZeroUsize, tx: Option<OneshotSender<TopologyPanic>>) -> Self {
         let network = Arc::new(RwLock::new(Topology::new(cache_size)));
-        Self { network }
+        Self { network, tx }
     }
 }
 
 impl Actor for TopologyActor {
     type Context = Context<Self>;
+}
+
+impl Drop for TopologyActor {
+    fn drop(&mut self) {
+        if thread::panicking() {
+            if let Some(tx) = self.tx.take() {
+                log::warn!("Panic in topology detected. Notifying main thread.");
+                let _ = tx.send(TopologyPanic);
+            }
+        }
+    }
 }
 
 #[derive(Message, Clone)]
