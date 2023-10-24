@@ -108,7 +108,7 @@ impl TestSetupBuilder {
         settings.database.name = db_name.clone();
         settings.s3.bucket = format!("{}-{}", &self.prefix, settings.s3.bucket);
 
-        let app_data = AppData::new(client.clone(), settings, None, None);
+        let app_data = AppData::new(client.clone(), settings, None, None, None);
 
         // create the test fixtures (users, projects, etc)
         client.database(&db_name).drop(None).await.unwrap();

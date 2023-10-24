@@ -34,6 +34,7 @@ use futures::TryStreamExt;
 use log::error;
 use mongodb::bson::doc;
 use mongodb::Client;
+use tokio::sync::oneshot;
 use uuid::Uuid;
 
 #[get("/configuration")]
@@ -73,7 +74,8 @@ async fn main() -> std::io::Result<()> {
         .await
         .expect("Could not connect to mongodb.");
 
-    let app_data = AppData::new(client, Settings::new().unwrap(), None, None);
+    let (tx, rx) = oneshot::channel();
+    let app_data = AppData::new(client, Settings::new().unwrap(), None, None, Some(tx));
     app_data
         .initialize()
         .await
@@ -84,7 +86,7 @@ async fn main() -> std::io::Result<()> {
         .unwrap();
 
     let address = config.address.clone();
-    HttpServer::new(move || {
+    let server = HttpServer::new(move || {
         let cors = Cors::default()
             .allow_any_origin()
             .allow_any_header()
@@ -131,8 +133,17 @@ async fn main() -> std::io::Result<()> {
             .service(get_client_config)
     })
     .bind(&address)?
-    .run()
-    .await
+    .run();
+
+    // If the network topology is dropped, the server should be stopped as it is unusable
+    let handle = server.handle();
+    tokio::spawn(async move {
+        let _ = rx.await;
+        println!("stopping server!");
+        handle.stop(false).await;
+    });
+
+    server.await
 }
 
 fn session_middleware(config: &Settings) -> SessionMiddleware<CookieSessionStore> {
