@@ -139,7 +139,6 @@ async fn main() -> std::io::Result<()> {
     let handle = server.handle();
     tokio::spawn(async move {
         let _ = rx.await;
-        println!("stopping server!");
         handle.stop(false).await;
     });
 

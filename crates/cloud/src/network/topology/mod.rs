@@ -44,7 +44,7 @@ impl Drop for TopologyActor {
     fn drop(&mut self) {
         if thread::panicking() {
             if let Some(tx) = self.tx.take() {
-                println!("notifying main thread of panic");
+                log::warn!("Panic in topology detected. Notifying main thread.");
                 let _ = tx.send(TopologyPanic);
             }
         }
