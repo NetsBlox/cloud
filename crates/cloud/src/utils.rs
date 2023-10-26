@@ -367,6 +367,25 @@ mod tests {
     }
 
     #[actix_web::test]
+    async fn test_update_project_cache_tie_goes_to_update() {
+        let original = ProjectMetadata::new("owner", "name", HashMap::new(), api::SaveState::Saved);
+        let id = original.id.clone();
+        let mut new_project = original.clone();
+        new_project.name = "new name".into();
+
+        let project_cache = Arc::new(RwLock::new(LruCache::new(NonZeroUsize::new(1).unwrap())));
+
+        // Suppose concurrent requests try to update the cache with the same update time
+        update_project_cache(&project_cache, original);
+        update_project_cache(&project_cache, new_project);
+
+        // check that it still has the latest
+        let mut cache = project_cache.write().unwrap();
+        let metadata = cache.get(&id).unwrap();
+        assert_eq!(&metadata.name, "new name");
+    }
+
+    #[actix_web::test]
     async fn test_x_is_valid_name() {
         assert!(is_valid_name("X"));
     }
