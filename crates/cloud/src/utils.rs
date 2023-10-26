@@ -332,7 +332,11 @@ pub(crate) fn send_email(
 
 #[cfg(test)]
 mod tests {
-    use std::{collections::HashMap, num::NonZeroUsize};
+    use std::{
+        collections::HashMap,
+        num::NonZeroUsize,
+        time::{Duration, SystemTime},
+    };
 
     use lru::LruCache;
     use mongodb::bson::DateTime;
@@ -352,9 +356,10 @@ mod tests {
         let id = original.id.clone();
         let mut new_project = original.clone();
         new_project.name = "new name".into();
-        new_project.updated = DateTime::now();
+        new_project.updated =
+            DateTime::from_system_time(SystemTime::now() + Duration::from_secs(10));
 
-        let project_cache = Arc::new(RwLock::new(LruCache::new(NonZeroUsize::new(1).unwrap())));
+        let project_cache = Arc::new(RwLock::new(LruCache::new(NonZeroUsize::new(2).unwrap())));
 
         // Suppose concurrent requests try to update the cache in the wrong order
         update_project_cache(&project_cache, new_project);
@@ -373,7 +378,7 @@ mod tests {
         let mut new_project = original.clone();
         new_project.name = "new name".into();
 
-        let project_cache = Arc::new(RwLock::new(LruCache::new(NonZeroUsize::new(1).unwrap())));
+        let project_cache = Arc::new(RwLock::new(LruCache::new(NonZeroUsize::new(2).unwrap())));
 
         // Suppose concurrent requests try to update the cache with the same update time
         update_project_cache(&project_cache, original);
