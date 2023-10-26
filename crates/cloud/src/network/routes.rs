@@ -443,7 +443,6 @@ mod tests {
     use std::{collections::HashMap, time::Duration};
 
     use actix_web::{http, test, App};
-    use mongodb::bson::DateTime;
     use netsblox_cloud_common::api::BrowserClientState;
     use netsblox_cloud_common::{NetworkTraceMetadata, User};
 
@@ -616,7 +615,7 @@ mod tests {
 
         let trace = NetworkTraceMetadata::new();
         let project = test_utils::project::builder()
-            .with_name("project".into())
+            .with_name("project")
             .with_owner("owner".to_string())
             .with_traces(&[trace.clone()])
             .with_roles(roles)
@@ -756,7 +755,7 @@ mod tests {
 
         let trace = NetworkTraceMetadata::new();
         let project = test_utils::project::builder()
-            .with_name("project".into())
+            .with_name("project")
             .with_owner("owner".to_string())
             .with_traces(&[trace.clone()])
             .with_roles(roles)
@@ -900,7 +899,7 @@ mod tests {
 
         let trace = NetworkTraceMetadata::new();
         let project = test_utils::project::builder()
-            .with_name("project".into())
+            .with_name("project")
             .with_owner("owner".to_string())
             .with_roles(roles)
             .build();

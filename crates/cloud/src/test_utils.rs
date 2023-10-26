@@ -272,8 +272,8 @@ pub(crate) mod project {
     }
 
     impl ProjectBuilder {
-        pub(crate) fn with_name(mut self, name: String) -> Self {
-            self.name = Some(name);
+        pub(crate) fn with_name(mut self, name: &str) -> Self {
+            self.name = Some(name.to_owned());
             self
         }
 

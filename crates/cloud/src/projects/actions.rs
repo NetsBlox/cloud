@@ -262,7 +262,12 @@ impl<'a> ProjectActions<'a> {
             utils::get_valid_project_name(self.project_metadata, &metadata.owner, new_name).await?;
 
         let query = doc! {"id": &metadata.id};
-        let update = doc! {"$set": {"name": &name}};
+        let update = doc! {
+            "$set": {
+                "name": &name,
+                "updated": DateTime::now()
+            }
+        };
         let options = FindOneAndUpdateOptions::builder()
             .return_document(ReturnDocument::After)
             .build();
@@ -288,7 +293,12 @@ impl<'a> ProjectActions<'a> {
         collaborator: &str,
     ) -> Result<api::ProjectMetadata, UserError> {
         let query = doc! {"id": &ep.metadata.id};
-        let update = doc! {"$pull": {"collaborators": &collaborator}};
+        let update = doc! {
+            "$pull": {"collaborators": &collaborator},
+            "$set": {
+                "updated": DateTime::now()
+            }
+        };
         let options = FindOneAndUpdateOptions::builder()
             .return_document(ReturnDocument::After)
             .build();
@@ -339,7 +349,12 @@ impl<'a> ProjectActions<'a> {
             .return_document(ReturnDocument::After)
             .build();
         let query = doc! {"id": &ep.metadata.id};
-        let update = doc! {"$set": {"state": &state}};
+        let update = doc! {
+            "$set": {
+                "state": &state,
+                "updated": DateTime::now()
+            }
+        };
         let updated_metadata = self
             .project_metadata
             .find_one_and_update(query, update, options)
@@ -358,7 +373,12 @@ impl<'a> ProjectActions<'a> {
     ) -> Result<api::PublishState, UserError> {
         let query = doc! {"id": &edit.metadata.id};
         let state = PublishState::Private;
-        let update = doc! {"$set": {"state": &state}};
+        let update = doc! {
+            "$set": {
+                "state": &state,
+                "updated": DateTime::now()
+            }
+        };
         let metadata = self
             .project_metadata
             .find_one_and_update(query, update, None)
@@ -435,7 +455,12 @@ impl<'a> ProjectActions<'a> {
         role_md.name = role_name;
 
         let query = doc! {"id": &ep.metadata.id};
-        let update = doc! {"$set": {&format!("roles.{}", role_id): role_md}};
+        let update = doc! {
+            "$set": {
+                &format!("roles.{}", role_id): role_md,
+                "updated": DateTime::now()
+            }
+        };
         let updated_metadata = self
             .project_metadata
             .find_one_and_update(query, update, options)
@@ -456,7 +481,12 @@ impl<'a> ProjectActions<'a> {
         utils::ensure_valid_name(name)?;
         if ep.metadata.roles.contains_key(&role_id) {
             let query = doc! {"id": &ep.metadata.id};
-            let update = doc! {"$set": {format!("roles.{}.name", role_id): name}};
+            let update = doc! {
+                "$set": {
+                    format!("roles.{}.name", role_id): name,
+                    "updated": DateTime::now()
+                }
+            };
             let options = FindOneAndUpdateOptions::builder()
                 .return_document(ReturnDocument::After)
                 .build();
@@ -485,7 +515,14 @@ impl<'a> ProjectActions<'a> {
         }
 
         let query = doc! {"id": &ep.metadata.id};
-        let update = doc! {"$unset": {format!("roles.{}", role_id): &""}};
+        let update = doc! {
+            "$unset": {
+                format!("roles.{}", role_id): &""
+            },
+            "$set": {
+                "updated": DateTime::now()
+            }
+        };
         let options = FindOneAndUpdateOptions::builder()
             .return_document(ReturnDocument::After)
             .build();
@@ -561,6 +598,7 @@ impl<'a> ProjectActions<'a> {
                 &format!("roles.{}", role_id): role_md,
                 "saveState": SaveState::Saved,
                 "state": state,
+                "updated": DateTime::now(),
             }
         };
         let options = FindOneAndUpdateOptions::builder()
@@ -651,7 +689,12 @@ impl<'a> ProjectActions<'a> {
         state: PublishState,
     ) -> Result<api::ProjectMetadata, UserError> {
         let query = doc! {"id": id};
-        let update = doc! {"$set": {"state": state}};
+        let update = doc! {
+            "$set": {
+                "state": state,
+                "updated": DateTime::now(),
+            }
+        };
         let options = FindOneAndUpdateOptions::builder()
             .return_document(ReturnDocument::After)
             .build();
@@ -1279,6 +1322,88 @@ mod tests {
                 assert_eq!(projects.get(0).unwrap().id, public_newest.id);
                 assert_eq!(projects.get(1).unwrap().id, public_new.id);
                 assert_eq!(projects.get(2).unwrap().id, public_old.id);
+            })
+            .await;
+    }
+
+    #[actix_web::test]
+    async fn test_rename_project_update_cache() {
+        let role_id = api::RoleId::new("someRole".into());
+        let role_data = api::RoleData {
+            name: "role".into(),
+            code: "<code/>".into(),
+            media: "<media/>".into(),
+        };
+        let project = test_utils::project::builder()
+            .with_name("project")
+            .with_owner("sender".to_string())
+            .with_state(api::PublishState::Public)
+            .with_roles([(role_id.clone(), role_data)].into_iter().collect())
+            .build();
+
+        test_utils::setup()
+            .with_projects(&[project.clone()])
+            .run(|app_data| async move {
+                let actions = app_data.as_project_actions();
+
+                let query = doc! {};
+                let metadata = app_data
+                    .project_metadata
+                    .find_one(query, None)
+                    .await
+                    .expect("database lookup")
+                    .unwrap();
+
+                // Cache the original
+                let mut cache = actions.project_cache.write().unwrap();
+                cache.put(metadata.id.clone(), metadata.clone());
+                drop(cache);
+
+                let auth_ep = auth::EditProject::test(metadata);
+                let new_name = "new project name";
+                actions.rename_project(&auth_ep, new_name).await.unwrap();
+
+                // Check the cache
+                let mut cache = actions.project_cache.write().unwrap();
+                let metadata = cache.get(&auth_ep.metadata.id).unwrap();
+                assert_eq!(&metadata.name, new_name);
+            })
+            .await;
+    }
+
+    #[actix_web::test]
+    async fn test_rename_project_update() {
+        let role_id = api::RoleId::new("someRole".into());
+        let role_data = api::RoleData {
+            name: "role".into(),
+            code: "<code/>".into(),
+            media: "<media/>".into(),
+        };
+        let project = test_utils::project::builder()
+            .with_name("project")
+            .with_owner("sender".to_string())
+            .with_state(api::PublishState::Public)
+            .with_roles([(role_id.clone(), role_data)].into_iter().collect())
+            .build();
+
+        test_utils::setup()
+            .with_projects(&[project.clone()])
+            .run(|app_data| async move {
+                let actions = app_data.as_project_actions();
+
+                let query = doc! {};
+                let metadata = app_data
+                    .project_metadata
+                    .find_one(query, None)
+                    .await
+                    .expect("database lookup")
+                    .unwrap();
+
+                let auth_ep = auth::EditProject::test(metadata.clone());
+                let new_name = "new project name";
+                let renamed = actions.rename_project(&auth_ep, new_name).await.unwrap();
+
+                assert_ne!(metadata.updated, renamed.updated.into());
             })
             .await;
     }

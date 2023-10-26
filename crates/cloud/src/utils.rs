@@ -42,7 +42,14 @@ pub(crate) fn update_project_cache(
     metadata: ProjectMetadata,
 ) {
     let mut cache = cache.write().unwrap();
-    cache.put(metadata.id.clone(), metadata);
+    let is_newer = cache
+        .get(&metadata.id)
+        .map(|existing| existing.updated < metadata.updated)
+        .unwrap_or(true);
+
+    if is_newer {
+        cache.put(metadata.id.clone(), metadata);
+    }
 }
 
 /// Get a unique project name for the given user and preferred name.
@@ -319,7 +326,39 @@ pub(crate) fn send_email(
 
 #[cfg(test)]
 mod tests {
+    use std::{collections::HashMap, num::NonZeroUsize};
+
+    use lru::LruCache;
+    use mongodb::bson::DateTime;
+
     use super::*;
+
+    #[actix_web::test]
+    async fn test_update_project_cache_ignore_stale() {
+        // This issue was discovered around old projects hanging around in the project cache
+        // due to what appears to be a high-level race condition
+        // - set publish state (get published one, metadata1)
+        // - rename (get renamed and published one, metadata2)
+        //   - add update time and use this when updating the cache?
+        // - update cache with metadata2
+        // - update cache with metadata1
+        let original = ProjectMetadata::new("owner", "name", HashMap::new(), api::SaveState::Saved);
+        let id = original.id.clone();
+        let mut new_project = original.clone();
+        new_project.name = "new name".into();
+        new_project.updated = DateTime::now();
+
+        let project_cache = Arc::new(RwLock::new(LruCache::new(NonZeroUsize::new(1).unwrap())));
+
+        // Suppose concurrent requests try to update the cache in the wrong order
+        update_project_cache(&project_cache, new_project);
+        update_project_cache(&project_cache, original);
+
+        // check that it still has the latest
+        let mut cache = project_cache.write().unwrap();
+        let metadata = cache.get(&id).unwrap();
+        assert_eq!(&metadata.name, "new name");
+    }
 
     #[actix_web::test]
     async fn test_x_is_valid_name() {
