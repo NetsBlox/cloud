@@ -66,7 +66,14 @@ impl<'a> NetworkActions<'a> {
     ) -> Result<api::NetworkTraceMetadata, UserError> {
         let query = doc! {"id": &vp.metadata.id};
         let new_trace = NetworkTraceMetadata::new();
-        let update = doc! {"$push": {"networkTraces": &new_trace}};
+        let update = doc! {
+            "$push": {
+                "networkTraces": &new_trace
+            },
+            "$set": {
+                "updated": DateTime::now(),
+            }
+        };
         let options = FindOneAndUpdateOptions::builder()
             .return_document(ReturnDocument::After)
             .build();
@@ -78,7 +85,7 @@ impl<'a> NetworkActions<'a> {
             .map_err(InternalError::DatabaseConnectionError)?
             .ok_or(UserError::ProjectNotFoundError)?;
 
-        utils::update_project_cache(&self.project_cache, metadata);
+        utils::update_project_cache(self.project_cache, metadata);
 
         Ok(new_trace.into())
     }
@@ -102,7 +109,8 @@ impl<'a> NetworkActions<'a> {
         let end_time = DateTime::now();
         let update = doc! {
             "$set": {
-                "networkTraces.$.endTime": end_time
+                "networkTraces.$.endTime": end_time,
+                "updated": DateTime::now(),
             }
         };
         let options = FindOneAndUpdateOptions::builder()
@@ -123,7 +131,7 @@ impl<'a> NetworkActions<'a> {
             .unwrap() // guaranteed to exist since it was checked in the query
             .clone();
 
-        utils::update_project_cache(&self.project_cache, metadata);
+        utils::update_project_cache(self.project_cache, metadata);
 
         Ok(trace.into())
     }
@@ -157,7 +165,7 @@ impl<'a> NetworkActions<'a> {
             .ok_or(UserError::NetworkTraceNotFoundError)?;
 
         let start_time = trace.start_time;
-        let end_time = trace.end_time.unwrap_or_else(|| DateTime::now());
+        let end_time = trace.end_time.unwrap_or_else(DateTime::now);
 
         let query = doc! {
             "projectId": &vp.metadata.id,
@@ -193,7 +201,14 @@ impl<'a> NetworkActions<'a> {
             .ok_or(UserError::NetworkTraceNotFoundError)?;
 
         let query = doc! {"id": &vp.metadata.id};
-        let update = doc! {"$pull": {"networkTraces": &trace}};
+        let update = doc! {
+            "$pull": {
+                "networkTraces": &trace,
+            },
+            "$set": {
+                "updated": DateTime::now(),
+            }
+        };
         let options = FindOneAndUpdateOptions::builder()
             .return_document(ReturnDocument::After)
             .build();
@@ -222,7 +237,7 @@ impl<'a> NetworkActions<'a> {
             .await
             .map_err(InternalError::DatabaseConnectionError)?;
 
-        utils::update_project_cache(&self.project_cache, metadata.clone());
+        let metadata = utils::update_project_cache(self.project_cache, metadata);
 
         Ok(metadata.into())
     }

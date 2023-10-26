@@ -279,8 +279,8 @@ impl<'a> ProjectActions<'a> {
             .map_err(InternalError::DatabaseConnectionError)?
             .ok_or(UserError::ProjectNotFoundError)?;
 
-        utils::on_room_changed(self.network, self.project_cache, updated_metadata.clone());
-        Ok(updated_metadata.into())
+        let metadata = utils::on_room_changed(self.network, self.project_cache, updated_metadata);
+        Ok(metadata.into())
     }
 
     pub(crate) fn get_collaborators(&self, md: &auth::projects::ViewProject) -> Vec<String> {
@@ -310,8 +310,7 @@ impl<'a> ProjectActions<'a> {
             .map_err(InternalError::DatabaseConnectionError)?
             .ok_or(UserError::ProjectNotFoundError)?;
 
-        utils::on_room_changed(self.network, self.project_cache, metadata.clone());
-
+        let metadata = utils::on_room_changed(self.network, self.project_cache, metadata);
         Ok(metadata.into())
     }
 
@@ -468,8 +467,8 @@ impl<'a> ProjectActions<'a> {
             .map_err(InternalError::DatabaseConnectionError)?
             .ok_or(UserError::ProjectNotFoundError)?;
 
-        utils::on_room_changed(self.network, self.project_cache, updated_metadata.clone());
-        Ok(updated_metadata.into())
+        let metadata = utils::on_room_changed(self.network, self.project_cache, updated_metadata);
+        Ok(metadata.into())
     }
 
     pub(crate) async fn rename_role(
@@ -498,8 +497,9 @@ impl<'a> ProjectActions<'a> {
                 .map_err(InternalError::DatabaseConnectionError)?
                 .ok_or(UserError::ProjectNotFoundError)?;
 
-            utils::on_room_changed(self.network, self.project_cache, updated_metadata.clone());
-            Ok(updated_metadata.into())
+            let metadata =
+                utils::on_room_changed(self.network, self.project_cache, updated_metadata);
+            Ok(metadata.into())
         } else {
             Err(UserError::RoleNotFoundError)
         }
@@ -546,8 +546,8 @@ impl<'a> ProjectActions<'a> {
             .into_iter()
             .collect::<Result<_, _>>()?;
 
-        utils::on_room_changed(self.network, self.project_cache, updated_metadata.clone());
-        Ok(updated_metadata.into())
+        let metadata = utils::on_room_changed(self.network, self.project_cache, updated_metadata);
+        Ok(metadata.into())
     }
 
     pub(crate) async fn get_role(
@@ -612,9 +612,9 @@ impl<'a> ProjectActions<'a> {
             .map_err(InternalError::DatabaseConnectionError)?
             .ok_or(UserError::ProjectNotFoundError)?;
 
-        utils::on_room_changed(self.network, self.project_cache, updated_metadata.clone());
+        let metadata = utils::on_room_changed(self.network, self.project_cache, updated_metadata);
 
-        Ok(updated_metadata.into())
+        Ok(metadata.into())
     }
 
     pub(crate) async fn delete_project(
@@ -706,9 +706,9 @@ impl<'a> ProjectActions<'a> {
             .map_err(InternalError::DatabaseConnectionError)?
             .ok_or(UserError::ProjectNotFoundError)?;
 
-        utils::on_room_changed(self.network, self.project_cache, updated_metadata.clone());
+        let metadata = utils::on_room_changed(self.network, self.project_cache, updated_metadata);
 
-        Ok(updated_metadata.into())
+        Ok(metadata.into())
     }
 
     pub(crate) async fn list_shared_projects(

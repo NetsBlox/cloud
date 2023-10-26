@@ -29,27 +29,33 @@ pub(crate) fn on_room_changed(
     network: &Addr<TopologyActor>,
     cache: &Arc<RwLock<LruCache<api::ProjectId, ProjectMetadata>>>,
     metadata: ProjectMetadata,
-) {
+) -> ProjectMetadata {
     network.do_send(topology::SendRoomState {
         project: metadata.clone(),
     });
 
-    update_project_cache(cache, metadata);
+    update_project_cache(cache, metadata)
 }
 
 pub(crate) fn update_project_cache(
     cache: &Arc<RwLock<LruCache<api::ProjectId, ProjectMetadata>>>,
     metadata: ProjectMetadata,
-) {
+) -> ProjectMetadata {
     let mut cache = cache.write().unwrap();
-    let is_newer = cache
+    let latest = cache
         .get(&metadata.id)
-        .map(|existing| existing.updated < metadata.updated)
-        .unwrap_or(true);
+        .and_then(|existing| {
+            if existing.updated > metadata.updated {
+                Some(existing.to_owned())
+            } else {
+                None
+            }
+        })
+        .unwrap_or(metadata);
 
-    if is_newer {
-        cache.put(metadata.id.clone(), metadata);
-    }
+    cache.put(latest.id.clone(), latest.clone());
+
+    latest
 }
 
 /// Get a unique project name for the given user and preferred name.
