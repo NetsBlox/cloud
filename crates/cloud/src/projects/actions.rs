@@ -179,9 +179,8 @@ impl<'a> ProjectActions<'a> {
             .max_by_key(|md| md.updated)
             .ok_or(UserError::ThumbnailNotFoundError)?;
 
-        // TODO: only fetch the code
-        let role = self.fetch_role(role_metadata).await?;
-        self.get_thumbnail(&role.code, aspect_ratio)
+        let code = self.download(&role_metadata.code).await?;
+        self.get_thumbnail(&code, aspect_ratio)
     }
 
     pub(crate) fn get_thumbnail(
