@@ -13,7 +13,7 @@ use lettre::{
 };
 use lru::LruCache;
 use mongodb::{
-    bson::doc,
+    bson::{doc, DateTime},
     options::{FindOneAndUpdateOptions, ReturnDocument},
     Collection,
 };
@@ -468,7 +468,13 @@ impl<'a> UserActions<'a> {
             let name =
                 utils::get_valid_project_name(self.project_metadata, username, &metadata.name)
                     .await?;
-            let update = doc! {"$set": {"owner": username, "name": name}};
+            let update = doc! {
+                "$set": {
+                    "owner": username,
+                    "name": name,
+                    "updated": DateTime::now(),
+                }
+            };
             let options = mongodb::options::FindOneAndUpdateOptions::builder()
                 .return_document(ReturnDocument::After)
                 .build();

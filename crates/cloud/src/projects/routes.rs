@@ -629,7 +629,7 @@ mod tests {
         .into();
         let project = test_utils::project::builder()
             .with_owner(user.username.clone())
-            .with_name("project name".into())
+            .with_name("project name")
             .build();
 
         test_utils::setup()
