@@ -242,7 +242,10 @@ impl AppData {
         self.project_metadata
             .create_indexes(
                 vec![
+                    // optimize lookups by ID
                     IndexModel::builder().keys(doc! {"id": 1}).build(),
+                    // optimize lookups by owner
+                    IndexModel::builder().keys(doc! {"owner": 1}).build(),
                     // delete broken projects after a delay
                     IndexModel::builder()
                         .keys(doc! {"deleteAt": 1})
