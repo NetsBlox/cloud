@@ -96,7 +96,7 @@ fn is_valid_name(name: &str) -> bool {
     let min_len = 1;
     let char_count = name.chars().count();
     lazy_static! {
-        static ref NAME_REGEX: Regex = Regex::new(r"^[\w\d_][\w\d_ \(\)\.,\-]*$").unwrap();
+        static ref NAME_REGEX: Regex = Regex::new(r"^[\w\d_][\w\d_ \(\)\.,'\-]*$").unwrap();
     }
 
     char_count >= min_len
@@ -428,6 +428,11 @@ mod tests {
     #[actix_web::test]
     async fn test_is_valid_name_comma() {
         assert!(is_valid_name("Lab2, SomeName"));
+    }
+
+    #[actix_web::test]
+    async fn test_is_valid_name_apostrophe() {
+        assert!(is_valid_name("Brian's project"));
     }
 
     #[actix_web::test]
