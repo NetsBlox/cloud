@@ -442,14 +442,9 @@ impl<'a> ProjectActions<'a> {
             .return_document(ReturnDocument::After)
             .build();
 
-        let role_names = ep
-            .metadata
-            .roles
-            .values()
-            .map(|r| r.name.to_owned())
-            .collect::<Vec<_>>();
+        let role_names = ep.metadata.roles.values().map(|r| r.name.as_str());
 
-        let role_name = utils::get_unique_name(role_names, &role_md.name);
+        let role_name = utils::get_unique_name(role_names, &role_md.name)?;
         role_md.name = role_name;
 
         let query = doc! {"id": &ep.metadata.id};

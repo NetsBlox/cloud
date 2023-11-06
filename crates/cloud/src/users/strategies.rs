@@ -1,10 +1,10 @@
-use std::{
-    collections::{HashMap, HashSet},
-    time::SystemTime,
-};
+use std::{collections::HashMap, time::SystemTime};
 
 pub(crate) use crate::common::api::Credentials;
-use crate::common::api::{self, UserRole};
+use crate::{
+    common::api::{self, UserRole},
+    utils,
+};
 use futures::TryStreamExt;
 use mongodb::{
     bson::{doc, DateTime},
@@ -220,26 +220,29 @@ async fn username_from(
         .map_err(InternalError::DatabaseConnectionError)?
         .into_iter()
         .map(|user| user.username)
-        .collect::<HashSet<String>>();
+        .collect::<Vec<_>>();
 
-    if existing_names.contains(&basename) {
-        let strategy: String = credentials
-            .strategy
-            .to_ascii_lowercase()
-            .chars()
-            .filter(|l| l.is_alphabetic())
-            .collect();
-        let mut username = format!("{}_{}", &basename, &strategy);
-        let mut count = 2;
+    get_unique_username(existing_names.iter().map(|n| n.as_str()), credentials)
+}
 
-        while existing_names.contains(&username) {
-            username = format!("{}_{}", basename, count);
-            count += 1;
-        }
-        Ok(username)
-    } else {
-        Ok(basename)
-    }
+fn get_unique_username<'a>(
+    names: impl Iterator<Item = &'a str>,
+    credentials: &api::LinkedAccount,
+) -> Result<String, UserError> {
+    let strategy: String = credentials
+        .strategy
+        .to_ascii_lowercase()
+        .chars()
+        .filter(|l| l.is_alphabetic())
+        .collect();
+
+    let candidates = std::iter::once(credentials.username.clone())
+        .chain(std::iter::once_with(|| {
+            format!("{}_{}", &credentials.username, &strategy)
+        }))
+        .chain((2..1000).map(|n| format!("{}_{}{}", &credentials.username, &strategy, n)));
+
+    utils::find_first_unique(names, candidates).ok_or(UserError::UsernameExists)
 }
 
 #[cfg(test)]
@@ -342,5 +345,42 @@ mod tests {
                 assert_eq!(user.salt.unwrap(), updated_user.salt.unwrap());
             })
             .await;
+    }
+
+    #[actix_web::test]
+    async fn test_get_unique_username_strat_suffix() {
+        let creds = api::LinkedAccount {
+            username: "brian".into(),
+            strategy: "snap".into(),
+        };
+        let names = ["brian"];
+        let name = get_unique_username(names.into_iter(), &creds).unwrap();
+        assert_eq!(name.as_str(), "brian_snap");
+    }
+
+    #[actix_web::test]
+    async fn test_get_unique_username_strat_suffix_inc() {
+        let creds = api::LinkedAccount {
+            username: "brian".into(),
+            strategy: "snap".into(),
+        };
+        let names = ["brian", "brian_snap", "brian_snap2"];
+        let name = get_unique_username(names.into_iter(), &creds).unwrap();
+        assert_eq!(name.as_str(), "brian_snap3");
+    }
+
+    #[actix_web::test]
+    async fn test_get_unique_username_none() {
+        let creds = api::LinkedAccount {
+            username: "brian".into(),
+            strategy: "snap".into(),
+        };
+        let existing: Vec<_> = std::iter::once("brian".to_string())
+            .chain(std::iter::once("brian_snap".to_string()))
+            .chain((2..10000).map(|n| format!("brian_snap{}", n)))
+            .collect();
+        let name_res = get_unique_username(existing.iter().map(|n| n.as_str()), &creds);
+
+        assert!(matches!(name_res, Err(UserError::UsernameExists)));
     }
 }
