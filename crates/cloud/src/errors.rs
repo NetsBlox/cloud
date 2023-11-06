@@ -67,12 +67,18 @@ pub enum UserError {
     BannedUserError,
     #[display(fmt = "User already exists.")]
     UserExistsError,
+    // FIXME: use a different status code or something so the client can
+    // handle it another way
+    #[display(fmt = "Username already exists. Please try again with a different name.")]
+    UsernameExists,
     #[display(fmt = "Group already exists.")]
     GroupExistsError,
     #[display(fmt = "Invalid username.")]
     InvalidUsername,
     #[display(fmt = "Invalid name.")]
     InvalidRoleOrProjectName,
+    #[display(fmt = "Name already exists. Please rename and try again.")]
+    RoleOrProjectNameExists,
     #[display(fmt = "Invalid library name.")]
     InvalidLibraryName,
     #[display(fmt = "Invalid email address.")]
@@ -182,6 +188,7 @@ impl error::ResponseError for UserError {
             Self::InternalError | Self::SnapConnectionError => StatusCode::INTERNAL_SERVER_ERROR,
             Self::InvalidUsername
             | Self::InvalidRoleOrProjectName
+            | Self::RoleOrProjectNameExists
             | Self::InvalidEmailAddress
             | Self::InvalidClientIdError
             | Self::InvalidLibraryName
@@ -193,6 +200,7 @@ impl error::ResponseError for UserError {
             | Self::TorAddressError
             | Self::OperaVPNError
             | Self::UserExistsError
+            | Self::UsernameExists
             | Self::OAuthClientAlreadyExistsError
             | Self::GroupExistsError
             | Self::CannotDeleteLastRoleError

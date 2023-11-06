@@ -71,15 +71,15 @@ pub(crate) async fn get_valid_project_name(
         .find(query, None)
         .await
         .map_err(InternalError::DatabaseConnectionError)?;
-    let project_names = cursor
+    let project_names: Vec<_> = cursor
         .try_collect::<Vec<_>>()
         .await
         .map_err(InternalError::DatabaseConnectionError)?
-        .iter()
-        .map(|md| md.name.to_owned())
+        .into_iter()
+        .map(|md| md.name)
         .collect();
 
-    Ok(get_unique_name(project_names, basename))
+    get_unique_name(project_names.iter().map(|n| n.as_str()), basename)
 }
 
 // FIXME: Can this be rolled into the data type itself?
@@ -105,16 +105,23 @@ fn is_valid_name(name: &str) -> bool {
         && !name.is_inappropriate()
 }
 
-pub(crate) fn get_unique_name(existing: Vec<String>, name: &str) -> String {
-    let names: HashSet<std::string::String> = HashSet::from_iter(existing.iter().cloned());
-    let base_name = name;
-    let mut role_name = base_name.to_owned();
-    let mut number: u8 = 2;
-    while names.contains(&role_name) {
-        role_name = format!("{} ({})", base_name, number);
-        number += 1;
-    }
-    role_name
+pub(crate) fn get_unique_name<'a>(
+    existing: impl Iterator<Item = &'a str>,
+    basename: &str,
+) -> Result<String, UserError> {
+    let candidates = std::iter::once(basename.into())
+        .chain((2..=1000).map(|n| format!("{} ({})", &basename, n)));
+
+    find_first_unique(existing, candidates).ok_or(UserError::RoleOrProjectNameExists)
+}
+
+pub(crate) fn find_first_unique<'a>(
+    existing: impl Iterator<Item = &'a str>,
+    mut candidates: impl Iterator<Item = String>,
+) -> Option<String> {
+    let names: HashSet<&str> = HashSet::from_iter(existing);
+    //get_unique_str(names, name, |s, n| format!("{} ({})", s, n))
+    candidates.find(|name| !names.contains(name.as_str()))
 }
 
 pub(crate) fn is_approval_required(text: &str) -> bool {
@@ -441,5 +448,29 @@ mod tests {
         assert!(!is_valid_name("fuck"));
         assert!(!is_valid_name("damn"));
         assert!(!is_valid_name("hell"));
+    }
+
+    #[actix_web::test]
+    async fn test_get_unique_name() {
+        let names = ["name", "name (2)", "name (3)", "name (4)"].into_iter();
+        let name = get_unique_name(names.clone(), "name").unwrap();
+        assert_eq!(name, "name (5)");
+    }
+
+    #[actix_web::test]
+    async fn test_get_unique_name_existing_parens() {
+        let names = ["name", "name (2)", "name (3)", "name (4)"].into_iter();
+        let name = get_unique_name(names, "name (3)").unwrap();
+        assert_eq!(name, "name (3) (2)");
+    }
+
+    #[actix_web::test]
+    async fn test_get_unique_name_none() {
+        let existing: Vec<_> = std::iter::once("name".to_string())
+            .chain((2..10000).map(|n| format!("name ({})", n)))
+            .collect();
+
+        let name_res = get_unique_name(existing.iter().map(|n| n.as_str()), "name");
+        assert!(matches!(name_res, Err(UserError::RoleOrProjectNameExists)));
     }
 }
