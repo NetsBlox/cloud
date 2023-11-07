@@ -988,4 +988,90 @@ mod tests {
     async fn test_evict_occupant_group_owner() {
         todo!();
     }
+
+    #[actix_web::test]
+    async fn test_set_client_state_external() {
+        let username: String = "username".into();
+        let client = test_utils::network::Client::new(Some(username.clone()), None);
+        test_utils::setup()
+            .with_clients(&[client.clone()])
+            .run(|app_data| async move {
+                let app = test::init_service(
+                    App::new()
+                        .wrap(test_utils::cookie::middleware())
+                        .app_data(web::Data::new(app_data.clone()))
+                        .configure(config),
+                )
+                .await;
+
+                let state = ClientStateData {
+                    state: ClientState::External(ExternalClientState {
+                        address: "project".into(),
+                        app_id: api::AppId::new("NetsBloxCLI"),
+                    }),
+                };
+                let req = test::TestRequest::post()
+                    .cookie(test_utils::cookie::new(&username))
+                    .uri(&format!("/{}/state", &client.id.as_str()))
+                    .set_json(state)
+                    .to_request();
+
+                let state_str = test::call_and_read_body(&app, req).await;
+                assert_eq!(state_str, format!("project@{} #NetsBloxCLI", username));
+            })
+            .await;
+    }
+
+    #[actix_web::test]
+    async fn test_set_client_state_browser() {
+        let username: String = "username".into();
+        let client = test_utils::network::Client::new(Some(username.clone()), None);
+
+        let role_id = api::RoleId::new("role_id".into());
+        let roles: HashMap<_, _> = [(
+            role_id.clone(),
+            api::RoleData {
+                name: "some role".into(),
+                code: "<code/>".into(),
+                media: "<media/>".into(),
+            },
+        )]
+        .into_iter()
+        .collect();
+
+        let project = test_utils::project::builder()
+            .with_name("project".into())
+            .with_owner(username.clone())
+            .with_roles(roles)
+            .build();
+
+        test_utils::setup()
+            .with_clients(&[client.clone()])
+            .with_projects(&[project.clone()])
+            .run(|app_data| async move {
+                let app = test::init_service(
+                    App::new()
+                        .wrap(test_utils::cookie::middleware())
+                        .app_data(web::Data::new(app_data.clone()))
+                        .configure(config),
+                )
+                .await;
+
+                let state = ClientStateData {
+                    state: ClientState::Browser(BrowserClientState {
+                        role_id,
+                        project_id: project.id.clone(),
+                    }),
+                };
+                let req = test::TestRequest::post()
+                    .cookie(test_utils::cookie::new(&username))
+                    .uri(&format!("/{}/state", &client.id.as_str()))
+                    .set_json(state)
+                    .to_request();
+
+                let state_str = test::call_and_read_body(&app, req).await;
+                assert_eq!(state_str, format!("some role@project@{}", username));
+            })
+            .await;
+    }
 }
