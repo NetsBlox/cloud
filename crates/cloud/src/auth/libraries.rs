@@ -124,3 +124,18 @@ pub(crate) async fn try_moderate_libraries(
         Err(UserError::PermissionsError)
     }
 }
+
+#[cfg(test)]
+mod test_utils {
+    use super::*;
+
+    impl ListLibraries {
+        pub(crate) fn test(username: String, visibility: PublishState) -> Self {
+            Self {
+                username,
+                visibility,
+                _private: (),
+            }
+        }
+    }
+}
