@@ -1,8 +1,6 @@
 use super::topology::{self, ClientCommand};
 use crate::app_data::AppData;
-use crate::common::api::{
-    ClientId, ClientState, ClientStateData, OccupantInviteData, ProjectId, SaveState,
-};
+use crate::common::api::{ClientId, ClientState, ClientStateData, OccupantInviteData, ProjectId};
 use crate::common::{api, api::ExternalClientState};
 use crate::errors::{InternalError, UserError};
 use crate::network::actions::NetworkActions;
@@ -51,23 +49,8 @@ async fn set_client_state(
                 auth::try_view_project(&app, &req, Some(&client_id), &client_state.project_id)
                     .await?;
 
-            let query = doc! {
-                "id": &auth_vp.metadata.id,
-                "saveState": SaveState::Created
-            };
-            let update = doc! {
-                "$set": {
-                    "saveState": SaveState::Transient
-                },
-                "$unset": {
-                    "deleteAt": 1
-                }
-            };
-            app.project_metadata
-                .update_one(query, update, None)
-                .await
-                .map_err(InternalError::DatabaseConnectionError)?;
-
+            let actions = app.as_network_actions();
+            actions.activate_room(&auth_vp).await?;
             ClientState::Browser(client_state)
         }
     };
