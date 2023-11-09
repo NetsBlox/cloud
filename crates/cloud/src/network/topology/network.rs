@@ -1,3 +1,4 @@
+use crate::auth;
 use crate::common::api;
 use crate::common::api::{
     AppId, BrowserClientState, ClientState, ExternalClient, OccupantState, RoleId, RoleState,
@@ -136,7 +137,7 @@ impl ProjectNetwork {
     }
 }
 
-pub struct Topology {
+pub(crate) struct Topology {
     app_data: Option<AppData>,
 
     clients: HashMap<ClientId, Client>,
@@ -614,7 +615,7 @@ impl Topology {
                 .await
                 .map_err(InternalError::DatabaseConnectionError)?
                 .map(|md| match md.save_state {
-                    SaveState::Created => unreachable!(),
+                    SaveState::Created => unreachable!(), // Cannot reach here since this is triggered when the last user leaves
                     SaveState::Transient => ProjectCleanup::Immediately,
                     SaveState::Broken => ProjectCleanup::Delayed,
                     SaveState::Saved => ProjectCleanup::None,
@@ -623,10 +624,14 @@ impl Topology {
 
             match cleanup {
                 ProjectCleanup::Immediately => {
-                    app.project_metadata
-                        .delete_one(query, None)
-                        .await
-                        .map_err(InternalError::DatabaseConnectionError)?;
+                    let actions = app.as_project_actions();
+                    let system_auth = auth::try_manage_system(self);
+                    let dp =
+                        auth::DeleteProject::from_manage_system(&system_auth, project_id.clone());
+
+                    if let Err(err) = actions.delete_project(&dp).await {
+                        log::error!("Unable to delete project {}: {}", project_id, &err);
+                    }
                 }
                 ProjectCleanup::Delayed => {
                     let ten_minutes = Duration::new(10 * 60, 0);
@@ -634,6 +639,11 @@ impl Topology {
                     let update = doc! {"$set": {
                         "deleteAt": DateTime::from_system_time(delete_at)}
                     };
+
+                    // FIXME: this should call delete_project since it:
+                    //   - can leave data on s3 if deleted by MongoDB
+                    //   - won't invalidate the cache
+                    // We need to remove the index from app data
                     app.project_metadata
                         .update_one(query, update, None)
                         .await

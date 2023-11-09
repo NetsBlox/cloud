@@ -7,7 +7,7 @@ use crate::app_data::AppData;
 use crate::errors::UserError;
 use crate::utils;
 
-use super::is_moderator;
+use super::{is_moderator, ManageSystem};
 
 /// Permissions to view a specific project
 pub(crate) struct ViewProject {
@@ -28,43 +28,20 @@ pub(crate) struct EditProject {
 }
 
 pub(crate) struct DeleteProject {
-    pub(crate) metadata: ProjectMetadata,
+    pub(crate) id: api::ProjectId,
     _private: (),
 }
 
-/// Permissions to approve projects that trigger manual approval
+impl DeleteProject {
+    /// Get project deletion permissions from system management permissions.
+    pub(crate) fn from_manage_system(_witness: &ManageSystem, id: api::ProjectId) -> Self {
+        Self { id, _private: () }
+    }
+}
+
+/// Permissions to approve projects that require manual approval
 pub(crate) struct ModerateProjects {
     _private: (),
-}
-
-#[cfg(test)]
-impl ViewProject {
-    pub(crate) fn test(metadata: ProjectMetadata) -> Self {
-        Self {
-            metadata,
-            _private: (),
-        }
-    }
-}
-
-#[cfg(test)]
-impl DeleteProject {
-    pub(crate) fn test(metadata: ProjectMetadata) -> Self {
-        Self {
-            metadata,
-            _private: (),
-        }
-    }
-}
-
-#[cfg(test)]
-impl EditProject {
-    pub(crate) fn test(metadata: ProjectMetadata) -> Self {
-        Self {
-            metadata,
-            _private: (),
-        }
-    }
 }
 
 pub(crate) async fn try_view_project(
@@ -146,7 +123,7 @@ pub(crate) async fn try_delete_project(
     super::try_edit_user(app, req, client_id.as_ref(), &metadata.owner)
         .await
         .map(|_eu| DeleteProject {
-            metadata,
+            id: metadata.id,
             _private: (),
         })
 }
@@ -210,5 +187,70 @@ fn flatten<T>(nested: Option<Option<T>>) -> Option<T> {
     match nested {
         Some(x) => x,
         None => None,
+    }
+}
+
+#[cfg(test)]
+mod test_utils {
+    use super::*;
+
+    impl ViewProject {
+        pub(crate) fn test(metadata: ProjectMetadata) -> Self {
+            Self {
+                metadata,
+                _private: (),
+            }
+        }
+    }
+
+    impl DeleteProject {
+        pub(crate) fn test(metadata: ProjectMetadata) -> Self {
+            Self {
+                id: metadata.id,
+                _private: (),
+            }
+        }
+    }
+
+    impl EditProject {
+        pub(crate) fn test(metadata: ProjectMetadata) -> Self {
+            Self {
+                metadata,
+                _private: (),
+            }
+        }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    #[actix_web::test]
+    #[ignore]
+    async fn test_try_view_project_owner() {
+        todo!();
+    }
+
+    #[actix_web::test]
+    #[ignore]
+    async fn test_try_view_project_invited() {
+        todo!();
+    }
+
+    #[actix_web::test]
+    #[ignore]
+    async fn test_try_view_project_group_owner() {
+        todo!();
+    }
+
+    #[actix_web::test]
+    #[ignore]
+    async fn test_try_view_project_admin() {
+        todo!();
+    }
+
+    #[actix_web::test]
+    #[ignore]
+    async fn test_try_view_project_403() {
+        todo!();
     }
 }

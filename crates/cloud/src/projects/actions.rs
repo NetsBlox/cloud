@@ -615,7 +615,7 @@ impl<'a> ProjectActions<'a> {
         &self,
         dp: &auth::projects::DeleteProject,
     ) -> Result<api::ProjectMetadata, UserError> {
-        let query = doc! {"id": &dp.metadata.id};
+        let query = doc! {"id": &dp.id};
         let metadata = self
             .project_metadata
             .find_one_and_delete(query, None)
