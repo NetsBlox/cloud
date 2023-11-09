@@ -365,10 +365,13 @@ impl AppData {
                 .await
                 .map_err(InternalError::DatabaseConnectionError)?;
 
-            let mut cache = self.project_cache.write().unwrap();
-            projects.iter().for_each(|project| {
-                cache.put(project.id.clone(), project.clone());
-            });
+            if let Ok(mut cache) = self.project_cache.write() {
+                projects.iter().for_each(|project| {
+                    cache.put(project.id.clone(), project.clone());
+                });
+            } else {
+                log::warn!("Unable to acquire lock to cache project metadata.");
+            }
             results.extend(projects);
         }
 
@@ -381,19 +384,28 @@ impl AppData {
     ) -> (Vec<ProjectMetadata>, Vec<&'a api::ProjectId>) {
         let mut results = Vec::new();
         let mut missing_projects = Vec::new();
-        let mut cache = self.project_cache.write().unwrap();
-        for id in ids {
-            match cache.get(id) {
-                Some(project_metadata) => results.push(project_metadata.clone()),
-                None => missing_projects.push(id),
+        if let Ok(mut cache) = self.project_cache.write() {
+            for id in ids {
+                match cache.get(id) {
+                    Some(project_metadata) => results.push(project_metadata.clone()),
+                    None => missing_projects.push(id),
+                }
             }
+            (results, missing_projects)
+        } else {
+            (results, ids.collect())
         }
-        (results, missing_projects)
     }
 
     fn get_cached_project(&self, id: &ProjectId) -> Option<ProjectMetadata> {
-        let mut cache = self.project_cache.write().unwrap();
-        cache.get(id).map(|md| md.to_owned())
+        self.project_cache
+            .write()
+            .map_err(|err| {
+                log::warn!("Unable to acquire project cache: {}", &err);
+                err
+            })
+            .ok()
+            .and_then(|mut cache| cache.get(id).map(|md| md.to_owned()))
     }
 
     async fn get_project_and_cache(&self, id: &ProjectId) -> Result<ProjectMetadata, UserError> {
@@ -404,9 +416,13 @@ impl AppData {
             .map_err(InternalError::DatabaseConnectionError)?
             .ok_or(UserError::ProjectNotFoundError)?;
 
-        let mut cache = self.project_cache.write().unwrap();
-        cache.put(id.clone(), metadata);
-        Ok(cache.get(id).unwrap().clone())
+        if let Ok(mut cache) = self.project_cache.write() {
+            log::warn!("Unable to acquire project cache to cache project");
+            cache.put(id.clone(), metadata);
+            Ok(cache.get(id).unwrap().clone())
+        } else {
+            Ok(metadata)
+        }
     }
 
     // Membership queries (cached)
