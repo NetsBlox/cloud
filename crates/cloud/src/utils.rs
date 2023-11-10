@@ -96,7 +96,7 @@ fn is_valid_name(name: &str) -> bool {
     let min_len = 1;
     let char_count = name.chars().count();
     lazy_static! {
-        static ref NAME_REGEX: Regex = Regex::new(r"^[\w\d_][\w\d_ \(\)\.,'\-]*$").unwrap();
+        static ref NAME_REGEX: Regex = Regex::new(r"^[\w\d_][\w\d_ \(\)\.,'\-!]*$").unwrap();
     }
 
     char_count >= min_len
@@ -448,6 +448,11 @@ mod tests {
         assert!(!is_valid_name("fuck"));
         assert!(!is_valid_name("damn"));
         assert!(!is_valid_name("hell"));
+    }
+
+    #[actix_web::test]
+    async fn test_is_valid_name_bang() {
+        assert!(is_valid_name("hello!"));
     }
 
     #[actix_web::test]
