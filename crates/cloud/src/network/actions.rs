@@ -69,7 +69,8 @@ impl<'a> NetworkActions<'a> {
         };
         let update = doc! {
             "$set": {
-                "saveState": SaveState::Transient
+                "saveState": SaveState::Transient,
+                "updated": DateTime::now(),
             },
             "$unset": {
                 "deleteAt": 1
@@ -85,7 +86,6 @@ impl<'a> NetworkActions<'a> {
             .await
             .map_err(InternalError::DatabaseConnectionError)?;
 
-        dbg!(&metadata);
         if let Some(metadata) = metadata {
             utils::update_project_cache(self.project_cache, metadata);
         }
