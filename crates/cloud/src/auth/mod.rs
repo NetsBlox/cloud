@@ -5,6 +5,7 @@ pub(crate) mod libraries;
 pub(crate) mod network;
 pub(crate) mod oauth;
 pub(crate) mod projects;
+pub(crate) mod system;
 pub(crate) mod users;
 
 pub(crate) use crate::auth::collaboration::*;
@@ -14,6 +15,7 @@ pub(crate) use crate::auth::libraries::*;
 pub(crate) use crate::auth::network::*;
 pub(crate) use crate::auth::oauth::*;
 pub(crate) use crate::auth::projects::*;
+pub(crate) use crate::auth::system::*;
 pub(crate) use crate::auth::users::*;
 
 use crate::app_data::AppData;

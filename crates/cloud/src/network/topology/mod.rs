@@ -1,6 +1,6 @@
 mod address;
 mod client;
-mod network;
+pub(crate) mod network;
 
 use crate::app_data::AppData;
 use crate::common::api::{ClientId, ExternalClient, ProjectId, RoleData, RoomState};
