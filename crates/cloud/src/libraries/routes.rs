@@ -152,66 +152,65 @@ pub fn config(cfg: &mut web::ServiceConfig) {
 
 #[cfg(test)]
 mod tests {
-    //use super::*;
-    //use actix_web::test;
+    use crate::test_utils;
+    use actix_web::{test, web, App};
+    use netsblox_cloud_common::{api, Library, User};
 
-    // #[actix_web::test]
-    //#[ignore]
-    // async fn test_list_community_libraries() {
-    //     let libraries = vec![
-    //         LibraryMetadata::new("brian".into(), "public example".into(), true, None),
-    //         LibraryMetadata::new("brian".into(), "private example".into(), false, None),
-    //     ];
-    //     let database = init_database("list_community_libs", libraries)
-    //         .await
-    //         .expect("Unable to initialize database");
+    #[actix_web::test]
+    async fn test_list_user_libraries() {
+        let user: User = api::NewUser {
+            username: "user".into(),
+            email: "user@netsblox.org".into(),
+            password: None,
+            group_id: None,
+            role: None,
+        }
+        .into();
+        let priv_lib = Library {
+            owner: user.username.to_owned(),
+            name: "private library".into(),
+            notes: "my notes".into(),
+            blocks: "<blocks/>".into(),
+            state: api::PublishState::Private,
+        };
+        let pub_lib = Library {
+            owner: user.username.to_owned(),
+            name: "pub library".into(),
+            notes: "my notes".into(),
+            blocks: "<blocks/>".into(),
+            state: api::PublishState::Public,
+        };
 
-    //     // Run the test
-    //     let mut app = test::init_service(
-    //         App::new()
-    //             .app_data(web::Data::new(database))
-    //             .configure(config),
-    //     )
-    //     .await;
-    //     let req = test::TestRequest::get().uri("/community").to_request();
-    //     let response = test::call_service(&mut app, req).await;
+        test_utils::setup()
+            .with_users(&[user.clone()])
+            .with_libraries(&[priv_lib, pub_lib])
+            .run(|app_data| async move {
+                let app = test::init_service(
+                    App::new()
+                        .app_data(web::Data::new(app_data))
+                        .wrap(test_utils::cookie::middleware())
+                        .configure(super::config),
+                )
+                .await;
 
-    //     assert_eq!(response.status(), http::StatusCode::OK);
-    //     let pub_libs: std::vec::Vec<LibraryMetadata> = test::read_body_json(response).await;
-    //     assert_eq!(pub_libs.len(), 1);
-    //     assert_eq!(pub_libs[0].state, PublishState::Public);
-    // }
+                let req = test::TestRequest::get()
+                    .uri(&format!("/user/{}/", &user.username))
+                    .cookie(test_utils::cookie::new(&user.username))
+                    .to_request();
 
-    // #[actix_web::test]
-    //#[ignore]
-    // async fn test_list_user_libraries() {
-    //     // TODO: 403 if not allowed?
-    //     let libraries = vec![
-    //         LibraryMetadata::new("cassie".into(), "project 1".into(), false, None),
-    //         LibraryMetadata::new("brian".into(), "project 2".into(), false, None),
-    //         LibraryMetadata::new("brian".into(), "project 3".into(), true, None),
-    //     ];
-    //     let database = init_database("list_user_libs", libraries)
-    //         .await
-    //         .expect("Unable to initialize database");
+                let libraries: Vec<api::LibraryMetadata> =
+                    test::call_and_read_body_json(&app, req).await;
 
-    //     // Run the test
-    //     let mut app = test::init_service(
-    //         App::new()
-    //             .app_data(web::Data::new(database.clone()))
-    //             .configure(config),
-    //     )
-    //     .await;
-    //     let req = test::TestRequest::get().uri("/brian").to_request();
-    //     let response = test::call_service(&mut app, req).await;
+                assert_eq!(libraries.len(), 2);
+            })
+            .await;
+    }
 
-    //     assert_eq!(response.status(), http::StatusCode::OK);
-    //     let libs: std::vec::Vec<LibraryMetadata> = test::read_body_json(response).await;
-    //     assert_eq!(libs.len(), 2);
-    //     libs.iter().for_each(|lib| {
-    //         assert_eq!(lib.owner, "brian");
-    //     });
-    // }
+    #[actix_web::test]
+    #[ignore]
+    async fn test_list_community_libraries() {
+        todo!()
+    }
 
     // #[actix_web::test]
     //#[ignore]
@@ -246,12 +245,6 @@ mod tests {
     // #[actix_web::test]
     //#[ignore]
     // async fn test_get_user_library_404() {
-    //     unimplemented!();
-    // }
-
-    // #[actix_web::test]
-    //#[ignore]
-    // async fn test_save_user_library() {
     //     unimplemented!();
     // }
 
