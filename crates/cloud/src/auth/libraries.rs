@@ -36,16 +36,16 @@ pub(crate) struct ModerateLibraries {
 pub(crate) async fn try_list_libraries(
     app: &AppData,
     req: &HttpRequest,
-    username: &str,
+    owner: &str,
 ) -> Result<ListLibraries, UserError> {
-    let visibility = if super::is_super_user(app, req).await? {
+    let visibility = if super::try_edit_user(app, req, None, owner).await.is_ok() {
         PublishState::Private
     } else {
         PublishState::Public
     };
 
     Ok(ListLibraries {
-        username: username.to_owned(),
+        username: owner.to_owned(),
         visibility,
         _private: (),
     })
@@ -134,6 +134,15 @@ mod test_utils {
             Self {
                 username,
                 visibility,
+                _private: (),
+            }
+        }
+    }
+
+    impl EditLibrary {
+        pub(crate) fn test(owner: String) -> Self {
+            Self {
+                owner,
                 _private: (),
             }
         }

@@ -83,19 +83,19 @@ impl<'a> LibraryActions<'a> {
 
     pub(crate) async fn save_library(
         &self,
-        vl: &auth::EditLibrary,
+        el: &auth::EditLibrary,
         data: &api::CreateLibraryData,
     ) -> Result<api::LibraryMetadata, UserError> {
         ensure_valid_name(&data.name)?;
 
-        let query = doc! {"owner": &vl.owner, "name": &data.name};
+        let query = doc! {"owner": &el.owner, "name": &data.name};
         let update = doc! {
             "$set": {
                 "notes": &data.notes,
                 "blocks": &data.blocks,
             },
             "$setOnInsert": {
-                "owner": &vl.owner,
+                "owner": &el.owner,
                 "name": &data.name,
                 "state": PublishState::Private,
             }
@@ -305,6 +305,38 @@ mod tests {
     }
 
     #[actix_web::test]
+    async fn test_save_user_lib() {
+        let user: User = api::NewUser {
+            username: "user".into(),
+            email: "user@netsblox.org".into(),
+            password: None,
+            group_id: None,
+            role: None,
+        }
+        .into();
+        test_utils::setup()
+            .with_users(&[user.clone()])
+            .run(|app_data| async move {
+                let actions = app_data.as_library_actions();
+                let auth_el = auth::EditLibrary::test(user.username.clone());
+                let data = api::CreateLibraryData {
+                    name: "mylibrary".into(),
+                    notes: "some notes".into(),
+                    blocks: "<blocks/>".into(),
+                };
+                actions.save_library(&auth_el, &data).await.unwrap();
+
+                let query = doc! {};
+                let metadata = app_data.libraries.find_one(query, None).await.unwrap();
+
+                assert!(metadata.is_some(), "Library not found in the database");
+                let metadata = metadata.unwrap();
+                assert_eq!(&metadata.name, "mylibrary");
+            })
+            .await;
+    }
+
+    #[actix_web::test]
     async fn test_list_user_libs_public() {
         let user: User = api::NewUser {
             username: "user".into(),
@@ -346,8 +378,8 @@ mod tests {
 
                 let libraries = actions.list_user_libraries(&auth_ll).await.unwrap();
                 assert_eq!(libraries.len(), 2);
-                assert!(libraries.iter().find(|lib| lib.name == pub1.name).is_some());
-                assert!(libraries.iter().find(|lib| lib.name == pub2.name).is_some());
+                assert!(libraries.iter().any(|lib| lib.name == pub1.name));
+                assert!(libraries.iter().any(|lib| lib.name == pub2.name));
             })
             .await;
     }
