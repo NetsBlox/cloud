@@ -44,6 +44,7 @@ pub struct User {
     #[ts(optional)]
     pub group_id: Option<GroupId>,
     pub role: UserRole,
+    #[ts(skip)]
     pub created_at: SystemTime,
     pub linked_accounts: Vec<LinkedAccount>,
     #[ts(optional)]
@@ -738,7 +739,6 @@ pub struct ServiceSettings {
 #[derive(Deserialize, Serialize, Debug, Clone)]
 #[serde(rename_all = "camelCase")]
 pub struct SendMessage {
-    #[ts(optional)]
     pub sender: Option<SendMessageSender>,
     pub target: SendMessageTarget,
     // TODO: Should we only allow "message" types or any sort of message?
