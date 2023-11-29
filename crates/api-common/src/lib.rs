@@ -10,45 +10,63 @@ use serde::{
 };
 use serde_json::Value;
 use std::{collections::HashMap, str::FromStr, time::SystemTime};
+use ts_rs::TS;
 use uuid::Uuid;
 
 const APP_NAME: &str = "NetsBlox";
 
+#[derive(TS)]
+#[ts(export)]
 #[derive(Deserialize, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct ClientConfig {
     pub client_id: String,
+    #[ts(optional)]
     pub username: Option<String>,
     pub services_hosts: Vec<ServiceHost>,
     pub cloud_url: String,
 }
 
+#[derive(TS)]
+#[ts(export)]
 #[derive(Deserialize, Serialize)]
 pub struct InvitationResponse {
     pub response: FriendLinkState,
 }
 
+#[derive(TS)]
+#[ts(export)]
 #[derive(Serialize, Deserialize, Clone, Debug)]
 #[serde(rename_all = "camelCase")]
 pub struct User {
     pub username: String,
     pub email: String,
+    #[ts(optional)]
     pub group_id: Option<GroupId>,
     pub role: UserRole,
+    #[ts(skip)]
     pub created_at: SystemTime,
     pub linked_accounts: Vec<LinkedAccount>,
+    #[ts(optional)]
     pub services_hosts: Option<Vec<ServiceHost>>,
 }
 
+#[derive(TS)]
+#[ts(export)]
 #[derive(Serialize, Deserialize, Debug)]
 pub struct NewUser {
     pub username: String,
     pub email: String,
+    #[ts(optional)]
     pub password: Option<String>,
+    #[ts(optional)]
     pub group_id: Option<GroupId>,
+    #[ts(optional)]
     pub role: Option<UserRole>,
 }
 
+#[derive(TS)]
+#[ts(export)]
 #[derive(Serialize, Deserialize, Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord)]
 #[serde(rename_all = "camelCase")]
 pub enum UserRole {
@@ -58,22 +76,31 @@ pub enum UserRole {
     Admin,
 }
 
+#[derive(TS)]
+#[ts(export)]
 #[derive(Deserialize, Serialize, Clone, Debug)]
 #[serde(rename_all = "camelCase")]
 pub struct NetworkTraceMetadata {
     pub id: String,
+    #[ts(type = "any")] // FIXME
     pub start_time: SystemTime,
+    #[ts(type = "any | null")] // FIXME
+    #[ts(optional)]
     pub end_time: Option<SystemTime>,
 }
 
+#[derive(TS)]
+#[ts(export)]
 #[derive(Deserialize, Serialize, Debug, Clone)]
 #[serde(rename_all = "camelCase")]
 pub struct SentMessage {
     pub project_id: ProjectId,
     pub recipients: Vec<ClientState>,
+    #[ts(type = "any")] // FIXME
     pub time: SystemTime,
     pub source: ClientState,
 
+    #[ts(type = "any")]
     pub content: serde_json::Value,
 }
 
@@ -86,6 +113,8 @@ pub struct OccupantInvite {
     pub created_at: SystemTime,
 }
 
+#[derive(TS)]
+#[ts(export)]
 #[derive(Debug, Display, Error)]
 #[display(fmt = "Unable to parse user role. Expected admin, moderator, or user.")]
 pub struct UserRoleError;
@@ -103,6 +132,8 @@ impl FromStr for UserRole {
     }
 }
 
+#[derive(TS)]
+#[ts(export)]
 #[derive(Serialize, Deserialize, Clone, Debug)]
 #[serde(rename_all = "camelCase")]
 pub struct ServiceHost {
@@ -110,6 +141,8 @@ pub struct ServiceHost {
     pub categories: Vec<String>,
 }
 
+#[derive(TS)]
+#[ts(export)]
 #[derive(Serialize, Deserialize, Clone, Debug)]
 pub struct LinkedAccount {
     pub username: String,
@@ -124,13 +157,18 @@ pub struct BannedAccount {
     pub banned_at: SystemTime,
 }
 
+#[derive(TS)]
+#[ts(export)]
 #[derive(Serialize, Deserialize, Debug)]
 #[serde(rename_all = "camelCase")]
 pub struct LoginRequest {
     pub credentials: Credentials,
+    #[ts(optional)]
     pub client_id: Option<ClientId>, // TODO: add a secret token for the client?
 }
 
+#[derive(TS)]
+#[ts(export)]
 #[derive(Deserialize, Serialize, Debug, Clone)]
 pub enum Credentials {
     Snap { username: String, password: String },
@@ -165,6 +203,8 @@ pub struct FriendLink {
     pub updated_at: SystemTime,
 }
 
+#[derive(TS)]
+#[ts(export)]
 #[derive(Deserialize, Serialize, Clone, Debug)]
 pub enum FriendLinkState {
     Pending,
@@ -196,15 +236,20 @@ impl FromStr for FriendLinkState {
     }
 }
 
+#[derive(TS)]
+#[ts(export)]
 #[derive(Serialize, Deserialize, Clone, Debug)]
 #[serde(rename_all = "camelCase")]
 pub struct FriendInvite {
     pub id: String,
     pub sender: String,
     pub recipient: String,
+    #[ts(type = "any")] // FIXME
     pub created_at: SystemTime,
 }
 
+#[derive(TS)]
+#[ts(export)]
 #[derive(Deserialize, Serialize, Clone, Debug, PartialEq, Eq, Display, Hash)]
 pub struct ProjectId(String);
 
@@ -214,6 +259,8 @@ impl ProjectId {
     }
 }
 
+#[derive(TS)]
+#[ts(export)]
 #[derive(Deserialize, Serialize, Clone, Debug, PartialEq, Eq, Display, Hash)]
 pub struct RoleId(String);
 
@@ -227,21 +274,27 @@ impl RoleId {
     }
 }
 
+#[derive(TS)]
+#[ts(export)]
 #[derive(Deserialize, Serialize, Clone, Debug)]
 #[serde(rename_all = "camelCase")]
 pub struct ProjectMetadata {
     pub id: ProjectId,
     pub owner: String,
     pub name: String,
+    #[ts(type = "any")] // FIXME
     pub updated: SystemTime,
     pub state: PublishState,
     pub collaborators: std::vec::Vec<String>,
     pub network_traces: Vec<NetworkTraceMetadata>,
+    #[ts(type = "any")] // FIXME
     pub origin_time: SystemTime,
     pub save_state: SaveState,
     pub roles: HashMap<RoleId, RoleMetadata>,
 }
 
+#[derive(TS)]
+#[ts(export)]
 #[derive(Deserialize, Serialize, Clone, Debug)]
 pub enum SaveState {
     Created,
@@ -250,6 +303,8 @@ pub enum SaveState {
     Saved,
 }
 
+#[derive(TS)]
+#[ts(export)]
 #[derive(Deserialize, Serialize, Clone, Debug)]
 pub struct RoleMetadata {
     pub name: String,
@@ -257,15 +312,19 @@ pub struct RoleMetadata {
     pub media: String,
 }
 
+#[derive(TS)]
+#[ts(export)]
 #[derive(Deserialize, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct Project {
     pub id: ProjectId,
     pub owner: String,
     pub name: String,
+    #[ts(type = "any")] // FIXME
     pub updated: SystemTime,
     pub state: PublishState,
     pub collaborators: std::vec::Vec<String>,
+    #[ts(type = "any")] // FIXME
     pub origin_time: SystemTime,
     pub save_state: SaveState,
     pub roles: HashMap<RoleId, RoleData>,
@@ -286,6 +345,8 @@ impl Project {
     }
 }
 
+#[derive(TS)]
+#[ts(export)]
 #[derive(Deserialize, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct RoleDataResponse {
@@ -293,6 +354,8 @@ pub struct RoleDataResponse {
     pub data: RoleData,
 }
 
+#[derive(TS)]
+#[ts(export)]
 #[derive(Deserialize, Serialize, Debug, Clone)]
 pub struct RoleData {
     pub name: String,
@@ -307,12 +370,16 @@ impl RoleData {
     }
 }
 
+#[derive(TS)]
+#[ts(export)]
 #[derive(Deserialize, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct ClientStateData {
     pub state: ClientState,
 }
 
+#[derive(TS)]
+#[ts(export)]
 #[derive(Debug, Deserialize, Serialize, Clone, PartialEq, Eq)]
 #[serde(rename_all = "camelCase")]
 pub enum ClientState {
@@ -320,6 +387,8 @@ pub enum ClientState {
     External(ExternalClientState),
 }
 
+#[derive(TS)]
+#[ts(export)]
 #[derive(Debug, Deserialize, Serialize, Clone, PartialEq, Eq)]
 #[serde(rename_all = "camelCase")]
 pub struct BrowserClientState {
@@ -327,6 +396,8 @@ pub struct BrowserClientState {
     pub project_id: ProjectId,
 }
 
+#[derive(TS)]
+#[ts(export)]
 #[derive(Debug, Serialize, Clone, Hash, Eq, PartialEq)]
 pub struct AppId(String);
 
@@ -373,6 +444,8 @@ impl<'de> Visitor<'de> for AppIdVisitor {
     }
 }
 
+#[derive(TS)]
+#[ts(export)]
 #[derive(Debug, Deserialize, Serialize, Clone, PartialEq, Eq)]
 #[serde(rename_all = "camelCase")]
 pub struct ExternalClientState {
@@ -380,6 +453,8 @@ pub struct ExternalClientState {
     pub app_id: AppId,
 }
 
+#[derive(TS)]
+#[ts(export)]
 #[derive(Serialize, Deserialize)]
 pub struct CreateLibraryData {
     pub name: String,
@@ -387,6 +462,8 @@ pub struct CreateLibraryData {
     pub blocks: String,
 }
 
+#[derive(TS)]
+#[ts(export)]
 #[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
 pub enum PublishState {
     Private,
@@ -395,6 +472,8 @@ pub enum PublishState {
     Public,
 }
 
+#[derive(TS)]
+#[ts(export)]
 #[derive(Serialize, Deserialize, Clone)]
 pub struct LibraryMetadata {
     pub owner: String,
@@ -419,13 +498,18 @@ impl LibraryMetadata {
     }
 }
 
+#[derive(TS)]
+#[ts(export)]
 #[derive(Serialize, Deserialize, Clone)]
 #[serde(rename_all = "camelCase")]
 pub struct CreateGroupData {
     pub name: String,
+    #[ts(optional)]
     pub services_hosts: Option<Vec<ServiceHost>>,
 }
 
+#[derive(TS)]
+#[ts(export)]
 #[derive(Deserialize, Serialize, Clone, Debug, PartialEq, Eq, Display, Hash, FromStr)]
 pub struct GroupId(String);
 
@@ -439,20 +523,27 @@ impl GroupId {
     }
 }
 
+#[derive(TS)]
+#[ts(export)]
 #[derive(Serialize, Deserialize, Clone, Debug)]
 #[serde(rename_all = "camelCase")]
 pub struct Group {
     pub id: GroupId,
     pub owner: String,
     pub name: String,
+    #[ts(optional)]
     pub services_hosts: Option<Vec<ServiceHost>>,
 }
 
+#[derive(TS)]
+#[ts(export)]
 #[derive(Serialize, Deserialize)]
 pub struct UpdateGroupData {
     pub name: String,
 }
 
+#[derive(TS)]
+#[ts(export)]
 #[derive(Deserialize, Serialize, Clone, Debug)]
 pub enum InvitationState {
     Pending,
@@ -485,34 +576,49 @@ impl CollaborationInvite {
     }
 }
 
+#[derive(TS)]
+#[ts(export)]
 #[derive(Deserialize, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct UpdateProjectData {
     pub name: String,
+    #[ts(optional)]
     pub client_id: Option<ClientId>,
 }
 
+#[derive(TS)]
+#[ts(export)]
 #[derive(Deserialize, Serialize, Debug)]
 #[serde(rename_all = "camelCase")]
 pub struct UpdateRoleData {
     pub name: String,
+    #[ts(optional)]
     pub client_id: Option<ClientId>,
 }
 
+#[derive(TS)]
+#[ts(export)]
 #[derive(Deserialize, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct CreateProjectData {
+    #[ts(optional)]
     pub owner: Option<String>,
     pub name: String,
+    #[ts(optional)]
     pub roles: Option<Vec<RoleData>>,
+    #[ts(optional)]
     pub client_id: Option<ClientId>,
+    #[ts(optional)]
     pub save_state: Option<SaveState>,
 
     #[cfg(test)]
+    #[ts(optional)]
     pub role_dict: Option<HashMap<RoleId, RoleData>>,
 }
 
 // Network debugging data
+#[derive(TS)]
+#[ts(export)]
 #[derive(Deserialize, Serialize, Debug, Clone, PartialEq, Eq, Hash)]
 pub struct ClientId(String);
 
@@ -526,6 +632,8 @@ impl ClientId {
     }
 }
 
+#[derive(TS)]
+#[ts(export)]
 #[derive(Debug, Display, Error)]
 #[display(fmt = "Invalid client ID. Must start with a _")]
 pub struct ClientIDError;
@@ -541,14 +649,19 @@ impl FromStr for ClientId {
     }
 }
 
+#[derive(TS)]
+#[ts(export)]
 #[derive(Deserialize, Serialize, Debug)]
 #[serde(rename_all = "camelCase")]
 pub struct ExternalClient {
+    #[ts(optional)]
     pub username: Option<String>,
     pub address: String,
     pub app_id: AppId,
 }
 
+#[derive(TS)]
+#[ts(export)]
 #[derive(Deserialize, Serialize, Clone, Debug)]
 pub struct RoomState {
     pub id: ProjectId,
@@ -559,26 +672,35 @@ pub struct RoomState {
     pub version: u64,
 }
 
+#[derive(TS)]
+#[ts(export)]
 #[derive(Deserialize, Serialize, Clone, Debug)]
 pub struct RoleState {
     pub name: String,
     pub occupants: Vec<OccupantState>,
 }
 
+#[derive(TS)]
+#[ts(export)]
 #[derive(Deserialize, Serialize, Clone, Debug)]
 pub struct OccupantState {
     pub id: ClientId,
     pub name: String,
 }
 
+#[derive(TS)]
+#[ts(export)]
 #[derive(Deserialize, Serialize, Debug)]
 #[serde(rename_all = "camelCase")]
 pub struct OccupantInviteData {
     pub username: String,
     pub role_id: RoleId,
+    #[ts(optional)]
     pub sender: Option<String>,
 }
 
+#[derive(TS)]
+#[ts(export)]
 #[derive(Deserialize, Serialize, Debug, Clone)]
 #[serde(rename_all = "camelCase")]
 pub struct AuthorizedServiceHost {
@@ -587,19 +709,27 @@ pub struct AuthorizedServiceHost {
     pub public: bool,
 }
 
+#[derive(TS)]
+#[ts(export)]
 #[derive(Deserialize, Serialize, Debug, Clone)]
 #[serde(rename_all = "camelCase")]
 pub struct ClientInfo {
+    #[ts(optional)]
     pub username: Option<String>,
+    #[ts(optional)]
     pub state: Option<ClientState>,
 }
 
 /// Service settings for a given user categorized by origin
+#[derive(TS)]
+#[ts(export)]
 #[derive(Deserialize, Serialize, Debug, Clone)]
 pub struct ServiceSettings {
     /// Service settings owned by the user
+    #[ts(optional)]
     pub user: Option<String>,
     /// Service settings owned by a group in which the user is a member
+    #[ts(optional)]
     pub member: Option<String>,
     /// Service settings owned by a groups created by the user
     pub groups: HashMap<GroupId, String>,
@@ -615,6 +745,8 @@ pub struct SendMessage {
     pub content: Value,
 }
 
+#[derive(TS)]
+#[ts(export)]
 #[derive(Deserialize, Serialize, Debug, Clone)]
 #[serde(rename_all = "camelCase")]
 pub enum SendMessageSender {
@@ -622,6 +754,8 @@ pub enum SendMessageSender {
     Client(ClientId),
 }
 
+#[derive(TS)]
+#[ts(export)]
 #[derive(Deserialize, Serialize, Debug, Clone)]
 #[serde(rename_all = "camelCase")]
 pub enum SendMessageTarget {
@@ -639,6 +773,7 @@ pub enum SendMessageTarget {
     },
     #[serde(rename_all = "camelCase")]
     Client {
+        #[ts(optional)]
         state: Option<ClientState>,
         client_id: ClientId,
     },
