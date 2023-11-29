@@ -362,9 +362,15 @@ impl ProjectMetadata {
     ) -> ProjectMetadata {
         let origin_time = DateTime::now();
 
-        let ten_minutes = Duration::new(10 * 60, 0);
-        let delete_at =
-            DateTime::from_system_time(SystemTime::now().checked_add(ten_minutes).unwrap());
+        let delete_at = match save_state {
+            SaveState::Saved => None,
+            _ => {
+                // if not saved, set the project to be deleted in 10 minutes if not joined
+                let ten_minutes = Duration::new(10 * 60, 0);
+                let ten_mins_from_now = SystemTime::now().checked_add(ten_minutes).unwrap();
+                Some(DateTime::from_system_time(ten_mins_from_now))
+            }
+        };
 
         ProjectMetadata {
             id: ProjectId::new(Uuid::new_v4().to_string()),
@@ -375,7 +381,7 @@ impl ProjectMetadata {
             state: PublishState::Private,
             collaborators: vec![],
             save_state,
-            delete_at: Some(delete_at),
+            delete_at,
             network_traces: Vec::new(),
             roles,
         }
@@ -794,6 +800,20 @@ pub(crate) fn sha512(text: &str) -> String {
 
 #[cfg(test)]
 mod tests {
+    use super::*;
+
     #[test]
-    fn test_uuid_ser() {}
+    fn test_dont_schedule_deletion_for_saved_projects() {
+        let metadata =
+            ProjectMetadata::new("owner", "someProject", HashMap::new(), SaveState::Saved);
+        assert!(metadata.delete_at.is_none());
+    }
+
+    #[test]
+    fn test_schedule_deletion_for_created_projects() {
+        // This gives them 10 minutes to be occupied before deletion
+        let metadata =
+            ProjectMetadata::new("owner", "someProject", HashMap::new(), SaveState::Created);
+        assert!(metadata.delete_at.is_some());
+    }
 }

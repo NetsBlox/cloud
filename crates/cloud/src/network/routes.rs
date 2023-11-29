@@ -1,8 +1,6 @@
 use super::topology::{self, ClientCommand};
 use crate::app_data::AppData;
-use crate::common::api::{
-    ClientId, ClientState, ClientStateData, OccupantInviteData, ProjectId, SaveState,
-};
+use crate::common::api::{ClientId, ClientState, ClientStateData, OccupantInviteData, ProjectId};
 use crate::common::{api, api::ExternalClientState};
 use crate::errors::{InternalError, UserError};
 use crate::network::actions::NetworkActions;
@@ -51,23 +49,8 @@ async fn set_client_state(
                 auth::try_view_project(&app, &req, Some(&client_id), &client_state.project_id)
                     .await?;
 
-            let query = doc! {
-                "id": &auth_vp.metadata.id,
-                "saveState": SaveState::Created
-            };
-            let update = doc! {
-                "$set": {
-                    "saveState": SaveState::Transient
-                },
-                "$unset": {
-                    "deleteAt": 1
-                }
-            };
-            app.project_metadata
-                .update_one(query, update, None)
-                .await
-                .map_err(InternalError::DatabaseConnectionError)?;
-
+            let actions = app.as_network_actions();
+            actions.activate_room(&auth_vp).await?;
             ClientState::Browser(client_state)
         }
     };
@@ -374,7 +357,7 @@ impl WsSession {
             }
             "ping" => ctx.text("{\"type\": \"pong\"}"),
             _ => {
-                println!("unrecognized message type: {}", msg_type);
+                log::warn!("unrecognized message type: {}", msg_type);
             }
         }
     }
@@ -392,8 +375,6 @@ impl Actor for WsSession {
     }
 
     fn stopping(&mut self, _: &mut Self::Context) -> actix::Running {
-        // TODO: wait a little bit?
-        println!("stopping! {:?}", self.client_id);
         self.topology_addr.do_send(topology::RemoveClient {
             id: self.client_id.clone(),
         });
@@ -423,7 +404,6 @@ impl StreamHandler<Result<ws::Message, ws::ProtocolError>> for WsSession {
                 }
             }
             Ok(ws::Message::Close(reason_opt)) => {
-                println!("Closing! Reason: {:?}", &reason_opt);
                 let is_broken = reason_opt
                     .map(|reason| !matches!(reason.code, CloseCode::Normal | CloseCode::Away))
                     .unwrap_or(true);
@@ -446,7 +426,6 @@ mod tests {
     use std::{collections::HashMap, time::Duration};
 
     use actix_web::{http, test, App};
-    use mongodb::bson::DateTime;
     use netsblox_cloud_common::api::BrowserClientState;
     use netsblox_cloud_common::{NetworkTraceMetadata, User};
 
@@ -619,7 +598,7 @@ mod tests {
 
         let trace = NetworkTraceMetadata::new();
         let project = test_utils::project::builder()
-            .with_name("project".into())
+            .with_name("project")
             .with_owner("owner".to_string())
             .with_traces(&[trace.clone()])
             .with_roles(roles)
@@ -674,7 +653,6 @@ mod tests {
                 });
 
                 let messages = messages.collect::<Vec<_>>();
-                println!("sending {} messages", messages.len());
                 for msg in messages {
                     app_data.network.send(msg).await.unwrap();
                     tokio::time::sleep(Duration::from_millis(5)).await;
@@ -702,14 +680,6 @@ mod tests {
                         .into_iter()
                         .map(|msg| msg.time)
                         .collect::<Vec<_>>();
-
-                    dbg!(&times);
-                    println!(
-                        "count is {} ({}) as of {:?}",
-                        &count,
-                        times.len(),
-                        DateTime::now()
-                    );
 
                     count = app_data
                         .recorded_messages
@@ -768,7 +738,7 @@ mod tests {
 
         let trace = NetworkTraceMetadata::new();
         let project = test_utils::project::builder()
-            .with_name("project".into())
+            .with_name("project")
             .with_owner("owner".to_string())
             .with_traces(&[trace.clone()])
             .with_roles(roles)
@@ -912,7 +882,7 @@ mod tests {
 
         let trace = NetworkTraceMetadata::new();
         let project = test_utils::project::builder()
-            .with_name("project".into())
+            .with_name("project")
             .with_owner("owner".to_string())
             .with_roles(roles)
             .build();

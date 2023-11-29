@@ -9,6 +9,7 @@ use crate::{auth, utils};
 use actix_web::{delete, get, patch, post, HttpRequest};
 use actix_web::{web, HttpResponse};
 use mongodb::bson::doc;
+use reqwest::Method;
 use serde::Deserialize;
 
 #[post("/")]
@@ -65,6 +66,14 @@ async fn list_shared_projects(
     Ok(HttpResponse::Ok().json(projects))
 }
 
+#[get("/public/")]
+async fn list_public_projects(app: web::Data<AppData>) -> Result<HttpResponse, UserError> {
+    let actions: ProjectActions = app.as_project_actions();
+    let projects = actions.list_public_projects().await?;
+
+    Ok(HttpResponse::Ok().json(projects))
+}
+
 #[get("/user/{owner}/{name}")]
 async fn get_project_named(
     app: web::Data<AppData>,
@@ -110,6 +119,30 @@ async fn get_project_metadata(
     Ok(HttpResponse::Ok().json(metadata))
 }
 
+#[get("/user/{owner}/{name}/xml")]
+async fn get_project_named_xml(
+    app: web::Data<AppData>,
+    path: web::Path<(String, String)>,
+    req: HttpRequest,
+) -> Result<HttpResponse, UserError> {
+    let (owner, name) = path.into_inner();
+    let query = doc! {"owner": owner, "name": name};
+    let metadata = app
+        .project_metadata
+        .find_one(query, None)
+        .await
+        .map_err(InternalError::DatabaseConnectionError)?
+        .ok_or(UserError::ProjectNotFoundError)?;
+
+    let auth_vp = auth::try_view_project(&app, &req, None, &metadata.id).await?;
+    let actions: ProjectActions = app.as_project_actions();
+
+    let project = actions.get_project(&auth_vp).await?;
+    Ok(HttpResponse::Ok()
+        .content_type("application/xml")
+        .body(project.to_xml()))
+}
+
 #[get("/id/{id}/metadata")]
 async fn get_project_id_metadata(
     app: web::Data<AppData>,
@@ -140,6 +173,23 @@ async fn get_project(
     Ok(HttpResponse::Ok().json(project))
 }
 
+#[get("/id/{projectID}/xml")]
+async fn get_project_xml(
+    app: web::Data<AppData>,
+    path: web::Path<(ProjectId,)>,
+    req: HttpRequest,
+) -> Result<HttpResponse, UserError> {
+    let (project_id,) = path.into_inner();
+    let auth_vp = auth::try_view_project(&app, &req, None, &project_id).await?;
+
+    let actions: ProjectActions = app.as_project_actions();
+    let project = actions.get_project(&auth_vp).await?;
+
+    Ok(HttpResponse::Ok()
+        .content_type("application/xml")
+        .body(project.to_xml()))
+}
+
 #[post("/id/{projectID}/publish")]
 async fn publish_project(
     app: web::Data<AppData>,
@@ -164,6 +214,37 @@ async fn unpublish_project(
     let actions: ProjectActions = app.as_project_actions();
     let state = actions.unpublish_project(&auth_ep).await?;
     Ok(HttpResponse::Ok().json(state))
+}
+
+#[get("/mod/pending/")]
+async fn list_pending_projects(
+    app: web::Data<AppData>,
+    req: HttpRequest,
+) -> Result<HttpResponse, UserError> {
+    let auth_mp = auth::try_moderate_projects(&app, &req).await?;
+
+    let actions = app.as_project_actions();
+    let projects = actions.list_pending_projects(&auth_mp).await?;
+
+    Ok(HttpResponse::Ok().json(projects))
+}
+
+#[post("/mod/id/{projectId}")]
+async fn set_project_state(
+    app: web::Data<AppData>,
+    path: web::Path<(ProjectId,)>,
+    state: web::Json<api::PublishState>,
+    req: HttpRequest,
+) -> Result<HttpResponse, UserError> {
+    let (id,) = path.into_inner();
+    let auth_mp = auth::try_moderate_projects(&app, &req).await?;
+
+    let actions = app.as_project_actions();
+    let project = actions
+        .set_project_state(&auth_mp, &id, state.into_inner())
+        .await?;
+
+    Ok(HttpResponse::Ok().json(project))
 }
 
 #[delete("/id/{projectID}")]
@@ -240,6 +321,69 @@ async fn get_project_thumbnail(
     let thumbnail = actions
         .get_project_thumbnail(&auth_vp, params.aspect_ratio)
         .await?;
+
+    Ok(HttpResponse::Ok().content_type("image/png").body(thumbnail))
+}
+
+#[get("/user/{owner}/{name}/thumbnail")]
+async fn get_user_project_thumbnail(
+    app: web::Data<AppData>,
+    path: web::Path<(String, String)>,
+    params: web::Query<ThumbnailParams>,
+    req: HttpRequest,
+) -> Result<HttpResponse, UserError> {
+    let (owner, name) = path.into_inner();
+    let query = doc! {"owner": owner, "name": name};
+    let metadata = app
+        .project_metadata
+        .find_one(query, None)
+        .await
+        .map_err(InternalError::DatabaseConnectionError)?
+        .ok_or(UserError::ProjectNotFoundError)?;
+
+    let auth_vp = auth::try_view_project(&app, &req, None, &metadata.id).await?;
+    let actions: ProjectActions = app.as_project_actions();
+    let thumbnail = actions
+        .get_project_thumbnail(&auth_vp, params.aspect_ratio)
+        .await?;
+
+    Ok(HttpResponse::Ok().content_type("image/png").body(thumbnail))
+}
+
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct GetThumbnailParams {
+    /// XML or base64-encoded string for the thumbnail
+    xml: Option<String>,
+    /// URL of XML of which to extract, pad the thumbnail
+    url: Option<String>,
+    aspect_ratio: Option<f32>,
+}
+
+#[get("/thumbnail")]
+async fn get_thumbnail(
+    app: web::Data<AppData>,
+    params: web::Query<GetThumbnailParams>,
+) -> Result<HttpResponse, UserError> {
+    let actions: ProjectActions = app.as_project_actions();
+    let xml = if let Some(xml) = params.xml.as_ref() {
+        xml.to_owned()
+    } else if let Some(url) = params.url.as_ref() {
+        let client = reqwest::Client::new();
+        let response = client
+            .request(Method::GET, url)
+            .send()
+            .await
+            .map_err(|_err| UserError::ProjectUnavailableError)?;
+
+        response
+            .text()
+            .await
+            .map_err(|_err| UserError::ProjectUnavailableError)?
+    } else {
+        return Err(UserError::MissingUrlOrXmlError);
+    };
+    let thumbnail = actions.get_thumbnail(&xml, params.aspect_ratio)?;
 
     Ok(HttpResponse::Ok().content_type("image/png").body(thumbnail))
 }
@@ -422,14 +566,21 @@ pub fn config(cfg: &mut web::ServiceConfig) {
         .service(delete_project)
         .service(list_user_projects)
         .service(list_shared_projects)
+        .service(list_public_projects)
         .service(get_project)
+        .service(get_project_xml)
         .service(get_project_named)
+        .service(get_project_named_xml)
         .service(get_project_metadata)
         .service(get_project_id_metadata)
         .service(publish_project)
         .service(unpublish_project)
+        .service(list_pending_projects)
+        .service(set_project_state)
         .service(get_latest_project)
         .service(get_project_thumbnail)
+        .service(get_user_project_thumbnail)
+        .service(get_thumbnail)
         .service(get_role)
         .service(get_latest_role)
         .service(report_latest_role)
@@ -467,27 +618,218 @@ mod tests {
     }
 
     #[actix_web::test]
-    #[ignore]
     async fn test_get_project() {
-        todo!();
+        let user: User = api::NewUser {
+            username: "user".into(),
+            email: "admin@netsblox.org".into(),
+            password: None,
+            group_id: None,
+            role: Some(UserRole::User),
+        }
+        .into();
+        let project = test_utils::project::builder()
+            .with_owner(user.username.clone())
+            .with_name("project name")
+            .build();
+
+        test_utils::setup()
+            .with_users(&[user.clone()])
+            .with_projects(&[project.clone()])
+            .run(|app_data| async move {
+                let app = test::init_service(
+                    App::new()
+                        .wrap(test_utils::cookie::middleware())
+                        .app_data(web::Data::new(app_data.clone()))
+                        .configure(config),
+                )
+                .await;
+
+                let cookie = test_utils::cookie::new(&user.username);
+                let req = test::TestRequest::get()
+                    .uri(&format!("/id/{}", &project.id))
+                    .cookie(cookie)
+                    .to_request();
+
+                let data: api::Project = test::call_and_read_body_json(&app, req).await;
+                assert_eq!(data.id, project.id);
+                assert_eq!(data.name, project.name);
+            })
+            .await;
     }
 
     #[actix_web::test]
-    #[ignore]
     async fn test_get_project_403() {
-        todo!();
+        let user: User = api::NewUser {
+            username: "user".into(),
+            email: "admin@netsblox.org".into(),
+            password: None,
+            group_id: None,
+            role: Some(UserRole::User),
+        }
+        .into();
+        let other: User = api::NewUser {
+            username: "other".into(),
+            email: "admin@netsblox.org".into(),
+            password: None,
+            group_id: None,
+            role: Some(UserRole::User),
+        }
+        .into();
+        let project = test_utils::project::builder()
+            .with_owner(user.username.clone())
+            .with_name("project name".into())
+            .build();
+
+        test_utils::setup()
+            .with_users(&[user.clone(), other.clone()])
+            .with_projects(&[project.clone()])
+            .run(|app_data| async move {
+                let app = test::init_service(
+                    App::new()
+                        .wrap(test_utils::cookie::middleware())
+                        .app_data(web::Data::new(app_data.clone()))
+                        .configure(config),
+                )
+                .await;
+
+                let cookie = test_utils::cookie::new(&other.username);
+                let req = test::TestRequest::get()
+                    .uri(&format!("/id/{}", &project.id))
+                    .cookie(cookie)
+                    .to_request();
+
+                let response = test::call_service(&app, req).await;
+                assert_eq!(response.status(), http::StatusCode::FORBIDDEN);
+            })
+            .await;
     }
 
     #[actix_web::test]
-    #[ignore]
     async fn test_get_project_admin() {
-        todo!();
+        let user: User = api::NewUser {
+            username: "user".into(),
+            email: "admin@netsblox.org".into(),
+            password: None,
+            group_id: None,
+            role: Some(UserRole::User),
+        }
+        .into();
+        let admin: User = api::NewUser {
+            username: "admin".into(),
+            email: "other@netsblox.org".into(),
+            password: None,
+            group_id: None,
+            role: Some(UserRole::Admin),
+        }
+        .into();
+        let project = test_utils::project::builder()
+            .with_owner(user.username.clone())
+            .with_name("project name".into())
+            .build();
+
+        test_utils::setup()
+            .with_users(&[user.clone(), admin.clone()])
+            .with_projects(&[project.clone()])
+            .run(|app_data| async move {
+                let app = test::init_service(
+                    App::new()
+                        .wrap(test_utils::cookie::middleware())
+                        .app_data(web::Data::new(app_data.clone()))
+                        .configure(config),
+                )
+                .await;
+
+                let cookie = test_utils::cookie::new(&admin.username);
+                let req = test::TestRequest::get()
+                    .uri(&format!("/id/{}", &project.id))
+                    .cookie(cookie)
+                    .to_request();
+
+                let response = test::call_service(&app, req).await;
+                assert_eq!(response.status(), http::StatusCode::OK);
+            })
+            .await;
     }
 
     #[actix_web::test]
-    #[ignore]
+    async fn test_get_project_xml() {
+        let user: User = api::NewUser {
+            username: "user".into(),
+            email: "admin@netsblox.org".into(),
+            password: None,
+            group_id: None,
+            role: Some(UserRole::User),
+        }
+        .into();
+        let project = test_utils::project::builder()
+            .with_owner(user.username.clone())
+            .with_name("project name".into())
+            .build();
+
+        test_utils::setup()
+            .with_users(&[user.clone()])
+            .with_projects(&[project.clone()])
+            .run(|app_data| async move {
+                let app = test::init_service(
+                    App::new()
+                        .wrap(test_utils::cookie::middleware())
+                        .app_data(web::Data::new(app_data.clone()))
+                        .configure(config),
+                )
+                .await;
+
+                let cookie = test_utils::cookie::new(&user.username);
+                let req = test::TestRequest::get()
+                    .uri(&format!("/id/{}/xml", &project.id))
+                    .cookie(cookie)
+                    .to_request();
+
+                let xml = test::call_and_read_body(&app, req).await;
+                let chars: Vec<_> = xml.into_iter().take_while(|c| *c != b' ').collect();
+                let start = String::from_utf8(chars).unwrap();
+                assert_eq!(&start, "<room");
+            })
+            .await;
+    }
+
+    #[actix_web::test]
     async fn test_get_project_named() {
-        todo!();
+        let user: User = api::NewUser {
+            username: "user".into(),
+            email: "admin@netsblox.org".into(),
+            password: None,
+            group_id: None,
+            role: Some(UserRole::User),
+        }
+        .into();
+        let project = test_utils::project::builder()
+            .with_owner(user.username.clone())
+            .with_name("superDuperProject".into())
+            .build();
+
+        test_utils::setup()
+            .with_users(&[user.clone()])
+            .with_projects(&[project.clone()])
+            .run(|app_data| async move {
+                let app = test::init_service(
+                    App::new()
+                        .wrap(test_utils::cookie::middleware())
+                        .app_data(web::Data::new(app_data.clone()))
+                        .configure(config),
+                )
+                .await;
+
+                let cookie = test_utils::cookie::new(&user.username);
+                let req = test::TestRequest::get()
+                    .uri(&format!("/user/{}/{}", &project.owner, &project.name))
+                    .cookie(cookie)
+                    .to_request();
+
+                let data: api::Project = test::call_and_read_body_json(&app, req).await;
+                assert_eq!(data.id, project.id);
+                assert_eq!(data.name, project.name);
+            })
+            .await;
     }
 
     #[actix_web::test]
@@ -500,6 +842,47 @@ mod tests {
     #[ignore]
     async fn test_get_project_named_admin() {
         todo!();
+    }
+
+    #[actix_web::test]
+    async fn test_get_project_named_xml() {
+        let user: User = api::NewUser {
+            username: "user".into(),
+            email: "admin@netsblox.org".into(),
+            password: None,
+            group_id: None,
+            role: Some(UserRole::User),
+        }
+        .into();
+        let project = test_utils::project::builder()
+            .with_owner(user.username.clone())
+            .with_name("superDuperProject".into())
+            .build();
+
+        test_utils::setup()
+            .with_users(&[user.clone()])
+            .with_projects(&[project.clone()])
+            .run(|app_data| async move {
+                let app = test::init_service(
+                    App::new()
+                        .wrap(test_utils::cookie::middleware())
+                        .app_data(web::Data::new(app_data.clone()))
+                        .configure(config),
+                )
+                .await;
+
+                let cookie = test_utils::cookie::new(&user.username);
+                let req = test::TestRequest::get()
+                    .uri(&format!("/user/{}/{}/xml", &project.owner, &project.name))
+                    .cookie(cookie)
+                    .to_request();
+
+                let xml = test::call_and_read_body(&app, req).await;
+                let chars: Vec<_> = xml.into_iter().take_while(|c| *c != b' ').collect();
+                let start = String::from_utf8(chars).unwrap();
+                assert_eq!(&start, "<room");
+            })
+            .await;
     }
 
     #[actix_web::test]
@@ -706,6 +1089,106 @@ mod tests {
     }
 
     #[actix_web::test]
+    async fn test_list_pending() {
+        let user: User = api::NewUser {
+            username: "user".to_string(),
+            email: "user@netsblox.org".into(),
+            password: None,
+            group_id: None,
+            role: Some(UserRole::Moderator),
+        }
+        .into();
+        let u2: User = api::NewUser {
+            username: "u2".to_string(),
+            email: "u2@netsblox.org".into(),
+            password: None,
+            group_id: None,
+            role: None,
+        }
+        .into();
+        let project = test_utils::project::builder()
+            .with_name("pending".into())
+            .with_owner(user.username.clone())
+            .with_state(api::PublishState::PendingApproval)
+            .build();
+        let project2 = test_utils::project::builder()
+            .with_name("pending2".into())
+            .with_owner(u2.username.clone())
+            .with_state(api::PublishState::PendingApproval)
+            .build();
+        let project3 = test_utils::project::builder()
+            .with_name("name".into())
+            .with_owner(u2.username.clone())
+            .with_state(api::PublishState::Private)
+            .build();
+        let project4 = test_utils::project::builder()
+            .with_name("name".into())
+            .with_owner(u2.username.clone())
+            .with_state(api::PublishState::Public)
+            .build();
+
+        test_utils::setup()
+            .with_projects(&[project, project2, project3, project4])
+            .with_users(&[user.clone(), u2.clone()])
+            .run(|app_data| async move {
+                let app = test::init_service(
+                    App::new()
+                        .wrap(test_utils::cookie::middleware())
+                        .app_data(web::Data::new(app_data.clone()))
+                        .configure(config),
+                )
+                .await;
+
+                let req = test::TestRequest::get()
+                    .cookie(test_utils::cookie::new(&user.username))
+                    .uri("/mod/pending/")
+                    .to_request();
+
+                let projects: Vec<api::ProjectMetadata> =
+                    test::call_and_read_body_json(&app, req).await;
+                assert_eq!(projects.len(), 2);
+                projects.into_iter().for_each(|project| {
+                    assert!(matches!(project.state, api::PublishState::PendingApproval));
+                    assert!(project.name.starts_with("pending"));
+                })
+            })
+            .await;
+    }
+
+    #[actix_web::test]
+    async fn test_list_pending_403() {
+        let user: User = api::NewUser {
+            username: "user".to_string(),
+            email: "user@netsblox.org".into(),
+            password: None,
+            group_id: None,
+            role: None,
+        }
+        .into();
+
+        test_utils::setup()
+            .with_users(&[user.clone()])
+            .run(|app_data| async move {
+                let app = test::init_service(
+                    App::new()
+                        .wrap(test_utils::cookie::middleware())
+                        .app_data(web::Data::new(app_data.clone()))
+                        .configure(config),
+                )
+                .await;
+
+                let req = test::TestRequest::get()
+                    .cookie(test_utils::cookie::new(&user.username))
+                    .uri("/mod/pending/")
+                    .to_request();
+
+                let response = test::call_service(&app, req).await;
+                assert_eq!(response.status(), http::StatusCode::FORBIDDEN);
+            })
+            .await;
+    }
+
+    #[actix_web::test]
     #[ignore]
     async fn test_delete_project() {
         // TODO: Should the client be notified?
@@ -819,7 +1302,7 @@ mod tests {
     }
 
     #[actix_web::test]
-    async fn test_rename_project_403() {
+    async fn test_rename_project_401() {
         let new_name = "some new name";
         let project_update = UpdateProjectData {
             name: new_name.into(),
@@ -847,22 +1330,62 @@ mod tests {
                     .to_request();
 
                 let response = test::call_service(&app, req).await;
-                println!("status: {:?}", response.status());
                 assert_eq!(response.status(), http::StatusCode::UNAUTHORIZED);
             })
             .await;
     }
 
     #[actix_web::test]
-    #[ignore]
     async fn test_rename_project_admin() {
-        todo!();
-    }
+        let owner: User = api::NewUser {
+            username: "owner".to_string(),
+            email: "owner@netsblox.org".into(),
+            password: None,
+            group_id: None,
+            role: None,
+        }
+        .into();
+        let admin: User = api::NewUser {
+            username: "admin".to_string(),
+            email: "admin@netsblox.org".into(),
+            password: None,
+            group_id: None,
+            role: Some(UserRole::Admin),
+        }
+        .into();
+        let project = test_utils::project::builder()
+            .with_name("old_name".into())
+            .with_owner(owner.username.clone())
+            .build();
+        let id = project.id.clone();
+        let new_name = "new project";
+        let project_update = UpdateProjectData {
+            name: new_name.into(),
+            client_id: None,
+        };
 
-    #[actix_web::test]
-    #[ignore]
-    async fn test_rename_project_room_update() {
-        todo!();
+        test_utils::setup()
+            .with_projects(&[project])
+            .with_users(&[owner, admin.clone()])
+            .run(|app_data| async move {
+                let app = test::init_service(
+                    App::new()
+                        .wrap(test_utils::cookie::middleware())
+                        .app_data(web::Data::new(app_data.clone()))
+                        .configure(config),
+                )
+                .await;
+
+                let req = test::TestRequest::patch()
+                    .cookie(test_utils::cookie::new(&admin.username))
+                    .uri(&format!("/id/{}", id))
+                    .set_json(&project_update)
+                    .to_request();
+
+                let response = test::call_service(&app, req).await;
+                assert_eq!(response.status(), http::StatusCode::OK);
+            })
+            .await;
     }
 
     #[actix_web::test]
@@ -1163,33 +1686,236 @@ mod tests {
     }
 
     #[actix_web::test]
-    #[ignore]
-    async fn test_rename_role_room_update() {
-        todo!();
-    }
-
-    #[actix_web::test]
-    #[ignore]
     async fn test_save_role() {
-        todo!();
+        let user: User = api::NewUser {
+            username: "owner".to_string(),
+            email: "owner@netsblox.org".into(),
+            password: None,
+            group_id: None,
+            role: None,
+        }
+        .into();
+        let role_id = api::RoleId::new("someRole".into());
+        let role_data = api::RoleData {
+            name: "role".into(),
+            code: "<code/>".into(),
+            media: "<media/>".into(),
+        };
+        let project = test_utils::project::builder()
+            .with_owner(user.username.to_string())
+            .with_roles([(role_id.clone(), role_data)].into_iter().collect())
+            .build();
+
+        test_utils::setup()
+            .with_projects(&[project.clone()])
+            .with_users(&[user.clone()])
+            .run(|app_data| async move {
+                let app = test::init_service(
+                    App::new()
+                        .wrap(test_utils::cookie::middleware())
+                        .app_data(web::Data::new(app_data.clone()))
+                        .configure(config),
+                )
+                .await;
+
+                let data = api::RoleData {
+                    name: "new name".into(),
+                    code: "<new code/>".into(),
+                    media: "<new media/>".into(),
+                };
+                let req = test::TestRequest::post()
+                    .cookie(test_utils::cookie::new(&user.username))
+                    .uri(&format!("/id/{}/{}", &project.id, &role_id))
+                    .set_json(&data)
+                    .to_request();
+
+                let project: api::ProjectMetadata = test::call_and_read_body_json(&app, req).await;
+
+                // Check the contents of the role
+                let req = test::TestRequest::get()
+                    .cookie(test_utils::cookie::new(&user.username))
+                    .uri(&format!("/id/{}/{}", &project.id, &role_id))
+                    .to_request();
+                let role: api::RoleData = test::call_and_read_body_json(&app, req).await;
+                assert_eq!(&role.name, "new name");
+                assert_eq!(&role.code, "<new code/>");
+                assert_eq!(&role.media, "<new media/>");
+            })
+            .await;
     }
 
     #[actix_web::test]
-    #[ignore]
     async fn test_save_role_403() {
-        todo!();
+        let user: User = api::NewUser {
+            username: "owner".to_string(),
+            email: "owner@netsblox.org".into(),
+            password: None,
+            group_id: None,
+            role: None,
+        }
+        .into();
+        let other: User = api::NewUser {
+            username: "other".to_string(),
+            email: "other@netsblox.org".into(),
+            password: None,
+            group_id: None,
+            role: None,
+        }
+        .into();
+        let role_id = api::RoleId::new("someRole".into());
+        let role_data = api::RoleData {
+            name: "role".into(),
+            code: "<code/>".into(),
+            media: "<media/>".into(),
+        };
+        let project = test_utils::project::builder()
+            .with_owner(user.username.to_string())
+            .with_roles([(role_id.clone(), role_data)].into_iter().collect())
+            .build();
+
+        test_utils::setup()
+            .with_projects(&[project.clone()])
+            .with_users(&[user.clone(), other.clone()])
+            .run(|app_data| async move {
+                let app = test::init_service(
+                    App::new()
+                        .wrap(test_utils::cookie::middleware())
+                        .app_data(web::Data::new(app_data.clone()))
+                        .configure(config),
+                )
+                .await;
+
+                let data = api::RoleData {
+                    name: "new name".into(),
+                    code: "<new code/>".into(),
+                    media: "<new media/>".into(),
+                };
+                let req = test::TestRequest::post()
+                    .cookie(test_utils::cookie::new(&other.username))
+                    .uri(&format!("/id/{}/{}", &project.id, &role_id))
+                    .set_json(&data)
+                    .to_request();
+
+                let response = test::call_service(&app, req).await;
+                assert_eq!(response.status(), http::StatusCode::FORBIDDEN);
+            })
+            .await;
     }
 
     #[actix_web::test]
-    #[ignore]
     async fn test_save_role_admin() {
-        todo!();
+        let user: User = api::NewUser {
+            username: "owner".to_string(),
+            email: "owner@netsblox.org".into(),
+            password: None,
+            group_id: None,
+            role: None,
+        }
+        .into();
+        let admin: User = api::NewUser {
+            username: "admin".to_string(),
+            email: "admin@netsblox.org".into(),
+            password: None,
+            group_id: None,
+            role: Some(UserRole::Admin),
+        }
+        .into();
+        let role_id = api::RoleId::new("someRole".into());
+        let role_data = api::RoleData {
+            name: "role".into(),
+            code: "<code/>".into(),
+            media: "<media/>".into(),
+        };
+        let project = test_utils::project::builder()
+            .with_owner(user.username.to_string())
+            .with_roles([(role_id.clone(), role_data)].into_iter().collect())
+            .build();
+
+        test_utils::setup()
+            .with_projects(&[project.clone()])
+            .with_users(&[user.clone(), admin.clone()])
+            .run(|app_data| async move {
+                let app = test::init_service(
+                    App::new()
+                        .wrap(test_utils::cookie::middleware())
+                        .app_data(web::Data::new(app_data.clone()))
+                        .configure(config),
+                )
+                .await;
+
+                let data = api::RoleData {
+                    name: "new name".into(),
+                    code: "<new code/>".into(),
+                    media: "<new media/>".into(),
+                };
+                let req = test::TestRequest::post()
+                    .cookie(test_utils::cookie::new(&admin.username))
+                    .uri(&format!("/id/{}/{}", &project.id, &role_id))
+                    .set_json(&data)
+                    .to_request();
+
+                let response = test::call_service(&app, req).await;
+                assert_eq!(response.status(), http::StatusCode::OK);
+            })
+            .await;
     }
 
     #[actix_web::test]
-    #[ignore]
     async fn test_delete_role() {
-        todo!();
+        let user: User = api::NewUser {
+            username: "owner".to_string(),
+            email: "owner@netsblox.org".into(),
+            password: None,
+            group_id: None,
+            role: None,
+        }
+        .into();
+        let role_id = api::RoleId::new("someRole".into());
+        let role_data = api::RoleData {
+            name: "role".into(),
+            code: "<code/>".into(),
+            media: "<media/>".into(),
+        };
+        let role2_id = api::RoleId::new("role2Id".into());
+        let role2_data = api::RoleData {
+            name: "role2".into(),
+            code: "<code/>".into(),
+            media: "<media/>".into(),
+        };
+        let project = test_utils::project::builder()
+            .with_owner(user.username.to_string())
+            .with_roles(
+                [(role_id.clone(), role_data), (role2_id.clone(), role2_data)]
+                    .into_iter()
+                    .collect(),
+            )
+            .build();
+
+        test_utils::setup()
+            .with_projects(&[project.clone()])
+            .with_users(&[user.clone()])
+            .run(|app_data| async move {
+                let app = test::init_service(
+                    App::new()
+                        .wrap(test_utils::cookie::middleware())
+                        .app_data(web::Data::new(app_data.clone()))
+                        .configure(config),
+                )
+                .await;
+
+                let req = test::TestRequest::delete()
+                    .cookie(test_utils::cookie::new(&user.username))
+                    .uri(&format!("/id/{}/{}", &project.id, &role_id))
+                    .to_request();
+
+                let project: api::ProjectMetadata = test::call_and_read_body_json(&app, req).await;
+                let role_opt = project.roles.get(&role_id);
+                assert!(role_opt.is_none(), "Role not deleted");
+
+                let role2_opt = project.roles.get(&role2_id);
+                assert!(role2_opt.is_some(), "Other role deleted!");
+            })
+            .await;
     }
 
     #[actix_web::test]
@@ -1207,36 +1933,6 @@ mod tests {
     #[actix_web::test]
     #[ignore]
     async fn test_delete_role_room_update() {
-        todo!();
-    }
-
-    #[actix_web::test]
-    #[ignore]
-    async fn test_add_collaborator() {
-        todo!();
-    }
-
-    #[actix_web::test]
-    #[ignore]
-    async fn test_add_collaborator_invalid_name() {
-        todo!();
-    }
-
-    #[actix_web::test]
-    #[ignore]
-    async fn test_add_collaborator_403() {
-        todo!();
-    }
-
-    #[actix_web::test]
-    #[ignore]
-    async fn test_add_collaborator_admin() {
-        todo!();
-    }
-
-    #[actix_web::test]
-    #[ignore]
-    async fn test_add_collaborator_room_update() {
         todo!();
     }
 
@@ -1278,19 +1974,146 @@ mod tests {
     #[actix_web::test]
     #[ignore]
     async fn test_remove_collaborator_invalid_name() {
-        todo!();
+        let owner: User = api::NewUser {
+            username: "owner".to_string(),
+            email: "owner@netsblox.org".into(),
+            password: None,
+            group_id: None,
+            role: None,
+        }
+        .into();
+
+        let project = test_utils::project::builder()
+            .with_owner(owner.username.clone())
+            .with_collaborators(&["user2", "user3"])
+            .build();
+
+        test_utils::setup()
+            .with_users(&[owner.clone()])
+            .with_projects(&[project.clone()])
+            .run(|app_data| async move {
+                let app = test::init_service(
+                    App::new()
+                        .wrap(test_utils::cookie::middleware())
+                        .app_data(web::Data::new(app_data.clone()))
+                        .configure(config),
+                )
+                .await;
+
+                let req = test::TestRequest::delete()
+                    .cookie(test_utils::cookie::new(&owner.username))
+                    .uri(&format!(
+                        "/id/{}/collaborators/notACollaborator",
+                        &project.id
+                    ))
+                    .to_request();
+
+                let response = test::call_service(&app, req).await;
+                // Currently, this doesn't detect if the project was changed
+                // and just returns "OK" if the project doesn't have that
+                // collaborator after the call.
+                assert_eq!(response.status(), http::StatusCode::NOT_FOUND);
+            })
+            .await;
     }
 
     #[actix_web::test]
-    #[ignore]
     async fn test_remove_collaborator_403() {
-        todo!();
+        let owner: User = api::NewUser {
+            username: "owner".to_string(),
+            email: "owner@netsblox.org".into(),
+            password: None,
+            group_id: None,
+            role: None,
+        }
+        .into();
+        let other: User = api::NewUser {
+            username: "other".to_string(),
+            email: "other@netsblox.org".into(),
+            password: None,
+            group_id: None,
+            role: None,
+        }
+        .into();
+
+        let project = test_utils::project::builder()
+            .with_owner(owner.username.clone())
+            .with_collaborators(&["user2", "user3"])
+            .build();
+
+        test_utils::setup()
+            .with_users(&[owner, other.clone()])
+            .with_projects(&[project.clone()])
+            .run(|app_data| async move {
+                let app = test::init_service(
+                    App::new()
+                        .wrap(test_utils::cookie::middleware())
+                        .app_data(web::Data::new(app_data.clone()))
+                        .configure(config),
+                )
+                .await;
+
+                let req = test::TestRequest::delete()
+                    .cookie(test_utils::cookie::new(&other.username))
+                    .uri(&format!("/id/{}/collaborators/user2", &project.id))
+                    .to_request();
+
+                let response = test::call_service(&app, req).await;
+                assert_eq!(response.status(), http::StatusCode::FORBIDDEN);
+            })
+            .await;
     }
 
     #[actix_web::test]
-    #[ignore]
     async fn test_remove_collaborator_admin() {
-        todo!();
+        let owner: User = api::NewUser {
+            username: "owner".to_string(),
+            email: "owner@netsblox.org".into(),
+            password: None,
+            group_id: None,
+            role: None,
+        }
+        .into();
+        let admin: User = api::NewUser {
+            username: "admin".to_string(),
+            email: "admin@netsblox.org".into(),
+            password: None,
+            group_id: None,
+            role: Some(UserRole::Admin),
+        }
+        .into();
+
+        let project = test_utils::project::builder()
+            .with_owner(owner.username.clone())
+            .with_collaborators(&["user2", "user3"])
+            .build();
+
+        test_utils::setup()
+            .with_users(&[owner, admin.clone()])
+            .with_projects(&[project.clone()])
+            .run(|app_data| async move {
+                let app = test::init_service(
+                    App::new()
+                        .wrap(test_utils::cookie::middleware())
+                        .app_data(web::Data::new(app_data.clone()))
+                        .configure(config),
+                )
+                .await;
+
+                let req = test::TestRequest::delete()
+                    .cookie(test_utils::cookie::new(&admin.username))
+                    .uri(&format!("/id/{}/collaborators/user2", &project.id))
+                    .to_request();
+
+                let project: api::ProjectMetadata = test::call_and_read_body_json(&app, req).await;
+                let expected = ["user3"];
+                project
+                    .collaborators
+                    .into_iter()
+                    .enumerate()
+                    .for_each(|(i, name)| assert_eq!(name, expected[i]));
+            })
+            .await;
     }
 
     #[actix_web::test]

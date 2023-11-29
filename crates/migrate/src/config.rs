@@ -30,6 +30,7 @@ pub struct StorageConfig {
 pub struct Config {
     pub source: StorageConfig,
     pub target: StorageConfig,
+    pub sleep: Option<u64>,
 }
 
 impl Config {

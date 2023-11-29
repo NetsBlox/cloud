@@ -63,6 +63,10 @@ enum Users {
         /// NetsBlox user to ban
         username: String,
     },
+    Unban {
+        /// NetsBlox user to unban
+        username: String,
+    },
     /// Link an account to a Snap! account (for login)
     Link {
         /// Snap! username to link to NetsBlox account
@@ -649,7 +653,6 @@ struct Cli {
 }
 
 fn prompt_credentials() -> (String, String, bool) {
-    // FIXME: can't delete w/ backspace???
     let use_snap = inquire::Confirm::new("Would you like to login using Snap?")
         .with_default(false)
         .prompt()
@@ -662,6 +665,7 @@ fn prompt_credentials() -> (String, String, bool) {
     let password = Password::new("Password:")
         .with_display_toggle_enabled()
         .with_display_mode(PasswordDisplayMode::Masked)
+        .without_confirmation()
         .prompt()
         .expect("Unable to prompt password");
 
@@ -772,7 +776,7 @@ async fn do_command(mut cfg: Config, args: Cli) -> Result<(), error::Error> {
             }
             Users::List => {
                 for user in client.list_users().await? {
-                    println!("{}", user.username);
+                    println!("{}", serde_json::to_string(&user).unwrap());
                 }
             }
             Users::Delete {
@@ -818,6 +822,9 @@ async fn do_command(mut cfg: Config, args: Cli) -> Result<(), error::Error> {
             }
             Users::Ban { username } => {
                 client.ban_user(username).await?;
+            }
+            Users::Unban { username } => {
+                client.unban_user(username).await?;
             }
         },
         Command::Projects(cmd) => match &cmd.subcmd {

@@ -9,7 +9,7 @@ use serde::{
     Deserialize, Deserializer, Serialize,
 };
 use serde_json::Value;
-use std::{cmp::Ordering, collections::HashMap, str::FromStr, time::SystemTime};
+use std::{collections::HashMap, str::FromStr, time::SystemTime};
 use ts_rs::TS;
 use uuid::Uuid;
 
@@ -21,6 +21,7 @@ const APP_NAME: &str = "NetsBlox";
 #[serde(rename_all = "camelCase")]
 pub struct ClientConfig {
     pub client_id: String,
+    #[ts(optional)]
     pub username: Option<String>,
     pub services_hosts: Vec<ServiceHost>,
     pub cloud_url: String,
@@ -38,10 +39,12 @@ pub struct InvitationResponse {
 pub struct User {
     pub username: String,
     pub email: String,
+    #[ts(optional)]
     pub group_id: Option<GroupId>,
     pub role: UserRole,
     pub created_at: SystemTime,
     pub linked_accounts: Vec<LinkedAccount>,
+    #[ts(optional)]
     pub services_hosts: Option<Vec<ServiceHost>>,
 }
 
@@ -51,28 +54,23 @@ pub struct User {
 pub struct NewUser {
     pub username: String,
     pub email: String,
+    #[ts(optional)]
     pub password: Option<String>,
+    #[ts(optional)]
     pub group_id: Option<GroupId>,
+    #[ts(optional)]
     pub role: Option<UserRole>,
 }
 
 #[derive(TS)]
 #[ts(export)]
-#[derive(Serialize, Deserialize, Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Serialize, Deserialize, Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord)]
 #[serde(rename_all = "camelCase")]
 pub enum UserRole {
-    User = 0,
-    Teacher = 1,
-    Moderator = 2,
-    Admin = 3,
-}
-
-impl PartialOrd for UserRole {
-    fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
-        let my_val = *self as u32;
-        let other_val = *other as u32;
-        my_val.partial_cmp(&other_val)
-    }
+    User,
+    Teacher,
+    Moderator,
+    Admin,
 }
 
 #[derive(TS)]
@@ -84,6 +82,7 @@ pub struct NetworkTraceMetadata {
     #[ts(type = "any")] // FIXME
     pub start_time: SystemTime,
     #[ts(type = "any | null")] // FIXME
+    #[ts(optional)]
     pub end_time: Option<SystemTime>,
 }
 
@@ -161,6 +160,7 @@ pub struct BannedAccount {
 #[serde(rename_all = "camelCase")]
 pub struct LoginRequest {
     pub credentials: Credentials,
+    #[ts(optional)]
     pub client_id: Option<ClientId>, // TODO: add a secret token for the client?
 }
 
@@ -461,7 +461,7 @@ pub struct CreateLibraryData {
 
 #[derive(TS)]
 #[ts(export)]
-#[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq)]
+#[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
 pub enum PublishState {
     Private,
     ApprovalDenied,
@@ -469,30 +469,9 @@ pub enum PublishState {
     Public,
 }
 
-impl PartialOrd for PublishState {
-    fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
-        if self.eq(other) {
-            Some(Ordering::Equal)
-        } else if matches!(self, PublishState::Private) {
-            Some(Ordering::Less)
-        } else if matches!(other, PublishState::Private) {
-            Some(Ordering::Greater)
-        } else if matches!(self, PublishState::ApprovalDenied) {
-            Some(Ordering::Less)
-        } else if matches!(other, PublishState::ApprovalDenied) {
-            Some(Ordering::Greater)
-        } else if matches!(self, PublishState::PendingApproval) {
-            Some(Ordering::Less)
-        } else {
-            // other must be PendingApproval and we are Public
-            Some(Ordering::Greater)
-        }
-    }
-}
-
 #[derive(TS)]
 #[ts(export)]
-#[derive(Serialize, Deserialize)]
+#[derive(Serialize, Deserialize, Clone)]
 pub struct LibraryMetadata {
     pub owner: String,
     pub name: String,
@@ -505,7 +484,7 @@ impl LibraryMetadata {
         owner: String,
         name: String,
         state: PublishState,
-        notes: Option<String>,
+        #[ts(optional)] notes: Option<String>,
     ) -> LibraryMetadata {
         LibraryMetadata {
             owner,
@@ -522,6 +501,7 @@ impl LibraryMetadata {
 #[serde(rename_all = "camelCase")]
 pub struct CreateGroupData {
     pub name: String,
+    #[ts(optional)]
     pub services_hosts: Option<Vec<ServiceHost>>,
 }
 
@@ -548,6 +528,7 @@ pub struct Group {
     pub id: GroupId,
     pub owner: String,
     pub name: String,
+    #[ts(optional)]
     pub services_hosts: Option<Vec<ServiceHost>>,
 }
 
@@ -598,6 +579,7 @@ impl CollaborationInvite {
 #[serde(rename_all = "camelCase")]
 pub struct UpdateProjectData {
     pub name: String,
+    #[ts(optional)]
     pub client_id: Option<ClientId>,
 }
 
@@ -607,6 +589,7 @@ pub struct UpdateProjectData {
 #[serde(rename_all = "camelCase")]
 pub struct UpdateRoleData {
     pub name: String,
+    #[ts(optional)]
     pub client_id: Option<ClientId>,
 }
 
@@ -615,13 +598,18 @@ pub struct UpdateRoleData {
 #[derive(Deserialize, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct CreateProjectData {
+    #[ts(optional)]
     pub owner: Option<String>,
     pub name: String,
+    #[ts(optional)]
     pub roles: Option<Vec<RoleData>>,
+    #[ts(optional)]
     pub client_id: Option<ClientId>,
+    #[ts(optional)]
     pub save_state: Option<SaveState>,
 
     #[cfg(test)]
+    #[ts(optional)]
     pub role_dict: Option<HashMap<RoleId, RoleData>>,
 }
 
@@ -663,6 +651,7 @@ impl FromStr for ClientId {
 #[derive(Deserialize, Serialize, Debug)]
 #[serde(rename_all = "camelCase")]
 pub struct ExternalClient {
+    #[ts(optional)]
     pub username: Option<String>,
     pub address: String,
     pub app_id: AppId,
@@ -703,6 +692,7 @@ pub struct OccupantState {
 pub struct OccupantInviteData {
     pub username: String,
     pub role_id: RoleId,
+    #[ts(optional)]
     pub sender: Option<String>,
 }
 
@@ -721,7 +711,9 @@ pub struct AuthorizedServiceHost {
 #[derive(Deserialize, Serialize, Debug, Clone)]
 #[serde(rename_all = "camelCase")]
 pub struct ClientInfo {
+    #[ts(optional)]
     pub username: Option<String>,
+    #[ts(optional)]
     pub state: Option<ClientState>,
 }
 
@@ -731,8 +723,10 @@ pub struct ClientInfo {
 #[derive(Deserialize, Serialize, Debug, Clone)]
 pub struct ServiceSettings {
     /// Service settings owned by the user
+    #[ts(optional)]
     pub user: Option<String>,
     /// Service settings owned by a group in which the user is a member
+    #[ts(optional)]
     pub member: Option<String>,
     /// Service settings owned by a groups created by the user
     pub groups: HashMap<GroupId, String>,
@@ -742,6 +736,7 @@ pub struct ServiceSettings {
 #[derive(Deserialize, Serialize, Debug, Clone)]
 #[serde(rename_all = "camelCase")]
 pub struct SendMessage {
+    #[ts(optional)]
     pub sender: Option<SendMessageSender>,
     pub target: SendMessageTarget,
     // TODO: Should we only allow "message" types or any sort of message?
@@ -776,6 +771,7 @@ pub enum SendMessageTarget {
     },
     #[serde(rename_all = "camelCase")]
     Client {
+        #[ts(optional)]
         state: Option<ClientState>,
         client_id: ClientId,
     },
@@ -806,12 +802,15 @@ mod tests {
         assert!(UserRole::Moderator > UserRole::User);
         assert!(UserRole::Admin > UserRole::User);
 
+        assert!(UserRole::Moderator > UserRole::Teacher);
+        assert!(UserRole::Admin > UserRole::Teacher);
+
+        assert!(UserRole::Admin > UserRole::Moderator);
+
         assert!(UserRole::User == UserRole::User);
         assert!(UserRole::Teacher == UserRole::Teacher);
         assert!(UserRole::Moderator == UserRole::Moderator);
         assert!(UserRole::Admin == UserRole::Admin);
-
-        assert!(UserRole::Admin > UserRole::Moderator);
     }
 
     #[test]

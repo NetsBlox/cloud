@@ -9,7 +9,8 @@ use mongodb::{
     Collection,
 };
 use netsblox_cloud_common::{
-    api, NetworkTraceMetadata, OccupantInvite, ProjectMetadata, SentMessage,
+    api::{self, SaveState},
+    NetworkTraceMetadata, OccupantInvite, ProjectMetadata, SentMessage,
 };
 
 use crate::{
@@ -60,13 +61,52 @@ impl<'a> NetworkActions<'a> {
         Ok(state)
     }
 
+    /// Update a project to ensure it isn't garbage collected due to inactivity
+    pub(crate) async fn activate_room(&self, vp: &auth::ViewProject) -> Result<(), UserError> {
+        let query = doc! {
+            "id": &vp.metadata.id,
+            "saveState": SaveState::Created
+        };
+        let update = doc! {
+            "$set": {
+                "saveState": SaveState::Transient,
+                "updated": DateTime::now(),
+            },
+            "$unset": {
+                "deleteAt": 1
+            }
+        };
+        let options = FindOneAndUpdateOptions::builder()
+            .return_document(ReturnDocument::After)
+            .build();
+
+        let metadata = self
+            .project_metadata
+            .find_one_and_update(query, update, options)
+            .await
+            .map_err(InternalError::DatabaseConnectionError)?;
+
+        if let Some(metadata) = metadata {
+            utils::update_project_cache(self.project_cache, metadata);
+        }
+
+        Ok(())
+    }
+
     pub(crate) async fn start_network_trace(
         &self,
         vp: &auth::ViewProject,
     ) -> Result<api::NetworkTraceMetadata, UserError> {
         let query = doc! {"id": &vp.metadata.id};
         let new_trace = NetworkTraceMetadata::new();
-        let update = doc! {"$push": {"networkTraces": &new_trace}};
+        let update = doc! {
+            "$push": {
+                "networkTraces": &new_trace
+            },
+            "$set": {
+                "updated": DateTime::now(),
+            }
+        };
         let options = FindOneAndUpdateOptions::builder()
             .return_document(ReturnDocument::After)
             .build();
@@ -78,7 +118,7 @@ impl<'a> NetworkActions<'a> {
             .map_err(InternalError::DatabaseConnectionError)?
             .ok_or(UserError::ProjectNotFoundError)?;
 
-        utils::update_project_cache(&self.project_cache, metadata);
+        utils::update_project_cache(self.project_cache, metadata);
 
         Ok(new_trace.into())
     }
@@ -102,7 +142,8 @@ impl<'a> NetworkActions<'a> {
         let end_time = DateTime::now();
         let update = doc! {
             "$set": {
-                "networkTraces.$.endTime": end_time
+                "networkTraces.$.endTime": end_time,
+                "updated": DateTime::now(),
             }
         };
         let options = FindOneAndUpdateOptions::builder()
@@ -123,7 +164,7 @@ impl<'a> NetworkActions<'a> {
             .unwrap() // guaranteed to exist since it was checked in the query
             .clone();
 
-        utils::update_project_cache(&self.project_cache, metadata);
+        utils::update_project_cache(self.project_cache, metadata);
 
         Ok(trace.into())
     }
@@ -157,7 +198,7 @@ impl<'a> NetworkActions<'a> {
             .ok_or(UserError::NetworkTraceNotFoundError)?;
 
         let start_time = trace.start_time;
-        let end_time = trace.end_time.unwrap_or_else(|| DateTime::now());
+        let end_time = trace.end_time.unwrap_or_else(DateTime::now);
 
         let query = doc! {
             "projectId": &vp.metadata.id,
@@ -193,7 +234,14 @@ impl<'a> NetworkActions<'a> {
             .ok_or(UserError::NetworkTraceNotFoundError)?;
 
         let query = doc! {"id": &vp.metadata.id};
-        let update = doc! {"$pull": {"networkTraces": &trace}};
+        let update = doc! {
+            "$pull": {
+                "networkTraces": &trace,
+            },
+            "$set": {
+                "updated": DateTime::now(),
+            }
+        };
         let options = FindOneAndUpdateOptions::builder()
             .return_document(ReturnDocument::After)
             .build();
@@ -222,7 +270,7 @@ impl<'a> NetworkActions<'a> {
             .await
             .map_err(InternalError::DatabaseConnectionError)?;
 
-        utils::update_project_cache(&self.project_cache, metadata.clone());
+        let metadata = utils::update_project_cache(self.project_cache, metadata);
 
         Ok(metadata.into())
     }
@@ -332,5 +380,76 @@ impl<'a> NetworkActions<'a> {
         self.network.do_send(topology::SendMessageFromServices {
             message: sm.msg.clone(),
         });
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use std::collections::HashMap;
+
+    use crate::test_utils;
+
+    use super::*;
+
+    #[actix_web::test]
+    async fn test_activate_room() {
+        let username: String = "username".into();
+        let role_id = api::RoleId::new("role_id".into());
+        let roles: HashMap<_, _> = [(
+            role_id.clone(),
+            api::RoleData {
+                name: "some role".into(),
+                code: "<code/>".into(),
+                media: "<media/>".into(),
+            },
+        )]
+        .into_iter()
+        .collect();
+
+        let project = test_utils::project::builder()
+            .with_name("project")
+            .with_owner(username.clone())
+            .with_roles(roles)
+            .build();
+
+        test_utils::setup()
+            .with_projects(&[project])
+            .run(|app_data| async move {
+                // set the project to Created
+                let query = doc! {};
+                let update = doc! {
+                    "$set": {
+                        "saveState": SaveState::Created
+                    }
+                };
+                let options = FindOneAndUpdateOptions::builder()
+                    .return_document(ReturnDocument::After)
+                    .build();
+
+                let metadata = app_data
+                    .project_metadata
+                    .find_one_and_update(query, update, options)
+                    .await
+                    .expect("database lookup")
+                    .unwrap();
+
+                // Cache the current version
+                let vp = auth::ViewProject::test(metadata);
+                let actions = app_data.as_network_actions();
+                let mut cache = actions.project_cache.write().unwrap();
+                cache.put(vp.metadata.id.clone(), vp.metadata.clone());
+                drop(cache);
+
+                // Activate room
+                actions.activate_room(&vp).await.unwrap();
+
+                // Check that the cache has been updated
+                let mut cache = actions.project_cache.write().unwrap();
+                let cached = cache.get(&vp.metadata.id);
+                assert!(cached.is_some(), "Project not cached after update");
+
+                assert!(matches!(cached.unwrap().save_state, SaveState::Transient));
+            })
+            .await;
     }
 }

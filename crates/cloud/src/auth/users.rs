@@ -56,6 +56,16 @@ impl EditUser {
 }
 
 #[cfg(test)]
+impl BanUser {
+    pub(crate) fn test(username: String) -> Self {
+        Self {
+            username,
+            _private: (),
+        }
+    }
+}
+
+#[cfg(test)]
 impl ViewUser {
     pub(crate) fn test(username: String) -> Self {
         Self {
@@ -77,10 +87,8 @@ pub(crate) async fn try_create_user(
     // make sure we can:
     // - edit the target group
     // - make the target user role
-    println!("group is {:?}", &data.group_id);
     if let Some(group_id) = data.group_id.clone() {
         auth::try_edit_group(app, req, &group_id).await?;
-        println!("can edit group?!");
     }
 
     let new_user_role = data.role.unwrap_or(UserRole::User);
@@ -109,10 +117,7 @@ pub(crate) async fn try_view_user(
     client_id: Option<&ClientId>,
     username: &str,
 ) -> Result<ViewUser, UserError> {
-    // can view user if:
-    // - self
-    // - moderator/admin
-    // - group owner
+    // Anyone can view guest accounts
     let is_guest = client_id.map(|id| id.as_str() == username).unwrap_or(false);
     if is_guest {
         return Ok(ViewUser {
@@ -121,12 +126,24 @@ pub(crate) async fn try_view_user(
         });
     }
 
-    let viewer = utils::get_username(req).ok_or(UserError::LoginRequiredError)?;
+    // Check if authorized host
+    let is_authorized_host = utils::get_authorized_host(&app.authorized_services, req)
+        .await?
+        .is_some();
+    if is_authorized_host {
+        return Ok(ViewUser {
+            username: username.to_owned(),
+            _private: (),
+        });
+    }
 
+    // Authorize the user
+    // can view user if:
+    // - self
+    // - moderator/admin
+    // - group owner
+    let viewer = utils::get_username(req).ok_or(UserError::LoginRequiredError)?;
     let authorized = viewer == username
-        || utils::get_authorized_host(&app.authorized_services, req)
-            .await?
-            .is_some()
         || get_user_role(app, &viewer).await? >= UserRole::Moderator
         || has_group_containing(app, &viewer, username).await?;
 
@@ -158,7 +175,6 @@ pub(crate) async fn try_edit_user(
     username: &str,
 ) -> Result<EditUser, UserError> {
     if let Some(requestor) = utils::get_username(req) {
-        println!("requestor is {}", &requestor);
         let can_edit = requestor == username
             || get_user_role(app, &requestor).await? >= UserRole::Moderator
             || has_group_containing(app, &requestor, username).await?;
@@ -229,7 +245,6 @@ pub(crate) async fn try_ban_user(
 ) -> Result<BanUser, UserError> {
     let session = req.get_session();
     if is_moderator(app, &session).await? {
-        println!("is moderator!");
         Ok(BanUser {
             username: username.to_owned(),
             _private: (),

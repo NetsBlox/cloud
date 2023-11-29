@@ -213,15 +213,26 @@ impl Client {
         Ok(())
     }
 
-    pub async fn ban_user(&self, username: &str) -> Result<(), error::Error> {
+    pub async fn ban_user(&self, username: &str) -> Result<BannedAccount, error::Error> {
         let response = self
             .request(Method::POST, &format!("/users/{}/ban", username))
             .send()
             .await
             .map_err(error::Error::RequestError)?;
 
-        check_response(response).await?;
-        Ok(())
+        let response = check_response(response).await?;
+        Ok(response.json::<BannedAccount>().await.unwrap())
+    }
+
+    pub async fn unban_user(&self, username: &str) -> Result<BannedAccount, error::Error> {
+        let response = self
+            .request(Method::POST, &format!("/users/{}/unban", username))
+            .send()
+            .await
+            .map_err(error::Error::RequestError)?;
+
+        let response = check_response(response).await?;
+        Ok(response.json::<BannedAccount>().await.unwrap())
     }
 
     // Project management

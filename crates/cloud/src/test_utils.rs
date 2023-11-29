@@ -4,7 +4,8 @@ use futures::{future::join_all, Future};
 use lazy_static::lazy_static;
 use mongodb::{bson::doc, Client};
 use netsblox_cloud_common::{
-    api, AuthorizedServiceHost, BannedAccount, CollaborationInvite, FriendLink, Group, User,
+    api, AuthorizedServiceHost, BannedAccount, CollaborationInvite, FriendLink, Group, Library,
+    User,
 };
 
 use crate::{
@@ -27,6 +28,7 @@ pub(crate) fn setup() -> TestSetupBuilder {
         users: Vec::new(),
         banned_users: Vec::new(),
         projects: Vec::new(),
+        libraries: Vec::new(),
         groups: Vec::new(),
         clients: Vec::new(),
         friends: Vec::new(),
@@ -40,6 +42,7 @@ pub(crate) struct TestSetupBuilder {
     prefix: String,
     users: Vec<User>,
     projects: Vec<project::ProjectFixture>,
+    libraries: Vec<Library>,
     groups: Vec<Group>,
     clients: Vec<network::Client>,
     friends: Vec<FriendLink>,
@@ -67,6 +70,11 @@ impl TestSetupBuilder {
 
     pub(crate) fn with_projects(mut self, projects: &[project::ProjectFixture]) -> Self {
         self.projects.extend_from_slice(projects);
+        self
+    }
+
+    pub(crate) fn with_libraries(mut self, libraries: &[Library]) -> Self {
+        self.libraries.extend_from_slice(libraries);
         self
     }
 
@@ -108,7 +116,7 @@ impl TestSetupBuilder {
         settings.database.name = db_name.clone();
         settings.s3.bucket = format!("{}-{}", &self.prefix, settings.s3.bucket);
 
-        let app_data = AppData::new(client.clone(), settings, None, None);
+        let app_data = AppData::new(client.clone(), settings, None, None, None);
 
         // create the test fixtures (users, projects, etc)
         client.database(&db_name).drop(None).await.unwrap();
@@ -131,10 +139,8 @@ impl TestSetupBuilder {
             let auth_eu = auth::EditUser::test(owner.clone());
             let actions: ProjectActions = app_data.as_project_actions();
             let project_data = CreateProjectDataDict {
-                owner: Some(owner),
                 name,
                 roles,
-                client_id: None,
                 save_state: Some(api::SaveState::Saved),
                 state,
             };
@@ -176,6 +182,13 @@ impl TestSetupBuilder {
             app_data
                 .banned_accounts
                 .insert_many(banned_users, None)
+                .await
+                .unwrap();
+        }
+        if !self.libraries.is_empty() {
+            app_data
+                .libraries
+                .insert_many(self.libraries, None)
                 .await
                 .unwrap();
         }
@@ -274,8 +287,8 @@ pub(crate) mod project {
     }
 
     impl ProjectBuilder {
-        pub(crate) fn with_name(mut self, name: String) -> Self {
-            self.name = Some(name);
+        pub(crate) fn with_name(mut self, name: &str) -> Self {
+            self.name = Some(name.to_owned());
             self
         }
 

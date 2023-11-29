@@ -4,7 +4,7 @@ use actix::Addr;
 use futures::TryStreamExt;
 use lru::LruCache;
 use mongodb::{
-    bson::doc,
+    bson::{doc, DateTime},
     options::{FindOneAndUpdateOptions, ReturnDocument},
     Collection,
 };
@@ -125,7 +125,14 @@ impl<'a> CollaborationInviteActions<'a> {
         // Update the project
         if matches!(state, InvitationState::Accepted) {
             let query = doc! {"id": &ri.invite.project_id};
-            let update = doc! {"$addToSet": {"collaborators": &ri.invite.receiver}};
+            let update = doc! {
+                "$addToSet": {
+                    "collaborators": &ri.invite.receiver,
+                },
+                "$set": {
+                    "updated": DateTime::now()
+                }
+            };
             let options = FindOneAndUpdateOptions::builder()
                 .return_document(ReturnDocument::After)
                 .build();
@@ -137,7 +144,7 @@ impl<'a> CollaborationInviteActions<'a> {
                 .map_err(InternalError::DatabaseConnectionError)?
                 .ok_or(UserError::ProjectNotFoundError)?;
 
-            utils::on_room_changed(&self.network, &self.project_cache, updated_metadata);
+            utils::on_room_changed(self.network, self.project_cache, updated_metadata);
         }
         // Update the project
         let invitation: api::CollaborationInvite = invitation.into();

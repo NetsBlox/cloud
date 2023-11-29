@@ -84,7 +84,7 @@ async fn logout(
     if let Some(client_id) = &params.client_id {
         // FIXME: this method should be updated as it currently could be used to half logout other users...
         let actions: UserActions = app.as_user_actions();
-        actions.logout(&client_id);
+        actions.logout(client_id);
     }
 
     HttpResponse::Ok().finish()
@@ -157,10 +157,8 @@ async fn reset_password(
     }
 
     let (username,) = path.into_inner();
-    let auth_eu = auth::try_edit_user(&app, &req, None, &username).await?;
-
     let actions: UserActions = app.as_user_actions();
-    actions.reset_password(&auth_eu).await?;
+    actions.reset_password(&username).await?;
 
     Ok(HttpResponse::Ok().finish())
 }
@@ -1139,6 +1137,39 @@ mod tests {
                     .expect("Could not query for user");
 
                 assert!(result.is_none(), "User banned");
+            })
+            .await;
+    }
+
+    #[actix_web::test]
+    #[ignore] // ignore until we can test fns using the mailer
+    async fn test_reset_password() {
+        let user: User = api::NewUser {
+            username: "user".to_string(),
+            email: "user@netsblox.org".into(),
+            password: None,
+            group_id: None,
+            role: None,
+        }
+        .into();
+
+        test_utils::setup()
+            .with_users(&[user.clone()])
+            .run(|app_data| async move {
+                let app = test::init_service(
+                    App::new()
+                        .wrap(test_utils::cookie::middleware())
+                        .app_data(web::Data::new(app_data.clone()))
+                        .configure(config),
+                )
+                .await;
+
+                let req = test::TestRequest::post()
+                    .uri(&format!("/{}/password", &user.username))
+                    .to_request();
+
+                let response = test::call_service(&app, req).await;
+                assert_eq!(response.status(), http::StatusCode::OK);
             })
             .await;
     }

@@ -29,20 +29,33 @@ pub(crate) fn on_room_changed(
     network: &Addr<TopologyActor>,
     cache: &Arc<RwLock<LruCache<api::ProjectId, ProjectMetadata>>>,
     metadata: ProjectMetadata,
-) {
+) -> ProjectMetadata {
     network.do_send(topology::SendRoomState {
         project: metadata.clone(),
     });
 
-    update_project_cache(cache, metadata);
+    update_project_cache(cache, metadata)
 }
 
 pub(crate) fn update_project_cache(
     cache: &Arc<RwLock<LruCache<api::ProjectId, ProjectMetadata>>>,
     metadata: ProjectMetadata,
-) {
+) -> ProjectMetadata {
     let mut cache = cache.write().unwrap();
-    cache.put(metadata.id.clone(), metadata);
+    let latest = cache
+        .get(&metadata.id)
+        .and_then(|existing| {
+            if existing.updated > metadata.updated {
+                Some(existing.to_owned())
+            } else {
+                None
+            }
+        })
+        .unwrap_or(metadata);
+
+    cache.put(latest.id.clone(), latest.clone());
+
+    latest
 }
 
 /// Get a unique project name for the given user and preferred name.
@@ -58,15 +71,15 @@ pub(crate) async fn get_valid_project_name(
         .find(query, None)
         .await
         .map_err(InternalError::DatabaseConnectionError)?;
-    let project_names = cursor
+    let project_names: Vec<_> = cursor
         .try_collect::<Vec<_>>()
         .await
         .map_err(InternalError::DatabaseConnectionError)?
-        .iter()
-        .map(|md| md.name.to_owned())
+        .into_iter()
+        .map(|md| md.name)
         .collect();
 
-    Ok(get_unique_name(project_names, basename))
+    get_unique_name(project_names.iter().map(|n| n.as_str()), basename)
 }
 
 // FIXME: Can this be rolled into the data type itself?
@@ -79,11 +92,11 @@ pub(crate) fn ensure_valid_name(name: &str) -> Result<(), UserError> {
 }
 
 fn is_valid_name(name: &str) -> bool {
-    let max_len = 25;
+    let max_len = 50;
     let min_len = 1;
     let char_count = name.chars().count();
     lazy_static! {
-        static ref NAME_REGEX: Regex = Regex::new(r"^[a-zA-Z][a-zA-Z0-9_ \(\)\-]*$").unwrap();
+        static ref NAME_REGEX: Regex = Regex::new(r"^[\w\d_][\w\d_ \(\)\.,'\-!]*$").unwrap();
     }
 
     char_count >= min_len
@@ -92,16 +105,23 @@ fn is_valid_name(name: &str) -> bool {
         && !name.is_inappropriate()
 }
 
-pub(crate) fn get_unique_name(existing: Vec<String>, name: &str) -> String {
-    let names: HashSet<std::string::String> = HashSet::from_iter(existing.iter().cloned());
-    let base_name = name;
-    let mut role_name = base_name.to_owned();
-    let mut number: u8 = 2;
-    while names.contains(&role_name) {
-        role_name = format!("{} ({})", base_name, number);
-        number += 1;
-    }
-    role_name
+pub(crate) fn get_unique_name<'a>(
+    existing: impl Iterator<Item = &'a str>,
+    basename: &str,
+) -> Result<String, UserError> {
+    let candidates = std::iter::once(basename.into())
+        .chain((2..=1000).map(|n| format!("{} ({})", &basename, n)));
+
+    find_first_unique(existing, candidates).ok_or(UserError::RoleOrProjectNameExists)
+}
+
+pub(crate) fn find_first_unique<'a>(
+    existing: impl Iterator<Item = &'a str>,
+    mut candidates: impl Iterator<Item = String>,
+) -> Option<String> {
+    let names: HashSet<&str> = HashSet::from_iter(existing);
+    //get_unique_str(names, name, |s, n| format!("{} ({})", s, n))
+    candidates.find(|name| !names.contains(name.as_str()))
 }
 
 pub(crate) fn is_approval_required(text: &str) -> bool {
@@ -270,7 +290,6 @@ fn get_cached_friends(
 
 pub(crate) fn get_username(req: &HttpRequest) -> Option<String> {
     let session = req.get_session();
-    println!("{:?}", session.get::<String>("username"));
     session.get::<String>("username").unwrap_or(None)
 }
 
@@ -314,14 +333,69 @@ pub(crate) fn send_email(
 }
 
 // TODO: tests for cache invalidation
-// - [ ] projects
 // - [ ] friends
 
 // TODO: tests for friend-checking
 
 #[cfg(test)]
 mod tests {
+    use std::{
+        collections::HashMap,
+        num::NonZeroUsize,
+        time::{Duration, SystemTime},
+    };
+
+    use lru::LruCache;
+    use mongodb::bson::DateTime;
+
     use super::*;
+
+    #[actix_web::test]
+    async fn test_update_project_cache_ignore_stale() {
+        // This issue was discovered around old projects hanging around in the project cache
+        // due to what appears to be a high-level race condition
+        // - set publish state (get published one, metadata1)
+        // - rename (get renamed and published one, metadata2)
+        //   - add update time and use this when updating the cache?
+        // - update cache with metadata2
+        // - update cache with metadata1
+        let original = ProjectMetadata::new("owner", "name", HashMap::new(), api::SaveState::Saved);
+        let id = original.id.clone();
+        let mut new_project = original.clone();
+        new_project.name = "new name".into();
+        new_project.updated =
+            DateTime::from_system_time(SystemTime::now() + Duration::from_secs(10));
+
+        let project_cache = Arc::new(RwLock::new(LruCache::new(NonZeroUsize::new(2).unwrap())));
+
+        // Suppose concurrent requests try to update the cache in the wrong order
+        update_project_cache(&project_cache, new_project);
+        update_project_cache(&project_cache, original);
+
+        // check that it still has the latest
+        let mut cache = project_cache.write().unwrap();
+        let metadata = cache.get(&id).unwrap();
+        assert_eq!(&metadata.name, "new name");
+    }
+
+    #[actix_web::test]
+    async fn test_update_project_cache_tie_goes_to_update() {
+        let original = ProjectMetadata::new("owner", "name", HashMap::new(), api::SaveState::Saved);
+        let id = original.id.clone();
+        let mut new_project = original.clone();
+        new_project.name = "new name".into();
+
+        let project_cache = Arc::new(RwLock::new(LruCache::new(NonZeroUsize::new(2).unwrap())));
+
+        // Suppose concurrent requests try to update the cache with the same update time
+        update_project_cache(&project_cache, original);
+        update_project_cache(&project_cache, new_project);
+
+        // check that it still has the latest
+        let mut cache = project_cache.write().unwrap();
+        let metadata = cache.get(&id).unwrap();
+        assert_eq!(&metadata.name, "new name");
+    }
 
     #[actix_web::test]
     async fn test_x_is_valid_name() {
@@ -334,8 +408,18 @@ mod tests {
     }
 
     #[actix_web::test]
+    async fn test_is_valid_name_leading_nums() {
+        assert!(is_valid_name("2048 Game"));
+    }
+
+    #[actix_web::test]
     async fn test_is_valid_name_dashes() {
         assert!(is_valid_name("Player-i"));
+    }
+
+    #[actix_web::test]
+    async fn test_is_valid_name_long_name() {
+        assert!(is_valid_name("RENAMED-rename-test-1696865702584"));
     }
 
     #[actix_web::test]
@@ -344,10 +428,54 @@ mod tests {
     }
 
     #[actix_web::test]
+    async fn test_is_valid_name_dots() {
+        assert!(is_valid_name("untitled v1.2"));
+    }
+
+    #[actix_web::test]
+    async fn test_is_valid_name_comma() {
+        assert!(is_valid_name("Lab2, SomeName"));
+    }
+
+    #[actix_web::test]
+    async fn test_is_valid_name_apostrophe() {
+        assert!(is_valid_name("Brian's project"));
+    }
+
+    #[actix_web::test]
     async fn test_is_valid_name_profanity() {
         assert!(!is_valid_name("shit"));
         assert!(!is_valid_name("fuck"));
         assert!(!is_valid_name("damn"));
         assert!(!is_valid_name("hell"));
+    }
+
+    #[actix_web::test]
+    async fn test_is_valid_name_bang() {
+        assert!(is_valid_name("hello!"));
+    }
+
+    #[actix_web::test]
+    async fn test_get_unique_name() {
+        let names = ["name", "name (2)", "name (3)", "name (4)"].into_iter();
+        let name = get_unique_name(names.clone(), "name").unwrap();
+        assert_eq!(name, "name (5)");
+    }
+
+    #[actix_web::test]
+    async fn test_get_unique_name_existing_parens() {
+        let names = ["name", "name (2)", "name (3)", "name (4)"].into_iter();
+        let name = get_unique_name(names, "name (3)").unwrap();
+        assert_eq!(name, "name (3) (2)");
+    }
+
+    #[actix_web::test]
+    async fn test_get_unique_name_none() {
+        let existing: Vec<_> = std::iter::once("name".to_string())
+            .chain((2..10000).map(|n| format!("name ({})", n)))
+            .collect();
+
+        let name_res = get_unique_name(existing.iter().map(|n| n.as_str()), "name");
+        assert!(matches!(name_res, Err(UserError::RoleOrProjectNameExists)));
     }
 }

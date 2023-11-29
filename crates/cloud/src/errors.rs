@@ -29,6 +29,10 @@ pub enum UserError {
     ProjectNotFoundError,
     #[display(fmt = "Thumbnail not available.")]
     ThumbnailNotFoundError,
+    #[display(fmt = "Unable to retrieve project.")]
+    ProjectUnavailableError,
+    #[display(fmt = "Must specify project either using url or xml")]
+    MissingUrlOrXmlError,
     #[display(fmt = "Password reset link already sent. Only 1 can be sent per hour.")]
     PasswordResetLinkSentError,
     #[display(fmt = "Network trace not found.")]
@@ -63,12 +67,18 @@ pub enum UserError {
     BannedUserError,
     #[display(fmt = "User already exists.")]
     UserExistsError,
+    // FIXME: use a different status code or something so the client can
+    // handle it another way
+    #[display(fmt = "Username already exists. Please try again with a different name.")]
+    UsernameExists,
     #[display(fmt = "Group already exists.")]
     GroupExistsError,
     #[display(fmt = "Invalid username.")]
     InvalidUsername,
     #[display(fmt = "Invalid name.")]
     InvalidRoleOrProjectName,
+    #[display(fmt = "Name already exists. Please rename and try again.")]
+    RoleOrProjectNameExists,
     #[display(fmt = "Invalid library name.")]
     InvalidLibraryName,
     #[display(fmt = "Invalid email address.")]
@@ -100,7 +110,7 @@ pub enum UserError {
     #[display(fmt = "OAuth token not found.")]
     OAuthTokenNotFoundError,
 
-    #[display(fmt = "Error occurred during ")]
+    #[display(fmt = "Error occurred during OAuth authentication")]
     OAuthFlowError(OAuthFlowError),
 }
 
@@ -178,6 +188,7 @@ impl error::ResponseError for UserError {
             Self::InternalError | Self::SnapConnectionError => StatusCode::INTERNAL_SERVER_ERROR,
             Self::InvalidUsername
             | Self::InvalidRoleOrProjectName
+            | Self::RoleOrProjectNameExists
             | Self::InvalidEmailAddress
             | Self::InvalidClientIdError
             | Self::InvalidLibraryName
@@ -189,12 +200,15 @@ impl error::ResponseError for UserError {
             | Self::TorAddressError
             | Self::OperaVPNError
             | Self::UserExistsError
+            | Self::UsernameExists
             | Self::OAuthClientAlreadyExistsError
             | Self::GroupExistsError
             | Self::CannotDeleteLastRoleError
             | Self::ServiceHostAlreadyAuthorizedError
             | Self::InviteNotAllowedError
             | Self::OAuthFlowError(..)
+            | Self::ProjectUnavailableError
+            | Self::MissingUrlOrXmlError
             | Self::ProjectNotActiveError => StatusCode::BAD_REQUEST,
             Self::InviteAlreadyExistsError => StatusCode::CONFLICT,
         }

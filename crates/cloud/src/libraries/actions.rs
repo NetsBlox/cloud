@@ -53,24 +53,26 @@ impl<'a> LibraryActions<'a> {
         &self,
         ll: &auth::ListLibraries,
     ) -> Result<Vec<api::LibraryMetadata>, UserError> {
-        let query = doc! {"owner": &ll.username};
+        let query = match ll.visibility {
+            PublishState::Private => doc! {"owner": &ll.username},
+            _ => doc! {
+            "owner": &ll.username,
+            "state": PublishState::Public,
+            },
+        };
+
         let options = FindOptions::builder().sort(doc! {"name": 1}).build();
-        let mut cursor = self
+        let libraries: Vec<_> = self
             .libraries
             .find(query, options)
             .await
-            .map_err(InternalError::DatabaseConnectionError)?;
-
-        let mut libraries = Vec::new();
-        while let Some(library) = cursor
-            .try_next()
+            .map_err(InternalError::DatabaseConnectionError)?
+            .try_collect::<Vec<_>>()
             .await
             .map_err(InternalError::DatabaseConnectionError)?
-        {
-            if can_view_library(&ll, &library) {
-                libraries.push(library.into());
-            }
-        }
+            .into_iter()
+            .map(|lib| lib.into())
+            .collect();
 
         Ok(libraries)
     }
@@ -81,19 +83,19 @@ impl<'a> LibraryActions<'a> {
 
     pub(crate) async fn save_library(
         &self,
-        vl: &auth::EditLibrary,
+        el: &auth::EditLibrary,
         data: &api::CreateLibraryData,
     ) -> Result<api::LibraryMetadata, UserError> {
         ensure_valid_name(&data.name)?;
 
-        let query = doc! {"owner": &vl.owner, "name": &data.name};
+        let query = doc! {"owner": &el.owner, "name": &data.name};
         let update = doc! {
             "$set": {
                 "notes": &data.notes,
                 "blocks": &data.blocks,
             },
             "$setOnInsert": {
-                "owner": &vl.owner,
+                "owner": &el.owner,
                 "name": &data.name,
                 "state": PublishState::Private,
             }
@@ -264,17 +266,13 @@ fn is_valid_name(name: &str) -> bool {
     LIBRARY_NAME.is_match(name) && !name.is_inappropriate()
 }
 
-fn can_view_library(ll: &auth::ListLibraries, library: &Library) -> bool {
-    match ll.visibility {
-        PublishState::Private => true,
-        _ => matches!(library.state, PublishState::Public),
-    }
-}
-
 #[cfg(test)]
 mod tests {
+    use crate::test_utils;
+
     use super::*;
     use actix_web::test;
+    use netsblox_cloud_common::User;
 
     #[test]
     async fn test_is_valid_name() {
@@ -304,5 +302,132 @@ mod tests {
     #[test]
     async fn test_ensure_valid_name_weird_symbol() {
         assert!(ensure_valid_name("<hola libré>").is_err());
+    }
+
+    #[actix_web::test]
+    async fn test_save_user_lib() {
+        let user: User = api::NewUser {
+            username: "user".into(),
+            email: "user@netsblox.org".into(),
+            password: None,
+            group_id: None,
+            role: None,
+        }
+        .into();
+        test_utils::setup()
+            .with_users(&[user.clone()])
+            .run(|app_data| async move {
+                let actions = app_data.as_library_actions();
+                let auth_el = auth::EditLibrary::test(user.username.clone());
+                let data = api::CreateLibraryData {
+                    name: "mylibrary".into(),
+                    notes: "some notes".into(),
+                    blocks: "<blocks/>".into(),
+                };
+                actions.save_library(&auth_el, &data).await.unwrap();
+
+                let query = doc! {};
+                let metadata = app_data.libraries.find_one(query, None).await.unwrap();
+
+                assert!(metadata.is_some(), "Library not found in the database");
+                let metadata = metadata.unwrap();
+                assert_eq!(&metadata.name, "mylibrary");
+            })
+            .await;
+    }
+
+    #[actix_web::test]
+    async fn test_list_user_libs_public() {
+        let user: User = api::NewUser {
+            username: "user".into(),
+            email: "user@netsblox.org".into(),
+            password: None,
+            group_id: None,
+            role: None,
+        }
+        .into();
+        let pub1 = Library {
+            owner: user.username.clone(),
+            name: "pub1".into(),
+            notes: "".into(),
+            blocks: "<blocks/>".into(),
+            state: api::PublishState::Public,
+        };
+        let pub2 = Library {
+            owner: user.username.clone(),
+            name: "pub2".into(),
+            notes: "".into(),
+            blocks: "<blocks/>".into(),
+            state: api::PublishState::Public,
+        };
+        let private = Library {
+            owner: user.username.clone(),
+            name: "priv".into(),
+            notes: "".into(),
+            blocks: "<blocks/>".into(),
+            state: api::PublishState::Private,
+        };
+
+        test_utils::setup()
+            .with_users(&[user.clone()])
+            .with_libraries(&[pub1.clone(), pub2.clone(), private])
+            .run(|app_data| async move {
+                let actions = app_data.as_library_actions();
+                let auth_ll =
+                    auth::ListLibraries::test(user.username.clone(), PublishState::Public);
+
+                let libraries = actions.list_user_libraries(&auth_ll).await.unwrap();
+                assert_eq!(libraries.len(), 2);
+                assert!(libraries.iter().any(|lib| lib.name == pub1.name));
+                assert!(libraries.iter().any(|lib| lib.name == pub2.name));
+            })
+            .await;
+    }
+
+    #[actix_web::test]
+    async fn test_list_user_libs_private() {
+        let user: User = api::NewUser {
+            username: "user".into(),
+            email: "user@netsblox.org".into(),
+            password: None,
+            group_id: None,
+            role: None,
+        }
+        .into();
+        let pub1 = Library {
+            owner: user.username.clone(),
+            name: "pub1".into(),
+            notes: "".into(),
+            blocks: "<blocks/>".into(),
+            state: api::PublishState::Public,
+        };
+        let pub2 = Library {
+            owner: user.username.clone(),
+            name: "pub2".into(),
+            notes: "".into(),
+            blocks: "<blocks/>".into(),
+            state: api::PublishState::Public,
+        };
+        let private = Library {
+            owner: user.username.clone(),
+            name: "priv".into(),
+            notes: "".into(),
+            blocks: "<blocks/>".into(),
+            state: api::PublishState::Private,
+        };
+
+        test_utils::setup()
+            .with_users(&[user.clone()])
+            .with_libraries(&[pub1, pub2, private])
+            .run(|app_data| async move {
+                let actions = app_data.as_library_actions();
+                let auth_ll =
+                    auth::ListLibraries::test(user.username.clone(), PublishState::Private);
+
+                let libraries = actions.list_user_libraries(&auth_ll).await.unwrap();
+                // Should get all the libraries since it has permissions to view private libraries
+                assert_eq!(libraries.len(), 3);
+            })
+            .await;
     }
 }

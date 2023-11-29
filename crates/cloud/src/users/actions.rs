@@ -12,7 +12,11 @@ use lettre::{
     Address, Message, SmtpTransport,
 };
 use lru::LruCache;
-use mongodb::{bson::doc, options::ReturnDocument, Collection};
+use mongodb::{
+    bson::{doc, DateTime},
+    options::{FindOneAndUpdateOptions, ReturnDocument},
+    Collection,
+};
 use netsblox_cloud_common::{api, BannedAccount, ProjectMetadata, SetPasswordToken, User};
 use regex::Regex;
 use rustrict::CensorStr;
@@ -115,7 +119,7 @@ impl<'a> UserActions<'a> {
             Err(UserError::UserExistsError)
         } else {
             if let Some(group_id) = user.group_id.clone() {
-                utils::group_members_updated(&self.users, self.friend_cache.clone(), &group_id)
+                utils::group_members_updated(self.users, self.friend_cache.clone(), &group_id)
                     .await;
             }
             self.metrics.record_signup();
@@ -146,7 +150,7 @@ impl<'a> UserActions<'a> {
             .ok_or(UserError::UserNotFoundError)?;
 
         if let Some(group_id) = user.group_id.as_ref() {
-            utils::group_members_updated(&self.users, self.friend_cache.clone(), group_id).await;
+            utils::group_members_updated(self.users, self.friend_cache.clone(), group_id).await;
         }
 
         Ok(user.into())
@@ -154,7 +158,7 @@ impl<'a> UserActions<'a> {
 
     pub(crate) async fn login(&self, request: api::LoginRequest) -> Result<api::User, UserError> {
         let client_id = request.client_id.clone();
-        let user = strategies::login(&self.users, request.credentials).await?;
+        let user = strategies::login(self.users, request.credentials).await?;
 
         let query = doc! {"$or": [
             {"username": &user.username},
@@ -188,18 +192,18 @@ impl<'a> UserActions<'a> {
         });
     }
 
-    pub(crate) async fn reset_password(&self, eu: &auth::EditUser) -> Result<(), UserError> {
+    pub(crate) async fn reset_password(&self, username: &str) -> Result<(), UserError> {
         let user = self
             .users
-            .find_one(doc! {"username": &eu.username}, None)
+            .find_one(doc! {"username": username}, None)
             .await
             .map_err(InternalError::DatabaseConnectionError)?
             .ok_or(UserError::UserNotFoundError)?;
 
-        let token = SetPasswordToken::new(eu.username.clone());
-
+        // Create the set password token
+        let token = SetPasswordToken::new(username.to_owned());
         let update = doc! {"$setOnInsert": &token};
-        let query = doc! {"username": &eu.username};
+        let query = doc! {"username": username};
         let options = mongodb::options::UpdateOptions::builder()
             .upsert(true)
             .build();
@@ -214,6 +218,7 @@ impl<'a> UserActions<'a> {
             return Err(UserError::PasswordResetLinkSentError);
         }
 
+        // Send the reset password email
         let email = SetPasswordEmail {
             sender: self.sender.clone(),
             public_url: self.public_url.clone(),
@@ -221,7 +226,7 @@ impl<'a> UserActions<'a> {
             token,
         };
 
-        utils::send_email(&self.mailer, email)?;
+        utils::send_email(self.mailer, email)?;
 
         Ok(())
     }
@@ -286,9 +291,16 @@ impl<'a> UserActions<'a> {
             .map_err(InternalError::DatabaseConnectionError)?
             .ok_or(UserError::UserNotFoundError)?;
 
+        let query = doc! {"username": &user.username};
         let account = BannedAccount::new(user.username, user.email);
+        let update = doc! {"$setOnInsert": &account};
+        let options = FindOneAndUpdateOptions::builder()
+            .return_document(ReturnDocument::After)
+            .upsert(true)
+            .build();
+
         self.banned_accounts
-            .insert_one(&account, None)
+            .find_one_and_update(query, update, options)
             .await
             .map_err(InternalError::DatabaseConnectionError)?;
 
@@ -366,22 +378,25 @@ impl<'a> UserActions<'a> {
         Ok(user.into())
     }
 
-    pub(crate) async fn list_users(&self, _lu: &auth::ListUsers) -> Result<Vec<String>, UserError> {
+    pub(crate) async fn list_users(
+        &self,
+        _lu: &auth::ListUsers,
+    ) -> Result<Vec<api::User>, UserError> {
         let query = doc! {};
         let cursor = self
             .users
             .find(query, None)
             .await
             .map_err(InternalError::DatabaseConnectionError)?;
-        let usernames: Vec<String> = cursor
+        let users: Vec<_> = cursor
             .try_collect::<Vec<_>>()
             .await
             .map_err(InternalError::DatabaseConnectionError)?
             .into_iter()
-            .map(|user| user.username)
+            .map(|user| user.into())
             .collect();
 
-        Ok(usernames)
+        Ok(users)
     }
 
     pub(crate) async fn set_user_settings(
@@ -451,9 +466,15 @@ impl<'a> UserActions<'a> {
         {
             // No project will be found for non-NetsBlox clients such as PyBlox
             let name =
-                utils::get_valid_project_name(&self.project_metadata, username, &metadata.name)
+                utils::get_valid_project_name(self.project_metadata, username, &metadata.name)
                     .await?;
-            let update = doc! {"$set": {"owner": username, "name": name}};
+            let update = doc! {
+                "$set": {
+                    "owner": username,
+                    "name": name,
+                    "updated": DateTime::now(),
+                }
+            };
             let options = mongodb::options::FindOneAndUpdateOptions::builder()
                 .return_document(ReturnDocument::After)
                 .build();
@@ -464,7 +485,7 @@ impl<'a> UserActions<'a> {
                 .map_err(InternalError::DatabaseConnectionError)?
                 .ok_or(UserError::ProjectNotFoundError)?;
 
-            utils::on_room_changed(&self.network, &self.project_cache, new_metadata);
+            utils::on_room_changed(self.network, self.project_cache, new_metadata);
         }
         Ok(())
     }
@@ -542,7 +563,49 @@ impl TryFrom<SetPasswordEmail> for lettre::Message {
 
 #[cfg(test)]
 mod tests {
+    use crate::test_utils;
+
     use super::*;
+
+    #[actix_web::test]
+    async fn test_ban_idempotent() {
+        let user: User = api::NewUser {
+            username: "user".into(),
+            email: "user@netsblox.org".into(),
+            password: None,
+            group_id: None,
+            role: None,
+        }
+        .into();
+        let other: User = api::NewUser {
+            username: "other".into(),
+            email: "other@netsblox.org".into(),
+            password: None,
+            group_id: None,
+            role: None,
+        }
+        .into();
+
+        test_utils::setup()
+            .with_users(&[user.clone(), other])
+            .run(|app_data| async move {
+                let actions = app_data.as_user_actions();
+
+                let auth_bu = auth::BanUser::test(user.username.clone());
+                actions.ban_user(&auth_bu).await.unwrap();
+                actions.ban_user(&auth_bu).await.unwrap();
+
+                actions.unban_user(&auth_bu).await.unwrap();
+                // Check that the user is not banned
+                let query = doc! {"username": &auth_bu.username};
+                let account = actions.banned_accounts.find_one(query, None).await.unwrap();
+                assert!(
+                    account.is_none(),
+                    "Double ban wasn't undone by single unban."
+                );
+            })
+            .await;
+    }
 
     #[actix_web::test]
     async fn test_is_valid_username_caps() {

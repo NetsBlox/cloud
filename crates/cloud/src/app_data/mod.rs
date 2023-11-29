@@ -11,6 +11,7 @@ use crate::projects::ProjectActions;
 use crate::services::hosts::actions::HostActions;
 use crate::services::settings::actions::SettingsActions;
 use crate::users::actions::{UserActionData, UserActions};
+use actix::dev::OneshotSender;
 use actix_web::rt::time;
 use lettre::message::Mailbox;
 use lettre::transport::smtp::authentication::Credentials;
@@ -35,7 +36,7 @@ use crate::common::{
 use crate::common::{OccupantInvite, SentMessage};
 use crate::config::Settings;
 use crate::errors::{InternalError, UserError};
-use crate::network::topology::{SetStorage, TopologyActor};
+use crate::network::topology::{SetStorage, TopologyActor, TopologyPanic};
 use actix::{Actor, Addr};
 use aws_config::SdkConfig;
 use aws_credential_types::{provider::SharedCredentialsProvider, Credentials as S3Credentials};
@@ -84,6 +85,7 @@ impl AppData {
         settings: Settings,
         network: Option<Addr<TopologyActor>>,
         prefix: Option<&str>,
+        tx: Option<OneshotSender<TopologyPanic>>,
     ) -> AppData {
         // Blob storage
         let access_key = settings.s3.credentials.access_key.clone();
@@ -139,8 +141,9 @@ impl AppData {
         let friends = db.collection::<FriendLink>(&(prefix.to_owned() + "friends"));
         let recorded_messages =
             db.collection::<SentMessage>(&(prefix.to_owned() + "recordedMessages"));
-        let network = network
-            .unwrap_or_else(|| TopologyActor::new(settings.cache_settings.num_addresses).start());
+        let network = network.unwrap_or_else(|| {
+            TopologyActor::new(settings.cache_settings.num_addresses, tx).start()
+        });
         let oauth_clients = db.collection::<OAuthClient>(&(prefix.to_owned() + "oauthClients"));
         let oauth_tokens = db.collection::<OAuthToken>(&(prefix.to_owned() + "oauthToken"));
         let oauth_codes = db.collection::<oauth::Code>(&(prefix.to_owned() + "oauthCode"));
@@ -239,7 +242,10 @@ impl AppData {
         self.project_metadata
             .create_indexes(
                 vec![
+                    // optimize lookups by ID
                     IndexModel::builder().keys(doc! {"id": 1}).build(),
+                    // optimize lookups by owner
+                    IndexModel::builder().keys(doc! {"owner": 1}).build(),
                     // delete broken projects after a delay
                     IndexModel::builder()
                         .keys(doc! {"deleteAt": 1})
