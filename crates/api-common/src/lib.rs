@@ -34,6 +34,8 @@ pub struct InvitationResponse {
     pub response: FriendLinkState,
 }
 
+#[derive(TS)]
+#[ts(export)]
 #[derive(Serialize, Deserialize, Clone, Debug)]
 #[serde(rename_all = "camelCase")]
 pub struct User {
@@ -484,7 +486,7 @@ impl LibraryMetadata {
         owner: String,
         name: String,
         state: PublishState,
-        #[ts(optional)] notes: Option<String>,
+        notes: Option<String>,
     ) -> LibraryMetadata {
         LibraryMetadata {
             owner,
