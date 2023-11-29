@@ -2,4 +2,4 @@
 import type { ClientId } from "./ClientId";
 import type { Credentials } from "./Credentials";
 
-export interface LoginRequest { credentials: Credentials, clientId: ClientId | null, }
+export interface LoginRequest { credentials: Credentials, clientId?: ClientId, }

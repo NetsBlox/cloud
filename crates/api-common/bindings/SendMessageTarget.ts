@@ -4,4 +4,4 @@ import type { ClientState } from "./ClientState";
 import type { ProjectId } from "./ProjectId";
 import type { RoleId } from "./RoleId";
 
-export type SendMessageTarget = { "address": { address: string, } } | { "room": { projectId: ProjectId, } } | { "role": { projectId: ProjectId, roleId: RoleId, } } | { "client": { state: ClientState | null, clientId: ClientId, } };
+export type SendMessageTarget = { "address": { address: string, } } | { "room": { projectId: ProjectId, } } | { "role": { projectId: ProjectId, roleId: RoleId, } } | { "client": { state?: ClientState, clientId: ClientId, } };

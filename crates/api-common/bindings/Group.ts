@@ -2,4 +2,4 @@
 import type { GroupId } from "./GroupId";
 import type { ServiceHost } from "./ServiceHost";
 
-export interface Group { id: GroupId, owner: string, name: string, servicesHosts: Array<ServiceHost> | null, }
+export interface Group { id: GroupId, owner: string, name: string, servicesHosts?: Array<ServiceHost>, }

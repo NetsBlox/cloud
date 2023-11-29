@@ -2,4 +2,4 @@
 import type { GroupId } from "./GroupId";
 import type { UserRole } from "./UserRole";
 
-export interface NewUser { username: string, email: string, password: string | null, group_id: GroupId | null, role: UserRole | null, }
+export interface NewUser { username: string, email: string, password?: string, group_id?: GroupId, role?: UserRole, }

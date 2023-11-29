@@ -4,4 +4,4 @@ import type { RoleData } from "./RoleData";
 import type { RoleId } from "./RoleId";
 import type { SaveState } from "./SaveState";
 
-export interface CreateProjectData { owner: string | null, name: string, roles: Array<RoleData> | null, clientId: ClientId | null, saveState: SaveState | null, roleDict: Record<RoleId, RoleData> | null, }
+export interface CreateProjectData { owner?: string, name: string, roles?: Array<RoleData>, clientId?: ClientId, saveState?: SaveState, roleDict?: Record<RoleId, RoleData>, }
