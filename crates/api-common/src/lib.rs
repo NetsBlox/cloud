@@ -15,10 +15,9 @@ use uuid::Uuid;
 
 const APP_NAME: &str = "NetsBlox";
 
-#[derive(TS)]
-#[ts(export)]
-#[derive(Deserialize, Serialize)]
+#[derive(Deserialize, Serialize, TS)]
 #[serde(rename_all = "camelCase")]
+#[ts(export)]
 pub struct ClientConfig {
     pub client_id: String,
     #[ts(optional)]
@@ -27,17 +26,15 @@ pub struct ClientConfig {
     pub cloud_url: String,
 }
 
-#[derive(TS)]
+#[derive(Deserialize, Serialize, TS)]
 #[ts(export)]
-#[derive(Deserialize, Serialize)]
 pub struct InvitationResponse {
     pub response: FriendLinkState,
 }
 
-#[derive(TS)]
-#[ts(export)]
-#[derive(Serialize, Deserialize, Clone, Debug)]
+#[derive(Serialize, Deserialize, Clone, Debug, TS)]
 #[serde(rename_all = "camelCase")]
+#[ts(export)]
 pub struct User {
     pub username: String,
     pub email: String,
@@ -51,9 +48,8 @@ pub struct User {
     pub services_hosts: Option<Vec<ServiceHost>>,
 }
 
-#[derive(TS)]
+#[derive(Serialize, Deserialize, Debug, TS)]
 #[ts(export)]
-#[derive(Serialize, Deserialize, Debug)]
 pub struct NewUser {
     pub username: String,
     pub email: String,
@@ -65,10 +61,9 @@ pub struct NewUser {
     pub role: Option<UserRole>,
 }
 
-#[derive(TS)]
-#[ts(export)]
-#[derive(Serialize, Deserialize, Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord)]
+#[derive(Serialize, Deserialize, Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, TS)]
 #[serde(rename_all = "camelCase")]
+#[ts(export)]
 pub enum UserRole {
     User,
     Teacher,
@@ -76,10 +71,9 @@ pub enum UserRole {
     Admin,
 }
 
-#[derive(TS)]
-#[ts(export)]
-#[derive(Deserialize, Serialize, Clone, Debug)]
+#[derive(Deserialize, Serialize, Clone, Debug, TS)]
 #[serde(rename_all = "camelCase")]
+#[ts(export)]
 pub struct NetworkTraceMetadata {
     pub id: String,
     #[ts(type = "any")] // FIXME
@@ -89,10 +83,9 @@ pub struct NetworkTraceMetadata {
     pub end_time: Option<SystemTime>,
 }
 
-#[derive(TS)]
-#[ts(export)]
-#[derive(Deserialize, Serialize, Debug, Clone)]
+#[derive(Deserialize, Serialize, Debug, Clone, TS)]
 #[serde(rename_all = "camelCase")]
+#[ts(export)]
 pub struct SentMessage {
     pub project_id: ProjectId,
     pub recipients: Vec<ClientState>,
@@ -104,19 +97,20 @@ pub struct SentMessage {
     pub content: serde_json::Value,
 }
 
-#[derive(Deserialize, Serialize, Debug, Clone)]
+#[derive(TS, Deserialize, Serialize, Debug, Clone)]
 #[serde(rename_all = "camelCase")]
+#[ts(export)]
 pub struct OccupantInvite {
     pub username: String,
     pub project_id: ProjectId,
     pub role_id: RoleId,
+    #[ts(type = "any")] // FIXME
     pub created_at: SystemTime,
 }
 
-#[derive(TS)]
-#[ts(export)]
-#[derive(Debug, Display, Error)]
+#[derive(Debug, Display, Error, TS)]
 #[display(fmt = "Unable to parse user role. Expected admin, moderator, or user.")]
+#[ts(export)]
 pub struct UserRoleError;
 
 impl FromStr for UserRole {
@@ -132,44 +126,42 @@ impl FromStr for UserRole {
     }
 }
 
-#[derive(TS)]
-#[ts(export)]
-#[derive(Serialize, Deserialize, Clone, Debug)]
+#[derive(Serialize, Deserialize, Clone, Debug, TS)]
 #[serde(rename_all = "camelCase")]
+#[ts(export)]
 pub struct ServiceHost {
     pub url: String,
     pub categories: Vec<String>,
 }
 
-#[derive(TS)]
+#[derive(Serialize, Deserialize, Clone, Debug, TS)]
 #[ts(export)]
-#[derive(Serialize, Deserialize, Clone, Debug)]
 pub struct LinkedAccount {
     pub username: String,
     pub strategy: String,
 }
 
-#[derive(Serialize, Deserialize, Clone)]
+#[derive(TS, Serialize, Deserialize, Clone)]
 #[serde(rename_all = "camelCase")]
+#[ts(export)]
 pub struct BannedAccount {
     pub username: String,
     pub email: String,
+    #[ts(type = "any")] // FIXME
     pub banned_at: SystemTime,
 }
 
-#[derive(TS)]
-#[ts(export)]
-#[derive(Serialize, Deserialize, Debug)]
+#[derive(Serialize, Deserialize, Debug, TS)]
 #[serde(rename_all = "camelCase")]
+#[ts(export)]
 pub struct LoginRequest {
     pub credentials: Credentials,
     #[ts(optional)]
     pub client_id: Option<ClientId>, // TODO: add a secret token for the client?
 }
 
-#[derive(TS)]
+#[derive(Deserialize, Serialize, Debug, Clone, TS)]
 #[ts(export)]
-#[derive(Deserialize, Serialize, Debug, Clone)]
 pub enum Credentials {
     Snap { username: String, password: String },
     NetsBlox { username: String, password: String },
@@ -192,20 +184,22 @@ impl From<Credentials> for LinkedAccount {
 }
 
 pub type FriendLinkId = String; // FIXME: switch to newtype
-#[derive(Deserialize, Serialize, Clone, Debug)]
+#[derive(TS, Deserialize, Serialize, Clone, Debug)]
 #[serde(rename_all = "camelCase")]
+#[ts(export)]
 pub struct FriendLink {
     pub id: FriendLinkId,
     pub sender: String,
     pub recipient: String,
     pub state: FriendLinkState,
+    #[ts(type = "any")] // FIXME
     pub created_at: SystemTime,
+    #[ts(type = "any")] // FIXME
     pub updated_at: SystemTime,
 }
 
-#[derive(TS)]
+#[derive(Deserialize, Serialize, Clone, Debug, TS)]
 #[ts(export)]
-#[derive(Deserialize, Serialize, Clone, Debug)]
 pub enum FriendLinkState {
     Pending,
     Approved,
@@ -236,10 +230,9 @@ impl FromStr for FriendLinkState {
     }
 }
 
-#[derive(TS)]
-#[ts(export)]
-#[derive(Serialize, Deserialize, Clone, Debug)]
+#[derive(Serialize, Deserialize, Clone, Debug, TS)]
 #[serde(rename_all = "camelCase")]
+#[ts(export)]
 pub struct FriendInvite {
     pub id: String,
     pub sender: String,
@@ -248,9 +241,8 @@ pub struct FriendInvite {
     pub created_at: SystemTime,
 }
 
-#[derive(TS)]
+#[derive(Deserialize, Serialize, Clone, Debug, PartialEq, Eq, Display, Hash, TS)]
 #[ts(export)]
-#[derive(Deserialize, Serialize, Clone, Debug, PartialEq, Eq, Display, Hash)]
 pub struct ProjectId(String);
 
 impl ProjectId {
@@ -259,9 +251,8 @@ impl ProjectId {
     }
 }
 
-#[derive(TS)]
+#[derive(Deserialize, Serialize, Clone, Debug, PartialEq, Eq, Display, Hash, TS)]
 #[ts(export)]
-#[derive(Deserialize, Serialize, Clone, Debug, PartialEq, Eq, Display, Hash)]
 pub struct RoleId(String);
 
 impl RoleId {
@@ -274,10 +265,9 @@ impl RoleId {
     }
 }
 
-#[derive(TS)]
-#[ts(export)]
-#[derive(Deserialize, Serialize, Clone, Debug)]
+#[derive(Deserialize, Serialize, Clone, Debug, TS)]
 #[serde(rename_all = "camelCase")]
+#[ts(export)]
 pub struct ProjectMetadata {
     pub id: ProjectId,
     pub owner: String,
@@ -293,9 +283,8 @@ pub struct ProjectMetadata {
     pub roles: HashMap<RoleId, RoleMetadata>,
 }
 
-#[derive(TS)]
+#[derive(Deserialize, Serialize, Clone, Debug, TS)]
 #[ts(export)]
-#[derive(Deserialize, Serialize, Clone, Debug)]
 pub enum SaveState {
     Created,
     Transient,
@@ -303,19 +292,17 @@ pub enum SaveState {
     Saved,
 }
 
-#[derive(TS)]
+#[derive(Deserialize, Serialize, Clone, Debug, TS)]
 #[ts(export)]
-#[derive(Deserialize, Serialize, Clone, Debug)]
 pub struct RoleMetadata {
     pub name: String,
     pub code: String,
     pub media: String,
 }
 
-#[derive(TS)]
-#[ts(export)]
-#[derive(Deserialize, Serialize)]
+#[derive(Deserialize, Serialize, TS)]
 #[serde(rename_all = "camelCase")]
+#[ts(export)]
 pub struct Project {
     pub id: ProjectId,
     pub owner: String,
@@ -345,18 +332,16 @@ impl Project {
     }
 }
 
-#[derive(TS)]
-#[ts(export)]
-#[derive(Deserialize, Serialize)]
+#[derive(Deserialize, Serialize, TS)]
 #[serde(rename_all = "camelCase")]
+#[ts(export)]
 pub struct RoleDataResponse {
     pub id: Uuid,
     pub data: RoleData,
 }
 
-#[derive(TS)]
+#[derive(Deserialize, Serialize, Debug, Clone, TS)]
 #[ts(export)]
-#[derive(Deserialize, Serialize, Debug, Clone)]
 pub struct RoleData {
     pub name: String,
     pub code: String,
@@ -370,35 +355,31 @@ impl RoleData {
     }
 }
 
-#[derive(TS)]
-#[ts(export)]
-#[derive(Deserialize, Serialize)]
+#[derive(Deserialize, Serialize, TS)]
 #[serde(rename_all = "camelCase")]
+#[ts(export)]
 pub struct ClientStateData {
     pub state: ClientState,
 }
 
-#[derive(TS)]
-#[ts(export)]
-#[derive(Debug, Deserialize, Serialize, Clone, PartialEq, Eq)]
+#[derive(Debug, Deserialize, Serialize, Clone, PartialEq, Eq, TS)]
 #[serde(rename_all = "camelCase")]
+#[ts(export)]
 pub enum ClientState {
     Browser(BrowserClientState),
     External(ExternalClientState),
 }
 
-#[derive(TS)]
-#[ts(export)]
-#[derive(Debug, Deserialize, Serialize, Clone, PartialEq, Eq)]
+#[derive(Debug, Deserialize, Serialize, Clone, PartialEq, Eq, TS)]
 #[serde(rename_all = "camelCase")]
+#[ts(export)]
 pub struct BrowserClientState {
     pub role_id: RoleId,
     pub project_id: ProjectId,
 }
 
-#[derive(TS)]
+#[derive(Debug, Serialize, Clone, Hash, Eq, PartialEq, TS)]
 #[ts(export)]
-#[derive(Debug, Serialize, Clone, Hash, Eq, PartialEq)]
 pub struct AppId(String);
 
 impl AppId {
@@ -444,27 +425,24 @@ impl<'de> Visitor<'de> for AppIdVisitor {
     }
 }
 
-#[derive(TS)]
-#[ts(export)]
-#[derive(Debug, Deserialize, Serialize, Clone, PartialEq, Eq)]
+#[derive(Debug, Deserialize, Serialize, Clone, PartialEq, Eq, TS)]
 #[serde(rename_all = "camelCase")]
+#[ts(export)]
 pub struct ExternalClientState {
     pub address: String,
     pub app_id: AppId,
 }
 
-#[derive(TS)]
+#[derive(Serialize, Deserialize, TS)]
 #[ts(export)]
-#[derive(Serialize, Deserialize)]
 pub struct CreateLibraryData {
     pub name: String,
     pub notes: String,
     pub blocks: String,
 }
 
-#[derive(TS)]
+#[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq, PartialOrd, Ord, TS)]
 #[ts(export)]
-#[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
 pub enum PublishState {
     Private,
     ApprovalDenied,
@@ -472,9 +450,8 @@ pub enum PublishState {
     Public,
 }
 
-#[derive(TS)]
+#[derive(Serialize, Deserialize, Clone, TS)]
 #[ts(export)]
-#[derive(Serialize, Deserialize, Clone)]
 pub struct LibraryMetadata {
     pub owner: String,
     pub name: String,
@@ -498,19 +475,17 @@ impl LibraryMetadata {
     }
 }
 
-#[derive(TS)]
-#[ts(export)]
-#[derive(Serialize, Deserialize, Clone)]
+#[derive(Serialize, Deserialize, Clone, TS)]
 #[serde(rename_all = "camelCase")]
+#[ts(export)]
 pub struct CreateGroupData {
     pub name: String,
     #[ts(optional)]
     pub services_hosts: Option<Vec<ServiceHost>>,
 }
 
-#[derive(TS)]
+#[derive(Deserialize, Serialize, Clone, Debug, PartialEq, Eq, Display, Hash, FromStr, TS)]
 #[ts(export)]
-#[derive(Deserialize, Serialize, Clone, Debug, PartialEq, Eq, Display, Hash, FromStr)]
 pub struct GroupId(String);
 
 impl GroupId {
@@ -523,10 +498,9 @@ impl GroupId {
     }
 }
 
-#[derive(TS)]
-#[ts(export)]
-#[derive(Serialize, Deserialize, Clone, Debug)]
+#[derive(Serialize, Deserialize, Clone, Debug, TS)]
 #[serde(rename_all = "camelCase")]
+#[ts(export)]
 pub struct Group {
     pub id: GroupId,
     pub owner: String,
@@ -535,16 +509,14 @@ pub struct Group {
     pub services_hosts: Option<Vec<ServiceHost>>,
 }
 
-#[derive(TS)]
+#[derive(Serialize, Deserialize, TS)]
 #[ts(export)]
-#[derive(Serialize, Deserialize)]
 pub struct UpdateGroupData {
     pub name: String,
 }
 
-#[derive(TS)]
+#[derive(Deserialize, Serialize, Clone, Debug, TS)]
 #[ts(export)]
-#[derive(Deserialize, Serialize, Clone, Debug)]
 pub enum InvitationState {
     Pending,
     Accepted,
@@ -552,14 +524,17 @@ pub enum InvitationState {
 }
 
 pub type InvitationId = String;
-#[derive(Deserialize, Serialize, Clone, Debug)]
+
+#[derive(TS, Deserialize, Serialize, Clone, Debug)]
 #[serde(rename_all = "camelCase")]
+#[ts(export)]
 pub struct CollaborationInvite {
     pub id: String,
     pub sender: String,
     pub receiver: String,
     pub project_id: ProjectId,
     pub state: InvitationState,
+    #[ts(type = "any")] // FIXME
     pub created_at: SystemTime,
 }
 
@@ -576,30 +551,27 @@ impl CollaborationInvite {
     }
 }
 
-#[derive(TS)]
-#[ts(export)]
-#[derive(Deserialize, Serialize)]
+#[derive(Deserialize, Serialize, TS)]
 #[serde(rename_all = "camelCase")]
+#[ts(export)]
 pub struct UpdateProjectData {
     pub name: String,
     #[ts(optional)]
     pub client_id: Option<ClientId>,
 }
 
-#[derive(TS)]
-#[ts(export)]
-#[derive(Deserialize, Serialize, Debug)]
+#[derive(Deserialize, Serialize, Debug, TS)]
 #[serde(rename_all = "camelCase")]
+#[ts(export)]
 pub struct UpdateRoleData {
     pub name: String,
     #[ts(optional)]
     pub client_id: Option<ClientId>,
 }
 
-#[derive(TS)]
-#[ts(export)]
-#[derive(Deserialize, Serialize)]
+#[derive(Deserialize, Serialize, TS)]
 #[serde(rename_all = "camelCase")]
+#[ts(export)]
 pub struct CreateProjectData {
     #[ts(optional)]
     pub owner: Option<String>,
@@ -617,9 +589,8 @@ pub struct CreateProjectData {
 }
 
 // Network debugging data
-#[derive(TS)]
+#[derive(Deserialize, Serialize, Debug, Clone, PartialEq, Eq, Hash, TS)]
 #[ts(export)]
-#[derive(Deserialize, Serialize, Debug, Clone, PartialEq, Eq, Hash)]
 pub struct ClientId(String);
 
 impl ClientId {
@@ -632,10 +603,9 @@ impl ClientId {
     }
 }
 
-#[derive(TS)]
-#[ts(export)]
-#[derive(Debug, Display, Error)]
+#[derive(Debug, Display, Error, TS)]
 #[display(fmt = "Invalid client ID. Must start with a _")]
+#[ts(export)]
 pub struct ClientIDError;
 
 impl FromStr for ClientId {
@@ -649,10 +619,9 @@ impl FromStr for ClientId {
     }
 }
 
-#[derive(TS)]
-#[ts(export)]
-#[derive(Deserialize, Serialize, Debug)]
+#[derive(Deserialize, Serialize, Debug, TS)]
 #[serde(rename_all = "camelCase")]
+#[ts(export)]
 pub struct ExternalClient {
     #[ts(optional)]
     pub username: Option<String>,
@@ -660,9 +629,8 @@ pub struct ExternalClient {
     pub app_id: AppId,
 }
 
-#[derive(TS)]
+#[derive(Deserialize, Serialize, Clone, Debug, TS)]
 #[ts(export)]
-#[derive(Deserialize, Serialize, Clone, Debug)]
 pub struct RoomState {
     pub id: ProjectId,
     pub owner: String,
@@ -672,26 +640,23 @@ pub struct RoomState {
     pub version: u64,
 }
 
-#[derive(TS)]
+#[derive(Deserialize, Serialize, Clone, Debug, TS)]
 #[ts(export)]
-#[derive(Deserialize, Serialize, Clone, Debug)]
 pub struct RoleState {
     pub name: String,
     pub occupants: Vec<OccupantState>,
 }
 
-#[derive(TS)]
+#[derive(Deserialize, Serialize, Clone, Debug, TS)]
 #[ts(export)]
-#[derive(Deserialize, Serialize, Clone, Debug)]
 pub struct OccupantState {
     pub id: ClientId,
     pub name: String,
 }
 
-#[derive(TS)]
-#[ts(export)]
-#[derive(Deserialize, Serialize, Debug)]
+#[derive(Deserialize, Serialize, Debug, TS)]
 #[serde(rename_all = "camelCase")]
+#[ts(export)]
 pub struct OccupantInviteData {
     pub username: String,
     pub role_id: RoleId,
@@ -699,20 +664,18 @@ pub struct OccupantInviteData {
     pub sender: Option<String>,
 }
 
-#[derive(TS)]
-#[ts(export)]
-#[derive(Deserialize, Serialize, Debug, Clone)]
+#[derive(Deserialize, Serialize, Debug, Clone, TS)]
 #[serde(rename_all = "camelCase")]
+#[ts(export)]
 pub struct AuthorizedServiceHost {
     pub url: String,
     pub id: String,
     pub public: bool,
 }
 
-#[derive(TS)]
-#[ts(export)]
-#[derive(Deserialize, Serialize, Debug, Clone)]
+#[derive(Deserialize, Serialize, Debug, Clone, TS)]
 #[serde(rename_all = "camelCase")]
+#[ts(export)]
 pub struct ClientInfo {
     #[ts(optional)]
     pub username: Option<String>,
@@ -721,9 +684,8 @@ pub struct ClientInfo {
 }
 
 /// Service settings for a given user categorized by origin
-#[derive(TS)]
+#[derive(Deserialize, Serialize, Debug, Clone, TS)]
 #[ts(export)]
-#[derive(Deserialize, Serialize, Debug, Clone)]
 pub struct ServiceSettings {
     /// Service settings owned by the user
     #[ts(optional)]
@@ -745,19 +707,17 @@ pub struct SendMessage {
     pub content: Value,
 }
 
-#[derive(TS)]
-#[ts(export)]
-#[derive(Deserialize, Serialize, Debug, Clone)]
+#[derive(Deserialize, Serialize, Debug, Clone, TS)]
 #[serde(rename_all = "camelCase")]
+#[ts(export)]
 pub enum SendMessageSender {
     Username(String),
     Client(ClientId),
 }
 
-#[derive(TS)]
-#[ts(export)]
-#[derive(Deserialize, Serialize, Debug, Clone)]
+#[derive(Deserialize, Serialize, Debug, Clone, TS)]
 #[serde(rename_all = "camelCase")]
+#[ts(export)]
 pub enum SendMessageTarget {
     Address {
         address: String,
