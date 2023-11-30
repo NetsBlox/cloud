@@ -698,12 +698,14 @@ pub struct ServiceSettings {
 }
 
 /// Send message request (for authorized services)
-#[derive(Deserialize, Serialize, Debug, Clone)]
+#[derive(Deserialize, Serialize, Debug, Clone, TS)]
 #[serde(rename_all = "camelCase")]
+#[ts(export)]
 pub struct SendMessage {
     pub sender: Option<SendMessageSender>,
     pub target: SendMessageTarget,
     // TODO: Should we only allow "message" types or any sort of message?
+    #[ts(type = "object")]
     pub content: Value,
 }
 
