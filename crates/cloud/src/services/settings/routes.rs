@@ -137,7 +137,7 @@ async fn set_group_settings(
 
     let actions: GroupActions = app.as_group_actions();
     actions
-        .set_service_settings(&auth_eg, &host, &settings)
+        .set_service_settings(&auth_eg, &host, settings)
         .await?;
 
     Ok(HttpResponse::Ok().finish())
