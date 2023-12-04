@@ -451,7 +451,7 @@ pub enum PublishState {
     Public,
 }
 
-#[derive(Serialize, Deserialize, Clone, TS)]
+#[derive(Serialize, Deserialize, Clone, Debug, TS)]
 #[ts(export)]
 pub struct LibraryMetadata {
     pub owner: String,

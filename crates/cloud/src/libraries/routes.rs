@@ -212,6 +212,53 @@ mod tests {
         todo!()
     }
 
+    #[actix_web::test]
+    async fn test_save_public_library_with_approval() {
+        let user: User = api::NewUser {
+            username: "user".into(),
+            email: "user@netsblox.org".into(),
+            password: None,
+            group_id: None,
+            role: None,
+        }
+        .into();
+        let pub_lib = Library {
+            owner: user.username.to_owned(),
+            name: "pub library".into(),
+            notes: "my notes".into(),
+            blocks: "<blocks/>".into(),
+            state: api::PublishState::Public,
+        };
+
+        test_utils::setup()
+            .with_users(&[user.clone()])
+            .with_libraries(&[pub_lib.clone()])
+            .run(|app_data| async move {
+                let app = test::init_service(
+                    App::new()
+                        .app_data(web::Data::new(app_data))
+                        .wrap(test_utils::cookie::middleware())
+                        .configure(super::config),
+                )
+                .await;
+
+                let lib_data = api::CreateLibraryData {
+                    name: "pub library".into(),
+                    notes: "my notes".into(),
+                    blocks: "<blocks><reportJSFunction/></blocks>".into(),
+                };
+                let req = test::TestRequest::post()
+                    .uri(&format!("/user/{}/", &user.username))
+                    .cookie(test_utils::cookie::new(&user.username))
+                    .set_json(&lib_data)
+                    .to_request();
+
+                let metadata: api::LibraryMetadata = test::call_and_read_body_json(&app, req).await;
+                assert!(matches!(metadata.state, api::PublishState::PendingApproval));
+            })
+            .await;
+    }
+
     // #[actix_web::test]
     //#[ignore]
     // async fn test_list_user_libraries_403() {
