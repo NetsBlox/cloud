@@ -75,6 +75,13 @@ impl ViewUser {
     }
 }
 
+#[cfg(test)]
+impl CreateUser {
+    pub(crate) fn test(data: api::NewUser) -> Self {
+        Self { data, _private: () }
+    }
+}
+
 /// Try to get privileges to create the given user. Must be able
 /// to edit the target group (if user is in a group). Moderators
 /// or admins can only be created by others with their role (or
