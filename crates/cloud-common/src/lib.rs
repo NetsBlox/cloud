@@ -27,7 +27,7 @@ pub struct User {
     pub created_at: DateTime,
     pub linked_accounts: Vec<LinkedAccount>,
     pub services_hosts: Option<Vec<ServiceHost>>,
-    pub service_settings: HashMap<String, String>,
+    pub service_settings: HashMap<String, Value>,
 }
 
 impl User {
