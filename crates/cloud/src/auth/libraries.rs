@@ -147,4 +147,10 @@ mod test_utils {
             }
         }
     }
+
+    impl ModerateLibraries {
+        pub(crate) fn test() -> Self {
+            Self { _private: () }
+        }
+    }
 }
