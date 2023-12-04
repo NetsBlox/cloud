@@ -49,6 +49,7 @@ pub struct User {
 }
 
 #[derive(Serialize, Deserialize, Debug, TS)]
+#[serde(rename_all = "camelCase")]
 #[ts(export)]
 pub struct NewUser {
     pub username: String,
