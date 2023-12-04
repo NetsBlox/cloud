@@ -757,7 +757,7 @@ impl Client {
 
     // Group management
     pub async fn list_groups(&self, username: &str) -> Result<Vec<Group>, error::Error> {
-        let path = format!("/groups/user/{}", username);
+        let path = format!("/groups/user/{}/", username);
         let response = self
             .request(Method::GET, &path)
             .send()
@@ -770,7 +770,7 @@ impl Client {
     }
 
     pub async fn create_group(&self, owner: &str, name: &str) -> Result<(), error::Error> {
-        let path = format!("/groups/user/{}", owner);
+        let path = format!("/groups/user/{}/", owner);
         let group = CreateGroupData {
             name: name.to_owned(),
             services_hosts: None,

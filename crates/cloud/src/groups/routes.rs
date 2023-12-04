@@ -7,7 +7,7 @@ use actix_web::{web, HttpResponse};
 
 use crate::common::api;
 
-#[get("/user/{owner}")]
+#[get("/user/{owner}/")]
 async fn list_groups(
     app: web::Data<AppData>,
     path: web::Path<(String,)>,
@@ -53,8 +53,7 @@ async fn list_members(
     Ok(HttpResponse::Ok().json(members))
 }
 
-// TODO: Should this send the data, too?
-#[post("/user/{owner}")]
+#[post("/user/{owner}/")]
 async fn create_group(
     app: web::Data<AppData>,
     path: web::Path<(String,)>,
@@ -65,7 +64,7 @@ async fn create_group(
     let auth_eu = auth::try_edit_user(&app, &req, None, &owner).await?;
 
     let actions: GroupActions = app.as_group_actions();
-    let group = actions.create_group(&auth_eu, &body.name).await?;
+    let group = actions.create_group(&auth_eu, body.into_inner()).await?;
 
     Ok(HttpResponse::Ok().json(group))
 }

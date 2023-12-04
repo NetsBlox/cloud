@@ -157,6 +157,16 @@ impl Group {
             services_hosts: None,
         }
     }
+
+    pub fn from_data(owner: String, data: api::CreateGroupData) -> Self {
+        Self {
+            id: api::GroupId::new(Uuid::new_v4().to_string()),
+            owner,
+            name: data.name,
+            service_settings: HashMap::new(),
+            services_hosts: data.services_hosts,
+        }
+    }
 }
 
 impl From<Group> for netsblox_api_common::Group {

@@ -20,10 +20,13 @@ impl<'a> GroupActions<'a> {
     pub(crate) async fn create_group(
         &self,
         eu: &auth::EditUser,
-        name: &str,
+        data: api::CreateGroupData,
     ) -> Result<api::Group, UserError> {
-        let group = Group::new(eu.username.to_owned(), name.to_owned());
-        let query = doc! {"name": &group.name, "owner": &group.owner};
+        let group = Group::from_data(eu.username.to_owned(), data);
+        let query = doc! {
+            "name": &group.name,
+            "owner": &group.owner,
+        };
         let update = doc! {"$setOnInsert": &group};
         let options = mongodb::options::UpdateOptions::builder()
             .upsert(true)
@@ -183,13 +186,12 @@ impl<'a> GroupActions<'a> {
         vg: &auth::groups::DeleteGroup,
     ) -> Result<api::Group, UserError> {
         let query = doc! {"id": &vg.id};
-        let group: api::Group = self
+        let group = self
             .groups
             .find_one_and_delete(query, None)
             .await
             .map_err(InternalError::DatabaseConnectionError)?
-            .ok_or(UserError::GroupNotFoundError)?
-            .into();
+            .ok_or(UserError::GroupNotFoundError)?;
 
         Ok(group.into())
     }
@@ -218,4 +220,55 @@ impl<'a> GroupActions<'a> {
     }
 }
 
-// TODO: add caching tests
+#[cfg(test)]
+mod tests {
+    use crate::test_utils;
+
+    use super::*;
+
+    #[actix_web::test]
+    async fn test_create_group_with_hosts() {
+        let user: User = api::NewUser {
+            username: "user".into(),
+            email: "user@netsblox.org".into(),
+            password: None,
+            group_id: None,
+            role: None,
+        }
+        .into();
+        let other: User = api::NewUser {
+            username: "other".into(),
+            email: "other@netsblox.org".into(),
+            password: None,
+            group_id: None,
+            role: None,
+        }
+        .into();
+
+        test_utils::setup()
+            .with_users(&[user.clone(), other])
+            .run(|app_data| async move {
+                let actions = app_data.as_group_actions();
+
+                let auth_eu = auth::EditUser::test(user.username.clone());
+
+                // create the group
+                let hosts = vec![api::ServiceHost {
+                    url: "http://testUrl.org".into(),
+                    categories: vec!["someCategory".into()],
+                }];
+                let data = api::CreateGroupData {
+                    name: "someGroup".into(),
+                    services_hosts: Some(hosts),
+                };
+                let group = actions.create_group(&auth_eu, data).await.unwrap();
+
+                // check that it has a service host
+                let services_hosts = group.services_hosts.unwrap_or_default();
+                assert_eq!(services_hosts.len(), 1);
+                let host = services_hosts.first().unwrap();
+                assert_eq!(&host.url, "http://testUrl.org");
+            })
+            .await;
+    }
+}
