@@ -120,7 +120,11 @@ impl<'a> LibraryActions<'a> {
         };
 
         if needs_approval {
-            let update = doc! {"state": PublishState::PendingApproval};
+            let update = doc! {
+                "$set": {
+                    "state": PublishState::PendingApproval
+                }
+            };
             let options = FindOneAndUpdateOptions::builder()
                 .return_document(ReturnDocument::After)
                 .build();
