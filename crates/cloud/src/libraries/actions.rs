@@ -240,9 +240,13 @@ impl<'a> LibraryActions<'a> {
     ) -> Result<api::LibraryMetadata, UserError> {
         let query = doc! {"owner": owner, "name": name};
         let update = doc! {"$set": {"state": state}};
+        let options = FindOneAndUpdateOptions::builder()
+            .upsert(true)
+            .return_document(ReturnDocument::After)
+            .build();
         let library = self
             .libraries
-            .find_one_and_update(query, update, None)
+            .find_one_and_update(query, update, options)
             .await
             .map_err(InternalError::DatabaseConnectionError)?
             .ok_or(UserError::LibraryNotFoundError)?;
@@ -427,6 +431,41 @@ mod tests {
                 let libraries = actions.list_user_libraries(&auth_ll).await.unwrap();
                 // Should get all the libraries since it has permissions to view private libraries
                 assert_eq!(libraries.len(), 3);
+            })
+            .await;
+    }
+
+    #[actix_web::test]
+    async fn test_set_library_state() {
+        let user: User = api::NewUser {
+            username: "user".into(),
+            email: "user@netsblox.org".into(),
+            password: None,
+            group_id: None,
+            role: None,
+        }
+        .into();
+        let lib = Library {
+            owner: user.username.clone(),
+            name: "lib".into(),
+            notes: "".into(),
+            blocks: "<blocks/>".into(),
+            state: api::PublishState::PendingApproval,
+        };
+
+        test_utils::setup()
+            .with_users(&[user.clone()])
+            .with_libraries(&[lib.clone()])
+            .run(|app_data| async move {
+                let actions = app_data.as_library_actions();
+                let auth_ml = auth::ModerateLibraries::test();
+
+                let metadata = actions
+                    .set_library_state(&auth_ml, &user.username, &lib.name, PublishState::Public)
+                    .await
+                    .unwrap();
+
+                assert!(matches!(metadata.state, PublishState::Public));
             })
             .await;
     }
