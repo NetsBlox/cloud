@@ -636,4 +636,10 @@ mod tests {
     async fn test_is_valid_username_vulgar() {
         assert!(!is_valid_username("shit"));
     }
+
+    #[actix_web::test]
+    async fn test_is_valid_username_yed() {
+        // https://github.com/NetsBlox/NetsBlox/issues/3378
+        assert!(is_valid_username("yedina"));
+    }
 }
