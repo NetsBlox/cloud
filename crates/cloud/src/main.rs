@@ -132,6 +132,7 @@ async fn main() -> std::io::Result<()> {
             .service(web::scope("/services").configure(services::config))
             .service(get_client_config)
     })
+    .client_request_timeout(std::time::Duration::from_secs(60))
     .bind(&address)?
     .run();
 
