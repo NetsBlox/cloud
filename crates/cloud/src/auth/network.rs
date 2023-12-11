@@ -219,6 +219,12 @@ async fn get_project_for_client(
     Ok(metadata)
 }
 
+impl ViewClient {
+    pub(crate) fn test(id: ClientId) -> Self {
+        Self { id, _private: () }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use actix_web::{http, post, test, web, App, HttpResponse};

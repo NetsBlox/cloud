@@ -278,19 +278,21 @@ impl<'a> NetworkActions<'a> {
     pub(crate) async fn get_client_state(
         &self,
         vc: &auth::ViewClient,
-    ) -> Result<api::ClientInfo, UserError> {
+    ) -> Result<Option<api::ClientInfo>, UserError> {
         let task = self
             .network
             .send(topology::GetClientUsername(vc.id.clone()))
             .await
             .map_err(InternalError::ActixMessageError)?;
         let username = task.run().await;
+
         let task = self
             .network
             .send(topology::GetClientState(vc.id.clone()))
             .await
             .map_err(InternalError::ActixMessageError)?;
         let state = task.run().await;
+
         Ok(api::ClientInfo { username, state })
     }
 
@@ -449,6 +451,19 @@ mod tests {
                 assert!(cached.is_some(), "Project not cached after update");
 
                 assert!(matches!(cached.unwrap().save_state, SaveState::Transient));
+            })
+            .await;
+    }
+
+    #[actix_web::test]
+    async fn test_get_client_state_none() {
+        // Return None if the client isn't connected
+        test_utils::setup()
+            .run(|app_data| async move {
+                let actions = app_data.as_network_actions();
+                let vc = auth::ViewClient::test(api::ClientId::new("_nonexistentClientId".into()));
+                let state = actions.get_client_state(&vc).await;
+                assert!(state.is_none());
             })
             .await;
     }
