@@ -275,25 +275,18 @@ impl<'a> NetworkActions<'a> {
         Ok(metadata.into())
     }
 
-    pub(crate) async fn get_client_state(
+    pub(crate) async fn get_client_info(
         &self,
         vc: &auth::ViewClient,
-    ) -> Result<Option<api::ClientInfo>, UserError> {
+    ) -> Result<api::ClientInfo, UserError> {
         let task = self
             .network
-            .send(topology::GetClientUsername(vc.id.clone()))
+            .send(topology::GetClientInfo(vc.id.clone()))
             .await
             .map_err(InternalError::ActixMessageError)?;
-        let username = task.run().await;
+        let info = task.run().await.ok_or(UserError::ClientNotFoundError)?;
 
-        let task = self
-            .network
-            .send(topology::GetClientState(vc.id.clone()))
-            .await
-            .map_err(InternalError::ActixMessageError)?;
-        let state = task.run().await;
-
-        Ok(api::ClientInfo { username, state })
+        Ok(info)
     }
 
     pub(crate) async fn invite_occupant(
@@ -456,14 +449,14 @@ mod tests {
     }
 
     #[actix_web::test]
-    async fn test_get_client_state_none() {
-        // Return None if the client isn't connected
+    async fn test_get_client_state_not_found() {
+        // Return client not found if the client isn't connected
         test_utils::setup()
             .run(|app_data| async move {
                 let actions = app_data.as_network_actions();
                 let vc = auth::ViewClient::test(api::ClientId::new("_nonexistentClientId".into()));
-                let state = actions.get_client_state(&vc).await;
-                assert!(state.is_none());
+                let state = actions.get_client_info(&vc).await;
+                assert!(matches!(state, Err(UserError::ClientNotFoundError)));
             })
             .await;
     }

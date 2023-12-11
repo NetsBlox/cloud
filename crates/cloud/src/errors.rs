@@ -27,6 +27,8 @@ pub enum UserError {
     PermissionsError,
     #[display(fmt = "Project not found.")]
     ProjectNotFoundError,
+    #[display(fmt = "Client not found.")]
+    ClientNotFoundError,
     #[display(fmt = "Thumbnail not available.")]
     ThumbnailNotFoundError,
     #[display(fmt = "Unable to retrieve project.")]
@@ -174,6 +176,7 @@ impl error::ResponseError for UserError {
             | Self::IncorrectPasswordError => StatusCode::FORBIDDEN,
 
             Self::ProjectNotFoundError
+            | Self::ClientNotFoundError
             | Self::ThumbnailNotFoundError
             | Self::NetworkTraceNotFoundError
             | Self::LibraryNotFoundError

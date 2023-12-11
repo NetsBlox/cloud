@@ -282,7 +282,7 @@ async fn get_client_state(
     let auth_vc = auth::try_view_client(&app, &req, &client_id).await?;
 
     let actions: NetworkActions = app.as_network_actions();
-    let client_info = actions.get_client_state(&auth_vc).await?;
+    let client_info = actions.get_client_info(&auth_vc).await?;
 
     Ok(HttpResponse::Ok().json(client_info))
 }
