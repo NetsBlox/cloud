@@ -219,6 +219,7 @@ async fn get_project_for_client(
     Ok(metadata)
 }
 
+#[cfg(test)]
 impl ViewClient {
     pub(crate) fn test(id: ClientId) -> Self {
         Self { id, _private: () }
