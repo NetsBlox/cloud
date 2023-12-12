@@ -617,6 +617,35 @@ impl Handler<GetClientState> for TopologyActor {
 }
 
 #[derive(Message, Clone)]
+#[rtype(result = "GetClientInfoTask")]
+pub(crate) struct GetClientInfo(pub ClientId);
+
+#[derive(Message, Clone)]
+#[rtype(result = "()")]
+pub struct GetClientInfoTask {
+    network: Arc<RwLock<Topology>>,
+    client_id: ClientId,
+}
+
+impl GetClientInfoTask {
+    pub(crate) async fn run(self) -> Option<api::ClientInfo> {
+        let topology = self.network.read().await;
+        topology.get_client_info(&self.client_id)
+    }
+}
+
+impl Handler<GetClientInfo> for TopologyActor {
+    type Result = MessageResult<GetClientInfo>;
+
+    fn handle(&mut self, msg: GetClientInfo, _ctx: &mut Context<Self>) -> Self::Result {
+        MessageResult(GetClientInfoTask {
+            network: self.network.clone(),
+            client_id: msg.0,
+        })
+    }
+}
+
+#[derive(Message, Clone)]
 #[rtype(result = "GetRoomStateTask")]
 pub(crate) struct GetRoomState(pub ProjectMetadata);
 
