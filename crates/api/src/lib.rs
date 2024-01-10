@@ -3,7 +3,7 @@ pub mod error;
 
 use crate::common::*;
 use futures_util::SinkExt;
-use netsblox_api_common::{CreateGroupData, UpdateGroupData};
+use netsblox_api_common::{CreateGroupData, ServiceHostScope, UpdateGroupData};
 use reqwest::{self, Method, RequestBuilder, Response};
 use serde::{Deserialize, Serialize};
 pub use serde_json;
@@ -914,12 +914,12 @@ impl Client {
         &self,
         url: &str,
         id: &str,
-        public: bool,
+        visibility: ServiceHostScope,
     ) -> Result<String, error::Error> {
         let host = AuthorizedServiceHost {
             url: url.to_owned(),
             id: id.to_owned(),
-            public,
+            visibility,
         };
         let response = self
             .request(Method::POST, "/services/hosts/authorized/")

@@ -40,12 +40,7 @@ pub(crate) async fn try_view_client(
         .await?
         .is_some();
 
-    if is_auth_host {
-        Ok(ViewClient {
-            id: client_id.to_owned(),
-            _private: (),
-        })
-    } else if is_super_user(app, req).await? {
+    if is_auth_host || is_super_user(app, req).await? {
         Ok(ViewClient {
             id: client_id.to_owned(),
             _private: (),
@@ -238,8 +233,12 @@ mod tests {
             },
             content: json!({"test": "hello!"}),
         };
-        let host =
-            AuthorizedServiceHost::new("http://localhost:5656".into(), "TestServices".into(), true);
+        let visibility = api::ServiceHostScope::Public(Vec::new());
+        let host = AuthorizedServiceHost::new(
+            "http://localhost:5656".into(),
+            "TestServices".into(),
+            visibility,
+        );
 
         test_utils::setup()
             .with_authorized_services(&[host.clone()])

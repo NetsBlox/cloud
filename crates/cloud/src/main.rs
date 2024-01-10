@@ -42,7 +42,7 @@ async fn get_client_config(
     app: web::Data<AppData>,
     session: Session,
 ) -> Result<HttpResponse, UserError> {
-    let query = doc! {"public": true};
+    let query = doc! {"visibility": {"$ne": "private"}};
     let default_hosts: Vec<api::ServiceHost> = app
         .authorized_services
         .find(query, None)
