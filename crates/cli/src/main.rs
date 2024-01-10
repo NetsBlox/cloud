@@ -10,7 +10,8 @@ use futures_util::StreamExt;
 use inquire::{Confirm, Password, PasswordDisplayMode};
 use netsblox_api::common::{
     oauth, ClientId, CreateProjectData, Credentials, FriendLinkState, InvitationState,
-    LinkedAccount, ProjectId, PublishState, RoleData, SaveState, ServiceHost, UserRole,
+    LinkedAccount, ProjectId, PublishState, RoleData, SaveState, ServiceHost, ServiceHostScope,
+    UserRole,
 };
 use netsblox_api::{self, serde_json, Client};
 use std::path::Path;
@@ -252,9 +253,9 @@ enum ServiceHosts {
     Authorize {
         url: String,
         client_id: String,
-        /// Enable this service host for all users
+        /// Set the public categories for the host. Omit to keep service private
         #[clap(short, long)]
-        public: bool,
+        categories: Option<String>,
     },
     /// Revoke the service host's authorization
     Unauthorize { url: String },
@@ -1268,9 +1269,18 @@ async fn do_command(mut cfg: Config, args: Cli) -> Result<(), error::Error> {
             ServiceHosts::Authorize {
                 url,
                 client_id,
-                public,
+                categories,
             } => {
-                let secret = client.authorize_host(url, client_id, *public).await?;
+                let visibility = categories
+                    .as_ref()
+                    .map(|cats| {
+                        let categories: Vec<String> =
+                            cats.split(',').map(|cat| cat.to_string()).collect();
+                        ServiceHostScope::Public(categories)
+                    })
+                    .unwrap_or(ServiceHostScope::Private);
+
+                let secret = client.authorize_host(url, client_id, visibility).await?;
                 println!("{}", secret);
             }
             ServiceHosts::Unauthorize { url } => {

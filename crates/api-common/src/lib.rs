@@ -583,10 +583,6 @@ pub struct CreateProjectData {
     pub client_id: Option<ClientId>,
     #[ts(optional)]
     pub save_state: Option<SaveState>,
-
-    #[cfg(test)]
-    #[ts(optional)]
-    pub role_dict: Option<HashMap<RoleId, RoleData>>,
 }
 
 // Network debugging data
@@ -671,7 +667,14 @@ pub struct OccupantInviteData {
 pub struct AuthorizedServiceHost {
     pub url: String,
     pub id: String,
-    pub public: bool,
+    pub visibility: ServiceHostScope,
+}
+
+#[derive(Deserialize, Serialize, Debug, Clone, TS)]
+#[serde(rename_all = "camelCase")]
+pub enum ServiceHostScope {
+    Public(Vec<String>),
+    Private,
 }
 
 #[derive(Deserialize, Serialize, Debug, Clone, TS)]
