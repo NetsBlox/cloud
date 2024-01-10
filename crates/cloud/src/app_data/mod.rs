@@ -308,7 +308,8 @@ impl AppData {
                 .map_err(InternalError::DatabaseConnectionError)?;
         }
 
-        if let Some(host) = self.settings.authorized_host.as_ref() {
+        if let Some(host_config) = self.settings.authorized_host.as_ref() {
+            let host: AuthorizedServiceHost = host_config.clone().into();
             let query = doc! {"id": &host.id};
             let update = doc! {"$setOnInsert": &host};
             let options = UpdateOptions::builder().upsert(true).build();
