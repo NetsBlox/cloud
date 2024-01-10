@@ -7,5 +7,6 @@ email = "admin@netsblox.org"
 id = "LocalServices"
 url = "http://localhost:8080"
 secret = "SuperSecret"
-public = true
+#category = "LocalServices"
+
 

@@ -1,7 +1,7 @@
 use std::{env, num::NonZeroUsize};
 
 use config::{Config, ConfigError, File};
-use netsblox_cloud_common::AuthorizedServiceHost;
+use netsblox_cloud_common::api::ServiceHostScope;
 use serde::Deserialize;
 
 #[derive(Clone, Deserialize)]
@@ -63,6 +63,26 @@ pub struct CacheSettings {
     pub num_users_admin_data: NonZeroUsize,
     pub num_users_friend_data: NonZeroUsize,
     pub num_addresses: NonZeroUsize,
+}
+
+#[derive(Clone, Deserialize)]
+pub struct AuthorizedServiceHost {
+    pub(crate) id: String,
+    pub(crate) url: String,
+    pub(crate) secret: String,
+    pub(crate) category: Option<String>,
+}
+
+impl From<AuthorizedServiceHost> for netsblox_cloud_common::AuthorizedServiceHost {
+    fn from(config: AuthorizedServiceHost) -> Self {
+        let categories = config.category.map(|cat| vec![cat]).unwrap_or_default();
+        Self {
+            id: config.id,
+            url: config.url,
+            secret: config.secret,
+            visibility: ServiceHostScope::Public(categories),
+        }
+    }
 }
 
 #[derive(Clone, Deserialize)]
