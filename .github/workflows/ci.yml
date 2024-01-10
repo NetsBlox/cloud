@@ -19,7 +19,8 @@ jobs:
           toolchain: stable
       - uses: actions-rs/cargo@v1
         with:
-          command: test --features bson
+          command: test
+          args: --all-features
 
   audit:
     name: audit
