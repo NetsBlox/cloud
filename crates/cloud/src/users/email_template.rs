@@ -45,10 +45,18 @@ pub(crate) fn forgot_username_email(email: &str, usernames: &NonEmpty<String>) -
 }
 
 fn multi_usernames_email(email: &str, usernames: &NonEmpty<String>) -> MultiPart {
+    MultiPart::alternative_plain_html(
+        multi_usernames_txt(email, usernames),
+        multi_usernames_html(email, usernames),
+    )
+}
+
+fn multi_usernames_html(email: &str, usernames: &NonEmpty<String>) -> String {
     let username_list_html = usernames
         .iter()
-        .fold(String::new(), |list, name| format!("{}{}<br/>", name, list));
-    let html = format!(
+        .fold(String::new(), |list, name| format!("{}<br/>{}", name, list));
+
+    format!(
         "<h1>NetsBlox Usernames</h1>
         <p>
             This email is just a reminder of the usernames associated with the given email address ({email}).
@@ -63,12 +71,15 @@ fn multi_usernames_email(email: &str, usernames: &NonEmpty<String>) -> MultiPart
         ",
         usernameList = username_list_html,
         email = email
-    );
+    )
+}
 
+fn multi_usernames_txt(email: &str, usernames: &NonEmpty<String>) -> String {
     let username_list_txt = usernames
         .iter()
         .fold(String::new(), |list, name| format!("{}\n{}", name, list));
-    let txt = format!(
+
+    format!(
         "NetsBlox Usernames
         
         This email is just a reminder of the usernames associated with the given email address ({email}).
@@ -81,9 +92,7 @@ fn multi_usernames_email(email: &str, usernames: &NonEmpty<String>) -> MultiPart
         the NetsBlox team",
         usernames = username_list_txt,
         email = email
-        );
-
-    MultiPart::alternative_plain_html(txt, html)
+        )
 }
 
 fn single_username_email(email: &str, username: &str) -> MultiPart {
@@ -113,4 +122,30 @@ fn single_username_email(email: &str, username: &str) -> MultiPart {
         );
 
     MultiPart::alternative_plain_html(txt, html)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use nonempty::nonempty;
+
+    #[actix_web::test]
+    async fn test_multi_usernames_html_multiline() {
+        let html = multi_usernames_html("EMAIL", &nonempty!["U1".into(), "U2".into()]);
+        let on_same_line = html
+            .split("<br/>")
+            .any(|line| line.contains("U1") && line.contains("U2"));
+
+        assert!(!on_same_line);
+    }
+
+    #[actix_web::test]
+    async fn test_multi_usernames_txt_multiline() {
+        let txt = multi_usernames_txt("EMAIL", &nonempty!["U1".into(), "U2".into()]);
+        let on_same_line = txt
+            .split("\n")
+            .any(|line| line.contains("U1") && line.contains("U2"));
+
+        assert!(!on_same_line);
+    }
 }
