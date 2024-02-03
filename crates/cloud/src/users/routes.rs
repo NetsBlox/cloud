@@ -99,6 +99,17 @@ async fn whoami(req: HttpRequest) -> Result<HttpResponse, UserError> {
     }
 }
 
+#[post("/forgot-username")]
+async fn forgot_username(
+    app: web::Data<AppData>,
+    email: web::Json<String>,
+) -> Result<HttpResponse, UserError> {
+    let actions: UserActions = app.as_user_actions();
+    actions.forgot_username(&email.into_inner()).await?;
+
+    Ok(HttpResponse::Ok().finish())
+}
+
 #[post("/{username}/ban")]
 async fn ban_user(
     app: web::Data<AppData>,
@@ -254,6 +265,7 @@ pub fn config(cfg: &mut web::ServiceConfig) {
         .service(login)
         .service(logout)
         .service(delete_user)
+        .service(forgot_username)
         .service(ban_user)
         .service(unban_user)
         .service(reset_password)
