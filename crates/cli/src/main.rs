@@ -59,6 +59,11 @@ enum Users {
     },
     /// List NetsBlox users
     List, // TODO: add verbose option?
+    /// Email all associated usernames to a given address
+    ForgotUsername {
+        /// Email address associated with the username(s)
+        email: String,
+    },
     /// Ban a given user. Email address will also be blacklisted
     Ban {
         /// NetsBlox user to ban
@@ -779,6 +784,10 @@ async fn do_command(mut cfg: Config, args: Cli) -> Result<(), error::Error> {
                 for user in client.list_users().await? {
                     println!("{}", serde_json::to_string(&user).unwrap());
                 }
+            }
+            Users::ForgotUsername { email } => {
+                client.forgot_username(&email).await?;
+                println!("Email sent to {}", email);
             }
             Users::Delete {
                 username,
