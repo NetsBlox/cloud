@@ -18,6 +18,7 @@ use mongodb::{
     Collection,
 };
 use netsblox_cloud_common::{api, BannedAccount, ProjectMetadata, SetPasswordToken, User};
+use nonempty::NonEmpty;
 use regex::Regex;
 use rustrict::CensorStr;
 
@@ -489,6 +490,38 @@ impl<'a> UserActions<'a> {
         }
         Ok(())
     }
+
+    pub(crate) async fn forgot_username(&self, email: &str) -> Result<(), UserError> {
+        let usernames = self.find_usernames(email).await?;
+        if let Some(usernames) = NonEmpty::from_vec(usernames) {
+            let email = ForgotUsernameEmail {
+                sender: self.sender.clone(),
+                email: email.to_owned(),
+                usernames,
+            };
+
+            utils::send_email(self.mailer, email)?;
+        }
+
+        Ok(())
+    }
+
+    async fn find_usernames(&self, email: &str) -> Result<Vec<String>, UserError> {
+        let query = doc! {"email": email};
+        let cursor = self
+            .users
+            .find(query, None)
+            .await
+            .map_err(InternalError::DatabaseConnectionError)?;
+
+        let usernames = cursor
+            .map_ok(|user| user.username)
+            .try_collect::<Vec<_>>()
+            .await
+            .map_err(InternalError::DatabaseConnectionError)?;
+
+        Ok(usernames)
+    }
 }
 
 fn ensure_valid_email(email: &str) -> Result<(), UserError> {
@@ -520,7 +553,7 @@ fn is_valid_username(name: &str) -> bool {
         && !name.is_inappropriate()
 }
 
-pub(crate) struct SetPasswordEmail {
+struct SetPasswordEmail {
     sender: Mailbox,
     user: User,
     token: SetPasswordToken,
@@ -546,6 +579,42 @@ impl TryFrom<SetPasswordEmail> for lettre::Message {
         let to_email = email.user.email;
         let message = Message::builder()
             .from(email.sender)
+            .to(Mailbox::new(
+                None,
+                to_email
+                    .parse::<Address>()
+                    .map_err(|_err| UserError::InvalidEmailAddress)?,
+            ))
+            .subject(subject.to_string())
+            .date_now()
+            .multipart(body)
+            .map_err(|_err| InternalError::EmailBuildError)?;
+
+        Ok(message)
+    }
+}
+
+struct ForgotUsernameEmail {
+    sender: Mailbox,
+    usernames: NonEmpty<String>,
+    email: String,
+}
+
+impl ForgotUsernameEmail {
+    fn render(&self) -> MultiPart {
+        email_template::forgot_username_email(&self.email, &self.usernames)
+    }
+}
+
+impl TryFrom<ForgotUsernameEmail> for lettre::Message {
+    type Error = UserError;
+
+    fn try_from(data: ForgotUsernameEmail) -> Result<Self, UserError> {
+        let subject = "NetsBlox Username(s)";
+        let body = data.render();
+        let to_email = data.email;
+        let message = Message::builder()
+            .from(data.sender)
             .to(Mailbox::new(
                 None,
                 to_email
@@ -603,6 +672,77 @@ mod tests {
                     account.is_none(),
                     "Double ban wasn't undone by single unban."
                 );
+            })
+            .await;
+    }
+
+    #[actix_web::test]
+    async fn test_find_usernames() {
+        let user: User = api::NewUser {
+            username: "user".into(),
+            email: "user@netsblox.org".into(),
+            password: None,
+            group_id: None,
+            role: None,
+        }
+        .into();
+        let other: User = api::NewUser {
+            username: "other".into(),
+            email: "other@netsblox.org".into(),
+            password: None,
+            group_id: None,
+            role: None,
+        }
+        .into();
+
+        test_utils::setup()
+            .with_users(&[user.clone(), other])
+            .run(|app_data| async move {
+                let actions = app_data.as_user_actions();
+
+                let usernames = actions.find_usernames(&user.email).await.unwrap();
+                assert_eq!(usernames.len(), 1);
+                assert!(usernames.iter().any(|name| name == "user"));
+            })
+            .await;
+    }
+
+    #[actix_web::test]
+    async fn test_find_usernames_multi() {
+        let user: User = api::NewUser {
+            username: "user".into(),
+            email: "user@netsblox.org".into(),
+            password: None,
+            group_id: None,
+            role: None,
+        }
+        .into();
+        let u2: User = api::NewUser {
+            username: "u2".into(),
+            email: "user@netsblox.org".into(),
+            password: None,
+            group_id: None,
+            role: None,
+        }
+        .into();
+        let other: User = api::NewUser {
+            username: "other".into(),
+            email: "other@netsblox.org".into(),
+            password: None,
+            group_id: None,
+            role: None,
+        }
+        .into();
+
+        test_utils::setup()
+            .with_users(&[user.clone(), u2, other])
+            .run(|app_data| async move {
+                let actions = app_data.as_user_actions();
+
+                let usernames = actions.find_usernames(&user.email).await.unwrap();
+                assert_eq!(usernames.len(), 2);
+                assert!(usernames.iter().any(|name| name == "user"));
+                assert!(usernames.iter().any(|name| name == "u2"));
             })
             .await;
     }
