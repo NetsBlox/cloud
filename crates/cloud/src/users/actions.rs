@@ -493,15 +493,16 @@ impl<'a> UserActions<'a> {
 
     pub(crate) async fn forgot_username(&self, email: &str) -> Result<(), UserError> {
         let usernames = self.find_usernames(email).await?;
-        if let Some(usernames) = NonEmpty::from_vec(usernames) {
-            let email = ForgotUsernameEmail {
+
+        let email = NonEmpty::from_vec(usernames)
+            .map(|usernames| ForgotUsernameEmail {
                 sender: self.sender.clone(),
                 email: email.to_owned(),
                 usernames,
-            };
+            })
+            .ok_or(UserError::UserNotFoundError)?;
 
-            utils::send_email(self.mailer, email)?;
-        }
+        utils::send_email(self.mailer, email)?;
 
         Ok(())
     }
@@ -743,6 +744,18 @@ mod tests {
                 assert_eq!(usernames.len(), 2);
                 assert!(usernames.iter().any(|name| name == "user"));
                 assert!(usernames.iter().any(|name| name == "u2"));
+            })
+            .await;
+    }
+
+    #[actix_web::test]
+    async fn test_forgot_username_none() {
+        test_utils::setup()
+            .run(|app_data| async move {
+                let actions = app_data.as_user_actions();
+
+                let result = actions.forgot_username("brian@netsblox.org").await;
+                assert!(matches!(result, Err(UserError::UserNotFoundError)));
             })
             .await;
     }
