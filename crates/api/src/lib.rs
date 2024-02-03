@@ -146,6 +146,20 @@ impl Client {
         Ok(response.json::<Vec<User>>().await.unwrap())
     }
 
+    /// Send an email containing all usernames associated with the given
+    /// address to the email address.
+    pub async fn forgot_username(&self, email: &str) -> Result<(), error::Error> {
+        let response = self
+            .request(Method::POST, "/users/forgot-username")
+            .json(&email)
+            .send()
+            .await
+            .map_err(error::Error::RequestError)?;
+
+        check_response(response).await?;
+        Ok(())
+    }
+
     pub async fn delete_user(&self, username: &str) -> Result<(), error::Error> {
         let response = self
             .request(Method::POST, &format!("/users/{}/delete", username))
