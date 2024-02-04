@@ -672,6 +672,7 @@ pub struct AuthorizedServiceHost {
 
 #[derive(Deserialize, Serialize, Debug, Clone, TS)]
 #[serde(rename_all = "camelCase")]
+#[ts(export)]
 pub enum ServiceHostScope {
     Public(Vec<String>),
     Private,
