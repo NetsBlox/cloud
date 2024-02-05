@@ -1,6 +1,6 @@
 use crate::{
-    oauth, FriendInvite, FriendLinkState, GroupId, InvitationState, LinkedAccount, ProjectId,
-    PublishState, RoleMetadata, SaveState, ServiceHost, ServiceHostScope, UserRole,
+    oauth, FriendInvite, FriendLinkState, GroupId, InvitationState, LinkedAccount, MagicLinkId,
+    ProjectId, PublishState, RoleMetadata, SaveState, ServiceHost, ServiceHostScope, UserRole,
 };
 use bson::{doc, Bson, DateTime};
 
@@ -156,6 +156,12 @@ impl From<ServiceHostScope> for Bson {
             }),
             ServiceHostScope::Private => Bson::String("private".into()),
         }
+    }
+}
+
+impl From<MagicLinkId> for Bson {
+    fn from(id: MagicLinkId) -> Bson {
+        Bson::String(id.0)
     }
 }
 

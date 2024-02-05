@@ -13,11 +13,11 @@ use lettre::{
 };
 use lru::LruCache;
 use mongodb::{
-    bson::{doc, DateTime},
+    bson::doc,
     options::{FindOneAndUpdateOptions, ReturnDocument},
     Collection,
 };
-use netsblox_cloud_common::{api, BannedAccount, ProjectMetadata, SetPasswordToken, User};
+use netsblox_cloud_common::{api, BannedAccount, SetPasswordToken, User};
 use nonempty::NonEmpty;
 use regex::Regex;
 use rustrict::CensorStr;
@@ -37,8 +37,6 @@ pub(crate) struct UserActions<'a> {
     password_tokens: &'a Collection<SetPasswordToken>,
     metrics: &'a metrics::Metrics,
 
-    project_metadata: &'a Collection<ProjectMetadata>,
-    project_cache: &'a Arc<RwLock<LruCache<api::ProjectId, ProjectMetadata>>>,
     network: &'a Addr<TopologyActor>,
 
     friend_cache: &'a Arc<RwLock<LruCache<String, Vec<String>>>>,
@@ -57,10 +55,7 @@ pub(crate) struct UserActionData<'a> {
     pub(crate) password_tokens: &'a Collection<SetPasswordToken>,
     pub(crate) metrics: &'a metrics::Metrics,
 
-    pub(crate) project_metadata: &'a Collection<ProjectMetadata>,
-    pub(crate) project_cache: &'a Arc<RwLock<LruCache<api::ProjectId, ProjectMetadata>>>,
     pub(crate) network: &'a Addr<TopologyActor>,
-
     pub(crate) friend_cache: &'a Arc<RwLock<LruCache<String, Vec<String>>>>,
 
     // email support
@@ -77,8 +72,6 @@ impl<'a> UserActions<'a> {
             password_tokens: data.password_tokens,
             metrics: data.metrics,
 
-            project_cache: data.project_cache,
-            project_metadata: data.project_metadata,
             network: data.network,
 
             friend_cache: data.friend_cache,
@@ -158,31 +151,9 @@ impl<'a> UserActions<'a> {
     }
 
     pub(crate) async fn login(&self, request: api::LoginRequest) -> Result<api::User, UserError> {
-        let client_id = request.client_id.clone();
+        //let client_id = request.client_id.clone();
         let user = strategies::login(self.users, request.credentials).await?;
 
-        let query = doc! {"$or": [
-            {"username": &user.username},
-            {"email": &user.email},
-        ]};
-
-        if let Some(_account) = self
-            .banned_accounts
-            .find_one(query.clone(), None)
-            .await
-            .map_err(InternalError::DatabaseConnectionError)?
-        {
-            return Err(UserError::BannedUserError);
-        }
-
-        if let Some(client_id) = client_id {
-            self.update_ownership(&client_id, &user.username).await?;
-            self.network.do_send(topology::SetClientUsername {
-                id: client_id,
-                username: Some(user.username.clone()),
-            });
-        }
-        self.metrics.record_login();
         Ok(user.into())
     }
 
@@ -448,80 +419,17 @@ impl<'a> UserActions<'a> {
 
         Ok(())
     }
-    async fn update_ownership(
-        &self,
-        client_id: &api::ClientId,
-        username: &str,
-    ) -> Result<(), UserError> {
-        // Update ownership of current project
-        if !client_id.as_str().starts_with('_') {
-            return Err(UserError::InvalidClientIdError);
-        }
-
-        let query = doc! {"owner": client_id.as_str()};
-        if let Some(metadata) = self
-            .project_metadata
-            .find_one(query.clone(), None)
-            .await
-            .map_err(InternalError::DatabaseConnectionError)?
-        {
-            // No project will be found for non-NetsBlox clients such as PyBlox
-            let name =
-                utils::get_valid_project_name(self.project_metadata, username, &metadata.name)
-                    .await?;
-            let update = doc! {
-                "$set": {
-                    "owner": username,
-                    "name": name,
-                    "updated": DateTime::now(),
-                }
-            };
-            let options = mongodb::options::FindOneAndUpdateOptions::builder()
-                .return_document(ReturnDocument::After)
-                .build();
-            let new_metadata = self
-                .project_metadata
-                .find_one_and_update(query, update, Some(options))
-                .await
-                .map_err(InternalError::DatabaseConnectionError)?
-                .ok_or(UserError::ProjectNotFoundError)?;
-
-            utils::on_room_changed(self.network, self.project_cache, new_metadata);
-        }
-        Ok(())
-    }
-
     pub(crate) async fn forgot_username(&self, email: &str) -> Result<(), UserError> {
-        let usernames = self.find_usernames(email).await?;
-
-        let email = NonEmpty::from_vec(usernames)
-            .map(|usernames| ForgotUsernameEmail {
-                sender: self.sender.clone(),
-                email: email.to_owned(),
-                usernames,
-            })
-            .ok_or(UserError::UserNotFoundError)?;
+        let usernames = utils::find_usernames(self.users, email).await?;
+        let email = ForgotUsernameEmail {
+            sender: self.sender.clone(),
+            email: email.to_owned(),
+            usernames,
+        };
 
         utils::send_email(self.mailer, email)?;
 
         Ok(())
-    }
-
-    async fn find_usernames(&self, email: &str) -> Result<Vec<String>, UserError> {
-        let query = doc! {"email": email};
-        let cursor = self
-            .users
-            .find(query, None)
-            .await
-            .map_err(InternalError::DatabaseConnectionError)?;
-
-        let usernames = cursor
-            .map_ok(|user| user.username)
-            .try_collect::<Vec<_>>()
-            .await
-            .map_err(InternalError::DatabaseConnectionError)?;
-
-        Ok(usernames)
     }
 }
 
@@ -673,77 +581,6 @@ mod tests {
                     account.is_none(),
                     "Double ban wasn't undone by single unban."
                 );
-            })
-            .await;
-    }
-
-    #[actix_web::test]
-    async fn test_find_usernames() {
-        let user: User = api::NewUser {
-            username: "user".into(),
-            email: "user@netsblox.org".into(),
-            password: None,
-            group_id: None,
-            role: None,
-        }
-        .into();
-        let other: User = api::NewUser {
-            username: "other".into(),
-            email: "other@netsblox.org".into(),
-            password: None,
-            group_id: None,
-            role: None,
-        }
-        .into();
-
-        test_utils::setup()
-            .with_users(&[user.clone(), other])
-            .run(|app_data| async move {
-                let actions = app_data.as_user_actions();
-
-                let usernames = actions.find_usernames(&user.email).await.unwrap();
-                assert_eq!(usernames.len(), 1);
-                assert!(usernames.iter().any(|name| name == "user"));
-            })
-            .await;
-    }
-
-    #[actix_web::test]
-    async fn test_find_usernames_multi() {
-        let user: User = api::NewUser {
-            username: "user".into(),
-            email: "user@netsblox.org".into(),
-            password: None,
-            group_id: None,
-            role: None,
-        }
-        .into();
-        let u2: User = api::NewUser {
-            username: "u2".into(),
-            email: "user@netsblox.org".into(),
-            password: None,
-            group_id: None,
-            role: None,
-        }
-        .into();
-        let other: User = api::NewUser {
-            username: "other".into(),
-            email: "other@netsblox.org".into(),
-            password: None,
-            group_id: None,
-            role: None,
-        }
-        .into();
-
-        test_utils::setup()
-            .with_users(&[user.clone(), u2, other])
-            .run(|app_data| async move {
-                let actions = app_data.as_user_actions();
-
-                let usernames = actions.find_usernames(&user.email).await.unwrap();
-                assert_eq!(usernames.len(), 2);
-                assert!(usernames.iter().any(|name| name == "user"));
-                assert!(usernames.iter().any(|name| name == "u2"));
             })
             .await;
     }
