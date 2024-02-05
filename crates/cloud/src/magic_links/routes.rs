@@ -54,7 +54,7 @@ pub fn config(cfg: &mut web::ServiceConfig) {
 #[cfg(test)]
 mod tests {
     use actix_web::{http, test, App};
-    use netsblox_cloud_common::{Group, MagicLink, User};
+    use netsblox_cloud_common::{MagicLink, User};
 
     use super::*;
     use crate::test_utils;

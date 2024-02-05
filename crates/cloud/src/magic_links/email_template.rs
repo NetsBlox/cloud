@@ -27,7 +27,7 @@ pub(crate) fn magic_link_email(
         let html = format!(
             "<h1>Magic sign-in link for NetsBlox</h1>
         <p>
-            Please click <a href=\"{url}\">here</a> to \"auto-magically\" sign-in to NetsBlox as {name}.
+            Please click <a href=\"{url}\">here</a> to \"auto-magically\" sign-in to NetsBlox as {name}. Link can only be used once.
             <br/>
             <br/>
 
@@ -40,7 +40,7 @@ pub(crate) fn magic_link_email(
         let txt = format!(
             "Magic sign-in link for NetsBlox
 
-        Please click the link below to \"auto-magically\" sign-in to NetsBlox as {name}.
+        Please click the link below to \"auto-magically\" sign-in to NetsBlox as {name}. Link can only be used once.
 
         {url}
             
@@ -63,7 +63,7 @@ pub(crate) fn magic_link_email(
         let html = format!(
             "<h1>Magic sign-in link for NetsBlox</h1>
         <p>
-            Please select an account below to \"auto-magically\" sign-in:
+            Please select an account below to \"auto-magically\" sign-in. These links can only be used once (combined).
             <br/>
             <br/>
 
@@ -86,7 +86,7 @@ pub(crate) fn magic_link_email(
         let txt = format!(
             "Magic sign-in link for NetsBlox
 
-        Please select an account below to \"auto-magically\" sign-in:
+        Please select an account below to \"auto-magically\" sign-in. These links can only be used once (combined).
 
         {urlText}
             

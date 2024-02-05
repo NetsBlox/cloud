@@ -84,7 +84,7 @@ impl<'a> MagicLinkActions<'a> {
         let query = doc! {"id": &link_id};
         let link = self
             .links
-            .find_one(query, None)
+            .find_one_and_delete(query, None)
             .await
             .map_err(InternalError::DatabaseConnectionError)?
             .ok_or(UserError::MagicLinkNotFoundError)?;
@@ -246,6 +246,34 @@ mod tests {
 
                 let data = actions.login(&user.username, &l1.id).await.unwrap();
                 assert_eq!(data.username, user.username);
+            })
+            .await;
+    }
+
+    #[actix_web::test]
+    async fn test_login_one_time_only() {
+        let user: User = api::NewUser {
+            username: "user".into(),
+            email: "user@netsblox.org".into(),
+            password: None,
+            group_id: None,
+            role: None,
+        }
+        .into();
+
+        let l1 = MagicLink::new(user.email.clone());
+
+        test_utils::setup()
+            .with_magic_links(&[l1.clone()])
+            .with_users(&[user.clone()])
+            .run(|app_data| async move {
+                let actions = app_data.as_magic_link_actions();
+
+                let res1 = actions.login(&user.username, &l1.id).await;
+                assert!(res1.is_ok());
+
+                let res2 = actions.login(&user.username, &l1.id).await;
+                assert!(res2.is_err(), "Should not allow more than one use.");
             })
             .await;
     }
