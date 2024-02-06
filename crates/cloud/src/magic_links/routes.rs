@@ -60,6 +60,46 @@ mod tests {
     use crate::test_utils;
 
     #[actix_web::test]
+    async fn test_login() {
+        let user: User = api::NewUser {
+            username: "user".into(),
+            email: "user@netsblox.org".into(),
+            password: None,
+            group_id: None,
+            role: None,
+        }
+        .into();
+        let l1 = MagicLink::new(user.email.clone());
+
+        test_utils::setup()
+            .with_users(&[user.clone()])
+            .with_magic_links(&[l1.clone()])
+            .run(|app_data| async move {
+                let app = test::init_service(
+                    App::new()
+                        .app_data(web::Data::new(app_data.clone()))
+                        .wrap(test_utils::cookie::middleware())
+                        .configure(config),
+                )
+                .await;
+
+                let req = test::TestRequest::get()
+                    .uri(&format!("/login?linkId={}&username=user", &l1.id.as_str()))
+                    .to_request();
+
+                let response = test::call_service(&app, req).await;
+                assert_eq!(response.status(), http::StatusCode::OK);
+
+                let cookie = response.headers().get(http::header::SET_COOKIE);
+                assert!(cookie.is_some());
+
+                let cookie_data = cookie.unwrap().to_str().unwrap();
+                assert!(cookie_data.starts_with("test_netsblox="));
+            })
+            .await;
+    }
+
+    #[actix_web::test]
     async fn test_login_banned() {
         let user: User = api::NewUser {
             username: "user".into(),
@@ -90,6 +130,70 @@ mod tests {
 
                 let response = test::call_service(&app, req).await;
                 assert_eq!(response.status(), http::StatusCode::FORBIDDEN);
+            })
+            .await;
+    }
+
+    #[actix_web::test]
+    async fn test_login_bad_id() {
+        let user: User = api::NewUser {
+            username: "user".into(),
+            email: "user@netsblox.org".into(),
+            password: None,
+            group_id: None,
+            role: None,
+        }
+        .into();
+
+        test_utils::setup()
+            .with_users(&[user.clone()])
+            .run(|app_data| async move {
+                let app = test::init_service(
+                    App::new()
+                        .app_data(web::Data::new(app_data.clone()))
+                        .wrap(test_utils::cookie::middleware())
+                        .configure(config),
+                )
+                .await;
+
+                let req = test::TestRequest::get()
+                    .uri("/login?linkId=SOME_ID&username=user")
+                    .to_request();
+
+                let response = test::call_service(&app, req).await;
+                assert_eq!(response.status(), http::StatusCode::NOT_FOUND);
+            })
+            .await;
+    }
+
+    #[actix_web::test]
+    async fn test_login_missing_id_400() {
+        let user: User = api::NewUser {
+            username: "user".into(),
+            email: "user@netsblox.org".into(),
+            password: None,
+            group_id: None,
+            role: None,
+        }
+        .into();
+
+        test_utils::setup()
+            .with_users(&[user.clone()])
+            .run(|app_data| async move {
+                let app = test::init_service(
+                    App::new()
+                        .app_data(web::Data::new(app_data.clone()))
+                        .wrap(test_utils::cookie::middleware())
+                        .configure(config),
+                )
+                .await;
+
+                let req = test::TestRequest::get()
+                    .uri("/login?username=user")
+                    .to_request();
+
+                let response = test::call_service(&app, req).await;
+                assert_eq!(response.status(), http::StatusCode::BAD_REQUEST);
             })
             .await;
     }
