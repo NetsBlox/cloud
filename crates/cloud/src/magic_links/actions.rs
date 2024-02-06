@@ -39,12 +39,22 @@ impl<'a> MagicLinkActions<'a> {
         }
     }
 
-    /// Make a magic link for the given email address. It can be used to login as any user
-    /// registered to the given address
+    /// Make a magic link for the email address and send it to the address.
+    /// The link can be used to login as any user associated with the given address.
     pub(crate) async fn create_link(
         &self,
         data: &api::CreateMagicLinkData,
     ) -> Result<(), UserError> {
+        let email = self.try_create_link(data).await?;
+        utils::send_email(self.mailer, email)?;
+        Ok(())
+    }
+
+    /// Try to create the given magic link running all the standard checks.
+    async fn try_create_link(
+        &self,
+        data: &api::CreateMagicLinkData,
+    ) -> Result<MagicLinkEmail, UserError> {
         let usernames: NonEmpty<String> = utils::find_usernames(self.users, &data.email).await?;
 
         let query = doc! {"email": &data.email};
@@ -63,16 +73,13 @@ impl<'a> MagicLinkActions<'a> {
         if existing.is_some() {
             Err(UserError::MagicLinkSentError)
         } else {
-            let email = MagicLinkEmail {
+            Ok(MagicLinkEmail {
                 sender: self.sender.clone(),
                 public_url: self.public_url.clone(),
                 redirect_uri: data.redirect_uri.clone(),
                 link,
                 usernames,
-            };
-            utils::send_email(self.mailer, email)?;
-
-            Ok(())
+            })
         }
     }
 
@@ -151,8 +158,7 @@ mod tests {
     use super::*;
 
     #[actix_web::test]
-    #[ignore] // TODO: figure out how to test with the email function...
-    async fn test_create_link() {
+    async fn test_try_create_link() {
         let user: User = api::NewUser {
             username: "user".into(),
             email: "user@netsblox.org".into(),
@@ -171,7 +177,7 @@ mod tests {
                     email: user.email.clone(),
                     redirect_uri: None,
                 };
-                actions.create_link(&data).await.unwrap();
+                actions.try_create_link(&data).await.unwrap();
                 let query = doc! {"email": &user.email};
                 let link_res = actions.links.find_one(query, None).await.unwrap();
 
