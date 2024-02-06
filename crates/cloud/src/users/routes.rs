@@ -59,9 +59,12 @@ async fn login(
     let request = request.into_inner();
 
     let actions: UserActions = app.as_user_actions();
+    let client_id = request.client_id.clone();
     let user = actions.login(request).await?;
 
-    session.insert("username", &user.username).unwrap();
+    let helper = app.as_login_helper();
+    helper.login(session, &user, client_id).await?;
+
     Ok(HttpResponse::Ok().json(user))
 }
 

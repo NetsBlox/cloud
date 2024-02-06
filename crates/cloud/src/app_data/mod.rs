@@ -5,6 +5,8 @@ use crate::common::api::{oauth, NewUser, ProjectId, UserRole};
 use crate::friends::actions::FriendActions;
 use crate::groups::actions::GroupActions;
 use crate::libraries::actions::LibraryActions;
+use crate::login_helper::LoginHelper;
+use crate::magic_links::actions::MagicLinkActions;
 use crate::network::actions::NetworkActions;
 use crate::oauth::actions::OAuthActions;
 use crate::projects::ProjectActions;
@@ -20,7 +22,7 @@ use log::{error, info, warn};
 use lru::LruCache;
 use mongodb::bson::{doc, Document};
 use mongodb::options::{FindOptions, IndexOptions, UpdateOptions};
-use netsblox_cloud_common::api;
+use netsblox_cloud_common::{api, MagicLink};
 use serde::{Deserialize, Serialize};
 use std::collections::HashSet;
 use std::net::IpAddr;
@@ -55,6 +57,7 @@ pub struct AppData {
     pub(crate) users: Collection<User>,
     pub(crate) banned_accounts: Collection<BannedAccount>,
     friends: Collection<FriendLink>,
+    magic_links: Collection<MagicLink>,
     pub(crate) project_metadata: Collection<ProjectMetadata>,
     pub(crate) libraries: Collection<Library>,
     pub(crate) authorized_services: Collection<AuthorizedServiceHost>,
@@ -139,6 +142,7 @@ impl AppData {
         let occupant_invites =
             db.collection::<OccupantInvite>(&(prefix.to_owned() + "occupantInvites"));
         let friends = db.collection::<FriendLink>(&(prefix.to_owned() + "friends"));
+        let magic_links = db.collection::<MagicLink>(&(prefix.to_owned() + "magicLinks"));
         let recorded_messages =
             db.collection::<SentMessage>(&(prefix.to_owned() + "recordedMessages"));
         let network = network.unwrap_or_else(|| {
@@ -179,6 +183,7 @@ impl AppData {
             occupant_invites,
             password_tokens,
             friends,
+            magic_links,
 
             mailer,
             sender,
@@ -210,9 +215,8 @@ impl AppData {
         }
 
         // Add database indexes
-        let index_opts = IndexOptions::builder()
-            .expire_after(Duration::from_secs(60 * 60))
-            .build();
+        let one_hour = Duration::from_secs(60 * 60);
+        let index_opts = IndexOptions::builder().expire_after(one_hour).build();
         let occupant_invite_indexes = vec![
             IndexModel::builder()
                 .keys(doc! {"createdAt": 1})
@@ -227,9 +231,7 @@ impl AppData {
             .await
             .map_err(InternalError::DatabaseConnectionError)?;
 
-        let index_opts = IndexOptions::builder()
-            .expire_after(Duration::from_secs(60 * 60))
-            .build();
+        let index_opts = IndexOptions::builder().expire_after(one_hour).build();
         let token_index = IndexModel::builder()
             .keys(doc! {"createdAt": 1})
             .options(index_opts)
@@ -239,6 +241,7 @@ impl AppData {
             .await
             .map_err(InternalError::DatabaseConnectionError)?;
 
+        let one_week = Duration::from_secs(60 * 60 * 24 * 7);
         self.project_metadata
             .create_indexes(
                 vec![
@@ -261,7 +264,7 @@ impl AppData {
                         .keys(doc! { "originTime": 1})
                         .options(
                             IndexOptions::builder()
-                                .expire_after(Duration::from_secs(60 * 60 * 24 * 7))
+                                .expire_after(one_week)
                                 .partial_filter_expression(doc! {"saveState": SaveState::Transient})
                                 .background(true)
                                 .build(),
@@ -275,6 +278,16 @@ impl AppData {
 
         self.tor_exit_nodes
             .create_index(IndexModel::builder().keys(doc! {"addr": 1}).build(), None)
+            .await
+            .map_err(InternalError::DatabaseConnectionError)?;
+
+        let index_opts = IndexOptions::builder().expire_after(one_hour).build();
+        let magic_link_indexes = vec![IndexModel::builder()
+            .keys(doc! {"createdAt": 1})
+            .options(index_opts)
+            .build()];
+        self.magic_links
+            .create_indexes(magic_link_indexes, None)
             .await
             .map_err(InternalError::DatabaseConnectionError)?;
 
@@ -521,6 +534,19 @@ impl AppData {
         Ok(())
     }
 
+    #[cfg(test)]
+    pub(crate) async fn insert_magic_links(
+        &self,
+        links: &[MagicLink],
+    ) -> Result<(), InternalError> {
+        self.magic_links
+            .insert_many(links, None)
+            .await
+            .map_err(InternalError::DatabaseConnectionError)?;
+
+        Ok(())
+    }
+
     pub(crate) async fn get_friends(&self, username: &str) -> Result<Vec<String>, UserError> {
         crate::utils::get_friends(
             &self.users,
@@ -561,6 +587,16 @@ impl AppData {
         )
     }
 
+    pub(crate) fn as_magic_link_actions(&self) -> MagicLinkActions {
+        MagicLinkActions::new(
+            &self.magic_links,
+            &self.users,
+            &self.mailer,
+            &self.sender,
+            &self.settings.public_url,
+        )
+    }
+
     pub(crate) fn as_collab_invite_actions(&self) -> CollaborationInviteActions {
         CollaborationInviteActions::new(
             &self.collab_invites,
@@ -595,10 +631,7 @@ impl AppData {
             password_tokens: &self.password_tokens,
             metrics: &self.metrics,
 
-            project_cache: &self.project_cache,
-            project_metadata: &self.project_metadata,
             network: &self.network,
-
             friend_cache: &self.friend_cache,
 
             mailer: &self.mailer,
@@ -610,6 +643,16 @@ impl AppData {
 
     pub(crate) fn as_host_actions(&self) -> HostActions {
         HostActions::new(&self.authorized_services)
+    }
+
+    pub(crate) fn as_login_helper(&self) -> LoginHelper {
+        LoginHelper::new(
+            &self.network,
+            &self.metrics,
+            &self.project_metadata,
+            &self.project_cache,
+            &self.banned_accounts,
+        )
     }
 
     #[cfg(test)]

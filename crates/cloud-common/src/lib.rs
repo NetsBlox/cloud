@@ -813,6 +813,37 @@ pub(crate) fn sha512(text: &str) -> String {
     hex::encode(hash)
 }
 
+/// A magic link is used for password-less login. It has no
+/// api version since exposing it via the api would be a pretty
+/// serious security vulnerability.
+#[derive(Serialize, Deserialize, Clone, Debug)]
+#[serde(rename_all = "camelCase")]
+pub struct MagicLink {
+    pub id: api::MagicLinkId,
+    pub email: String,
+    pub created_at: DateTime,
+}
+
+impl MagicLink {
+    pub fn new(email: String) -> Self {
+        Self {
+            id: api::MagicLinkId::new(Uuid::new_v4().to_string()),
+            email,
+            created_at: DateTime::now(),
+        }
+    }
+}
+
+impl From<MagicLink> for Bson {
+    fn from(link: MagicLink) -> Bson {
+        Bson::Document(doc! {
+            "id": link.id,
+            "email": link.email,
+            "createdAt": link.created_at,
+        })
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

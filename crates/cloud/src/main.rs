@@ -7,6 +7,8 @@ mod errors;
 mod friends;
 mod groups;
 mod libraries;
+mod login_helper;
+mod magic_links;
 mod network;
 mod oauth;
 mod projects;
@@ -123,6 +125,7 @@ async fn main() -> std::io::Result<()> {
             .service(web::scope("/projects").configure(projects::routes::config))
             .service(web::scope("/groups").configure(groups::routes::config))
             .service(web::scope("/friends").configure(friends::routes::config))
+            .service(web::scope("/magic-links").configure(magic_links::routes::config))
             .service(web::scope("/network").configure(network::routes::config))
             .service(web::scope("/oauth").configure(oauth::routes::config))
             .service(

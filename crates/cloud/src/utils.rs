@@ -11,6 +11,7 @@ use netsblox_cloud_common::{
     api::{self, GroupId, UserRole},
     AuthorizedServiceHost, FriendLink, Group, ProjectMetadata, User,
 };
+use nonempty::NonEmpty;
 use regex::Regex;
 use rustrict::CensorStr;
 use sha2::{Digest, Sha512};
@@ -332,6 +333,29 @@ pub(crate) fn send_email(
     Ok(())
 }
 
+/// Find the usernames given the associated email address.
+///
+/// Results in a UserNotFound error if no users are associated with the given email address.
+///
+pub(crate) async fn find_usernames(
+    collection: &Collection<User>,
+    email: &str,
+) -> Result<NonEmpty<String>, UserError> {
+    let query = doc! {"email": email};
+    let cursor = collection
+        .find(query, None)
+        .await
+        .map_err(InternalError::DatabaseConnectionError)?;
+
+    let usernames = cursor
+        .map_ok(|user| user.username)
+        .try_collect::<Vec<_>>()
+        .await
+        .map_err(InternalError::DatabaseConnectionError)?;
+
+    NonEmpty::from_vec(usernames).ok_or(UserError::UserNotFoundError)
+}
+
 // TODO: tests for cache invalidation
 // - [ ] friends
 
@@ -347,6 +371,8 @@ mod tests {
 
     use lru::LruCache;
     use mongodb::bson::DateTime;
+
+    use crate::test_utils;
 
     use super::*;
 
@@ -477,5 +503,72 @@ mod tests {
 
         let name_res = get_unique_name(existing.iter().map(|n| n.as_str()), "name");
         assert!(matches!(name_res, Err(UserError::RoleOrProjectNameExists)));
+    }
+
+    #[actix_web::test]
+    async fn test_find_usernames() {
+        let user: User = api::NewUser {
+            username: "user".into(),
+            email: "user@netsblox.org".into(),
+            password: None,
+            group_id: None,
+            role: None,
+        }
+        .into();
+        let other: User = api::NewUser {
+            username: "other".into(),
+            email: "other@netsblox.org".into(),
+            password: None,
+            group_id: None,
+            role: None,
+        }
+        .into();
+
+        test_utils::setup()
+            .with_users(&[user.clone(), other])
+            .run(|app_data| async move {
+                let usernames = find_usernames(&app_data.users, &user.email).await.unwrap();
+                assert_eq!(usernames.len(), 1);
+                assert!(usernames.iter().any(|name| name == "user"));
+            })
+            .await;
+    }
+
+    #[actix_web::test]
+    async fn test_find_usernames_multi() {
+        let user: User = api::NewUser {
+            username: "user".into(),
+            email: "user@netsblox.org".into(),
+            password: None,
+            group_id: None,
+            role: None,
+        }
+        .into();
+        let u2: User = api::NewUser {
+            username: "u2".into(),
+            email: "user@netsblox.org".into(),
+            password: None,
+            group_id: None,
+            role: None,
+        }
+        .into();
+        let other: User = api::NewUser {
+            username: "other".into(),
+            email: "other@netsblox.org".into(),
+            password: None,
+            group_id: None,
+            role: None,
+        }
+        .into();
+
+        test_utils::setup()
+            .with_users(&[user.clone(), u2, other])
+            .run(|app_data| async move {
+                let usernames = find_usernames(&app_data.users, &user.email).await.unwrap();
+                assert_eq!(usernames.len(), 2);
+                assert!(usernames.iter().any(|name| name == "user"));
+                assert!(usernames.iter().any(|name| name == "u2"));
+            })
+            .await;
     }
 }

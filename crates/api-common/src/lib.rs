@@ -746,6 +746,41 @@ pub enum SendMessageTarget {
     },
 }
 
+#[derive(Serialize, Deserialize, Clone, Debug, TS)]
+#[ts(export)]
+pub struct MagicLinkId(String);
+
+impl MagicLinkId {
+    pub fn new(id: String) -> Self {
+        Self(id)
+    }
+
+    pub fn as_str(&self) -> &str {
+        &self.0
+    }
+}
+
+#[derive(Serialize, Deserialize, Clone, Debug, TS)]
+#[serde(rename_all = "camelCase")]
+#[ts(export)]
+pub struct MagicLinkLoginData {
+    pub link_id: MagicLinkId,
+    pub username: String,
+    #[ts(optional)]
+    pub client_id: Option<ClientId>,
+    #[ts(optional)]
+    pub redirect_uri: Option<String>,
+}
+
+#[derive(Serialize, Deserialize, Clone, Debug, TS)]
+#[serde(rename_all = "camelCase")]
+#[ts(export)]
+pub struct CreateMagicLinkData {
+    pub email: String,
+    #[ts(optional)]
+    pub redirect_uri: Option<String>,
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

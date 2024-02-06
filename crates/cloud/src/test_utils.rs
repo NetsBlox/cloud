@@ -5,7 +5,7 @@ use lazy_static::lazy_static;
 use mongodb::{bson::doc, Client};
 use netsblox_cloud_common::{
     api, AuthorizedServiceHost, BannedAccount, CollaborationInvite, FriendLink, Group, Library,
-    User,
+    MagicLink, User,
 };
 
 use crate::{
@@ -32,6 +32,7 @@ pub(crate) fn setup() -> TestSetupBuilder {
         groups: Vec::new(),
         clients: Vec::new(),
         friends: Vec::new(),
+        magic_links: Vec::new(),
         collab_invites: Vec::new(),
         authorized_services: Vec::new(),
         // network: None,
@@ -46,6 +47,7 @@ pub(crate) struct TestSetupBuilder {
     groups: Vec<Group>,
     clients: Vec<network::Client>,
     friends: Vec<FriendLink>,
+    magic_links: Vec<MagicLink>,
     banned_users: Vec<String>,
     collab_invites: Vec<CollaborationInvite>,
     authorized_services: Vec<AuthorizedServiceHost>,
@@ -95,6 +97,11 @@ impl TestSetupBuilder {
 
     pub(crate) fn with_friend_links(mut self, friends: &[FriendLink]) -> Self {
         self.friends.extend_from_slice(friends);
+        self
+    }
+
+    pub(crate) fn with_magic_links(mut self, links: &[MagicLink]) -> Self {
+        self.magic_links.extend_from_slice(links);
         self
     }
 
@@ -197,6 +204,12 @@ impl TestSetupBuilder {
         }
         if !self.friends.is_empty() {
             app_data.insert_friends(&self.friends).await.unwrap();
+        }
+        if !self.magic_links.is_empty() {
+            app_data
+                .insert_magic_links(&self.magic_links)
+                .await
+                .unwrap();
         }
         if !self.groups.is_empty() {
             app_data
