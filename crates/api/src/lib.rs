@@ -3,7 +3,9 @@ pub mod error;
 
 use crate::common::*;
 use futures_util::SinkExt;
-use netsblox_api_common::{CreateGroupData, ServiceHostScope, UpdateGroupData};
+use netsblox_api_common::{
+    CreateGroupData, CreateMagicLinkData, ServiceHostScope, UpdateGroupData,
+};
 use reqwest::{self, Method, RequestBuilder, Response};
 use serde::{Deserialize, Serialize};
 pub use serde_json;
@@ -247,6 +249,20 @@ impl Client {
 
         let response = check_response(response).await?;
         Ok(response.json::<BannedAccount>().await.unwrap())
+    }
+
+    /// Send a magic link to the given email address. Usable for any user associated with the
+    /// address.
+    pub async fn send_magic_link(&self, data: &CreateMagicLinkData) -> Result<(), error::Error> {
+        let response = self
+            .request(Method::POST, "/magic-links/")
+            .json(data)
+            .send()
+            .await
+            .map_err(error::Error::RequestError)?;
+
+        check_response(response).await?;
+        Ok(())
     }
 
     // Project management

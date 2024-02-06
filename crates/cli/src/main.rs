@@ -9,9 +9,9 @@ use clap::{Parser, Subcommand};
 use futures_util::StreamExt;
 use inquire::{Confirm, Password, PasswordDisplayMode};
 use netsblox_api::common::{
-    oauth, ClientId, CreateProjectData, Credentials, FriendLinkState, InvitationState,
-    LinkedAccount, ProjectId, PublishState, RoleData, SaveState, ServiceHost, ServiceHostScope,
-    UserRole,
+    oauth, ClientId, CreateMagicLinkData, CreateProjectData, Credentials, FriendLinkState,
+    InvitationState, LinkedAccount, ProjectId, PublishState, RoleData, SaveState, ServiceHost,
+    ServiceHostScope, UserRole,
 };
 use netsblox_api::{self, serde_json, Client};
 use std::path::Path;
@@ -94,6 +94,19 @@ enum Users {
         /// Perform this action on behalf of this user
         #[clap(short, long)]
         user: Option<String>,
+    },
+}
+
+/// Send "magic links" for password-less sign in
+#[derive(Subcommand, Debug)]
+enum MagicLinks {
+    /// Send a magic link to the given email. Allows login by any user associated with the email address.
+    Send {
+        /// Email to send the magic link to.
+        email: String,
+        /// Redirect the user to this URL after login
+        #[clap(short, long)]
+        url: Option<String>,
     },
 }
 
@@ -574,6 +587,12 @@ struct UserCommand {
 }
 
 #[derive(Parser, Debug)]
+struct MagicLinkCommand {
+    #[clap(subcommand)]
+    subcmd: MagicLinks,
+}
+
+#[derive(Parser, Debug)]
 struct ProjectCommand {
     #[clap(subcommand)]
     subcmd: Projects,
@@ -636,6 +655,8 @@ enum Command {
     Logout,
     #[clap(alias = "user")]
     Users(UserCommand),
+    #[clap(alias = "magic-link")]
+    MagicLinks(MagicLinkCommand),
     #[clap(alias = "project")]
     Projects(ProjectCommand),
     Network(NetworkCommand),
@@ -708,6 +729,9 @@ async fn do_command(mut cfg: Config, args: Cli) -> Result<(), error::Error> {
     let login_required = match &args.cmd {
         Command::Login => true,
         Command::Logout => false,
+        Command::MagicLinks(cmd) => match &cmd.subcmd {
+            MagicLinks::Send { .. } => false,
+        },
         Command::Users(cmd) => match &cmd.subcmd {
             Users::Create { .. } => false,
             _ => !is_logged_in,
@@ -835,6 +859,16 @@ async fn do_command(mut cfg: Config, args: Cli) -> Result<(), error::Error> {
             }
             Users::Unban { username } => {
                 client.unban_user(username).await?;
+            }
+        },
+        Command::MagicLinks(cmd) => match &cmd.subcmd {
+            MagicLinks::Send { email, url } => {
+                let data = CreateMagicLinkData {
+                    email: email.clone(),
+                    redirect_uri: url.to_owned(),
+                };
+                client.send_magic_link(&data).await?;
+                println!("Magic link sent to {}!", email);
             }
         },
         Command::Projects(cmd) => match &cmd.subcmd {
