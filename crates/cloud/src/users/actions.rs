@@ -541,9 +541,48 @@ impl TryFrom<ForgotUsernameEmail> for lettre::Message {
 
 #[cfg(test)]
 mod tests {
+    use netsblox_cloud_common::Group;
+
     use crate::test_utils;
 
     use super::*;
+
+    #[actix_web::test]
+    async fn test_create_member() {
+        let owner: User = api::NewUser {
+            username: "owner".into(),
+            email: "owner@netsblox.org".into(),
+            password: None,
+            group_id: None,
+            role: None,
+        }
+        .into();
+        let group = Group::new(owner.username.to_owned(), "Some name".into());
+
+        test_utils::setup()
+            .with_users(&[owner.clone()])
+            .with_groups(&[group.clone()])
+            .run(|app_data| async move {
+                let actions = app_data.as_user_actions();
+
+                let new_user = api::NewUser {
+                    username: "member".into(),
+                    email: "member@netsblox.org".into(),
+                    password: None,
+                    group_id: Some(group.id.to_owned()),
+                    role: None,
+                };
+                let auth_cu = auth::CreateUser::test(new_user);
+                let user = actions.create_user(auth_cu).await.unwrap();
+                assert!(user.group_id.is_some(), "User is not assigned to a group.");
+                assert_eq!(
+                    user.group_id.unwrap(),
+                    group.id,
+                    "User assigned to incorrect group"
+                );
+            })
+            .await;
+    }
 
     #[actix_web::test]
     async fn test_ban_idempotent() {
@@ -623,8 +662,21 @@ mod tests {
     }
 
     #[actix_web::test]
+    async fn test_is_valid_username_length() {
+        assert!(!is_valid_username(
+            "testCreateUser1701709207213testCreateUser1701709207213"
+        ));
+    }
+
+    #[actix_web::test]
     async fn test_is_valid_username_vulgar() {
         assert!(!is_valid_username("shit"));
+    }
+
+    #[actix_web::test]
+    async fn test_ensure_valid_email() {
+        let result = ensure_valid_email("noreply@netsblox.org");
+        assert!(result.is_ok());
     }
 
     #[actix_web::test]
