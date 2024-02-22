@@ -59,9 +59,12 @@ async fn login(
     let request = request.into_inner();
 
     let actions: UserActions = app.as_user_actions();
+    let client_id = request.client_id.clone();
     let user = actions.login(request).await?;
 
-    session.insert("username", &user.username).unwrap();
+    let helper = app.as_login_helper();
+    helper.login(session, &user, client_id).await?;
+
     Ok(HttpResponse::Ok().json(user))
 }
 
@@ -97,6 +100,17 @@ async fn whoami(req: HttpRequest) -> Result<HttpResponse, UserError> {
     } else {
         Err(UserError::PermissionsError)
     }
+}
+
+#[post("/forgot-username")]
+async fn forgot_username(
+    app: web::Data<AppData>,
+    email: web::Json<String>,
+) -> Result<HttpResponse, UserError> {
+    let actions: UserActions = app.as_user_actions();
+    actions.forgot_username(&email.into_inner()).await?;
+
+    Ok(HttpResponse::Ok().finish())
 }
 
 #[post("/{username}/ban")]
@@ -254,6 +268,7 @@ pub fn config(cfg: &mut web::ServiceConfig) {
         .service(login)
         .service(logout)
         .service(delete_user)
+        .service(forgot_username)
         .service(ban_user)
         .service(unban_user)
         .service(reset_password)

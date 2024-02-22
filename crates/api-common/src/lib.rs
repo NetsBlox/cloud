@@ -583,10 +583,6 @@ pub struct CreateProjectData {
     pub client_id: Option<ClientId>,
     #[ts(optional)]
     pub save_state: Option<SaveState>,
-
-    #[cfg(test)]
-    #[ts(optional)]
-    pub role_dict: Option<HashMap<RoleId, RoleData>>,
 }
 
 // Network debugging data
@@ -671,7 +667,15 @@ pub struct OccupantInviteData {
 pub struct AuthorizedServiceHost {
     pub url: String,
     pub id: String,
-    pub public: bool,
+    pub visibility: ServiceHostScope,
+}
+
+#[derive(Deserialize, Serialize, Debug, Clone, TS)]
+#[serde(rename_all = "camelCase")]
+#[ts(export)]
+pub enum ServiceHostScope {
+    Public(Vec<String>),
+    Private,
 }
 
 #[derive(Deserialize, Serialize, Debug, Clone, TS)]
@@ -740,6 +744,41 @@ pub enum SendMessageTarget {
         state: Option<ClientState>,
         client_id: ClientId,
     },
+}
+
+#[derive(Serialize, Deserialize, Clone, Debug, TS)]
+#[ts(export)]
+pub struct MagicLinkId(String);
+
+impl MagicLinkId {
+    pub fn new(id: String) -> Self {
+        Self(id)
+    }
+
+    pub fn as_str(&self) -> &str {
+        &self.0
+    }
+}
+
+#[derive(Serialize, Deserialize, Clone, Debug, TS)]
+#[serde(rename_all = "camelCase")]
+#[ts(export)]
+pub struct MagicLinkLoginData {
+    pub link_id: MagicLinkId,
+    pub username: String,
+    #[ts(optional)]
+    pub client_id: Option<ClientId>,
+    #[ts(optional)]
+    pub redirect_uri: Option<String>,
+}
+
+#[derive(Serialize, Deserialize, Clone, Debug, TS)]
+#[serde(rename_all = "camelCase")]
+#[ts(export)]
+pub struct CreateMagicLinkData {
+    pub email: String,
+    #[ts(optional)]
+    pub redirect_uri: Option<String>,
 }
 
 #[cfg(test)]

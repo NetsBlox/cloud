@@ -3,7 +3,9 @@ pub mod error;
 
 use crate::common::*;
 use futures_util::SinkExt;
-use netsblox_api_common::{CreateGroupData, UpdateGroupData};
+use netsblox_api_common::{
+    CreateGroupData, CreateMagicLinkData, ServiceHostScope, UpdateGroupData,
+};
 use reqwest::{self, Method, RequestBuilder, Response};
 use serde::{Deserialize, Serialize};
 pub use serde_json;
@@ -146,6 +148,20 @@ impl Client {
         Ok(response.json::<Vec<User>>().await.unwrap())
     }
 
+    /// Send an email containing all usernames associated with the given
+    /// address to the email address.
+    pub async fn forgot_username(&self, email: &str) -> Result<(), error::Error> {
+        let response = self
+            .request(Method::POST, "/users/forgot-username")
+            .json(&email)
+            .send()
+            .await
+            .map_err(error::Error::RequestError)?;
+
+        check_response(response).await?;
+        Ok(())
+    }
+
     pub async fn delete_user(&self, username: &str) -> Result<(), error::Error> {
         let response = self
             .request(Method::POST, &format!("/users/{}/delete", username))
@@ -233,6 +249,20 @@ impl Client {
 
         let response = check_response(response).await?;
         Ok(response.json::<BannedAccount>().await.unwrap())
+    }
+
+    /// Send a magic link to the given email address. Usable for any user associated with the
+    /// address.
+    pub async fn send_magic_link(&self, data: &CreateMagicLinkData) -> Result<(), error::Error> {
+        let response = self
+            .request(Method::POST, "/magic-links/")
+            .json(data)
+            .send()
+            .await
+            .map_err(error::Error::RequestError)?;
+
+        check_response(response).await?;
+        Ok(())
     }
 
     // Project management
@@ -914,12 +944,12 @@ impl Client {
         &self,
         url: &str,
         id: &str,
-        public: bool,
+        visibility: ServiceHostScope,
     ) -> Result<String, error::Error> {
         let host = AuthorizedServiceHost {
             url: url.to_owned(),
             id: id.to_owned(),
-            public,
+            visibility,
         };
         let response = self
             .request(Method::POST, "/services/hosts/authorized/")

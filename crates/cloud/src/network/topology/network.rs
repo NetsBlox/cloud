@@ -798,6 +798,14 @@ impl Topology {
         self.usernames.get(id)
     }
 
+    /// Get info about a client. Returns None if no client connected.
+    pub(crate) fn get_client_info(&self, id: &ClientId) -> Option<api::ClientInfo> {
+        self.has_client(id).then(|| api::ClientInfo {
+            username: self.get_client_username(id).cloned(),
+            state: self.get_client_state(id).cloned(),
+        })
+    }
+
     pub fn send_occupant_invite(&self, msg: SendOccupantInvite) {
         let clients = self.usernames.iter().filter_map(|(client_id, username)| {
             if username == &msg.invite.username {

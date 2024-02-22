@@ -27,6 +27,8 @@ pub enum UserError {
     PermissionsError,
     #[display(fmt = "Project not found.")]
     ProjectNotFoundError,
+    #[display(fmt = "Client not found.")]
+    ClientNotFoundError,
     #[display(fmt = "Thumbnail not available.")]
     ThumbnailNotFoundError,
     #[display(fmt = "Unable to retrieve project.")]
@@ -35,6 +37,10 @@ pub enum UserError {
     MissingUrlOrXmlError,
     #[display(fmt = "Password reset link already sent. Only 1 can be sent per hour.")]
     PasswordResetLinkSentError,
+    #[display(fmt = "Magic link already sent. Only 1 can be sent per hour.")]
+    MagicLinkSentError,
+    #[display(fmt = "Magic link not found or no longer active.")]
+    MagicLinkNotFoundError,
     #[display(fmt = "Network trace not found.")]
     NetworkTraceNotFoundError,
     #[display(fmt = "Library not found.")]
@@ -174,12 +180,14 @@ impl error::ResponseError for UserError {
             | Self::IncorrectPasswordError => StatusCode::FORBIDDEN,
 
             Self::ProjectNotFoundError
+            | Self::ClientNotFoundError
             | Self::ThumbnailNotFoundError
             | Self::NetworkTraceNotFoundError
             | Self::LibraryNotFoundError
             | Self::ServiceHostNotFoundError
             | Self::RoleNotFoundError
             | Self::InviteNotFoundError
+            | Self::MagicLinkNotFoundError
             | Self::UserNotFoundError
             | Self::FriendNotFoundError
             | Self::OAuthClientNotFoundError
@@ -196,6 +204,7 @@ impl error::ResponseError for UserError {
             | Self::InvalidServiceHostIDError
             | Self::AccountAlreadyLinkedError
             | Self::PasswordResetLinkSentError
+            | Self::MagicLinkSentError
             | Self::InvalidAccountTypeError
             | Self::TorAddressError
             | Self::OperaVPNError

@@ -5,7 +5,7 @@ use netsblox_api_common::{
 };
 use netsblox_api_common::{
     FriendInvite, FriendLinkState, GroupId, InvitationState, LinkedAccount, ProjectId, RoleData,
-    SaveState, ServiceHost,
+    SaveState, ServiceHost, ServiceHostScope,
 };
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha512};
@@ -614,18 +614,18 @@ impl From<SetPasswordToken> for Bson {
 pub struct AuthorizedServiceHost {
     pub url: String,
     pub id: String,
-    pub public: bool,
+    pub visibility: ServiceHostScope,
     pub secret: String,
 }
 
 impl AuthorizedServiceHost {
-    pub fn new(url: String, id: String, public: bool) -> Self {
+    pub fn new(url: String, id: String, visibility: ServiceHostScope) -> Self {
         let secret = Uuid::new_v4().to_string();
         AuthorizedServiceHost {
             url,
             id,
-            public,
             secret,
+            visibility,
         }
     }
 
@@ -636,19 +636,19 @@ impl AuthorizedServiceHost {
 }
 
 impl From<AuthorizedServiceHost> for Bson {
-    fn from(token: AuthorizedServiceHost) -> Bson {
+    fn from(host: AuthorizedServiceHost) -> Bson {
         Bson::Document(doc! {
-            "url": token.url,
-            "id": token.id,
-            "public": token.public,
-            "secret": token.secret,
+            "url": host.url,
+            "id": host.id,
+            "visibility": host.visibility,
+            "secret": host.secret,
         })
     }
 }
 
 impl From<netsblox_api_common::AuthorizedServiceHost> for AuthorizedServiceHost {
     fn from(data: netsblox_api_common::AuthorizedServiceHost) -> AuthorizedServiceHost {
-        AuthorizedServiceHost::new(data.url, data.id, data.public)
+        AuthorizedServiceHost::new(data.url, data.id, data.visibility)
     }
 }
 
@@ -657,16 +657,21 @@ impl From<AuthorizedServiceHost> for netsblox_api_common::AuthorizedServiceHost 
         netsblox_api_common::AuthorizedServiceHost {
             id: host.id,
             url: host.url,
-            public: host.public,
+            visibility: host.visibility,
         }
     }
 }
 
 impl From<AuthorizedServiceHost> for netsblox_api_common::ServiceHost {
     fn from(host: AuthorizedServiceHost) -> netsblox_api_common::ServiceHost {
+        let categories = match host.visibility {
+            ServiceHostScope::Public(cats) => cats,
+            ServiceHostScope::Private => Vec::new(),
+        };
+
         netsblox_api_common::ServiceHost {
             url: host.url,
-            categories: Vec::new(),
+            categories,
         }
     }
 }
@@ -808,6 +813,37 @@ pub(crate) fn sha512(text: &str) -> String {
     hex::encode(hash)
 }
 
+/// A magic link is used for password-less login. It has no
+/// api version since exposing it via the api would be a pretty
+/// serious security vulnerability.
+#[derive(Serialize, Deserialize, Clone, Debug)]
+#[serde(rename_all = "camelCase")]
+pub struct MagicLink {
+    pub id: api::MagicLinkId,
+    pub email: String,
+    pub created_at: DateTime,
+}
+
+impl MagicLink {
+    pub fn new(email: String) -> Self {
+        Self {
+            id: api::MagicLinkId::new(Uuid::new_v4().to_string()),
+            email,
+            created_at: DateTime::now(),
+        }
+    }
+}
+
+impl From<MagicLink> for Bson {
+    fn from(link: MagicLink) -> Bson {
+        Bson::Document(doc! {
+            "id": link.id,
+            "email": link.email,
+            "createdAt": link.created_at,
+        })
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -825,5 +861,32 @@ mod tests {
         let metadata =
             ProjectMetadata::new("owner", "someProject", HashMap::new(), SaveState::Created);
         assert!(metadata.delete_at.is_some());
+    }
+
+    #[test]
+    fn test_pub_auth_host_to_host_preserves_cats() {
+        let categories = vec!["cat1".into()];
+        let auth_host = AuthorizedServiceHost {
+            url: "http://localhost:8000".into(),
+            id: "SomeTrustedHost".into(),
+            secret: "SomeSecret".into(),
+            visibility: ServiceHostScope::Public(categories.clone()),
+        };
+        let host: ServiceHost = auth_host.into();
+
+        assert_eq!(host.categories.len(), 1);
+        assert_eq!(&host.categories.into_iter().next().unwrap(), "cat1");
+    }
+
+    #[test]
+    fn test_priv_auth_host_to_host_no_cats() {
+        let auth_host = AuthorizedServiceHost {
+            url: "http://localhost:8000".into(),
+            id: "SomeTrustedHost".into(),
+            secret: "SomeSecret".into(),
+            visibility: ServiceHostScope::Private,
+        };
+        let host: ServiceHost = auth_host.into();
+        assert_eq!(host.categories.len(), 0);
     }
 }

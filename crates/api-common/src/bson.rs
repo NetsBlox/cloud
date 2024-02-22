@@ -1,6 +1,6 @@
 use crate::{
-    oauth, FriendInvite, FriendLinkState, GroupId, InvitationState, LinkedAccount, ProjectId,
-    PublishState, RoleMetadata, SaveState, ServiceHost, UserRole,
+    oauth, FriendInvite, FriendLinkState, GroupId, InvitationState, LinkedAccount, MagicLinkId,
+    ProjectId, PublishState, RoleMetadata, SaveState, ServiceHost, ServiceHostScope, UserRole,
 };
 use bson::{doc, Bson, DateTime};
 
@@ -145,5 +145,43 @@ impl From<oauth::Code> for Bson {
 impl From<oauth::TokenId> for Bson {
     fn from(id: oauth::TokenId) -> Bson {
         Bson::String(id.as_str().to_owned())
+    }
+}
+
+impl From<ServiceHostScope> for Bson {
+    fn from(scope: ServiceHostScope) -> Bson {
+        match scope {
+            ServiceHostScope::Public(cats) => Bson::Document(doc! {
+                "public": Into::<Bson>::into(cats),
+            }),
+            ServiceHostScope::Private => Bson::String("private".into()),
+        }
+    }
+}
+
+impl From<MagicLinkId> for Bson {
+    fn from(id: MagicLinkId) -> Bson {
+        Bson::String(id.0)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_deser_priv_service_host_scope() {
+        let data = bson::to_bson(&ServiceHostScope::Private)
+            .unwrap()
+            .to_string();
+        let priv_scope: Result<ServiceHostScope, _> = serde_json::from_str(&data);
+
+        assert!(priv_scope.is_ok());
+
+        let data = bson::to_bson(&ServiceHostScope::Public(vec!["hello".into()]))
+            .unwrap()
+            .to_string();
+        let scope: Result<ServiceHostScope, _> = serde_json::from_str(&data);
+        assert!(scope.is_ok());
     }
 }

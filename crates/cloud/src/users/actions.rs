@@ -13,11 +13,12 @@ use lettre::{
 };
 use lru::LruCache;
 use mongodb::{
-    bson::{doc, DateTime},
+    bson::doc,
     options::{FindOneAndUpdateOptions, ReturnDocument},
     Collection,
 };
-use netsblox_cloud_common::{api, BannedAccount, ProjectMetadata, SetPasswordToken, User};
+use netsblox_cloud_common::{api, BannedAccount, SetPasswordToken, User};
+use nonempty::NonEmpty;
 use regex::Regex;
 use rustrict::CensorStr;
 
@@ -36,8 +37,6 @@ pub(crate) struct UserActions<'a> {
     password_tokens: &'a Collection<SetPasswordToken>,
     metrics: &'a metrics::Metrics,
 
-    project_metadata: &'a Collection<ProjectMetadata>,
-    project_cache: &'a Arc<RwLock<LruCache<api::ProjectId, ProjectMetadata>>>,
     network: &'a Addr<TopologyActor>,
 
     friend_cache: &'a Arc<RwLock<LruCache<String, Vec<String>>>>,
@@ -56,10 +55,7 @@ pub(crate) struct UserActionData<'a> {
     pub(crate) password_tokens: &'a Collection<SetPasswordToken>,
     pub(crate) metrics: &'a metrics::Metrics,
 
-    pub(crate) project_metadata: &'a Collection<ProjectMetadata>,
-    pub(crate) project_cache: &'a Arc<RwLock<LruCache<api::ProjectId, ProjectMetadata>>>,
     pub(crate) network: &'a Addr<TopologyActor>,
-
     pub(crate) friend_cache: &'a Arc<RwLock<LruCache<String, Vec<String>>>>,
 
     // email support
@@ -76,8 +72,6 @@ impl<'a> UserActions<'a> {
             password_tokens: data.password_tokens,
             metrics: data.metrics,
 
-            project_cache: data.project_cache,
-            project_metadata: data.project_metadata,
             network: data.network,
 
             friend_cache: data.friend_cache,
@@ -157,31 +151,9 @@ impl<'a> UserActions<'a> {
     }
 
     pub(crate) async fn login(&self, request: api::LoginRequest) -> Result<api::User, UserError> {
-        let client_id = request.client_id.clone();
+        //let client_id = request.client_id.clone();
         let user = strategies::login(self.users, request.credentials).await?;
 
-        let query = doc! {"$or": [
-            {"username": &user.username},
-            {"email": &user.email},
-        ]};
-
-        if let Some(_account) = self
-            .banned_accounts
-            .find_one(query.clone(), None)
-            .await
-            .map_err(InternalError::DatabaseConnectionError)?
-        {
-            return Err(UserError::BannedUserError);
-        }
-
-        if let Some(client_id) = client_id {
-            self.update_ownership(&client_id, &user.username).await?;
-            self.network.do_send(topology::SetClientUsername {
-                id: client_id,
-                username: Some(user.username.clone()),
-            });
-        }
-        self.metrics.record_login();
         Ok(user.into())
     }
 
@@ -447,46 +419,16 @@ impl<'a> UserActions<'a> {
 
         Ok(())
     }
-    async fn update_ownership(
-        &self,
-        client_id: &api::ClientId,
-        username: &str,
-    ) -> Result<(), UserError> {
-        // Update ownership of current project
-        if !client_id.as_str().starts_with('_') {
-            return Err(UserError::InvalidClientIdError);
-        }
+    pub(crate) async fn forgot_username(&self, email: &str) -> Result<(), UserError> {
+        let usernames = utils::find_usernames(self.users, email).await?;
+        let email = ForgotUsernameEmail {
+            sender: self.sender.clone(),
+            email: email.to_owned(),
+            usernames,
+        };
 
-        let query = doc! {"owner": client_id.as_str()};
-        if let Some(metadata) = self
-            .project_metadata
-            .find_one(query.clone(), None)
-            .await
-            .map_err(InternalError::DatabaseConnectionError)?
-        {
-            // No project will be found for non-NetsBlox clients such as PyBlox
-            let name =
-                utils::get_valid_project_name(self.project_metadata, username, &metadata.name)
-                    .await?;
-            let update = doc! {
-                "$set": {
-                    "owner": username,
-                    "name": name,
-                    "updated": DateTime::now(),
-                }
-            };
-            let options = mongodb::options::FindOneAndUpdateOptions::builder()
-                .return_document(ReturnDocument::After)
-                .build();
-            let new_metadata = self
-                .project_metadata
-                .find_one_and_update(query, update, Some(options))
-                .await
-                .map_err(InternalError::DatabaseConnectionError)?
-                .ok_or(UserError::ProjectNotFoundError)?;
+        utils::send_email(self.mailer, email)?;
 
-            utils::on_room_changed(self.network, self.project_cache, new_metadata);
-        }
         Ok(())
     }
 }
@@ -520,7 +462,7 @@ fn is_valid_username(name: &str) -> bool {
         && !name.is_inappropriate()
 }
 
-pub(crate) struct SetPasswordEmail {
+struct SetPasswordEmail {
     sender: Mailbox,
     user: User,
     token: SetPasswordToken,
@@ -546,6 +488,42 @@ impl TryFrom<SetPasswordEmail> for lettre::Message {
         let to_email = email.user.email;
         let message = Message::builder()
             .from(email.sender)
+            .to(Mailbox::new(
+                None,
+                to_email
+                    .parse::<Address>()
+                    .map_err(|_err| UserError::InvalidEmailAddress)?,
+            ))
+            .subject(subject.to_string())
+            .date_now()
+            .multipart(body)
+            .map_err(|_err| InternalError::EmailBuildError)?;
+
+        Ok(message)
+    }
+}
+
+struct ForgotUsernameEmail {
+    sender: Mailbox,
+    usernames: NonEmpty<String>,
+    email: String,
+}
+
+impl ForgotUsernameEmail {
+    fn render(&self) -> MultiPart {
+        email_template::forgot_username_email(&self.email, &self.usernames)
+    }
+}
+
+impl TryFrom<ForgotUsernameEmail> for lettre::Message {
+    type Error = UserError;
+
+    fn try_from(data: ForgotUsernameEmail) -> Result<Self, UserError> {
+        let subject = "NetsBlox Username(s)";
+        let body = data.render();
+        let to_email = data.email;
+        let message = Message::builder()
+            .from(data.sender)
             .to(Mailbox::new(
                 None,
                 to_email
@@ -647,6 +625,18 @@ mod tests {
     }
 
     #[actix_web::test]
+    async fn test_forgot_username_none() {
+        test_utils::setup()
+            .run(|app_data| async move {
+                let actions = app_data.as_user_actions();
+
+                let result = actions.forgot_username("brian@netsblox.org").await;
+                assert!(matches!(result, Err(UserError::UserNotFoundError)));
+            })
+            .await;
+    }
+
+    #[actix_web::test]
     async fn test_is_valid_username_caps() {
         assert!(is_valid_username("HelloWorld"));
     }
@@ -687,5 +677,11 @@ mod tests {
     async fn test_ensure_valid_email() {
         let result = ensure_valid_email("noreply@netsblox.org");
         assert!(result.is_ok());
+    }
+
+    #[actix_web::test]
+    async fn test_is_valid_username_yed() {
+        // https://github.com/NetsBlox/NetsBlox/issues/3378
+        assert!(is_valid_username("yedina"));
     }
 }

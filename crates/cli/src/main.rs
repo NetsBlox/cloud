@@ -9,8 +9,9 @@ use clap::{Parser, Subcommand};
 use futures_util::StreamExt;
 use inquire::{Confirm, Password, PasswordDisplayMode};
 use netsblox_api::common::{
-    oauth, ClientId, CreateProjectData, Credentials, FriendLinkState, InvitationState,
-    LinkedAccount, ProjectId, PublishState, RoleData, SaveState, ServiceHost, UserRole,
+    oauth, ClientId, CreateMagicLinkData, CreateProjectData, Credentials, FriendLinkState,
+    InvitationState, LinkedAccount, ProjectId, PublishState, RoleData, SaveState, ServiceHost,
+    ServiceHostScope, UserRole,
 };
 use netsblox_api::{self, serde_json, Client};
 use std::path::Path;
@@ -58,6 +59,11 @@ enum Users {
     },
     /// List NetsBlox users
     List, // TODO: add verbose option?
+    /// Email all associated usernames to a given address
+    ForgotUsername {
+        /// Email address associated with the username(s)
+        email: String,
+    },
     /// Ban a given user. Email address will also be blacklisted
     Ban {
         /// NetsBlox user to ban
@@ -88,6 +94,19 @@ enum Users {
         /// Perform this action on behalf of this user
         #[clap(short, long)]
         user: Option<String>,
+    },
+}
+
+/// Send "magic links" for password-less sign in
+#[derive(Subcommand, Debug)]
+enum MagicLinks {
+    /// Send a magic link to the given email. Allows login by any user associated with the email address.
+    Send {
+        /// Email to send the magic link to.
+        email: String,
+        /// Redirect the user to this URL after login
+        #[clap(short, long)]
+        url: Option<String>,
     },
 }
 
@@ -252,9 +271,9 @@ enum ServiceHosts {
     Authorize {
         url: String,
         client_id: String,
-        /// Enable this service host for all users
+        /// Set the public categories for the host. Omit to keep service private
         #[clap(short, long)]
-        public: bool,
+        categories: Option<String>,
     },
     /// Revoke the service host's authorization
     Unauthorize { url: String },
@@ -568,6 +587,12 @@ struct UserCommand {
 }
 
 #[derive(Parser, Debug)]
+struct MagicLinkCommand {
+    #[clap(subcommand)]
+    subcmd: MagicLinks,
+}
+
+#[derive(Parser, Debug)]
 struct ProjectCommand {
     #[clap(subcommand)]
     subcmd: Projects,
@@ -630,6 +655,8 @@ enum Command {
     Logout,
     #[clap(alias = "user")]
     Users(UserCommand),
+    #[clap(alias = "magic-link")]
+    MagicLinks(MagicLinkCommand),
     #[clap(alias = "project")]
     Projects(ProjectCommand),
     Network(NetworkCommand),
@@ -702,6 +729,9 @@ async fn do_command(mut cfg: Config, args: Cli) -> Result<(), error::Error> {
     let login_required = match &args.cmd {
         Command::Login => true,
         Command::Logout => false,
+        Command::MagicLinks(cmd) => match &cmd.subcmd {
+            MagicLinks::Send { .. } => false,
+        },
         Command::Users(cmd) => match &cmd.subcmd {
             Users::Create { .. } => false,
             _ => !is_logged_in,
@@ -779,6 +809,10 @@ async fn do_command(mut cfg: Config, args: Cli) -> Result<(), error::Error> {
                     println!("{}", serde_json::to_string(&user).unwrap());
                 }
             }
+            Users::ForgotUsername { email } => {
+                client.forgot_username(&email).await?;
+                println!("Email sent to {}", email);
+            }
             Users::Delete {
                 username,
                 no_confirm,
@@ -825,6 +859,16 @@ async fn do_command(mut cfg: Config, args: Cli) -> Result<(), error::Error> {
             }
             Users::Unban { username } => {
                 client.unban_user(username).await?;
+            }
+        },
+        Command::MagicLinks(cmd) => match &cmd.subcmd {
+            MagicLinks::Send { email, url } => {
+                let data = CreateMagicLinkData {
+                    email: email.clone(),
+                    redirect_uri: url.to_owned(),
+                };
+                client.send_magic_link(&data).await?;
+                println!("Magic link sent to {}!", email);
             }
         },
         Command::Projects(cmd) => match &cmd.subcmd {
@@ -1268,9 +1312,18 @@ async fn do_command(mut cfg: Config, args: Cli) -> Result<(), error::Error> {
             ServiceHosts::Authorize {
                 url,
                 client_id,
-                public,
+                categories,
             } => {
-                let secret = client.authorize_host(url, client_id, *public).await?;
+                let visibility = categories
+                    .as_ref()
+                    .map(|cats| {
+                        let categories: Vec<String> =
+                            cats.split(',').map(|cat| cat.to_string()).collect();
+                        ServiceHostScope::Public(categories)
+                    })
+                    .unwrap_or(ServiceHostScope::Private);
+
+                let secret = client.authorize_host(url, client_id, visibility).await?;
                 println!("{}", secret);
             }
             ServiceHosts::Unauthorize { url } => {
