@@ -5,6 +5,7 @@ mod common;
 mod config;
 mod errors;
 mod friends;
+mod galleries;
 mod groups;
 mod libraries;
 mod login_helper;
@@ -121,6 +122,7 @@ async fn main() -> std::io::Result<()> {
             .app_data(web::JsonConfig::default().limit(size_32_mb))
             .app_data(web::Data::new(app_data.clone()))
             .service(web::scope("/libraries").configure(libraries::routes::config))
+            .service(web::scope("/galleries").configure(galleries::routes::config))
             .service(web::scope("/users").configure(users::routes::config))
             .service(web::scope("/projects").configure(projects::routes::config))
             .service(web::scope("/groups").configure(groups::routes::config))
