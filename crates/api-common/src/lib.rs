@@ -525,6 +525,29 @@ pub struct UpdateGroupData {
     pub name: String,
 }
 
+#[derive(Deserialize, Serialize, Clone, Debug, PartialEq, Eq, Display, Hash, FromStr, TS)]
+#[ts(export)]
+pub struct GalleryId(String);
+
+impl GalleryId {
+    pub fn new(name: String) -> Self {
+        Self(name)
+    }
+
+    pub fn as_str(&self) -> &str {
+        &self.0
+    }
+}
+
+#[derive(Serialize, Deserialize, Clone, Debug, TS)]
+#[serde(rename_all = "camelCase")]
+#[ts(export)]
+pub struct Gallery {
+    pub id: GalleryId,
+    pub owner: String,
+    pub name: String,
+}
+
 #[derive(Deserialize, Serialize, Clone, Debug, TS)]
 #[ts(export)]
 pub enum InvitationState {

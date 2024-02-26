@@ -5,7 +5,7 @@ use netsblox_api_common::{
 };
 use netsblox_api_common::{
     FriendInvite, FriendLinkState, GroupId, InvitationState, LinkedAccount, ProjectId, RoleData,
-    SaveState, ServiceHost, ServiceHostScope,
+    SaveState, ServiceHost, ServiceHostScope, GalleryId,
 };
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha512};
@@ -874,6 +874,45 @@ impl From<MagicLink> for Bson {
             "createdAt": link.created_at,
         })
     }
+}
+
+/// A Gallery allows the owner to retrieve project information of the members  
+#[derive(Serialize, Deserialize, Clone, Debug)]
+#[serde(rename_all = "camelCase")]
+pub struct Gallery {
+    pub id: GalleryId,
+    pub owner: String,
+    pub name: String,
+}
+
+impl Gallery {
+    pub fn new(owner: String, name: String) -> Self {
+        Self {
+            id: api::GalleryId::new(Uuid::new_v4().to_string()),
+            name,
+            owner,
+        }
+    }
+}
+
+impl From<Gallery> for netsblox_api_common::Gallery {
+    fn from(gallery: Gallery) -> netsblox_api_common::Gallery {
+        netsblox_api_common::Gallery {
+            id: gallery.id,
+            owner: gallery.owner,
+            name: gallery.name,
+        }
+    }
+}
+
+impl From<Gallery> for Bson {
+  fn from(gallery: Gallery) -> Self {
+      Bson::Document(doc! {
+          "id": gallery.id,
+          "owner": gallery.owner,
+          "name": gallery.name,
+      })
+  }
 }
 
 #[cfg(test)]

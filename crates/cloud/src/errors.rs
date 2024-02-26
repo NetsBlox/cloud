@@ -51,6 +51,8 @@ pub enum UserError {
     RoleNotFoundError,
     #[display(fmt = "Group not found.")]
     GroupNotFoundError,
+    #[display(fmt = "Gallery not found.")]
+    GalleryNotFoundError,
     #[display(fmt = "User not found.")]
     UserNotFoundError,
     #[display(fmt = "Message not found.")]
@@ -198,6 +200,7 @@ impl error::ResponseError for UserError {
             | Self::OAuthClientNotFoundError
             | Self::OAuthTokenNotFoundError
             | Self::GroupNotFoundError => StatusCode::NOT_FOUND,
+            | Self::GalleryNotFoundError => StatusCode::NOT_FOUND,
             Self::InternalError | Self::SnapConnectionError => StatusCode::INTERNAL_SERVER_ERROR,
             Self::InvalidUsername
             | Self::InvalidRoleOrProjectName

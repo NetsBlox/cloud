@@ -1,7 +1,7 @@
 use crate::{
-    oauth, AppId, ClientId, FriendInvite, FriendLinkState, GroupId, InvitationState, LinkedAccount,
-    MagicLinkId, ProjectId, PublishState, RoleId, RoleMetadata, SaveState, ServiceHost,
-    ServiceHostScope, UserRole,
+    oauth, AppId, ClientId, FriendInvite, FriendLinkState, GalleryId, GroupId, InvitationState,
+    LinkedAccount, MagicLinkId, ProjectId, PublishState, RoleId, RoleMetadata, SaveState,
+    ServiceHost, ServiceHostScope, UserRole,
 };
 use bson::{doc, Bson, DateTime};
 
@@ -108,6 +108,12 @@ impl From<GroupId> for Bson {
 
 impl From<ClientId> for Bson {
     fn from(id: ClientId) -> Bson {
+        Bson::String(id.as_str().to_owned())
+    }
+}
+
+impl From<GalleryId> for Bson {
+    fn from(id: GalleryId) -> Bson {
         Bson::String(id.as_str().to_owned())
     }
 }
