@@ -3,6 +3,7 @@ pub(crate) mod metrics;
 use crate::collaboration_invites::actions::CollaborationInviteActions;
 use crate::common::api::{oauth, NewUser, ProjectId, UserRole};
 use crate::friends::actions::FriendActions;
+use crate::galleries::actions::GalleryActions;
 use crate::groups::actions::GroupActions;
 use crate::libraries::actions::LibraryActions;
 use crate::login_helper::LoginHelper;
@@ -22,7 +23,7 @@ use log::{error, info, warn};
 use lru::LruCache;
 use mongodb::bson::{doc, Document};
 use mongodb::options::{FindOptions, IndexOptions, UpdateOptions};
-use netsblox_cloud_common::{api, MagicLink};
+use netsblox_cloud_common::{api, Gallery, MagicLink};
 use serde::{Deserialize, Serialize};
 use std::collections::HashSet;
 use std::net::IpAddr;
@@ -58,6 +59,7 @@ pub struct AppData {
     pub(crate) banned_accounts: Collection<BannedAccount>,
     friends: Collection<FriendLink>,
     magic_links: Collection<MagicLink>,
+    galleries: Collection<Gallery>,
     pub(crate) project_metadata: Collection<ProjectMetadata>,
     pub(crate) libraries: Collection<Library>,
     pub(crate) authorized_services: Collection<AuthorizedServiceHost>,
@@ -143,6 +145,7 @@ impl AppData {
             db.collection::<OccupantInvite>(&(prefix.to_owned() + "occupantInvites"));
         let friends = db.collection::<FriendLink>(&(prefix.to_owned() + "friends"));
         let magic_links = db.collection::<MagicLink>(&(prefix.to_owned() + "magicLinks"));
+        let galleries = db.collection::<Gallery>(&(prefix.to_owned() + "galleries"));
         let recorded_messages =
             db.collection::<SentMessage>(&(prefix.to_owned() + "recordedMessages"));
         let network = network.unwrap_or_else(|| {
@@ -184,6 +187,7 @@ impl AppData {
             password_tokens,
             friends,
             magic_links,
+            galleries,
 
             mailer,
             sender,
@@ -561,6 +565,10 @@ impl AppData {
     // get resource actions (eg, libraries, users, etc)
     pub(crate) fn as_library_actions(&self) -> LibraryActions {
         LibraryActions::new(&self.libraries)
+    }
+
+    pub(crate) fn as_gallery_actions(&self) -> GalleryActions {
+        GalleryActions::new(&self.galleries)
     }
 
     pub(crate) fn as_project_actions(&self) -> ProjectActions {
