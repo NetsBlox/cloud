@@ -4,7 +4,7 @@ pub use netsblox_api_common::{
     CreateProjectData, Credentials, ExternalClient, ExternalClientState, Group, GroupId,
     InvitationId, InvitationState, LibraryMetadata, LinkedAccount, LoginRequest, NewUser, Project,
     ProjectId, PublishState, RoleData, RoleId, RoomState, SaveState, ServiceHost, ServiceHostScope,
-    ServiceSettings, UpdateProjectData, UpdateRoleData, UserRole,
+    ServiceSettings, UpdateProjectData, UpdateRoleData, UserRole, GalleryId, Gallery,
 };
 pub use netsblox_api_common::{
     FriendInvite, FriendLinkState, InvitationResponse, ProjectMetadata, User,
