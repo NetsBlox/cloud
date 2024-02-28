@@ -17,7 +17,7 @@ impl<'a> GalleryActions<'a> {
     pub(crate) async fn create_gallery(
         &self,
         // TODO: this function will need some arguments
-        //_ml: &auth::Moderategalleries,
+        //_ml: &auth::ModerateGalleries,
         //owner: &str,
         //name: &str,
         //state: api::PublishState,
