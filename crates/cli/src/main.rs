@@ -105,8 +105,8 @@ enum MagicLinks {
         /// Email to send the magic link to.
         email: String,
         /// Redirect the user to this URL after login
-        #[clap(short, long)]
-        url: Option<String>,
+        #[clap(short, long, default_value = "https://editor.netsblox.org")]
+        url: String,
     },
 }
 
@@ -865,7 +865,7 @@ async fn do_command(mut cfg: Config, args: Cli) -> Result<(), error::Error> {
             MagicLinks::Send { email, url } => {
                 let data = CreateMagicLinkData {
                     email: email.clone(),
-                    redirect_uri: url.to_owned(),
+                    redirect_uri: Some(url.to_owned()),
                 };
                 client.send_magic_link(&data).await?;
                 println!("Magic link sent to {}!", email);
