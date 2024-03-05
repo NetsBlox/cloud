@@ -53,4 +53,26 @@ mod tests {
             })
             .await;
     }
+
+    #[actix_web::test]
+    async fn test_delete_gallery() {
+        let gallery = Gallery::new("owner".into(), "mygallery".into());
+
+        test_utils::setup()
+            .with_galleries(&[gallery.clone()])
+            .run(|app_data| async move {
+                let actions = app_data.as_gallery_actions();
+
+                // TODO: call the endpoint to create the gallery
+                // TODO: call delete_gallery
+                //actions.create_gallery().await.unwrap();
+
+                // Check that it exists in the database
+                let query = doc! {};
+                let metadata = actions.galleries.find_one(query, None).await.unwrap();
+
+                assert!(metadata.is_none(), "Gallery still exists in the database");
+            })
+            .await;
+    }
 }

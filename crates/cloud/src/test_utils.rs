@@ -35,6 +35,7 @@ pub(crate) fn setup() -> TestSetupBuilder {
         magic_links: Vec::new(),
         collab_invites: Vec::new(),
         authorized_services: Vec::new(),
+        galleries: Vec::new(),
         // network: None,
     }
 }
@@ -44,6 +45,7 @@ pub(crate) struct TestSetupBuilder {
     users: Vec<User>,
     projects: Vec<project::ProjectFixture>,
     libraries: Vec<Library>,
+    galleries: Vec<Gallery>,
     groups: Vec<Group>,
     clients: Vec<network::Client>,
     friends: Vec<FriendLink>,
@@ -72,6 +74,11 @@ impl TestSetupBuilder {
 
     pub(crate) fn with_projects(mut self, projects: &[project::ProjectFixture]) -> Self {
         self.projects.extend_from_slice(projects);
+        self
+    }
+
+    pub(crate) fn with_galleries(mut self, galleries: &[Gallery]) -> Self {
+        self.galleries.extend_from_slice(galleries);
         self
     }
 
@@ -204,6 +211,9 @@ impl TestSetupBuilder {
         }
         if !self.friends.is_empty() {
             app_data.insert_friends(&self.friends).await.unwrap();
+        }
+        if !self.galleries.is_empty() {
+            app_data.insert_galleries(&self.galleries).await.unwrap();
         }
         if !self.magic_links.is_empty() {
             app_data
