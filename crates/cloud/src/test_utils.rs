@@ -4,8 +4,8 @@ use futures::{future::join_all, Future};
 use lazy_static::lazy_static;
 use mongodb::{bson::doc, Client};
 use netsblox_cloud_common::{
-    api, AuthorizedServiceHost, BannedAccount, CollaborationInvite, FriendLink, Group, Library,
-    MagicLink, User,
+    api, AuthorizedServiceHost, BannedAccount, CollaborationInvite, FriendLink, Gallery, Group,
+    Library, MagicLink, User,
 };
 
 use crate::{
