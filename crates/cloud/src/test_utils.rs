@@ -4,8 +4,8 @@ use futures::{future::join_all, Future};
 use lazy_static::lazy_static;
 use mongodb::{bson::doc, Client};
 use netsblox_cloud_common::{
-    api, AuthorizedServiceHost, BannedAccount, CollaborationInvite, FriendLink, Group, Library,
-    LogMessage, MagicLink, User,
+    api, AuthorizedServiceHost, BannedAccount, CollaborationInvite, FriendLink, Gallery, Group,
+    Library, LogMessage, MagicLink, User,
 };
 
 use crate::{
@@ -36,6 +36,7 @@ pub(crate) fn setup() -> TestSetupBuilder {
         collab_invites: Vec::new(),
         authorized_services: Vec::new(),
         message_logs: Vec::new(),
+        galleries: Vec::new(),
         // network: None,
     }
 }
@@ -45,6 +46,7 @@ pub(crate) struct TestSetupBuilder {
     users: Vec<User>,
     projects: Vec<project::ProjectFixture>,
     libraries: Vec<Library>,
+    galleries: Vec<Gallery>,
     groups: Vec<Group>,
     clients: Vec<network::Client>,
     friends: Vec<FriendLink>,
@@ -74,6 +76,11 @@ impl TestSetupBuilder {
 
     pub(crate) fn with_projects(mut self, projects: &[project::ProjectFixture]) -> Self {
         self.projects.extend_from_slice(projects);
+        self
+    }
+
+    pub(crate) fn with_galleries(mut self, galleries: &[Gallery]) -> Self {
+        self.galleries.extend_from_slice(galleries);
         self
     }
 
@@ -211,6 +218,9 @@ impl TestSetupBuilder {
         }
         if !self.friends.is_empty() {
             app_data.insert_friends(&self.friends).await.unwrap();
+        }
+        if !self.galleries.is_empty() {
+            app_data.insert_galleries(&self.galleries).await.unwrap();
         }
         if !self.magic_links.is_empty() {
             app_data

@@ -562,6 +562,19 @@ impl AppData {
     }
 
     #[cfg(test)]
+    pub(crate) async fn insert_galleries(
+        &self,
+        galleries: &[Gallery],
+    ) -> Result<(), InternalError> {
+        self.galleries
+            .insert_many(galleries, None)
+            .await
+            .map_err(InternalError::DatabaseConnectionError)?;
+
+        Ok(())
+    }
+
+    #[cfg(test)]
     pub(crate) async fn insert_magic_links(
         &self,
         links: &[MagicLink],
