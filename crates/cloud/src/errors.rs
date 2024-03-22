@@ -81,6 +81,8 @@ pub enum UserError {
     UsernameExists,
     #[display(fmt = "Group already exists.")]
     GroupExistsError,
+    #[display(fmt = "Gallery already exists.")]
+    GalleryExistsError,
     #[display(fmt = "Invalid username.")]
     InvalidUsername,
     #[display(fmt = "Invalid name.")]
@@ -214,6 +216,7 @@ impl error::ResponseError for UserError {
             | Self::UserExistsError
             | Self::UsernameExists
             | Self::OAuthClientAlreadyExistsError
+            | Self::GalleryExistsError
             | Self::GroupExistsError
             | Self::CannotDeleteLastRoleError
             | Self::ServiceHostAlreadyAuthorizedError

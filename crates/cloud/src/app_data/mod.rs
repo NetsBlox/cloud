@@ -59,7 +59,7 @@ pub struct AppData {
     pub(crate) banned_accounts: Collection<BannedAccount>,
     friends: Collection<FriendLink>,
     magic_links: Collection<MagicLink>,
-    galleries: Collection<Gallery>,
+    pub(crate) galleries: Collection<Gallery>,
     pub(crate) project_metadata: Collection<ProjectMetadata>,
     pub(crate) libraries: Collection<Library>,
     pub(crate) authorized_services: Collection<AuthorizedServiceHost>,

@@ -537,6 +537,7 @@ pub struct Gallery {
     pub id: GalleryId,
     pub owner: String,
     pub name: String,
+    pub state: PublishState,
 }
 
 #[derive(Deserialize, Serialize, Clone, Debug, TS)]
