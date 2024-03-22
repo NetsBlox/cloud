@@ -4,8 +4,8 @@ use netsblox_api_common::{
     oauth, ClientState, LibraryMetadata, NewUser, PublishState, RoleId, UserRole,
 };
 use netsblox_api_common::{
-    FriendInvite, FriendLinkState, GroupId, InvitationState, LinkedAccount, ProjectId, RoleData,
-    SaveState, ServiceHost, ServiceHostScope, GalleryId,
+    FriendInvite, FriendLinkState, GalleryId, GroupId, InvitationState, LinkedAccount, ProjectId,
+    RoleData, SaveState, ServiceHost, ServiceHostScope,
 };
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha512};
@@ -883,14 +883,16 @@ pub struct Gallery {
     pub id: GalleryId,
     pub owner: String,
     pub name: String,
+    pub state: api::PublishState,
 }
 
 impl Gallery {
-    pub fn new(owner: String, name: String) -> Self {
+    pub fn new(owner: String, name: String, state: api::PublishState) -> Self {
         Self {
             id: api::GalleryId::new(Uuid::new_v4().to_string()),
             name,
             owner,
+            state,
         }
     }
 }
@@ -901,18 +903,20 @@ impl From<Gallery> for netsblox_api_common::Gallery {
             id: gallery.id,
             owner: gallery.owner,
             name: gallery.name,
+            state: gallery.state,
         }
     }
 }
 
 impl From<Gallery> for Bson {
-  fn from(gallery: Gallery) -> Self {
-      Bson::Document(doc! {
-          "id": gallery.id,
-          "owner": gallery.owner,
-          "name": gallery.name,
-      })
-  }
+    fn from(gallery: Gallery) -> Self {
+        Bson::Document(doc! {
+            "id": gallery.id,
+            "owner": gallery.owner,
+            "name": gallery.name,
+            "state": gallery.state,
+        })
+    }
 }
 
 #[cfg(test)]

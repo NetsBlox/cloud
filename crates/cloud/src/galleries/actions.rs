@@ -1,8 +1,11 @@
 use mongodb::bson::doc;
+use mongodb::options::ReturnDocument;
 use mongodb::Collection;
+
 use netsblox_cloud_common::{api, Gallery};
 
-use crate::errors::UserError;
+use crate::auth::{self, DeleteGallery, EditGallery};
+use crate::errors::{InternalError, UserError};
 
 pub(crate) struct GalleryActions<'a> {
     galleries: &'a Collection<Gallery>,
@@ -13,18 +16,79 @@ impl<'a> GalleryActions<'a> {
         Self { galleries }
     }
 
-    /// Create a gallery for a given user
     pub(crate) async fn create_gallery(
         &self,
-        // TODO: this function will need some arguments
-        //_ml: &auth::ModerateGalleries,
-        //owner: &str,
-        //name: &str,
-        //state: api::PublishState,
-    ) -> Result<api::Gallery, UserError> {
-        todo!("need to implement this!");
+        eu: &auth::EditUser,
+        name: &str,
+        state: api::PublishState,
+    ) -> Result<Gallery, UserError> {
+        // create gallery
+        let gallery = Gallery::new(eu.username.to_owned(), name.to_owned(), state.to_owned());
+        // create mongodb formatted gallery
+        let query = doc! {
+          "name": &gallery.name,
+          "owner": &gallery.owner,
+        };
+        // options for mongodb insertion
+        let update = doc! {"$setOnInsert": &gallery};
+        let options = mongodb::options::UpdateOptions::builder()
+            .upsert(true)
+            .build();
+
+        let result = self
+            .galleries
+            .update_one(query, update, options)
+            .await
+            .map_err(InternalError::DatabaseConnectionError)?;
+
+        if result.matched_count == 1 {
+            Err(UserError::GalleryExistsError)
+        } else {
+            Ok(gallery)
+        }
+    }
+
+    pub(crate) async fn rename_gallery(
+        &self,
+        egal: &EditGallery,
+        name: &str,
+    ) -> Result<Gallery, UserError> {
+        let query = doc! {"id": &egal.metadata.id};
+        let update = doc! {"$set": {"name": &name}};
+        let options = mongodb::options::FindOneAndUpdateOptions::builder()
+            .return_document(ReturnDocument::After)
+            .build();
+
+        let gallery = self
+            .galleries
+            .find_one_and_update(query, update, options)
+            .await
+            .map_err(InternalError::DatabaseConnectionError)?
+            .ok_or(UserError::GalleryNotFoundError)?;
+
+        Ok(gallery)
+    }
+
+    /// delete a gallery
+    pub(crate) async fn delete_gallery(&self, dgal: &DeleteGallery) -> Result<Gallery, UserError> {
+        // create mongodb query
+        let query = doc! {
+          "id": &dgal.metadata.id
+        };
+        // delete gallery
+        let gallery = self
+            .galleries
+            .find_one_and_delete(query, None)
+            .await
+            .map_err(InternalError::DatabaseConnectionError)?
+            .ok_or(UserError::GalleryNotFoundError)?;
+
+        Ok(gallery)
     }
 }
+// break into smaller pieces.
+// use with users to decouple
+// from other tests.
 
 #[cfg(test)]
 mod tests {
@@ -32,19 +96,33 @@ mod tests {
 
     use super::*;
     use actix_web::test;
+    use netsblox_cloud_common::User;
 
     #[actix_web::test]
-    async fn test_create_gallery() {
+    async fn test_create_empty_gallery() {
+        let user: User = api::NewUser {
+            username: "user".into(),
+            email: "user@netsblox.org".into(),
+            password: None,
+            group_id: None,
+            role: None,
+        }
+        .into();
+
         test_utils::setup()
-            //.with_users(&[user.clone()])
+            .with_users(&[user.clone()])
             .run(|app_data| async move {
                 let actions = app_data.as_gallery_actions();
 
-                // TODO: call the endpoint to create the gallery
-                actions.create_gallery().await.unwrap();
+                let auth_eu = auth::EditUser::test(user.username.clone());
+
+                let gallery = actions
+                    .create_gallery(&auth_eu, "mygallery", api::PublishState::Private)
+                    .await
+                    .unwrap();
 
                 // Check that it exists in the database
-                let query = doc! {};
+                let query = doc! {"id": gallery.id};
                 let metadata = actions.galleries.find_one(query, None).await.unwrap();
 
                 assert!(metadata.is_some(), "Gallery not found in the database");
@@ -56,19 +134,27 @@ mod tests {
 
     #[actix_web::test]
     async fn test_delete_gallery() {
-        let gallery = Gallery::new("owner".into(), "mygallery".into());
+        let gallery = Gallery::new(
+            "owner".into(),
+            "mygallery".into(),
+            api::PublishState::Private,
+        );
 
         test_utils::setup()
             .with_galleries(&[gallery.clone()])
             .run(|app_data| async move {
                 let actions = app_data.as_gallery_actions();
 
-                // TODO: call the endpoint to create the gallery
-                // TODO: call delete_gallery
-                //actions.create_gallery().await.unwrap();
+                let query = doc! {"owner": &gallery.owner, "name": &gallery.name};
+                let gallery = actions.galleries.find_one(query, None).await.unwrap();
+
+                assert!(
+                    gallery.is_some(),
+                    "Gallery does not exist in the database before deletion"
+                );
 
                 // Check that it exists in the database
-                let query = doc! {};
+                let query = doc! {"id": &gallery.id};
                 let metadata = actions.galleries.find_one(query, None).await.unwrap();
 
                 assert!(metadata.is_none(), "Gallery still exists in the database");
