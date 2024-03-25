@@ -371,6 +371,25 @@ pub(crate) async fn find_usernames(
     NonEmpty::from_vec(usernames).ok_or(UserError::UserNotFoundError)
 }
 
+// TODO: refactor download here, too
+pub(crate) async fn upload(
+    client: &s3::Client,
+    key: &str, // TODO: it would be nice to namespace these with an enum/struct or something
+    body: String,
+) -> Result<PutObjectOutput, InternalError> {
+    client
+        .put_object()
+        .bucket(self.bucket.clone())
+        .key(key)
+        .body(String::into_bytes(body).into())
+        .send()
+        .await
+        .map_err(|err| {
+            warn!("Unable to upload to s3: {}", err);
+            InternalError::S3Error
+        })
+}
+
 // TODO: tests for cache invalidation
 // - [ ] friends
 

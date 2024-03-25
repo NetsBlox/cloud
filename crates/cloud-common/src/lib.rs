@@ -347,6 +347,26 @@ impl From<NetworkTraceMetadata> for netsblox_api_common::NetworkTraceMetadata {
     }
 }
 
+/// TODO: Explain gallery projects
+#[derive(Deserialize, Serialize, Clone, Debug)]
+#[serde(rename_all = "camelCase")]
+pub struct GalleryProjectMetadata {
+    pub gallery_id: GalleryId,
+    pub id: ProjectId,
+
+    // owner (for permissions)
+    pub owner: String,
+
+    // metadata
+    pub name: String,
+    pub updated: DateTime,
+    pub origin_time: DateTime,
+    pub thumbnail: String,
+    // (path to the) xml contents (on s3)
+    //pub versions: Vec<String>,  // TODO: worry about versions later
+    pub content: String,
+}
+
 #[derive(Deserialize, Serialize, Clone, Debug)]
 #[serde(rename_all = "camelCase")]
 pub struct ProjectMetadata {

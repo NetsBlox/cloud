@@ -23,7 +23,7 @@ use log::{error, info, warn};
 use lru::LruCache;
 use mongodb::bson::{doc, Document};
 use mongodb::options::{FindOptions, IndexOptions, UpdateOptions};
-use netsblox_cloud_common::{api, Gallery, MagicLink};
+use netsblox_cloud_common::{api, Gallery, GalleryProjectMetadata, MagicLink};
 use serde::{Deserialize, Serialize};
 use std::collections::HashSet;
 use std::net::IpAddr;
@@ -60,6 +60,7 @@ pub struct AppData {
     friends: Collection<FriendLink>,
     magic_links: Collection<MagicLink>,
     pub(crate) galleries: Collection<Gallery>,
+    pub(crate) galleryProjects: Collection<GalleryProjectMetadata>,
     pub(crate) project_metadata: Collection<ProjectMetadata>,
     pub(crate) libraries: Collection<Library>,
     pub(crate) authorized_services: Collection<AuthorizedServiceHost>,
@@ -147,6 +148,8 @@ impl AppData {
         let friends = db.collection::<FriendLink>(&(prefix.to_owned() + "friends"));
         let magic_links = db.collection::<MagicLink>(&(prefix.to_owned() + "magicLinks"));
         let galleries = db.collection::<Gallery>(&(prefix.to_owned() + "galleries"));
+        let galleryProjects =
+            db.collection::<GalleryProjectMetadata>(&(prefix.to_owned() + "galleryProjects"));
         let recorded_messages =
             db.collection::<SentMessage>(&(prefix.to_owned() + "recordedMessages"));
         let logged_messages = db.collection::<LogMessage>(&(prefix.to_owned() + "loggedMessages"));
@@ -190,6 +193,7 @@ impl AppData {
             friends,
             magic_links,
             galleries,
+            galleryProjects,
 
             mailer,
             sender,
