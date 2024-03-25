@@ -43,8 +43,13 @@ async fn view_gallery(
     Ok(HttpResponse::Ok().json(auth_dgal.metadata))
 }
 
+#[post("/id/{id}/projects/")]
+async fn create_gallery_project() {
+    todo!();
+}
+
 //FIXME: this function should return all projects in the gallery.
-#[get("/id/{id}/projects")]
+#[get("/id/{id}/projects/")]
 async fn view_gallery_projects(
     app: web::Data<AppData>,
     path: web::Path<(api::GalleryId,)>,
@@ -54,6 +59,11 @@ async fn view_gallery_projects(
     let auth_dgal = auth::try_view_gallery(&app, &req, &id).await?;
 
     Ok(HttpResponse::Ok().json(auth_dgal.metadata))
+}
+
+#[get("/id/{id}/projects/xml")]
+async fn view_gallery_project_xml() {
+    todo!("return the xml string");
 }
 
 #[patch("/id/{id}/name/{name}")]
