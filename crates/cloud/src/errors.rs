@@ -99,6 +99,8 @@ pub enum UserError {
     InvalidAppIdError,
     #[display(fmt = "Invalid service host ID.")]
     InvalidServiceHostIDError,
+    #[display(fmt = "State invalid.")]
+    InvalidStateError,
     #[display(fmt = "Unable to connect to Snap! Please try again later.")]
     SnapConnectionError,
     #[display(fmt = "Account already linked to NetsBlox user.")]
@@ -196,8 +198,8 @@ impl error::ResponseError for UserError {
             | Self::FriendNotFoundError
             | Self::OAuthClientNotFoundError
             | Self::OAuthTokenNotFoundError
+            | Self::GalleryNotFoundError
             | Self::GroupNotFoundError => StatusCode::NOT_FOUND,
-            | Self::GalleryNotFoundError => StatusCode::NOT_FOUND,
             Self::InternalError | Self::SnapConnectionError => StatusCode::INTERNAL_SERVER_ERROR,
             Self::InvalidUsername
             | Self::InvalidRoleOrProjectName
@@ -207,6 +209,7 @@ impl error::ResponseError for UserError {
             | Self::InvalidLibraryName
             | Self::InvalidAppIdError
             | Self::InvalidServiceHostIDError
+            | Self::InvalidStateError
             | Self::AccountAlreadyLinkedError
             | Self::PasswordResetLinkSentError
             | Self::MagicLinkSentError
