@@ -56,7 +56,7 @@ async fn view_gallery_projects(
     Ok(HttpResponse::Ok().json(auth_dgal.metadata))
 }
 
-#[patch("/id/{id}/{name}")]
+#[patch("/id/{id}/name/{name}")]
 async fn rename_gallery(
     app: web::Data<AppData>,
     path: web::Path<(api::GalleryId, String)>,
@@ -67,6 +67,22 @@ async fn rename_gallery(
 
     let actions = app.as_gallery_actions();
     let metadata = actions.rename_gallery(&auth_egal, &name).await?;
+
+    Ok(HttpResponse::Ok().json(metadata))
+}
+
+// acceptable state values are public/pu/1 or private/pr/0
+#[patch("/id/{id}/state/{state}")]
+async fn change_gallery_state(
+    app: web::Data<AppData>,
+    path: web::Path<(api::GalleryId, String)>,
+    req: HttpRequest,
+) -> Result<HttpResponse, UserError> {
+    let (id, state) = path.into_inner();
+    let auth_egal = auth::try_edit_gallery(&app, &req, &id).await?;
+
+    let actions = app.as_gallery_actions();
+    let metadata = actions.rename_gallery(&auth_egal, &state).await?;
 
     Ok(HttpResponse::Ok().json(metadata))
 }
@@ -216,7 +232,6 @@ mod tests {
                     .cookie(test_utils::cookie::new(&admin.username))
                     .to_request();
 
-                //FIXME:: Admin unable to create gallery for other user
                 let _gallery: Gallery = test::call_and_read_body_json(&app, req).await;
             })
             .await;
