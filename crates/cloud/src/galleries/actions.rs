@@ -23,7 +23,7 @@ impl<'a> GalleryActions<'a> {
         state: api::PublishState,
     ) -> Result<Gallery, UserError> {
         // create gallery
-        let gallery = Gallery::new(eu.username.to_owned(), name.to_owned(), state.to_owned());
+        let gallery = Gallery::new(eu.username.clone(), name.into(), state.clone());
         // create mongodb formatted gallery
         let query = doc! {
           "name": &gallery.name,
@@ -95,8 +95,8 @@ mod tests {
     use crate::test_utils;
 
     use super::*;
-    use actix_web::test;
-    use netsblox_cloud_common::User;
+    use actix_web::{body::MessageBody, http, test, web, App};
+    use netsblox_cloud_common::{Gallery, User};
 
     #[actix_web::test]
     async fn test_create_empty_gallery() {
@@ -128,36 +128,6 @@ mod tests {
                 assert!(metadata.is_some(), "Gallery not found in the database");
                 let metadata = metadata.unwrap();
                 assert_eq!(&metadata.name, "mygallery");
-            })
-            .await;
-    }
-
-    #[actix_web::test]
-    async fn test_delete_gallery() {
-        let gallery = Gallery::new(
-            "owner".into(),
-            "mygallery".into(),
-            api::PublishState::Private,
-        );
-
-        test_utils::setup()
-            .with_galleries(&[gallery.clone()])
-            .run(|app_data| async move {
-                let actions = app_data.as_gallery_actions();
-
-                let query = doc! {"owner": &gallery.owner, "name": &gallery.name};
-                let gallery = actions.galleries.find_one(query, None).await.unwrap();
-
-                assert!(
-                    gallery.is_some(),
-                    "Gallery does not exist in the database before deletion"
-                );
-
-                // Check that it exists in the database
-                let query = doc! {"id": &gallery.id};
-                let metadata = actions.galleries.find_one(query, None).await.unwrap();
-
-                assert!(metadata.is_none(), "Gallery still exists in the database");
             })
             .await;
     }

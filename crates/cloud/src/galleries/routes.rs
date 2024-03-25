@@ -1,7 +1,7 @@
 use crate::app_data::AppData;
 use crate::auth;
 use crate::errors::UserError;
-use actix_web::{delete, patch, post, HttpRequest};
+use actix_web::{delete, get, patch, post, HttpRequest};
 use actix_web::{web, HttpResponse};
 
 use crate::common::api;
@@ -29,6 +29,31 @@ async fn create_gallery(
         .await?;
 
     Ok(HttpResponse::Ok().json(metadata))
+}
+
+#[get("/id/{id}")]
+async fn view_gallery(
+    app: web::Data<AppData>,
+    path: web::Path<(api::GalleryId,)>,
+    req: HttpRequest,
+) -> Result<HttpResponse, UserError> {
+    let (id,) = path.into_inner();
+    let auth_dgal = auth::try_view_gallery(&app, &req, &id).await?;
+
+    Ok(HttpResponse::Ok().json(auth_dgal.metadata))
+}
+
+//FIXME: this function should return all projects in the gallery.
+#[get("/id/{id}/projects")]
+async fn view_gallery_projects(
+    app: web::Data<AppData>,
+    path: web::Path<(api::GalleryId,)>,
+    req: HttpRequest,
+) -> Result<HttpResponse, UserError> {
+    let (id,) = path.into_inner();
+    let auth_dgal = auth::try_view_gallery(&app, &req, &id).await?;
+
+    Ok(HttpResponse::Ok().json(auth_dgal.metadata))
 }
 
 #[patch("/id/{id}/{name}")]
@@ -67,6 +92,8 @@ async fn delete_gallery(
 
 pub fn config(cfg: &mut web::ServiceConfig) {
     cfg.service(create_gallery);
+    cfg.service(view_gallery);
+    cfg.service(view_gallery_projects);
     cfg.service(rename_gallery);
     cfg.service(delete_gallery);
 }
@@ -74,8 +101,14 @@ pub fn config(cfg: &mut web::ServiceConfig) {
 #[cfg(test)]
 mod tests {
     use crate::test_utils;
-    use actix_web::{test, web, App};
-    use netsblox_cloud_common::{api, Gallery, Library, User};
+    use actix_web::{http, test, web, App};
+    // use mongodb::bson::doc;
+    use netsblox_cloud_common::{
+        api::{self, UserRole},
+        Gallery, User,
+    };
+
+    use super::*;
 
     #[actix_web::test]
     async fn test_create_gallery() {
@@ -99,12 +132,12 @@ mod tests {
                 )
                 .await;
 
-                let req = test::TestRequest::get()
-                    .uri(&format!("/user/{}/", &user.username))
+                let req = test::TestRequest::post()
+                    .uri(&format!("/user/{}/{}", &user.username, "gallery"))
                     .cookie(test_utils::cookie::new(&user.username))
                     .to_request();
 
-                let gallery: Gallery = test::call_and_read_body_json(&app, req).await;
+                let _gallery: Gallery = test::call_and_read_body_json(&app, req).await;
             })
             .await;
     }
@@ -138,19 +171,92 @@ mod tests {
                 )
                 .await;
 
-                let req = test::TestRequest::get()
-                    .uri(&format!("/user/{}/", &user.username))
+                let req = test::TestRequest::post()
+                    .uri(&format!("/user/{}/{}", &user.username, "gallery"))
                     .cookie(test_utils::cookie::new(&other.username))
                     .to_request();
 
-                let gallery: Gallery = test::call_and_read_body_json(&app, req).await;
+                let response = test::call_service(&app, req).await;
+                assert_ne!(response.status(), http::StatusCode::OK);
             })
             .await;
     }
 
     #[actix_web::test]
-
     async fn test_create_gallery_admin() {
-        todo!("Check that an admin can create a gallery for another user");
+        let user: User = api::NewUser {
+            username: "user2".into(),
+            email: "user@netsblox.org".into(),
+            password: None,
+            group_id: None,
+            role: None,
+        }
+        .into();
+        let admin: User = api::NewUser {
+            username: "admin".into(),
+            email: "other@netsblox.org".into(),
+            password: None,
+            group_id: None,
+            role: Some(UserRole::Admin),
+        }
+        .into();
+        test_utils::setup()
+            .with_users(&[user.clone(), admin.clone()])
+            .run(|app_data| async move {
+                let app = test::init_service(
+                    App::new()
+                        .app_data(web::Data::new(app_data))
+                        .wrap(test_utils::cookie::middleware())
+                        .configure(super::config),
+                )
+                .await;
+
+                let req = test::TestRequest::post()
+                    .uri(&format!("/user/{}/{}", &user.username, "gallery"))
+                    .cookie(test_utils::cookie::new(&admin.username))
+                    .to_request();
+
+                //FIXME:: Admin unable to create gallery for other user
+                let _gallery: Gallery = test::call_and_read_body_json(&app, req).await;
+            })
+            .await;
+    }
+
+    #[actix_web::test]
+    async fn test_delete_gallery() {
+        let owner: User = api::NewUser {
+            username: "owner".into(),
+            email: "owner@netsblox.org".into(),
+            password: None,
+            group_id: None,
+            role: None,
+        }
+        .into();
+        let gallery = Gallery::new(
+            "owner".into(),
+            "mygallery".into(),
+            api::PublishState::Private,
+        );
+
+        test_utils::setup()
+            .with_users(&[owner.clone()])
+            .with_galleries(&[gallery.clone()])
+            .run(|app_data| async move {
+                let app = test::init_service(
+                    App::new()
+                        .app_data(web::Data::new(app_data.clone()))
+                        .wrap(test_utils::cookie::middleware())
+                        .configure(config),
+                )
+                .await;
+
+                let req = test::TestRequest::delete()
+                    .uri(&format!("/id/{}", &gallery.id))
+                    .cookie(test_utils::cookie::new(&owner.username))
+                    .to_request();
+
+                let _gallery: Gallery = test::call_and_read_body_json(&app, req).await;
+            })
+            .await;
     }
 }
