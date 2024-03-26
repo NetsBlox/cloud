@@ -72,15 +72,9 @@ impl<'a> GalleryActions<'a> {
     pub(crate) async fn change_gallery_state(
         &self,
         egal: &EditGallery,
-        statestr: &str,
+        state: &api::PublishState,
     ) -> Result<Gallery, UserError> {
         let query = doc! {"id": &egal.metadata.id};
-        let state: Option<api::PublishState> = match statestr.to_lowercase().as_str() {
-            "1" | "pu" | "public" => Some(api::PublishState::Public),
-            "0" | "pr" | "private" => Some(api::PublishState::Private),
-            _ => None,
-        };
-        state.as_ref().ok_or(UserError::InvalidStateError)?;
 
         let update = doc! {"$set": {"state": &state}};
         let options = mongodb::options::FindOneAndUpdateOptions::builder()
@@ -217,78 +211,8 @@ mod tests {
                 let actions = app_data.as_gallery_actions();
                 let auth_egal = auth::EditGallery::test(&gallery.clone().into());
 
-                actions.change_gallery_state(&auth_egal, "1").await.unwrap();
-
-                let query = doc! {"id": gallery.id.clone()};
-                let metadata = actions.galleries.find_one(query, None).await.unwrap();
-
-                assert!(metadata.is_some(), "Gallery not found in the database");
-                let metadata = metadata.unwrap();
-                assert_eq!(
-                    metadata.state,
-                    api::PublishState::Public,
-                    "Gallery state not updated0"
-                );
-
-                actions.change_gallery_state(&auth_egal, "0").await.unwrap();
-
-                let query = doc! {"id": gallery.id.clone()};
-                let metadata = actions.galleries.find_one(query, None).await.unwrap();
-
-                assert!(metadata.is_some(), "Gallery not found in the database");
-                let metadata = metadata.unwrap();
-                assert_eq!(
-                    metadata.state,
-                    api::PublishState::Private,
-                    "Gallery state not updated1"
-                );
                 actions
-                    .change_gallery_state(&auth_egal, "pu")
-                    .await
-                    .unwrap();
-
-                let query = doc! {"id": gallery.id.clone()};
-                let metadata = actions.galleries.find_one(query, None).await.unwrap();
-
-                assert!(metadata.is_some(), "Gallery not found in the database");
-                let metadata = metadata.unwrap();
-                assert_eq!(
-                    metadata.state,
-                    api::PublishState::Public,
-                    "gallery state not updated2"
-                );
-                actions
-                    .change_gallery_state(&auth_egal, "pR")
-                    .await
-                    .unwrap();
-
-                let query = doc! {"id": gallery.id.clone()};
-                let metadata = actions.galleries.find_one(query, None).await.unwrap();
-
-                assert!(metadata.is_some(), "Gallery not found in the database");
-                let metadata = metadata.unwrap();
-                assert_eq!(
-                    metadata.state,
-                    api::PublishState::Private,
-                    "gallery state not updated3"
-                );
-                actions
-                    .change_gallery_state(&auth_egal, "PubLIC")
-                    .await
-                    .unwrap();
-
-                let query = doc! {"id": gallery.id.clone()};
-                let metadata = actions.galleries.find_one(query, None).await.unwrap();
-
-                assert!(metadata.is_some(), "Gallery not found in the database");
-                let metadata = metadata.unwrap();
-                assert_eq!(
-                    metadata.state,
-                    api::PublishState::Public,
-                    "gallery state not updated4"
-                );
-                actions
-                    .change_gallery_state(&auth_egal, "PRIVate")
+                    .change_gallery_state(&auth_egal, api::PublishState::Private)
                     .await
                     .unwrap();
 
