@@ -798,14 +798,15 @@ impl<'a> ProjectActions<'a> {
         role_id: &api::RoleId,
         role: &RoleData,
     ) -> Result<RoleMetadata, UserError> {
+        // for galleries, galleries/<gallery ID>/<project ID>/<version index>.xml
         let is_guest = owner.starts_with('_');
         let top_level = if is_guest { "guests" } else { "users" };
         let basepath = format!("{}/{}/{}/{}", top_level, owner, project_id, &role_id);
         let src_path = format!("{}/code.xml", &basepath);
         let media_path = format!("{}/media.xml", &basepath);
 
-        self.upload(&media_path, role.media.to_owned()).await?;
-        self.upload(&src_path, role.code.to_owned()).await?;
+        utils::upload(self.s3, &media_path, role.media.to_owned()).await?;
+        utils::upload(self.s3, &src_path, role.code.to_owned()).await?;
 
         Ok(RoleMetadata {
             name: role.name.to_owned(),
@@ -813,20 +814,6 @@ impl<'a> ProjectActions<'a> {
             media: media_path,
             updated: DateTime::now(),
         })
-    }
-
-    async fn upload(&self, key: &str, body: String) -> Result<PutObjectOutput, InternalError> {
-        self.s3
-            .put_object()
-            .bucket(self.bucket.clone())
-            .key(key)
-            .body(String::into_bytes(body).into())
-            .send()
-            .await
-            .map_err(|err| {
-                warn!("Unable to upload to s3: {}", err);
-                InternalError::S3Error
-            })
     }
 }
 
