@@ -2,6 +2,7 @@ use actix::Addr;
 use actix_session::SessionExt;
 use actix_web::HttpRequest;
 use aws_sdk_s3 as s3;
+use aws_sdk_s3::operation::put_object::PutObjectOutput;
 use futures::TryStreamExt;
 use lazy_static::lazy_static;
 use lettre::{Message, SmtpTransport, Transport};
@@ -403,8 +404,8 @@ pub(crate) async fn upload(
 ) -> Result<PutObjectOutput, InternalError> {
     client
         .put_object()
-        .bucket(bucket.as_str())
-        .key(key.as_str())
+        .bucket(bucket.to_owned())
+        .key(key)
         .body(String::into_bytes(body).into())
         .send()
         .await

@@ -48,12 +48,8 @@ async fn change_gallery(
 ) -> Result<HttpResponse, UserError> {
     let id = path.into_inner();
     let try_change = body.into_inner();
-
     let auth_egal = auth::try_edit_gallery(&app, &req, &id, Some(try_change)).await?;
-
-    let actions = app.as_gallery_actions();
     let metadata = actions.change_gallery(&auth_egal).await?;
-
     Ok(HttpResponse::Ok().json(metadata))
 }
 
