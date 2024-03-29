@@ -208,15 +208,11 @@ impl<'a> UserActions<'a> {
     //  - role (admin required)
     //  - group_id (admin or group owner)
     //  - email (edit user)
-    pub(crate) async fn update_user(
-        &self,
-        eu: &auth::EditUser,
-        data: api::UpdateUserData,
-    ) -> Result<api::User, UserError> {
+    pub(crate) async fn update_user(&self, eu: &auth::UpdateUser) -> Result<api::User, UserError> {
         let query = doc! {"username": &eu.username};
 
         // Get a doc with just the fields to set
-        let update_fields = utils::fields_with_values(&data)
+        let update_fields = utils::fields_with_values(&eu.update)
             .and_then(|obj| if obj.is_empty() { None } else { Some(obj) })
             .ok_or(UserError::UserUpdateFieldRequiredError)?;
 
@@ -635,13 +631,13 @@ mod tests {
             .run(|app_data| async move {
                 let actions = app_data.as_user_actions();
 
-                let auth_eu = auth::EditUser::test(user.username.clone());
                 let data = api::UpdateUserData {
                     email: Some("brian@netsblox.org".into()),
                     group_id: None,
                     role: None,
                 };
-                let res_user = actions.update_user(&auth_eu, data.clone()).await.unwrap();
+                let auth_uu = auth::UpdateUser::test(user.username.clone(), data.clone());
+                let res_user = actions.update_user(&auth_uu).await.unwrap();
 
                 let query = doc! {"username": user.username};
                 let user = actions
@@ -674,13 +670,13 @@ mod tests {
             .run(|app_data| async move {
                 let actions = app_data.as_user_actions();
 
-                let auth_eu = auth::EditUser::test(user.username.clone());
                 let data = api::UpdateUserData {
                     email: None,
                     group_id: None,
                     role: Some(UserRole::Teacher),
                 };
-                actions.update_user(&auth_eu, data.clone()).await.unwrap();
+                let auth_uu = auth::UpdateUser::test(user.username.clone(), data);
+                actions.update_user(&auth_uu).await.unwrap();
 
                 let query = doc! {"username": user.username};
                 let user = actions
@@ -711,13 +707,13 @@ mod tests {
             .run(|app_data| async move {
                 let actions = app_data.as_user_actions();
 
-                let auth_eu = auth::EditUser::test(user.username.clone());
                 let data = api::UpdateUserData {
                     email: Some("brian@netsblox.org".into()),
                     group_id: Some(api::GroupId::new("someGroup".into())),
                     role: None,
                 };
-                actions.update_user(&auth_eu, data.clone()).await.unwrap();
+                let auth_uu = auth::UpdateUser::test(user.username.clone(), data.clone());
+                actions.update_user(&auth_uu).await.unwrap();
 
                 let query = doc! {"username": user.username};
                 let user = actions

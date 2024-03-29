@@ -234,10 +234,10 @@ async fn update_user(
     req: HttpRequest,
 ) -> Result<HttpResponse, UserError> {
     let (username,) = path.into_inner();
-    let auth_eu = auth::try_edit_user(&app, &req, None, &username).await?;
+    let auth_uu = auth::try_update_user(&app, &req, &username, data.into_inner()).await?;
 
     let actions = app.as_user_actions();
-    let user = actions.update_user(&auth_eu, data.into_inner()).await?;
+    let user = actions.update_user(&auth_uu).await?;
 
     Ok(HttpResponse::Ok().json(user))
 }

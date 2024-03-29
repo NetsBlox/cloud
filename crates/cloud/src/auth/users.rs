@@ -4,7 +4,7 @@ use actix_session::{Session, SessionExt};
 use actix_web::HttpRequest;
 use futures::TryStreamExt;
 use mongodb::bson::doc;
-use netsblox_cloud_common::api::{self, ClientId, UserRole};
+use netsblox_cloud_common::api::{self, ClientId, UpdateUserData, UserRole};
 
 use crate::{
     app_data::AppData,
@@ -19,19 +19,50 @@ pub(crate) struct CreateUser {
     _private: (),
 }
 
+/// Authorization to view a given user
 #[derive(Debug)]
 pub(crate) struct ViewUser {
     pub(crate) username: String,
     _private: (),
 }
 
+/// Authorization to list all users
 pub(crate) struct ListUsers {
     _private: (),
 }
 
+/// Authorization to edit the user with the given username
 pub(crate) struct EditUser {
     pub(crate) username: String,
     _private: (),
+}
+
+#[cfg(test)]
+impl EditUser {
+    pub(crate) fn test(username: String) -> Self {
+        Self {
+            username,
+            _private: (),
+        }
+    }
+}
+
+/// Authorization to apply the given updates to the specified user
+pub(crate) struct UpdateUser {
+    pub(crate) username: String,
+    pub(crate) update: UpdateUserData,
+    _private: (),
+}
+
+#[cfg(test)]
+impl UpdateUser {
+    pub(crate) fn test(username: String, update: UpdateUserData) -> Self {
+        Self {
+            username,
+            update,
+            _private: (),
+        }
+    }
 }
 
 pub(crate) struct SetPassword {
@@ -45,16 +76,6 @@ pub(crate) struct BanUser {
 }
 
 // TODO: make a macro for making it when testing?
-#[cfg(test)]
-impl EditUser {
-    pub(crate) fn test(username: String) -> Self {
-        Self {
-            username,
-            _private: (),
-        }
-    }
-}
-
 #[cfg(test)]
 impl BanUser {
     pub(crate) fn test(username: String) -> Self {
@@ -208,6 +229,35 @@ pub(crate) async fn try_edit_user(
                 }
             })
             .ok_or(UserError::LoginRequiredError)
+    }
+}
+
+/// Try to get privileges to apply the given updates to the specified user.
+pub(crate) async fn try_update_user(
+    app: &AppData,
+    req: &HttpRequest,
+    username: &str,
+    update: UpdateUserData,
+) -> Result<UpdateUser, UserError> {
+    // If setting the role or group_id, we must be an admin
+    if update.group_id.is_some() || update.role.is_some() {
+        if is_super_user(app, req).await? {
+            Ok(UpdateUser {
+                username: username.to_owned(),
+                update,
+                _private: (),
+            })
+        } else {
+            Err(UserError::PermissionsError)
+        }
+    } else {
+        try_edit_user(&app, &req, None, &username)
+            .await
+            .map(|eu| UpdateUser {
+                username: eu.username.to_owned(),
+                update,
+                _private: (),
+            })
     }
 }
 
