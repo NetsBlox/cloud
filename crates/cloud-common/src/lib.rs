@@ -5,7 +5,7 @@ use netsblox_api_common::{
 };
 use netsblox_api_common::{
     FriendInvite, FriendLinkState, GalleryId, GroupId, InvitationState, LinkedAccount, ProjectId,
-    RoleData, SaveState, ServiceHost, ServiceHostScope,
+    RoleData, S3Key, SaveState, ServiceHost, ServiceHostScope,
 };
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha512};
@@ -347,6 +347,19 @@ impl From<NetworkTraceMetadata> for netsblox_api_common::NetworkTraceMetadata {
     }
 }
 
+#[derive(Deserialize, Serialize, Clone, Debug)]
+pub struct Bucket(String);
+
+impl Bucket {
+    pub fn new(bucket: String) -> Self {
+        Bucket(bucket)
+    }
+
+    pub fn as_str(&self) -> &str {
+        &self.0
+    }
+}
+
 /// TODO: Explain gallery projects
 #[derive(Deserialize, Serialize, Clone, Debug)]
 #[serde(rename_all = "camelCase")]
@@ -500,8 +513,8 @@ impl From<Project> for netsblox_api_common::Project {
 #[serde(rename_all = "camelCase")]
 pub struct RoleMetadata {
     pub name: String,
-    pub code: String,
-    pub media: String,
+    pub code: S3Key,
+    pub media: S3Key,
     pub updated: DateTime,
 }
 
@@ -509,8 +522,8 @@ impl From<RoleMetadata> for netsblox_api_common::RoleMetadata {
     fn from(metadata: RoleMetadata) -> netsblox_api_common::RoleMetadata {
         netsblox_api_common::RoleMetadata {
             name: metadata.name,
-            code: metadata.code,
-            media: metadata.media,
+            code: metadata.code.clone(),
+            media: metadata.media.clone(),
         }
     }
 }

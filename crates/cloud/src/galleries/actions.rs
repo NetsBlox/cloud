@@ -212,7 +212,7 @@ mod tests {
                 let auth_egal = auth::EditGallery::test(&gallery.clone().into());
 
                 actions
-                    .change_gallery_state(&auth_egal, api::PublishState::Private)
+                    .change_gallery_state(&auth_egal, &api::PublishState::Private)
                     .await
                     .unwrap();
 

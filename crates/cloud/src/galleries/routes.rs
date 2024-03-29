@@ -44,7 +44,11 @@ async fn view_gallery(
 }
 
 #[post("/id/{id}/projects/")]
-async fn create_gallery_project() {
+async fn create_gallery_project(
+    app: web::Data<AppData>,
+    path: web::Path<(api::GalleryId,)>,
+    req: HttpRequest,
+) -> Result<HttpResponse, UserError> {
     todo!();
 }
 
@@ -61,8 +65,12 @@ async fn view_gallery_projects(
     Ok(HttpResponse::Ok().json(auth_dgal.metadata))
 }
 
-#[get("/id/{id}/projects/xml")]
-async fn view_gallery_project_xml() {
+#[get("/id/{id}/projectid/{prid}/xml")]
+async fn view_gallery_project_xml(
+    app: web::Data<AppData>,
+    path: web::Path<(api::GalleryId,)>,
+    req: HttpRequest,
+) -> Result<HttpResponse, UserError> {
     todo!("return the xml string");
 }
 

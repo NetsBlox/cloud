@@ -11,6 +11,8 @@ pub(crate) struct ViewGallery {
     pub(crate) metadata: api::Gallery,
     _private: (),
 }
+
+#[cfg(test)]
 impl ViewGallery {
     pub(crate) fn test(gallery: &api::Gallery) -> ViewGallery {
         ViewGallery {
@@ -24,6 +26,7 @@ pub(crate) struct EditGallery {
     pub(crate) metadata: api::Gallery,
     _private: (),
 }
+#[cfg(test)]
 impl EditGallery {
     pub(crate) fn test(gallery: &api::Gallery) -> EditGallery {
         EditGallery {
@@ -36,6 +39,7 @@ pub(crate) struct DeleteGallery {
     pub(crate) metadata: api::Gallery,
     _private: (),
 }
+#[cfg(test)]
 impl DeleteGallery {
     pub(crate) fn test(gallery: &api::Gallery) -> DeleteGallery {
         DeleteGallery {

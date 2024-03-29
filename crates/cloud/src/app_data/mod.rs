@@ -23,7 +23,7 @@ use log::{error, info, warn};
 use lru::LruCache;
 use mongodb::bson::{doc, Document};
 use mongodb::options::{FindOptions, IndexOptions, UpdateOptions};
-use netsblox_cloud_common::{api, Gallery, GalleryProjectMetadata, MagicLink};
+use netsblox_cloud_common::{api, Bucket, Gallery, GalleryProjectMetadata, MagicLink};
 use serde::{Deserialize, Serialize};
 use std::collections::HashSet;
 use std::net::IpAddr;
@@ -49,7 +49,7 @@ use mongodb::{Client, Collection, IndexModel};
 
 #[derive(Clone)]
 pub struct AppData {
-    bucket: String,
+    bucket: Bucket,
     tor_exit_nodes: Collection<TorNode>,
     s3: s3::Client,
     pub(crate) settings: Settings,
@@ -60,7 +60,7 @@ pub struct AppData {
     friends: Collection<FriendLink>,
     magic_links: Collection<MagicLink>,
     pub(crate) galleries: Collection<Gallery>,
-    pub(crate) galleryProjects: Collection<GalleryProjectMetadata>,
+    pub(crate) gallery_projects: Collection<GalleryProjectMetadata>,
     pub(crate) project_metadata: Collection<ProjectMetadata>,
     pub(crate) libraries: Collection<Library>,
     pub(crate) authorized_services: Collection<AuthorizedServiceHost>,
@@ -85,6 +85,7 @@ pub struct AppData {
     friend_cache: Arc<RwLock<LruCache<String, Vec<String>>>>,
 }
 
+#[allow(clippy::too_many_lines)]
 impl AppData {
     pub fn new(
         client: Client,
@@ -147,7 +148,7 @@ impl AppData {
         let friends = db.collection::<FriendLink>(&(prefix.to_owned() + "friends"));
         let magic_links = db.collection::<MagicLink>(&(prefix.to_owned() + "magicLinks"));
         let galleries = db.collection::<Gallery>(&(prefix.to_owned() + "galleries"));
-        let galleryProjects =
+        let gallery_projects =
             db.collection::<GalleryProjectMetadata>(&(prefix.to_owned() + "galleryProjects"));
         let recorded_messages =
             db.collection::<SentMessage>(&(prefix.to_owned() + "recordedMessages"));
@@ -158,7 +159,7 @@ impl AppData {
         let oauth_tokens = db.collection::<OAuthToken>(&(prefix.to_owned() + "oauthToken"));
         let oauth_codes = db.collection::<oauth::Code>(&(prefix.to_owned() + "oauthCode"));
         let tor_exit_nodes = db.collection::<TorNode>(&(prefix.to_owned() + "torExitNodes"));
-        let bucket = settings.s3.bucket.clone();
+        let bucket = Bucket::new(settings.s3.bucket.clone());
 
         let project_cache = Arc::new(RwLock::new(LruCache::new(
             settings.cache_settings.num_projects,
@@ -191,7 +192,7 @@ impl AppData {
             friends,
             magic_links,
             galleries,
-            galleryProjects,
+            gallery_projects,
 
             mailer,
             sender,
