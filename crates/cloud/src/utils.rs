@@ -1,19 +1,21 @@
 use actix::Addr;
 use actix_session::SessionExt;
 use actix_web::HttpRequest;
+use aws_sdk_s3 as s3;
 use futures::TryStreamExt;
 use lazy_static::lazy_static;
 use lettre::{Message, SmtpTransport, Transport};
-use log::error;
+use log::{error, warn};
 use lru::LruCache;
 use mongodb::{bson::doc, Collection};
 use netsblox_cloud_common::{
-    api::{self, GroupId, UserRole},
-    AuthorizedServiceHost, FriendLink, Group, ProjectMetadata, User,
+    api::{self, GroupId, S3Key, UserRole},
+    AuthorizedServiceHost, Bucket, FriendLink, Group, ProjectMetadata, User,
 };
 use nonempty::NonEmpty;
 use regex::Regex;
 use rustrict::CensorStr;
+use s3::operation::put_object::PutObjectOutput;
 use serde::Serialize;
 use sha2::{Digest, Sha512};
 use std::{
@@ -372,15 +374,38 @@ pub(crate) async fn find_usernames(
 }
 
 // TODO: refactor download here, too
+pub(crate) async fn download(
+    client: &s3::Client,
+    bucket: &Bucket,
+    key: &S3Key,
+) -> Result<String, InternalError> {
+    let output = client
+        .get_object()
+        .bucket(bucket.as_str())
+        .key(key.as_str())
+        .send()
+        .await
+        .map_err(|_err| InternalError::S3Error)?;
+    let bytes: Vec<u8> = output
+        .body
+        .collect()
+        .await
+        .map(|data| data.to_vec())
+        .map_err(|_err| InternalError::S3ContentError)?;
+
+    String::from_utf8(bytes).map_err(|_err| InternalError::S3ContentError)
+}
+
 pub(crate) async fn upload(
     client: &s3::Client,
-    key: &str, // TODO: it would be nice to namespace these with an enum/struct or something
+    bucket: &Bucket,
+    key: &S3Key,
     body: String,
 ) -> Result<PutObjectOutput, InternalError> {
     client
         .put_object()
-        .bucket(self.bucket.clone())
-        .key(key)
+        .bucket(bucket.as_str())
+        .key(key.as_str())
         .body(String::into_bytes(body).into())
         .send()
         .await
