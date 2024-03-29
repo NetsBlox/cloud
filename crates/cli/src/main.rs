@@ -9,13 +9,37 @@ use clap::{Parser, Subcommand};
 use futures_util::StreamExt;
 use inquire::{Confirm, Password, PasswordDisplayMode};
 use netsblox_api::common::{
-    oauth, ClientId, CreateMagicLinkData, CreateProjectData, Credentials, FriendLinkState,
+    oauth, ClientId, CreateMagicLinkData, CreateProjectData, Credentials, FriendLinkState, GroupId,
     InvitationState, LinkedAccount, ProjectId, PublishState, RoleData, SaveState, ServiceHost,
-    ServiceHostScope, UserRole,
+    ServiceHostScope, UpdateUserData, UserRole,
 };
 use netsblox_api::{self, serde_json, Client};
 use std::path::Path;
 use xmlparser::{Token, Tokenizer};
+
+#[derive(Parser, Debug)]
+#[group(required = true, multiple = true)]
+struct UserUpdateOpt {
+    /// Set the user's email
+    #[clap(long, group = "update_data")]
+    email: Option<String>,
+    /// Set the user role (eg, admin, moderator)
+    #[clap(long, group = "update_data")]
+    role: Option<UserRole>,
+    /// Add the user as a member of a given group
+    #[clap(long, group = "update_data")]
+    group_id: Option<GroupId>,
+}
+
+impl From<&UserUpdateOpt> for UpdateUserData {
+    fn from(opt: &UserUpdateOpt) -> UpdateUserData {
+        UpdateUserData {
+            email: opt.email.clone(),
+            group_id: opt.group_id.clone(),
+            role: opt.role.clone(),
+        }
+    }
+}
 
 /// Manage & moderate user accounts
 #[derive(Subcommand, Debug)]
@@ -46,6 +70,14 @@ enum Users {
     },
     /// View the current user
     View {
+        /// Perform this action on behalf of this user
+        #[clap(short, long)]
+        user: Option<String>,
+    },
+    /// Update the current user
+    Update {
+        #[command(flatten)]
+        data: UserUpdateOpt,
         /// Perform this action on behalf of this user
         #[clap(short, long)]
         user: Option<String>,
@@ -799,6 +831,10 @@ async fn do_command(mut cfg: Config, args: Cli) -> Result<(), error::Error> {
                         role.to_owned(),
                     )
                     .await?;
+            }
+            Users::Update { data, user } => {
+                let username = user.clone().unwrap_or_else(|| get_current_user(cfg.host()));
+                client.update_user(&username, &data.into()).await?;
             }
             Users::SetPassword { password, user } => {
                 let username = user.clone().unwrap_or_else(|| get_current_user(cfg.host()));

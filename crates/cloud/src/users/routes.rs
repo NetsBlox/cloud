@@ -226,6 +226,22 @@ async fn view_user(
     Ok(HttpResponse::Ok().json(user))
 }
 
+#[patch("/{username}")]
+async fn update_user(
+    app: web::Data<AppData>,
+    path: web::Path<(String,)>,
+    data: web::Json<api::UpdateUserData>,
+    req: HttpRequest,
+) -> Result<HttpResponse, UserError> {
+    let (username,) = path.into_inner();
+    let auth_eu = auth::try_edit_user(&app, &req, None, &username).await?;
+
+    let actions = app.as_user_actions();
+    let user = actions.update_user(&auth_eu, data.into_inner()).await?;
+
+    Ok(HttpResponse::Ok().json(user))
+}
+
 #[post("/{username}/link/")]
 async fn link_account(
     app: web::Data<AppData>,
@@ -264,6 +280,7 @@ async fn unlink_account(
 
 pub fn config(cfg: &mut web::ServiceConfig) {
     cfg.service(create_user)
+        .service(update_user)
         .service(list_users)
         .service(login)
         .service(logout)
