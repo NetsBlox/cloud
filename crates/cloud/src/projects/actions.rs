@@ -805,8 +805,8 @@ impl<'a> ProjectActions<'a> {
         let src_path = format!("{}/code.xml", &basepath);
         let media_path = format!("{}/media.xml", &basepath);
 
-        utils::upload(self.s3, &media_path, role.media.to_owned()).await?;
-        utils::upload(self.s3, &src_path, role.code.to_owned()).await?;
+        utils::upload(self.s3, &self.bucket, &media_path, role.media.to_owned()).await?;
+        utils::upload(self.s3, &self.bucket, &src_path, role.code.to_owned()).await?;
 
         Ok(RoleMetadata {
             name: role.name.to_owned(),

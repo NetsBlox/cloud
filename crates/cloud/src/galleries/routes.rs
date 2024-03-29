@@ -44,7 +44,7 @@ async fn view_gallery(
 }
 
 #[post("/id/{id}/projects/")]
-async fn create_gallery_project() {
+async fn create_gallery_project() -> Result<HttpResponse, UserError> {
     todo!();
 }
 
@@ -62,7 +62,7 @@ async fn view_gallery_projects(
 }
 
 #[get("/id/{id}/projects/xml")]
-async fn view_gallery_project_xml() {
+async fn view_gallery_project_xml() -> Result<HttpResponse, UserError> {
     todo!("return the xml string");
 }
 

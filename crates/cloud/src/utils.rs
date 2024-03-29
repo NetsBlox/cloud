@@ -1,10 +1,12 @@
 use actix::Addr;
 use actix_session::SessionExt;
 use actix_web::HttpRequest;
+use aws_sdk_s3 as s3;
+use aws_sdk_s3::operation::put_object::PutObjectOutput;
 use futures::TryStreamExt;
 use lazy_static::lazy_static;
 use lettre::{Message, SmtpTransport, Transport};
-use log::error;
+use log::{error, warn};
 use lru::LruCache;
 use mongodb::{bson::doc, Collection};
 use netsblox_cloud_common::{
@@ -359,12 +361,13 @@ pub(crate) async fn find_usernames(
 // TODO: refactor download here, too
 pub(crate) async fn upload(
     client: &s3::Client,
+    bucket: &str,
     key: &str, // TODO: it would be nice to namespace these with an enum/struct or something
     body: String,
 ) -> Result<PutObjectOutput, InternalError> {
     client
         .put_object()
-        .bucket(self.bucket.clone())
+        .bucket(bucket.to_owned())
         .key(key)
         .body(String::into_bytes(body).into())
         .send()
