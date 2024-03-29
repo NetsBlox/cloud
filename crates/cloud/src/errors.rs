@@ -35,6 +35,8 @@ pub enum UserError {
     ProjectUnavailableError,
     #[display(fmt = "Must specify project either using url or xml")]
     MissingUrlOrXmlError,
+    #[display(fmt = "Must specify email, role, or groupId to update.")]
+    UserUpdateFieldRequiredError,
     #[display(fmt = "Password reset link already sent. Only 1 can be sent per hour.")]
     PasswordResetLinkSentError,
     #[display(fmt = "Magic link already sent. Only 1 can be sent per hour.")]
@@ -218,6 +220,7 @@ impl error::ResponseError for UserError {
             | Self::OAuthFlowError(..)
             | Self::ProjectUnavailableError
             | Self::MissingUrlOrXmlError
+            | Self::UserUpdateFieldRequiredError
             | Self::ProjectNotActiveError => StatusCode::BAD_REQUEST,
             Self::InviteAlreadyExistsError => StatusCode::CONFLICT,
         }
