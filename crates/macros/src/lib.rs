@@ -8,8 +8,16 @@ pub fn derive_witness(input: TokenStream) -> TokenStream {
     // TODO: add _private field to struct
     let output = quote! {
         impl #ident {
+            // "new" shouldn't be pub(crate) so it can only be instantiated in the defining file/module
+            // as a bonus, this would disallow anyone from trying to define a new "new" function for a Witness (already defined!)
+            fn new() -> Self {
+                todo!();
+            }
+
             #[cfg(test)]
-            pub(crate) fn test() -> Self {
+            pub(crate) fn test(
+                // Figure out the attributes and make equivalent arguments here
+            ) -> Self {
                 // TODO: get the inputs and pass them through
                 Self {
                     _private: ()
