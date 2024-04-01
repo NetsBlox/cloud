@@ -44,3 +44,4 @@ aws-sdk-s3 = "0.31.2"
 aws-credential-types = "0.56.1"
 aws-config = "0.56.1"
 nonempty = "0.9.0"
+netsblox-macros = { path = "../macros", version = "1.0.0" }

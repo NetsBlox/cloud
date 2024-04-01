@@ -2,13 +2,28 @@ use crate::{app_data::AppData, errors::InternalError, utils};
 use actix_web::HttpRequest;
 use mongodb::bson::doc;
 use netsblox_cloud_common::api;
+use netsblox_macros::Witness;
 
 use crate::errors::UserError;
 
 // Permissions on groups
+#[derive(Witness)]
 pub(crate) struct ViewGroup {
     pub(crate) id: api::GroupId,
+    // TODO: can the Witness macro add the following field?
     _private: (),
+}
+
+// TODO: the macro, Witness, should generate this
+impl ViewGroup {
+    fn new(id: api::GroupId) -> Self {
+        Self { id, _private: () }
+    }
+
+    #[cfg(test)]
+    pub(crate) fn mock(id: api::GroupId) -> Self {
+        Self::new(id)
+    }
 }
 
 pub(crate) struct EditGroup {
@@ -30,10 +45,7 @@ pub(crate) async fn try_view_group(
     // for now you can only view the group if you are allowed to edit it
     try_edit_group(app, req, group_id)
         .await
-        .map(|eg| ViewGroup {
-            id: eg.id,
-            _private: (),
-        })
+        .map(|eg| ViewGroup::new(eg.id))
 }
 
 pub(crate) async fn try_edit_group(
