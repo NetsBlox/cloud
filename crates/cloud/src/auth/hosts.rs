@@ -2,7 +2,9 @@ use super::is_super_user;
 use crate::app_data::AppData;
 use crate::errors::UserError;
 use actix_web::HttpRequest;
+use netsblox_macros::Witness;
 
+#[derive(Witness)] // FIXME: this doesn't work
 pub(crate) struct ViewAuthHosts {
     _private: (),
 }
