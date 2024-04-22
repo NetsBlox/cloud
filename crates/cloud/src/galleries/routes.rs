@@ -6,10 +6,6 @@ use actix_web::{web, HttpResponse};
 
 use crate::common::api;
 
-// Question:
-// I could get the owner from the HttpRequest.
-// However, this would mean that admins cant create
-// Galleries for other users?
 #[post("/user/{owner}/{name}")]
 async fn create_gallery(
     app: web::Data<AppData>,
@@ -34,85 +30,40 @@ async fn create_gallery(
 #[get("/id/{id}")]
 async fn view_gallery(
     app: web::Data<AppData>,
-    path: web::Path<(api::GalleryId,)>,
+    path: web::Path<api::GalleryId>,
     req: HttpRequest,
 ) -> Result<HttpResponse, UserError> {
-    let (id,) = path.into_inner();
-    let auth_dgal = auth::try_view_gallery(&app, &req, &id).await?;
+    let id = path.into_inner();
+    let auth_vgal = auth::try_view_gallery(&app, &req, &id).await?;
 
-    Ok(HttpResponse::Ok().json(auth_dgal.metadata))
+    Ok(HttpResponse::Ok().json(auth_vgal.metadata))
 }
 
-#[post("/id/{id}/projects/")]
-async fn create_gallery_project(
+#[patch("/id/{id}/")]
+async fn change_gallery(
     app: web::Data<AppData>,
-    path: web::Path<(api::GalleryId,)>,
+    path: web::Path<api::GalleryId>,
+    body: web::Json<api::ChangeGalleryData>,
     req: HttpRequest,
 ) -> Result<HttpResponse, UserError> {
-    todo!();
-}
+    let id = path.into_inner();
+    let try_change = body.into_inner();
 
-//FIXME: this function should return all projects in the gallery.
-#[get("/id/{id}/projects/")]
-async fn view_gallery_projects(
-    app: web::Data<AppData>,
-    path: web::Path<(api::GalleryId,)>,
-    req: HttpRequest,
-) -> Result<HttpResponse, UserError> {
-    let (id,) = path.into_inner();
-    let auth_dgal = auth::try_view_gallery(&app, &req, &id).await?;
-
-    Ok(HttpResponse::Ok().json(auth_dgal.metadata))
-}
-
-#[get("/id/{id}/projectid/{prid}/xml")]
-async fn view_gallery_project_xml(
-    app: web::Data<AppData>,
-    path: web::Path<(api::GalleryId,)>,
-    req: HttpRequest,
-) -> Result<HttpResponse, UserError> {
-    todo!("return the xml string");
-}
-
-#[patch("/id/{id}/name/{name}")]
-async fn rename_gallery(
-    app: web::Data<AppData>,
-    path: web::Path<(api::GalleryId, String)>,
-    req: HttpRequest,
-) -> Result<HttpResponse, UserError> {
-    let (id, name) = path.into_inner();
-    let auth_egal = auth::try_edit_gallery(&app, &req, &id).await?;
+    let auth_egal = auth::try_edit_gallery(&app, &req, &id, Some(try_change)).await?;
 
     let actions = app.as_gallery_actions();
-    let metadata = actions.rename_gallery(&auth_egal, &name).await?;
+    let metadata = actions.change_gallery(&auth_egal).await?;
 
     Ok(HttpResponse::Ok().json(metadata))
 }
 
-// acceptable state values are public/pu/1 or private/pr/0
-#[patch("/id/{id}/state/{state}")]
-async fn change_gallery_state(
-    app: web::Data<AppData>,
-    path: web::Path<(api::GalleryId, String)>,
-    req: HttpRequest,
-) -> Result<HttpResponse, UserError> {
-    let (id, state) = path.into_inner();
-    let auth_egal = auth::try_edit_gallery(&app, &req, &id).await?;
-
-    let actions = app.as_gallery_actions();
-    let metadata = actions.rename_gallery(&auth_egal, &state).await?;
-
-    Ok(HttpResponse::Ok().json(metadata))
-}
-
-// prefix with user or id to avoid collisions
 #[delete("/id/{id}")]
 async fn delete_gallery(
     app: web::Data<AppData>,
-    path: web::Path<(api::GalleryId,)>,
+    path: web::Path<api::GalleryId>,
     req: HttpRequest,
 ) -> Result<HttpResponse, UserError> {
-    let (id,) = path.into_inner();
+    let id = path.into_inner();
     let auth_dgal = auth::try_delete_gallery(&app, &req, &id).await?;
 
     let actions = app.as_gallery_actions();
@@ -121,17 +72,89 @@ async fn delete_gallery(
     Ok(HttpResponse::Ok().json(metadata))
 }
 
+#[get("/id/{id}/projects")]
+async fn view_gallery_projects(
+    app: web::Data<AppData>,
+    path: web::Path<api::GalleryId>,
+    req: HttpRequest,
+) -> Result<HttpResponse, UserError> {
+    let id = path.into_inner();
+    let auth_vgal = auth::try_view_gallery(&app, &req, &id).await?;
+
+    let actions = app.as_gallery_actions();
+    let all_projects = actions.get_all_projects(&auth_vgal).await?;
+    Ok(HttpResponse::Ok().json(all_projects))
+}
+
+#[post("/id/{id}")]
+async fn add_gallery_project(
+    app: web::Data<AppData>,
+    path: web::Path<api::GalleryId>,
+    body: web::Json<api::CreateGalleryProjectData>,
+    req: HttpRequest,
+) -> Result<HttpResponse, UserError> {
+    let id = path.into_inner();
+    let data: api::CreateGalleryProjectData = body.into_inner();
+
+    // try_add_project_gallery let it add any if gallery exists
+    // later: use group_id in metadata, use try_edit_user
+    let auth_ap = auth::try_add_project(&app, &req, &id, &data).await?;
+
+    let actions = app.as_gallery_actions();
+    let project = actions.add_project(&auth_ap).await?;
+
+    Ok(HttpResponse::Ok().json(project))
+}
+
+#[get("/id/{id}/projectid/{prid}/xml")]
+async fn view_gallery_project_xml(
+    app: web::Data<AppData>,
+    path: web::Path<(api::GalleryId, api::ProjectId)>,
+    req: HttpRequest,
+) -> Result<HttpResponse, UserError> {
+    let (id, prid) = path.into_inner();
+    let auth_vgal = auth::try_view_gallery(&app, &req, &id).await?;
+
+    let actions = app.as_gallery_actions();
+    let project_xml = actions.get_gallery_project_xml(&auth_vgal, &prid).await?;
+
+    Ok(HttpResponse::Ok()
+        .content_type("application/xml")
+        .body(project_xml))
+}
+
+#[delete("/id/{id}/projectid/{prid}/xml")]
+async fn delete_gallery_project(
+    app: web::Data<AppData>,
+    path: web::Path<(api::GalleryId, api::ProjectId)>,
+    req: HttpRequest,
+) -> Result<HttpResponse, UserError> {
+    // let (id, prid) = path.into_inner();
+    // let auth_vgal = auth::try_delete_gallery(&app, &req, &id).await?;
+
+    // let actions = app.as_gallery_actions();
+    // let project_xml = actions.remove_project_in_gallery(&auth_vgal, &prid).await?;
+
+    // Ok(HttpResponse::Ok()
+    //     .content_type("application/xml")
+    //     .body(project_xml))
+    unimplemented!()
+}
 // TODO: Create endpoints for the other operations that need to be supported
 // (make a function - like above - then add them to `config` - like below)
 
 pub fn config(cfg: &mut web::ServiceConfig) {
     cfg.service(create_gallery);
     cfg.service(view_gallery);
-    cfg.service(view_gallery_projects);
-    cfg.service(rename_gallery);
+    cfg.service(change_gallery);
     cfg.service(delete_gallery);
+    cfg.service(view_gallery_projects);
+    cfg.service(add_gallery_project);
+    cfg.service(view_gallery_project_xml);
+    cfg.service(delete_gallery_project);
 }
 
+// use tests that tests functionality of the code in this file.
 #[cfg(test)]
 mod tests {
     use crate::test_utils;

@@ -2,19 +2,19 @@ use crate::{app_data::AppData, errors::InternalError};
 use actix_web::HttpRequest;
 use mongodb::bson::doc;
 
-use netsblox_cloud_common::api::{self, PublishState};
-
 use crate::errors::UserError;
+use netsblox_cloud_common::api::{self, PublishState};
+use netsblox_cloud_common::Gallery;
 
 // Permissions on galleries
 pub(crate) struct ViewGallery {
-    pub(crate) metadata: api::Gallery,
+    pub(crate) metadata: Gallery,
     _private: (),
 }
 
 #[cfg(test)]
 impl ViewGallery {
-    pub(crate) fn test(gallery: &api::Gallery) -> ViewGallery {
+    pub(crate) fn test(gallery: &Gallery) -> ViewGallery {
         ViewGallery {
             metadata: gallery.clone(),
             _private: (),
@@ -23,25 +23,28 @@ impl ViewGallery {
 }
 
 pub(crate) struct EditGallery {
-    pub(crate) metadata: api::Gallery,
+    pub(crate) metadata: Gallery,
+    // store changes instead. If permission change based on proposed changes, then include it
+    pub(crate) change: api::ChangeGalleryData,
     _private: (),
 }
 #[cfg(test)]
 impl EditGallery {
-    pub(crate) fn test(gallery: &api::Gallery) -> EditGallery {
+    pub(crate) fn test(gallery: &Gallery, change: &api::ChangeGalleryData) -> EditGallery {
         EditGallery {
             metadata: gallery.clone(),
+            change: change.clone(),
             _private: (),
         }
     }
 }
 pub(crate) struct DeleteGallery {
-    pub(crate) metadata: api::Gallery,
+    pub(crate) metadata: Gallery,
     _private: (),
 }
 #[cfg(test)]
 impl DeleteGallery {
-    pub(crate) fn test(gallery: &api::Gallery) -> DeleteGallery {
+    pub(crate) fn test(gallery: &Gallery) -> DeleteGallery {
         DeleteGallery {
             metadata: gallery.clone(),
             _private: (),
@@ -49,7 +52,25 @@ impl DeleteGallery {
     }
 }
 
-// functions to try to obtain the given permissions
+/// witness for authorization for adding projects to a gallery
+pub(crate) struct AddProject {
+    pub(crate) metadata: Gallery,
+    pub(crate) project: api::CreateGalleryProjectData,
+    _private: (),
+}
+
+#[cfg(test)]
+impl AddProject {
+    pub(crate) fn test(gallery: &Gallery, project: &api::CreateGalleryProjectData) -> AddProject {
+        AddProject {
+            metadata: gallery.clone(),
+            project: project.clone(),
+            _private: (),
+        }
+    }
+}
+
+/// functions to try to obtain the given permissions
 pub(crate) async fn try_view_gallery(
     app: &AppData,
     req: &HttpRequest,
@@ -68,7 +89,7 @@ pub(crate) async fn try_view_gallery(
     }
 
     Ok(ViewGallery {
-        metadata: result.into(),
+        metadata: result,
         _private: (),
     })
 }
@@ -77,6 +98,7 @@ pub(crate) async fn try_edit_gallery(
     app: &AppData,
     req: &HttpRequest,
     id: &api::GalleryId,
+    try_change: Option<api::ChangeGalleryData>,
 ) -> Result<EditGallery, UserError> {
     let query = doc! {"id": id};
     let result = app
@@ -86,12 +108,15 @@ pub(crate) async fn try_edit_gallery(
         .map_err(InternalError::DatabaseConnectionError)?
         .ok_or(UserError::GalleryNotFoundError)?;
 
-    // return early with error if user is not owner
     super::try_edit_user(app, req, None, &result.owner).await?;
 
-    // else, return permissions EditGallery
+    // is there a presedent for a valid name?
     Ok(EditGallery {
-        metadata: result.into(),
+        metadata: result,
+        change: try_change.unwrap_or(api::ChangeGalleryData {
+            name: None,
+            state: None,
+        }),
         _private: (),
     })
 }
@@ -104,12 +129,37 @@ pub(crate) async fn try_delete_gallery(
     id: &api::GalleryId,
 ) -> Result<DeleteGallery, UserError> {
     // for now you can only delete the gallery if you are allowed to edit it
-    try_edit_gallery(app, req, id)
+    try_edit_gallery(app, req, id, None)
         .await
         .map(|eg| DeleteGallery {
             metadata: eg.metadata.clone(),
             _private: (),
         })
+}
+
+pub(crate) async fn try_add_project(
+    app: &AppData,
+    req: &HttpRequest,
+    id: &api::GalleryId,
+    try_project: &api::CreateGalleryProjectData,
+) -> Result<AddProject, UserError> {
+    let query = doc! {"id": id};
+    let result = app
+        .galleries
+        .find_one(query, None)
+        .await
+        .map_err(InternalError::DatabaseConnectionError)?
+        .ok_or(UserError::GalleryNotFoundError)?;
+
+    super::try_edit_user(app, req, None, &result.owner).await?;
+
+    // NOTE: Add checking for group memebership.
+    // is there a presedent for a valid name?
+    Ok(AddProject {
+        metadata: result,
+        project: try_project.clone(),
+        _private: (),
+    })
 }
 
 #[cfg(test)]
@@ -298,6 +348,10 @@ mod tests {
             role: None,
         }
         .into();
+        let change = api::ChangeGalleryData {
+            name: Some("gallerytwo".into()),
+            state: Some(PublishState::Private),
+        };
         let gallery = Gallery::new("owner".into(), "gallery".into(), api::PublishState::Private);
         test_utils::setup()
             .with_users(&[owner.clone()])
@@ -314,7 +368,7 @@ mod tests {
                 let req = test::TestRequest::get()
                     .cookie(test_utils::cookie::new(&owner.username))
                     .uri("/test")
-                    .set_json(gallery.id)
+                    .set_json((gallery.id, change))
                     .to_request();
 
                 let response = test::call_service(&app, req).await;
@@ -343,6 +397,11 @@ mod tests {
         .into();
         let gallery = Gallery::new("owner".into(), "gallery".into(), api::PublishState::Private);
 
+        let change = api::ChangeGalleryData {
+            name: Some("gallerytwo".into()),
+            state: Some(PublishState::Private),
+        };
+
         test_utils::setup()
             .with_users(&[owner.clone(), other.clone()])
             .with_galleries(&[gallery.clone()])
@@ -358,7 +417,7 @@ mod tests {
                 let req = test::TestRequest::get()
                     .cookie(test_utils::cookie::new(&other.username))
                     .uri("/test")
-                    .set_json(gallery.id)
+                    .set_json((gallery.id, change))
                     .to_request();
 
                 let response = test::call_service(&app, req).await;
@@ -385,6 +444,10 @@ mod tests {
             role: Some(api::UserRole::Admin),
         }
         .into();
+        let change = api::ChangeGalleryData {
+            name: Some("gallerytwo".into()),
+            state: Some(PublishState::Private),
+        };
         let gallery = Gallery::new("owner".into(), "gallery".into(), api::PublishState::Private);
 
         test_utils::setup()
@@ -402,7 +465,7 @@ mod tests {
                 let req = test::TestRequest::get()
                     .cookie(test_utils::cookie::new(&admin.username))
                     .uri("/test")
-                    .set_json(gallery.id)
+                    .set_json((gallery.id, change))
                     .to_request();
 
                 let response = test::call_service(&app, req).await;
@@ -536,6 +599,7 @@ mod tests {
     }
 
     #[get("/test")]
+    // Possibility for macro to replace the view test definition
     async fn view_test(
         app: web::Data<AppData>,
         req: HttpRequest,
@@ -550,10 +614,10 @@ mod tests {
     async fn edit_test(
         app: web::Data<AppData>,
         req: HttpRequest,
-        gallery: web::Json<api::GalleryId>,
+        gallery: web::Json<(api::GalleryId, api::ChangeGalleryData)>,
     ) -> Result<HttpResponse, UserError> {
-        let gallery_id = gallery.into_inner();
-        try_edit_gallery(&app, &req, &gallery_id).await?;
+        let (gallery_id, change) = gallery.into_inner();
+        try_edit_gallery(&app, &req, &gallery_id, Some(change)).await?;
         Ok(HttpResponse::Ok().finish())
     }
 

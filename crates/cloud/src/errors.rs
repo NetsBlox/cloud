@@ -83,6 +83,10 @@ pub enum UserError {
     GroupExistsError,
     #[display(fmt = "Gallery already exists.")]
     GalleryExistsError,
+    #[display(fmt = "Gallery project not found.")]
+    GalleryProjectNotFoundError,
+    #[display(fmt = "Gallery project already exists.")]
+    GalleryProjectExistsError,
     #[display(fmt = "Invalid username.")]
     InvalidUsername,
     #[display(fmt = "Invalid name.")]
@@ -194,6 +198,7 @@ impl error::ResponseError for UserError {
             | Self::RoleNotFoundError
             | Self::InviteNotFoundError
             | Self::MagicLinkNotFoundError
+            | Self::GalleryProjectNotFoundError
             | Self::UserNotFoundError
             | Self::FriendNotFoundError
             | Self::OAuthClientNotFoundError
@@ -220,6 +225,7 @@ impl error::ResponseError for UserError {
             | Self::UsernameExists
             | Self::OAuthClientAlreadyExistsError
             | Self::GalleryExistsError
+            | Self::GalleryProjectExistsError
             | Self::GroupExistsError
             | Self::CannotDeleteLastRoleError
             | Self::ServiceHostAlreadyAuthorizedError

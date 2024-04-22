@@ -586,7 +586,12 @@ impl AppData {
     }
 
     pub(crate) fn as_gallery_actions(&self) -> GalleryActions {
-        GalleryActions::new(&self.galleries)
+        GalleryActions::new(
+            &self.galleries,
+            &self.gallery_projects,
+            &self.bucket,
+            &self.s3,
+        )
     }
 
     pub(crate) fn as_project_actions(&self) -> ProjectActions {

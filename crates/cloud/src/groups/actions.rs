@@ -22,7 +22,7 @@ impl<'a> GroupActions<'a> {
         eu: &auth::EditUser,
         data: api::CreateGroupData,
     ) -> Result<api::Group, UserError> {
-        let group = Group::from_data(eu.username.to_owned(), data);
+        let group = Group::from_data(eu.username.clone(), data);
         let query = doc! {
             "name": &group.name,
             "owner": &group.owner,

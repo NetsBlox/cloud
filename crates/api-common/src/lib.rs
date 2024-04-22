@@ -534,10 +534,11 @@ pub struct UpdateGroupData {
 pub struct GalleryId(String);
 
 impl GalleryId {
+    #[must_use]
     pub fn new(name: String) -> Self {
         Self(name)
     }
-
+    #[must_use]
     pub fn as_str(&self) -> &str {
         &self.0
     }
@@ -551,6 +552,51 @@ pub struct Gallery {
     pub owner: String,
     pub name: String,
     pub state: PublishState,
+}
+
+#[derive(Serialize, Deserialize, Clone, Debug, TS)]
+#[serde(rename_all = "camelCase")]
+#[ts(export)]
+pub struct ChangeGalleryData {
+    #[ts(optional)]
+    pub name: Option<String>,
+    #[ts(optional)]
+    pub state: Option<PublishState>,
+}
+
+#[derive(Deserialize, Serialize, Clone, Debug, TS)]
+#[serde(rename_all = "camelCase")]
+#[ts(export)]
+pub struct GalleryProjectMetadata {
+    pub gallery_id: GalleryId,
+    pub id: ProjectId,
+    pub owner: String,
+    pub name: String,
+    #[ts(type = "any")] // FIXME
+    pub updated: SystemTime,
+    #[ts(type = "any")] // FIXME
+    pub origin_time: SystemTime,
+    pub thumbnail: String,
+    pub versions: Vec<Option<S3Key>>,
+}
+
+#[derive(Deserialize, Serialize, Clone, Debug, TS)]
+#[serde(rename_all = "camelCase")]
+#[ts(export)]
+pub struct CreateGalleryProjectData {
+    pub owner: String,
+    pub name: String,
+    pub thumbnail: String, // should I extract from xml?
+    pub project_xml: String,
+}
+
+#[derive(Deserialize, Serialize, TS)]
+#[serde(rename_all = "camelCase")]
+#[ts(export)]
+pub struct UpdateGalleryProjectData {
+    pub owner: String,
+    pub name: String,
+    pub thumbnail: String,
 }
 
 #[derive(Deserialize, Serialize, Clone, Debug, TS)]
