@@ -533,10 +533,16 @@ impl<'a> ProjectActions<'a> {
             .ok_or(UserError::RoleNotFoundError)?;
 
         let RoleMetadata { media, code, .. } = role;
-        join_all([self.delete(media.to_owned()), self.delete(code.to_owned())].into_iter())
-            .await
-            .into_iter()
-            .collect::<Result<_, _>>()?;
+        join_all(
+            [
+                utils::delete(&self.s3, &self.bucket, media.to_owned()),
+                utils::delete(&self.s3, &self.bucket, code.to_owned()),
+            ]
+            .into_iter(),
+        )
+        .await
+        .into_iter()
+        .collect::<Result<_, _>>()?;
 
         let metadata = utils::on_room_changed(self.network, self.project_cache, updated_metadata);
         Ok(metadata.into())
@@ -627,7 +633,7 @@ impl<'a> ProjectActions<'a> {
             .into_values()
             .flat_map(|role| vec![role.code, role.media]);
 
-        join_all(paths.map(move |path| self.delete(path)))
+        join_all(paths.map(move |path| utils::delete(&self.s3, &self.bucket, path)))
             .await
             .into_iter()
             .collect::<Result<Vec<_>, _>>()?;
@@ -746,18 +752,6 @@ impl<'a> ProjectActions<'a> {
             code: code?,
             media: media?,
         })
-    }
-
-    async fn delete(&self, key: S3Key) -> Result<(), UserError> {
-        self.s3
-            .delete_object()
-            .bucket(self.bucket.as_str().to_owned())
-            .key(key.as_str().to_owned())
-            .send()
-            .await
-            .map_err(|_err| InternalError::S3Error)?;
-
-        Ok(())
     }
 
     async fn is_approval_required(&self, metadata: &ProjectMetadata) -> Result<bool, UserError> {

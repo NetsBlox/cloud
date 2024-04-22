@@ -360,24 +360,117 @@ impl Bucket {
     }
 }
 
+/// A Gallery allows the owner to retrieve project information of the members  
+#[derive(Serialize, Deserialize, Clone, Debug)]
+#[serde(rename_all = "camelCase")]
+pub struct Gallery {
+    pub id: GalleryId,
+    pub owner: String,
+    pub name: String,
+    pub state: api::PublishState,
+    // pub projects: Vec<GalleryProjectMetadata>,
+}
+
+impl Gallery {
+    #[must_use]
+    pub fn new(owner: String, name: String, state: api::PublishState) -> Self {
+        Self {
+            id: api::GalleryId::new(Uuid::new_v4().to_string()),
+            name,
+            owner,
+            state,
+        }
+    }
+}
+
+impl From<Gallery> for netsblox_api_common::Gallery {
+    fn from(gallery: Gallery) -> netsblox_api_common::Gallery {
+        netsblox_api_common::Gallery {
+            id: gallery.id,
+            owner: gallery.owner,
+            name: gallery.name,
+            state: gallery.state,
+        }
+    }
+}
+
+impl From<Gallery> for Bson {
+    fn from(gallery: Gallery) -> Self {
+        Bson::Document(doc! {
+            "id": gallery.id,
+            "owner": gallery.owner,
+            "name": gallery.name,
+            "state": gallery.state,
+        })
+    }
+}
+
 /// TODO: Explain gallery projects
+// we lose type safety because of serialization boundry
 #[derive(Deserialize, Serialize, Clone, Debug)]
 #[serde(rename_all = "camelCase")]
 pub struct GalleryProjectMetadata {
     pub gallery_id: GalleryId,
     pub id: ProjectId,
 
-    // owner (for permissions)
     pub owner: String,
-
-    // metadata
     pub name: String,
     pub updated: DateTime,
     pub origin_time: DateTime,
     pub thumbnail: String,
-    // (path to the) xml contents (on s3)
-    //pub versions: Vec<String>,  // TODO: worry about versions later
-    pub content: String,
+    pub versions: Vec<Option<S3Key>>,
+}
+
+// Move to ./gallery.rs
+pub struct GalleryProjectVersion {
+    pub key: S3Key,
+    pub deleted: bool,
+}
+
+impl GalleryProjectMetadata {
+    #[must_use]
+    pub fn new(gallery: &Gallery, owner: String, name: String, thumbnail: String) -> Self {
+        Self {
+            gallery_id: gallery.id.clone(),
+            id: api::ProjectId::new(Uuid::new_v4().to_string()),
+            owner,
+            name,
+            updated: DateTime::now(),
+            origin_time: DateTime::now(),
+            thumbnail,
+            versions: Vec::new(),
+        }
+    }
+}
+
+impl From<GalleryProjectMetadata> for netsblox_api_common::GalleryProjectMetadata {
+    fn from(gal_project: GalleryProjectMetadata) -> netsblox_api_common::GalleryProjectMetadata {
+        netsblox_api_common::GalleryProjectMetadata {
+            gallery_id: gal_project.gallery_id,
+            id: gal_project.id,
+            owner: gal_project.owner,
+            name: gal_project.name,
+            updated: gal_project.updated.to_system_time(),
+            origin_time: gal_project.origin_time.to_system_time(),
+            thumbnail: gal_project.thumbnail,
+            versions: gal_project.versions,
+        }
+    }
+}
+
+impl From<GalleryProjectMetadata> for Bson {
+    fn from(gal_project: GalleryProjectMetadata) -> Self {
+        Bson::Document(doc! {
+            "galleryId": gal_project.gallery_id,
+            "id": gal_project.id,
+            "owner": gal_project.owner,
+            "name": gal_project.name,
+            "updated": gal_project.updated,
+            "origin_time": gal_project.origin_time,
+            "thumbnail": gal_project.thumbnail,
+            "versions": gal_project.versions,
+        })
+    }
 }
 
 #[derive(Deserialize, Serialize, Clone, Debug)]
@@ -905,49 +998,6 @@ impl From<MagicLink> for Bson {
             "id": link.id,
             "email": link.email,
             "createdAt": link.created_at,
-        })
-    }
-}
-
-/// A Gallery allows the owner to retrieve project information of the members  
-#[derive(Serialize, Deserialize, Clone, Debug)]
-#[serde(rename_all = "camelCase")]
-pub struct Gallery {
-    pub id: GalleryId,
-    pub owner: String,
-    pub name: String,
-    pub state: api::PublishState,
-}
-
-impl Gallery {
-    pub fn new(owner: String, name: String, state: api::PublishState) -> Self {
-        Self {
-            id: api::GalleryId::new(Uuid::new_v4().to_string()),
-            name,
-            owner,
-            state,
-        }
-    }
-}
-
-impl From<Gallery> for netsblox_api_common::Gallery {
-    fn from(gallery: Gallery) -> netsblox_api_common::Gallery {
-        netsblox_api_common::Gallery {
-            id: gallery.id,
-            owner: gallery.owner,
-            name: gallery.name,
-            state: gallery.state,
-        }
-    }
-}
-
-impl From<Gallery> for Bson {
-    fn from(gallery: Gallery) -> Self {
-        Bson::Document(doc! {
-            "id": gallery.id,
-            "owner": gallery.owner,
-            "name": gallery.name,
-            "state": gallery.state,
         })
     }
 }

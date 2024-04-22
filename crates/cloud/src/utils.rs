@@ -373,7 +373,6 @@ pub(crate) async fn find_usernames(
     NonEmpty::from_vec(usernames).ok_or(UserError::UserNotFoundError)
 }
 
-// TODO: refactor download here, too
 pub(crate) async fn download(
     client: &s3::Client,
     bucket: &Bucket,
@@ -415,6 +414,21 @@ pub(crate) async fn upload(
         })
 }
 
+pub(crate) async fn delete(
+    client: &s3::Client,
+    bucket: &Bucket,
+    key: S3Key,
+) -> Result<(), UserError> {
+    client
+        .delete_object()
+        .bucket(bucket.as_str().to_owned())
+        .key(key.as_str().to_owned())
+        .send()
+        .await
+        .map_err(|_err| InternalError::S3Error)?;
+
+    Ok(())
+}
 // TODO: tests for cache invalidation
 // - [ ] friends
 
