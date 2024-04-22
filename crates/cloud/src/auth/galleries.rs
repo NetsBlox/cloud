@@ -4,7 +4,9 @@ use mongodb::bson::doc;
 
 use crate::errors::UserError;
 use netsblox_cloud_common::api::{self, PublishState};
-use netsblox_cloud_common::Gallery;
+use netsblox_cloud_common::{Gallery, GalleryProjectMetadata};
+
+//TODO: Scope in AUTHGA
 
 // Permissions on galleries
 pub(crate) struct ViewGallery {
@@ -63,6 +65,27 @@ pub(crate) struct AddProject {
 impl AddProject {
     pub(crate) fn test(gallery: &Gallery, project: &api::CreateGalleryProjectData) -> AddProject {
         AddProject {
+            metadata: gallery.clone(),
+            project: project.clone(),
+            _private: (),
+        }
+    }
+}
+
+/// witness for authorization for deleting a specific project in a gallery
+pub(crate) struct DeleteGalleryProject {
+    pub(crate) metadata: Gallery,
+    pub(crate) project: GalleryProjectMetadata,
+    _private: (),
+}
+
+#[cfg(test)]
+impl DeleteGalleryProject {
+    pub(crate) fn test(
+        gallery: &Gallery,
+        project: &GalleryProjectMetadata,
+    ) -> DeleteGalleryProject {
+        DeleteGalleryProject {
             metadata: gallery.clone(),
             project: project.clone(),
             _private: (),
@@ -137,29 +160,59 @@ pub(crate) async fn try_delete_gallery(
         })
 }
 
+// NOTE: Add checking for group memebership.
+// is there a presedent for a valid name?
 pub(crate) async fn try_add_project(
     app: &AppData,
     req: &HttpRequest,
     id: &api::GalleryId,
     try_project: &api::CreateGalleryProjectData,
 ) -> Result<AddProject, UserError> {
-    let query = doc! {"id": id};
-    let result = app
-        .galleries
+    try_edit_gallery(app, req, id, None)
+        .await
+        .map(|eg| AddProject {
+            metadata: eg.metadata.clone(),
+            project: try_project.clone(),
+            _private: (),
+        })
+}
+
+pub(crate) async fn try_delete_project(
+    app: &AppData,
+    req: &HttpRequest,
+    id: &api::GalleryId,
+    prid: &api::ProjectId,
+) -> Result<DeleteGalleryProject, UserError> {
+    let gallery = try_edit_gallery(app, req, id, None).await?.metadata;
+
+    let is_gal_owner = super::try_edit_user(app, req, None, &gallery.owner)
+        .await
+        .is_ok();
+
+    let query = doc! {"galleryId": prid};
+    let proj = app
+        .gallery_projects
         .find_one(query, None)
         .await
         .map_err(InternalError::DatabaseConnectionError)?
         .ok_or(UserError::GalleryNotFoundError)?;
 
-    super::try_edit_user(app, req, None, &result.owner).await?;
-
-    // NOTE: Add checking for group memebership.
-    // is there a presedent for a valid name?
-    Ok(AddProject {
-        metadata: result,
-        project: try_project.clone(),
-        _private: (),
-    })
+    if is_gal_owner {
+        // if power over owner
+        Ok(DeleteGalleryProject {
+            metadata: gallery,
+            project: proj.into(),
+            _private: (),
+        })
+    } else {
+        // or project owner
+        super::try_edit_user(app, req, None, &proj.owner).await?;
+        Ok(DeleteGalleryProject {
+            metadata: gallery,
+            project: proj,
+            _private: (),
+        })
+    }
 }
 
 #[cfg(test)]

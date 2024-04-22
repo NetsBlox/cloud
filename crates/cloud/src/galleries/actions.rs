@@ -4,7 +4,7 @@ use mongodb::options::ReturnDocument;
 use mongodb::{Collection, Cursor};
 use netsblox_cloud_common::api::{ProjectId, UpdateGalleryProjectData};
 
-use crate::auth::{self, AddProject, DeleteGallery, EditGallery, ViewGallery};
+use crate::auth::{self, AddGalleryProject, DeleteGallery, EditGallery, ViewGallery};
 use crate::errors::{InternalError, UserError};
 use crate::utils;
 
@@ -115,7 +115,7 @@ impl<'a> GalleryActions<'a> {
     // for galleries, galleries/<gallery ID>/<project ID>/<version index>.xml
     // WARN:
     // WARN: what should happen if the client exceeds 9999 versions?
-    fn get_s3key(ap: &AddProject, gal_proj: &GalleryProjectMetadata) -> api::S3Key {
+    fn get_s3key(ap: &AddGalleryProject, gal_proj: &GalleryProjectMetadata) -> api::S3Key {
         let ver_index = gal_proj.versions.len() + 1;
         let path = format!("{}/{}/{:04}.xml", ap.metadata.id, gal_proj.id, ver_index);
 
@@ -124,7 +124,7 @@ impl<'a> GalleryActions<'a> {
 
     pub(crate) async fn add_project(
         &self,
-        ap: &AddProject,
+        ap: &AddGalleryProject,
     ) -> Result<GalleryProjectMetadata, UserError> {
         let mut gal_project = GalleryProjectMetadata::new(
             &ap.metadata,
@@ -234,7 +234,7 @@ impl<'a> GalleryActions<'a> {
 
     pub(crate) async fn add_version(
         &self,
-        ap: &AddProject,
+        ap: &AddGalleryProject,
     ) -> Result<GalleryProjectMetadata, UserError> {
         unimplemented!()
     }
@@ -251,8 +251,7 @@ impl<'a> GalleryActions<'a> {
 
     pub(crate) async fn remove_project_in_gallery(
         &self,
-        egal: &DeleteGallery,
-        proj_id: &ProjectId,
+        dp: &DeleteProject,
     ) -> Result<Gallery, UserError> {
         unimplemented!()
     }

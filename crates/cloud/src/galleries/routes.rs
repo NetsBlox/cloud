@@ -125,16 +125,15 @@ async fn delete_gallery_project(
     path: web::Path<(api::GalleryId, api::ProjectId)>,
     req: HttpRequest,
 ) -> Result<HttpResponse, UserError> {
-    // let (id, prid) = path.into_inner();
-    // let auth_vgal = auth::try_delete_gallery(&app, &req, &id).await?;
+    let (id, prid) = path.into_inner();
+    let auth_dp = auth::try_delete_project(&app, &req, &id, &prid).await?;
 
-    // let actions = app.as_gallery_actions();
-    // let project_xml = actions.remove_project_in_gallery(&auth_vgal, &prid).await?;
+    let actions = app.as_gallery_actions();
+    let project_xml = actions.remove_project_in_gallery(&auth_dp).await?;
 
-    // Ok(HttpResponse::Ok()
-    //     .content_type("application/xml")
-    //     .body(project_xml))
-    unimplemented!()
+    Ok(HttpResponse::Ok()
+        .content_type("application/xml")
+        .body(project_xml))
 }
 // TODO: Create endpoints for the other operations that need to be supported
 // (make a function - like above - then add them to `config` - like below)
