@@ -2,6 +2,7 @@ use actix::Addr;
 use actix_session::SessionExt;
 use actix_web::HttpRequest;
 use aws_sdk_s3 as s3;
+use aws_sdk_s3::operation::put_object::PutObjectOutput;
 use futures::TryStreamExt;
 use lazy_static::lazy_static;
 use lettre::{Message, SmtpTransport, Transport};
@@ -15,7 +16,6 @@ use netsblox_cloud_common::{
 use nonempty::NonEmpty;
 use regex::Regex;
 use rustrict::CensorStr;
-use s3::operation::put_object::PutObjectOutput;
 use sha2::{Digest, Sha512};
 use std::{
     borrow::Borrow,

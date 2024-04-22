@@ -50,7 +50,6 @@ async fn change_gallery(
     let try_change = body.into_inner();
 
     let auth_egal = auth::try_edit_gallery(&app, &req, &id, Some(try_change)).await?;
-
     let actions = app.as_gallery_actions();
     let metadata = actions.change_gallery(&auth_egal).await?;
 
@@ -123,6 +122,12 @@ async fn view_gallery_project_xml(
         .body(project_xml))
 }
 
+///returns xml of all projects in gallery
+#[get("/id/{id}/projects/xml")]
+async fn view_gallery_projects_xml() -> Result<HttpResponse, UserError> {
+    todo!("return the xml string");
+}
+
 #[delete("/id/{id}/projectid/{prid}/xml")]
 async fn delete_gallery_project(
     app: web::Data<AppData>,
@@ -151,6 +156,7 @@ pub fn config(cfg: &mut web::ServiceConfig) {
     cfg.service(view_gallery_projects);
     cfg.service(add_gallery_project);
     cfg.service(view_gallery_project_xml);
+    cfg.service(view_gallery_projects_xml);
     cfg.service(delete_gallery_project);
 }
 
