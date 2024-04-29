@@ -1,9 +1,9 @@
+use api::Name;
 use futures::TryStreamExt;
 use mongodb::bson::doc;
 use mongodb::options::ReturnDocument;
 use mongodb::{Collection, Cursor};
-use netsblox_cloud_common::api::{ProjectId, UpdateGalleryProjectData};
-use utils::Name;
+use netsblox_cloud_common::api::ProjectId;
 
 use crate::auth::{
     self, AddGalleryProject, DeleteGallery, DeleteGalleryProject, EditGallery, ViewGallery,
