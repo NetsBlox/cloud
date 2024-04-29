@@ -2593,7 +2593,10 @@ version = "1.6.6"
 dependencies = [
  "bson",
  "derive_more",
- "serde",
+ "lazy_static",
+ "regex",
+ "rustrict",
+ "serde 1.0.188",
  "serde_json",
  "ts-rs",
  "uuid",
