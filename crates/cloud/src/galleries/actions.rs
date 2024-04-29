@@ -3,8 +3,11 @@ use mongodb::bson::doc;
 use mongodb::options::ReturnDocument;
 use mongodb::{Collection, Cursor};
 use netsblox_cloud_common::api::{ProjectId, UpdateGalleryProjectData};
+use utils::Name;
 
-use crate::auth::{self, AddGalleryProject, DeleteGallery, EditGallery, ViewGallery};
+use crate::auth::{
+    self, AddGalleryProject, DeleteGallery, DeleteGalleryProject, EditGallery, ViewGallery,
+};
 use crate::errors::{InternalError, UserError};
 use crate::utils;
 
@@ -38,11 +41,15 @@ impl<'a> GalleryActions<'a> {
     pub(crate) async fn create_gallery(
         &self,
         eu: &auth::EditUser,
-        name: &str,
+        name: &Name,
         state: api::PublishState,
     ) -> Result<Gallery, UserError> {
         // create gallery
-        let gallery = Gallery::new(eu.username.clone(), name.into(), state.clone());
+        let gallery = Gallery::new(
+            eu.username.clone(),
+            name.as_str().to_string(),
+            state.clone(),
+        );
         // create mongodb formatted gallery
         let query = doc! {
           "name": &gallery.name,
@@ -67,15 +74,20 @@ impl<'a> GalleryActions<'a> {
         }
     }
 
-    pub(crate) async fn change_gallery(&self, egal: &EditGallery) -> Result<Gallery, UserError> {
+    pub(crate) async fn change_gallery(
+        &self,
+        egal: &EditGallery,
+        change: api::ChangeGalleryData,
+    ) -> Result<Gallery, UserError> {
         let query = doc! {"id": &egal.metadata.id};
 
         let mut update = doc! {"$set": {}};
 
-        if let Some(n) = egal.change.name.clone() {
+        // NOTE: fix this, it is ugly
+        if let Some(n) = change.name.clone() {
             update.get_document_mut("$set").unwrap().insert("name", n);
         }
-        if let Some(s) = egal.change.state.clone() {
+        if let Some(s) = change.state.clone() {
             update.get_document_mut("$set").unwrap().insert("state", s);
         }
 
@@ -113,7 +125,6 @@ impl<'a> GalleryActions<'a> {
     }
 
     // for galleries, galleries/<gallery ID>/<project ID>/<version index>.xml
-    // WARN:
     // WARN: what should happen if the client exceeds 9999 versions?
     fn get_s3key(ap: &AddGalleryProject, gal_proj: &GalleryProjectMetadata) -> api::S3Key {
         let ver_index = gal_proj.versions.len() + 1;
@@ -125,15 +136,16 @@ impl<'a> GalleryActions<'a> {
     pub(crate) async fn add_project(
         &self,
         ap: &AddGalleryProject,
+        project: api::CreateGalleryProjectData,
     ) -> Result<GalleryProjectMetadata, UserError> {
         let mut gal_project = GalleryProjectMetadata::new(
             &ap.metadata,
-            ap.project.owner.clone(),
-            ap.project.name.clone(),
-            ap.project.thumbnail.clone(),
+            project.owner.clone(),
+            project.name.clone(),
+            project.thumbnail.clone(),
         );
 
-        let key: api::S3Key = GalleryActions::get_s3key(&ap, &gal_project);
+        let key: api::S3Key = GalleryActions::get_s3key(ap, &gal_project);
         gal_project.versions.push(Some(key.clone()));
 
         let query = doc! {
@@ -157,8 +169,7 @@ impl<'a> GalleryActions<'a> {
             return Err(UserError::GalleryProjectExistsError);
         }
 
-        let s3_res =
-            utils::upload(self.s3, self.bucket, &key, ap.project.project_xml.clone()).await;
+        let s3_res = utils::upload(self.s3, self.bucket, &key, project.project_xml.clone()).await;
 
         if let Err(e) = s3_res {
             self.gallery_projects
@@ -251,7 +262,7 @@ impl<'a> GalleryActions<'a> {
 
     pub(crate) async fn remove_project_in_gallery(
         &self,
-        dp: &DeleteProject,
+        dp: &DeleteGalleryProject,
     ) -> Result<Gallery, UserError> {
         unimplemented!()
     }
@@ -297,7 +308,11 @@ mod tests {
                 let auth_eu = auth::EditUser::test(user.username.clone());
 
                 let gallery = actions
-                    .create_gallery(&auth_eu, "mygallery", api::PublishState::Private)
+                    .create_gallery(
+                        &auth_eu,
+                        &Name("mygallery".to_string()),
+                        api::PublishState::Private,
+                    )
                     .await
                     .unwrap();
 
@@ -337,9 +352,9 @@ mod tests {
             .with_galleries(&[gallery.clone()])
             .run(|app_data| async move {
                 let actions = app_data.as_gallery_actions();
-                let auth_egal = auth::EditGallery::test(&gallery, &change);
+                let auth_egal = auth::EditGallery::test(&gallery);
 
-                actions.change_gallery(&auth_egal).await.unwrap();
+                actions.change_gallery(&auth_egal, change).await.unwrap();
 
                 let query = doc! {"id": gallery.id};
                 let metadata = actions.galleries.find_one(query, None).await.unwrap();
@@ -376,9 +391,9 @@ mod tests {
             .with_galleries(&[gallery.clone()])
             .run(|app_data| async move {
                 let actions = app_data.as_gallery_actions();
-                let auth_egal = auth::EditGallery::test(&gallery, &change);
+                let auth_egal = auth::EditGallery::test(&gallery);
 
-                actions.change_gallery(&auth_egal).await.unwrap();
+                actions.change_gallery(&auth_egal, change).await.unwrap();
 
                 let query = doc! {"id": gallery.id.clone()};
                 let metadata = actions.galleries.find_one(query, None).await.unwrap();

@@ -1,6 +1,7 @@
 use crate::app_data::AppData;
 use crate::auth;
 use crate::errors::UserError;
+use crate::utils::Name;
 use actix_web::{delete, get, patch, post, HttpRequest};
 use actix_web::{web, HttpResponse};
 
@@ -9,7 +10,7 @@ use crate::common::api;
 #[post("/user/{owner}/{name}")]
 async fn create_gallery(
     app: web::Data<AppData>,
-    path: web::Path<(String, String)>,
+    path: web::Path<(String, Name)>,
     req: HttpRequest,
 ) -> Result<HttpResponse, UserError> {
     let (owner, name) = path.into_inner();
@@ -48,8 +49,12 @@ async fn change_gallery(
 ) -> Result<HttpResponse, UserError> {
     let id = path.into_inner();
     let try_change = body.into_inner();
-    let auth_egal = auth::try_edit_gallery(&app, &req, &id, Some(try_change)).await?;
-    let metadata = actions.change_gallery(&auth_egal).await?;
+    let auth_egal = auth::try_edit_gallery(&app, &req, &id).await?;
+    let actions = app.as_gallery_actions();
+    // witnesses only have permissions. What can you edit? Except for optimizations
+    // TODO: Add change data to change_gallery
+    let metadata = actions.change_gallery(&auth_egal, try_change).await?;
+
     Ok(HttpResponse::Ok().json(metadata))
 }
 
@@ -94,10 +99,10 @@ async fn add_gallery_project(
 
     // try_add_project_gallery let it add any if gallery exists
     // later: use group_id in metadata, use try_edit_user
-    let auth_ap = auth::try_add_project(&app, &req, &id, &data).await?;
+    let auth_ap = auth::try_add_gallery_project(&app, &req, &id).await?;
 
     let actions = app.as_gallery_actions();
-    let project = actions.add_project(&auth_ap).await?;
+    let project = actions.add_project(&auth_ap, data).await?;
 
     Ok(HttpResponse::Ok().json(project))
 }
@@ -126,14 +131,14 @@ async fn delete_gallery_project(
     req: HttpRequest,
 ) -> Result<HttpResponse, UserError> {
     let (id, prid) = path.into_inner();
-    let auth_dp = auth::try_delete_project(&app, &req, &id, &prid).await?;
+    let auth_dp = auth::try_delete_gallery_project(&app, &req, &id, &prid).await?;
 
     let actions = app.as_gallery_actions();
     let project_xml = actions.remove_project_in_gallery(&auth_dp).await?;
 
     Ok(HttpResponse::Ok()
         .content_type("application/xml")
-        .body(project_xml))
+        .body("<home>sdaud<\\home>"))
 }
 // TODO: Create endpoints for the other operations that need to be supported
 // (make a function - like above - then add them to `config` - like below)
@@ -190,6 +195,39 @@ mod tests {
                     .to_request();
 
                 let _gallery: Gallery = test::call_and_read_body_json(&app, req).await;
+            })
+            .await;
+    }
+
+    #[actix_web::test]
+    async fn test_create_gallery_bad_name() {
+        let user: User = api::NewUser {
+            username: "user".into(),
+            email: "user@netsblox.org".into(),
+            password: None,
+            group_id: None,
+            role: None,
+        }
+        .into();
+
+        test_utils::setup()
+            .with_users(&[user.clone()])
+            .run(|app_data| async move {
+                let app = test::init_service(
+                    App::new()
+                        .app_data(web::Data::new(app_data))
+                        .wrap(test_utils::cookie::middleware())
+                        .configure(super::config),
+                )
+                .await;
+
+                let req = test::TestRequest::post()
+                    .uri(&format!("/user/{}/{}", &user.username, "fuck"))
+                    .cookie(test_utils::cookie::new(&user.username))
+                    .to_request();
+
+                let response = test::call_service(&app, req).await;
+                assert_ne!(response.status(), http::StatusCode::OK);
             })
             .await;
     }

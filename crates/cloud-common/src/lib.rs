@@ -351,10 +351,12 @@ impl From<NetworkTraceMetadata> for netsblox_api_common::NetworkTraceMetadata {
 pub struct Bucket(String);
 
 impl Bucket {
+    #[must_use]
     pub fn new(bucket: String) -> Self {
         Bucket(bucket)
     }
 
+    #[must_use]
     pub fn as_str(&self) -> &str {
         &self.0
     }
@@ -419,12 +421,6 @@ pub struct GalleryProjectMetadata {
     pub origin_time: DateTime,
     pub thumbnail: String,
     pub versions: Vec<Option<S3Key>>,
-}
-
-// Move to ./gallery.rs
-pub struct GalleryProjectVersion {
-    pub key: S3Key,
-    pub deleted: bool,
 }
 
 impl GalleryProjectMetadata {
