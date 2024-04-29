@@ -6,9 +6,6 @@ use crate::errors::UserError;
 use netsblox_cloud_common::api::{self, PublishState};
 use netsblox_cloud_common::{Gallery, GalleryProjectMetadata};
 
-//TODO: Scope in AUTHGA
-
-// Permissions on galleries
 pub(crate) struct ViewGallery {
     pub(crate) metadata: Gallery,
     _private: (),
@@ -132,14 +129,12 @@ pub(crate) async fn try_edit_gallery(
     })
 }
 
-/// Try to obtain permissions to delete a gallery. Only gallery owners
-/// are allowed to delete the gallery.
+/// Try to obtain permissions to delete a gallery.
 pub(crate) async fn try_delete_gallery(
     app: &AppData,
     req: &HttpRequest,
     id: &api::GalleryId,
 ) -> Result<DeleteGallery, UserError> {
-    // for now you can only delete the gallery if you are allowed to edit it
     try_edit_gallery(app, req, id)
         .await
         .map(|eg| DeleteGallery {
@@ -151,10 +146,6 @@ pub(crate) async fn try_delete_gallery(
 // TODO: Add checking for group memebership.
 // Must add group id to gallery definition
 // this is so a collection of people can "control a gallery"
-// is there a presedent for a valid name?
-// there is a function in utils that ensures a name is valid
-// It would be nice if we could define something for name that would automatically check
-// in actix
 pub(crate) async fn try_add_gallery_project(
     app: &AppData,
     req: &HttpRequest,
@@ -383,6 +374,12 @@ mod tests {
     }
 
     #[actix_web::test]
+    #[ignore]
+    async fn test_try_view_gallery_group() {
+        todo!();
+    }
+
+    #[actix_web::test]
     async fn test_try_edit_gallery_owner() {
         let owner: User = api::NewUser {
             username: "owner".into(),
@@ -519,6 +516,12 @@ mod tests {
     }
 
     #[actix_web::test]
+    #[ignore]
+    async fn test_try_edit_gallery_group() {
+        todo!();
+    }
+
+    #[actix_web::test]
     async fn test_try_delete_gallery_owner() {
         let owner: User = api::NewUser {
             username: "owner".into(),
@@ -640,6 +643,60 @@ mod tests {
                 assert_eq!(response.status(), http::StatusCode::OK);
             })
             .await;
+    }
+
+    #[actix_web::test]
+    #[ignore]
+    async fn test_try_delete_gallery_group() {
+        todo!();
+    }
+
+    #[actix_web::test]
+    #[ignore]
+    async fn test_try_add_gallery_project_owner() {
+        todo!();
+    }
+
+    #[actix_web::test]
+    #[ignore]
+    async fn test_try_add_gallery_project_other() {
+        todo!();
+    }
+
+    #[actix_web::test]
+    #[ignore]
+    async fn test_try_add_gallery_project_admin() {
+        todo!();
+    }
+
+    #[actix_web::test]
+    #[ignore]
+    async fn test_try_add_gallery_project_group() {
+        todo!();
+    }
+
+    #[actix_web::test]
+    #[ignore]
+    async fn test_try_delete_gallery_project_owner() {
+        todo!();
+    }
+
+    #[actix_web::test]
+    #[ignore]
+    async fn test_try_delete_gallery_project_other() {
+        todo!();
+    }
+
+    #[actix_web::test]
+    #[ignore]
+    async fn test_try_delete_gallery_project_admin() {
+        todo!();
+    }
+
+    #[actix_web::test]
+    #[ignore]
+    async fn test_try_delete_gallery_project_group() {
+        todo!();
     }
 
     #[get("/test")]

@@ -51,8 +51,6 @@ async fn change_gallery(
     let try_change = body.into_inner();
     let auth_egal = auth::try_edit_gallery(&app, &req, &id).await?;
     let actions = app.as_gallery_actions();
-    // witnesses only have permissions. What can you edit? Except for optimizations
-    // TODO: Add change data to change_gallery
     let metadata = actions.change_gallery(&auth_egal, try_change).await?;
 
     Ok(HttpResponse::Ok().json(metadata))
@@ -83,7 +81,7 @@ async fn view_gallery_projects(
     let auth_vgal = auth::try_view_gallery(&app, &req, &id).await?;
 
     let actions = app.as_gallery_actions();
-    let all_projects = actions.get_all_projects(&auth_vgal).await?;
+    let all_projects = actions.get_all_gallery_projects(&auth_vgal).await?;
     Ok(HttpResponse::Ok().json(all_projects))
 }
 
@@ -97,12 +95,28 @@ async fn add_gallery_project(
     let id = path.into_inner();
     let data: api::CreateGalleryProjectData = body.into_inner();
 
-    // try_add_project_gallery let it add any if gallery exists
-    // later: use group_id in metadata, use try_edit_user
     let auth_ap = auth::try_add_gallery_project(&app, &req, &id).await?;
 
     let actions = app.as_gallery_actions();
-    let project = actions.add_project(&auth_ap, data).await?;
+    let project = actions.add_gallery_project(&auth_ap, data).await?;
+
+    Ok(HttpResponse::Ok().json(project))
+}
+
+#[patch("/id/{id}")]
+async fn add_gallery_project_version(
+    app: web::Data<AppData>,
+    path: web::Path<api::GalleryId>,
+    body: web::Json<api::CreateGalleryProjectData>,
+    req: HttpRequest,
+) -> Result<HttpResponse, UserError> {
+    let id = path.into_inner();
+    let data: api::CreateGalleryProjectData = body.into_inner();
+
+    let auth_ap = auth::try_add_gallery_project(&app, &req, &id).await?;
+
+    let actions = app.as_gallery_actions();
+    let project = actions.add_gallery_project_version(&auth_ap, data).await?;
 
     Ok(HttpResponse::Ok().json(project))
 }

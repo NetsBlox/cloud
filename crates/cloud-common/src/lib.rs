@@ -370,7 +370,6 @@ pub struct Gallery {
     pub owner: String,
     pub name: String,
     pub state: api::PublishState,
-    // pub projects: Vec<GalleryProjectMetadata>,
 }
 
 impl Gallery {
@@ -462,7 +461,7 @@ impl From<GalleryProjectMetadata> for Bson {
             "owner": gal_project.owner,
             "name": gal_project.name,
             "updated": gal_project.updated,
-            "origin_time": gal_project.origin_time,
+            "originTime": gal_project.origin_time,
             "thumbnail": gal_project.thumbnail,
             "versions": gal_project.versions,
         })
