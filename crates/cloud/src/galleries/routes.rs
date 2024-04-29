@@ -71,6 +71,20 @@ async fn delete_gallery(
     Ok(HttpResponse::Ok().json(metadata))
 }
 
+#[get("/id/{id}/project/{prid}")]
+async fn view_gallery_project(
+    app: web::Data<AppData>,
+    path: web::Path<(api::GalleryId, api::ProjectId)>,
+    req: HttpRequest,
+) -> Result<HttpResponse, UserError> {
+    let (id, prid) = path.into_inner();
+    let auth_vgal = auth::try_view_gallery(&app, &req, &id).await?;
+
+    let actions = app.as_gallery_actions();
+    let project = actions.get_gallery_project(&auth_vgal, &prid).await?;
+    Ok(HttpResponse::Ok().json(project))
+}
+
 #[get("/id/{id}/projects")]
 async fn view_gallery_projects(
     app: web::Data<AppData>,
@@ -138,6 +152,22 @@ async fn view_gallery_project_xml(
         .body(project_xml))
 }
 
+///returns xml of all projects in gallery
+#[get("/id/{id}/projects/xml")]
+async fn view_gallery_projects_xml(
+    app: web::Data<AppData>,
+    path: web::Path<api::GalleryId>,
+    req: HttpRequest,
+) -> Result<HttpResponse, UserError> {
+    let id = path.into_inner();
+    let auth_vgal = auth::try_view_gallery(&app, &req, &id).await?;
+
+    let actions = app.as_gallery_actions();
+    let all_project_xml = actions.get_all_gallery_project_xml(&auth_vgal).await?;
+
+    Ok(HttpResponse::Ok().json(all_project_xml))
+}
+
 #[delete("/id/{id}/projectid/{prid}/xml")]
 async fn delete_gallery_project(
     app: web::Data<AppData>,
@@ -148,11 +178,9 @@ async fn delete_gallery_project(
     let auth_dp = auth::try_delete_gallery_project(&app, &req, &id, &prid).await?;
 
     let actions = app.as_gallery_actions();
-    let project_xml = actions.remove_project_in_gallery(&auth_dp).await?;
+    let project = actions.remove_project_in_gallery(&auth_dp).await?;
 
-    Ok(HttpResponse::Ok()
-        .content_type("application/xml")
-        .body("<home>sdaud<\\home>"))
+    Ok(HttpResponse::Ok().json(project))
 }
 // TODO: Create endpoints for the other operations that need to be supported
 // (make a function - like above - then add them to `config` - like below)
@@ -162,8 +190,10 @@ pub fn config(cfg: &mut web::ServiceConfig) {
     cfg.service(view_gallery);
     cfg.service(change_gallery);
     cfg.service(delete_gallery);
+    cfg.service(view_gallery_project);
     cfg.service(view_gallery_projects);
     cfg.service(add_gallery_project);
+    cfg.service(add_gallery_project_version);
     cfg.service(view_gallery_project_xml);
     cfg.service(delete_gallery_project);
 }

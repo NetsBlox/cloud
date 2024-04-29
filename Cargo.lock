@@ -2596,7 +2596,7 @@ dependencies = [
  "lazy_static",
  "regex",
  "rustrict",
- "serde 1.0.188",
+ "serde",
  "serde_json",
  "ts-rs",
  "uuid",

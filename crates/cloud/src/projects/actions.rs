@@ -771,7 +771,6 @@ impl<'a> ProjectActions<'a> {
         role_id: &api::RoleId,
         role: &RoleData,
     ) -> Result<RoleMetadata, UserError> {
-        // for galleries, galleries/<gallery ID>/<project ID>/<version index>.xml
         let is_guest = owner.starts_with('_');
         let top_level = if is_guest { "guests" } else { "users" };
         let basepath = format!("{}/{}/{}/{}", top_level, owner, project_id, &role_id);

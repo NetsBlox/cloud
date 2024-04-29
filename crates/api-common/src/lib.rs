@@ -663,7 +663,7 @@ pub struct GalleryProjectMetadata {
 pub struct CreateGalleryProjectData {
     pub owner: String,
     pub name: String,
-    pub thumbnail: String, // should I extract from xml?
+    pub thumbnail: String,
     pub project_xml: String,
 }
 
