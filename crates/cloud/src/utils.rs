@@ -3,6 +3,7 @@ use actix_session::SessionExt;
 use actix_web::HttpRequest;
 use aws_sdk_s3 as s3;
 use aws_sdk_s3::operation::put_object::PutObjectOutput;
+use aws_sdk_s3::types::{Delete, ObjectIdentifier};
 use futures::TryStreamExt;
 use lazy_static::lazy_static;
 use lettre::{Message, SmtpTransport, Transport};
@@ -474,6 +475,30 @@ pub(crate) async fn delete(
         .delete_object()
         .bucket(bucket.as_str().to_owned())
         .key(key.as_str().to_owned())
+        .send()
+        .await
+        .map_err(|_err| InternalError::S3Error)?;
+
+    Ok(())
+}
+
+pub(crate) async fn delete_multiple(
+    client: &s3::Client,
+    bucket: &Bucket,
+    keys: Vec<Option<S3Key>>,
+) -> Result<(), UserError> {
+    let objects = keys
+        .into_iter()
+        .flatten()
+        .map(|key| ObjectIdentifier::builder().key(key.as_str()).build())
+        .collect::<Vec<_>>();
+
+    let delete = Delete::builder().set_objects(Some(objects)).build();
+
+    client
+        .delete_objects()
+        .bucket(bucket.as_str().to_owned())
+        .delete(delete)
         .send()
         .await
         .map_err(|_err| InternalError::S3Error)?;
