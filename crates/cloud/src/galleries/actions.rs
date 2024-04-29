@@ -1,4 +1,5 @@
 use api::Name;
+use futures::future::try_join_all;
 use futures::TryStreamExt;
 use mongodb::bson::doc;
 use mongodb::options::ReturnDocument;
@@ -124,15 +125,6 @@ impl<'a> GalleryActions<'a> {
         Ok(gallery)
     }
 
-    // for galleries, galleries/<gallery ID>/<project ID>/<version index>.xml
-    // WARN: what should happen if the client exceeds 99999 versions?
-    fn get_s3key(ap: &AddGalleryProject, gal_proj: &GalleryProjectMetadata) -> api::S3Key {
-        let ver_index = gal_proj.versions.len() + 1;
-        let path = format!("{}/{}/{:05}.xml", ap.metadata.id, gal_proj.id, ver_index);
-
-        api::S3Key::new(path)
-    }
-
     pub(crate) async fn add_gallery_project(
         &self,
         ap: &AddGalleryProject,
@@ -239,9 +231,26 @@ impl<'a> GalleryActions<'a> {
             .clone()
             .unwrap();
 
-        let xml = utils::download(self.s3, self.bucket, &s3key).await?; // this resolves the tombstone option
+        let xml = utils::download(self.s3, self.bucket, &s3key).await?;
 
         Ok(xml)
+    }
+
+    pub(crate) async fn get_all_gallery_project_xml(
+        &self,
+        vgal: &ViewGallery,
+    ) -> Result<Vec<String>, UserError> {
+        let projects = self.get_all_gallery_projects(vgal).await?;
+
+        // Create a vector of futures for fetching each project XML
+        let futures: Vec<_> = projects
+            .iter()
+            .map(|project| self.get_gallery_project_xml(vgal, &project.id))
+            .collect();
+
+        // Resolve all futures concurrently and collect the results
+        let xmls = try_join_all(futures).await?;
+        Ok(xmls)
     }
 
     pub(crate) async fn add_gallery_project_version(
@@ -331,9 +340,18 @@ impl<'a> GalleryActions<'a> {
 
     pub(crate) fn change_project_version_in_gallery(
         &self,
-        egal: &EditGallery,
+        ep: &EditGallery,
     ) -> Result<Gallery, UserError> {
         unimplemented!();
+    }
+
+    // for galleries, galleries/<gallery ID>/<project ID>/<version index>.xml
+    // WARN: what should happen if the client exceeds 99999 versions?
+    fn get_s3key(ap: &AddGalleryProject, gal_proj: &GalleryProjectMetadata) -> api::S3Key {
+        let ver_index = gal_proj.versions.len() + 1;
+        let path = format!("{}/{}/{:05}.xml", ap.metadata.id, gal_proj.id, ver_index);
+
+        api::S3Key::new(path)
     }
 }
 
