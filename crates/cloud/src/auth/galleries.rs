@@ -13,7 +13,6 @@ pub(crate) struct ViewGallery {
     pub(crate) metadata: Gallery,
     _private: (),
 }
-
 #[cfg(test)]
 impl ViewGallery {
     pub(crate) fn test(gallery: &Gallery) -> ViewGallery {
@@ -26,20 +25,18 @@ impl ViewGallery {
 
 pub(crate) struct EditGallery {
     pub(crate) metadata: Gallery,
-    // store changes instead. If permission change based on proposed changes, then include it
-    pub(crate) change: api::ChangeGalleryData,
     _private: (),
 }
 #[cfg(test)]
 impl EditGallery {
-    pub(crate) fn test(gallery: &Gallery, change: &api::ChangeGalleryData) -> EditGallery {
+    pub(crate) fn test(gallery: &Gallery) -> EditGallery {
         EditGallery {
             metadata: gallery.clone(),
-            change: change.clone(),
             _private: (),
         }
     }
 }
+
 pub(crate) struct DeleteGallery {
     pub(crate) metadata: Gallery,
     _private: (),
@@ -55,18 +52,15 @@ impl DeleteGallery {
 }
 
 /// witness for authorization for adding projects to a gallery
-pub(crate) struct AddProject {
+pub(crate) struct AddGalleryProject {
     pub(crate) metadata: Gallery,
-    pub(crate) project: api::CreateGalleryProjectData,
     _private: (),
 }
-
 #[cfg(test)]
-impl AddProject {
-    pub(crate) fn test(gallery: &Gallery, project: &api::CreateGalleryProjectData) -> AddProject {
-        AddProject {
+impl AddGalleryProject {
+    pub(crate) fn test(gallery: &Gallery) -> AddGalleryProject {
+        AddGalleryProject {
             metadata: gallery.clone(),
-            project: project.clone(),
             _private: (),
         }
     }
@@ -78,7 +72,6 @@ pub(crate) struct DeleteGalleryProject {
     pub(crate) project: GalleryProjectMetadata,
     _private: (),
 }
-
 #[cfg(test)]
 impl DeleteGalleryProject {
     pub(crate) fn test(
@@ -121,7 +114,6 @@ pub(crate) async fn try_edit_gallery(
     app: &AppData,
     req: &HttpRequest,
     id: &api::GalleryId,
-    try_change: Option<api::ChangeGalleryData>,
 ) -> Result<EditGallery, UserError> {
     let query = doc! {"id": id};
     let result = app
@@ -136,10 +128,6 @@ pub(crate) async fn try_edit_gallery(
     // is there a presedent for a valid name?
     Ok(EditGallery {
         metadata: result,
-        change: try_change.unwrap_or(api::ChangeGalleryData {
-            name: None,
-            state: None,
-        }),
         _private: (),
     })
 }
@@ -152,7 +140,7 @@ pub(crate) async fn try_delete_gallery(
     id: &api::GalleryId,
 ) -> Result<DeleteGallery, UserError> {
     // for now you can only delete the gallery if you are allowed to edit it
-    try_edit_gallery(app, req, id, None)
+    try_edit_gallery(app, req, id)
         .await
         .map(|eg| DeleteGallery {
             metadata: eg.metadata.clone(),
@@ -160,30 +148,33 @@ pub(crate) async fn try_delete_gallery(
         })
 }
 
-// NOTE: Add checking for group memebership.
+// TODO: Add checking for group memebership.
+// Must add group id to gallery definition
+// this is so a collection of people can "control a gallery"
 // is there a presedent for a valid name?
-pub(crate) async fn try_add_project(
+// there is a function in utils that ensures a name is valid
+// It would be nice if we could define something for name that would automatically check
+// in actix
+pub(crate) async fn try_add_gallery_project(
     app: &AppData,
     req: &HttpRequest,
     id: &api::GalleryId,
-    try_project: &api::CreateGalleryProjectData,
-) -> Result<AddProject, UserError> {
-    try_edit_gallery(app, req, id, None)
+) -> Result<AddGalleryProject, UserError> {
+    try_edit_gallery(app, req, id)
         .await
-        .map(|eg| AddProject {
+        .map(|eg| AddGalleryProject {
             metadata: eg.metadata.clone(),
-            project: try_project.clone(),
             _private: (),
         })
 }
 
-pub(crate) async fn try_delete_project(
+pub(crate) async fn try_delete_gallery_project(
     app: &AppData,
     req: &HttpRequest,
     id: &api::GalleryId,
     prid: &api::ProjectId,
 ) -> Result<DeleteGalleryProject, UserError> {
-    let gallery = try_edit_gallery(app, req, id, None).await?.metadata;
+    let gallery = try_edit_gallery(app, req, id).await?.metadata;
 
     let is_gal_owner = super::try_edit_user(app, req, None, &gallery.owner)
         .await
@@ -201,7 +192,7 @@ pub(crate) async fn try_delete_project(
         // if power over owner
         Ok(DeleteGalleryProject {
             metadata: gallery,
-            project: proj.into(),
+            project: proj,
             _private: (),
         })
     } else {
@@ -669,8 +660,8 @@ mod tests {
         req: HttpRequest,
         gallery: web::Json<(api::GalleryId, api::ChangeGalleryData)>,
     ) -> Result<HttpResponse, UserError> {
-        let (gallery_id, change) = gallery.into_inner();
-        try_edit_gallery(&app, &req, &gallery_id, Some(change)).await?;
+        let (gallery_id, _change) = gallery.into_inner();
+        try_edit_gallery(&app, &req, &gallery_id).await?;
         Ok(HttpResponse::Ok().finish())
     }
 

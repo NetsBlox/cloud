@@ -559,6 +559,9 @@ pub struct Gallery {
 #[ts(export)]
 pub struct ChangeGalleryData {
     #[ts(optional)]
+    // TODO: Future, use newtype and add constraints.
+    // In general, we need to automate checking for a valid 'name'
+    //
     pub name: Option<String>,
     #[ts(optional)]
     pub state: Option<PublishState>,
