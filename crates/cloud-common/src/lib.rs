@@ -416,24 +416,34 @@ pub struct GalleryProjectMetadata {
 
     pub owner: String,
     pub name: String,
-    pub updated: DateTime,
+    pub updated: DateTime, //NOTE: add updated to vector
     pub origin_time: DateTime,
-    pub thumbnail: String,
+    pub thumbnail: String, //NOTE: Move to s3, tuple with version
     pub versions: Vec<Option<S3Key>>,
+}
+
+pub struct version {
+    pub updated: DateTime,
+    //etc//
 }
 
 impl GalleryProjectMetadata {
     #[must_use]
     pub fn new(gallery: &Gallery, owner: String, name: String, thumbnail: String) -> Self {
+        let id = api::ProjectId::new(Uuid::new_v4().to_string());
         Self {
             gallery_id: gallery.id.clone(),
-            id: api::ProjectId::new(Uuid::new_v4().to_string()),
+            id: id.clone(),
             owner,
             name,
             updated: DateTime::now(),
             origin_time: DateTime::now(),
             thumbnail,
-            versions: Vec::new(),
+            versions: vec![Some(S3Key::new(format!(
+                "galleries/{}/{}/00001.xml",
+                gallery.id, id,
+            )))],
+            // for galleries, galleries/<gallery ID>/<project ID>/<version index>.xml
         }
     }
 }

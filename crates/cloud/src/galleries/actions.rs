@@ -236,6 +236,8 @@ impl<'a> GalleryActions<'a> {
         Ok(xml)
     }
 
+    //FIX: This is taxing on the server
+    //Remove
     pub(crate) async fn get_all_gallery_project_xml(
         &self,
         vgal: &ViewGallery,
@@ -349,7 +351,10 @@ impl<'a> GalleryActions<'a> {
     // WARN: what should happen if the client exceeds 99999 versions?
     fn get_s3key(ap: &AddGalleryProject, gal_proj: &GalleryProjectMetadata) -> api::S3Key {
         let ver_index = gal_proj.versions.len() + 1;
-        let path = format!("{}/{}/{:05}.xml", ap.metadata.id, gal_proj.id, ver_index);
+        let path = format!(
+            "galleries/{}/{}/{:05}.xml",
+            ap.metadata.id, gal_proj.id, ver_index
+        );
 
         api::S3Key::new(path)
     }

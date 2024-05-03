@@ -72,6 +72,24 @@ async fn delete_gallery(
     Ok(HttpResponse::Ok().json(metadata))
 }
 
+#[post("/id/{id}")]
+async fn add_gallery_project(
+    app: web::Data<AppData>,
+    path: web::Path<api::GalleryId>,
+    body: web::Json<api::CreateGalleryProjectData>,
+    req: HttpRequest,
+) -> Result<HttpResponse, UserError> {
+    let id = path.into_inner();
+    let data: api::CreateGalleryProjectData = body.into_inner();
+
+    let auth_ap = auth::try_add_gallery_project(&app, &req, &id).await?;
+
+    let actions = app.as_gallery_actions();
+    let project = actions.add_gallery_project(&auth_ap, data).await?;
+
+    Ok(HttpResponse::Ok().json(project))
+}
+
 #[get("/id/{id}/project/{prid}")]
 async fn view_gallery_project(
     app: web::Data<AppData>,
@@ -98,24 +116,6 @@ async fn view_gallery_projects(
     let actions = app.as_gallery_actions();
     let all_projects = actions.get_all_gallery_projects(&auth_vgal).await?;
     Ok(HttpResponse::Ok().json(all_projects))
-}
-
-#[post("/id/{id}")]
-async fn add_gallery_project(
-    app: web::Data<AppData>,
-    path: web::Path<api::GalleryId>,
-    body: web::Json<api::CreateGalleryProjectData>,
-    req: HttpRequest,
-) -> Result<HttpResponse, UserError> {
-    let id = path.into_inner();
-    let data: api::CreateGalleryProjectData = body.into_inner();
-
-    let auth_ap = auth::try_add_gallery_project(&app, &req, &id).await?;
-
-    let actions = app.as_gallery_actions();
-    let project = actions.add_gallery_project(&auth_ap, data).await?;
-
-    Ok(HttpResponse::Ok().json(project))
 }
 
 #[patch("/id/{id}")]
