@@ -51,6 +51,10 @@ impl Name {
 
 struct NameVisitor;
 
+//TODO: FUTURE: look for modern alternative to lazy_static
+//TODO: FUTURE: Look for a crate that would do this cleanly
+//TODO: FUTURE: It may be harder for Name, due to the
+//TODO: FUTURE: Setup custom errors in src/error.rs
 impl<'de> Visitor<'de> for NameVisitor {
     type Value = Name;
 
@@ -663,7 +667,7 @@ pub struct GalleryProjectMetadata {
 pub struct CreateGalleryProjectData {
     pub owner: String,
     pub name: String,
-    pub thumbnail: String,
+    pub thumbnail: String, //NOTE:: Redundent, thumbnail in project_xml
     pub project_xml: String,
 }
 
@@ -993,6 +997,13 @@ mod tests {
     fn serialize_userroles_as_strings() {
         let role_str = serde_json::to_string(&UserRole::User).unwrap();
         assert_eq!(&role_str, "\"user\"");
+    }
+
+    #[test]
+    fn deserialize_shortname_error() {
+        let name_str = String::from("\"\"");
+        let name: Result<Name, serde_json::Error> = serde_json::from_str(&name_str);
+        assert!(name.is_err());
     }
 
     #[test]
