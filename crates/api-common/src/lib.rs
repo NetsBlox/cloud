@@ -32,6 +32,70 @@ pub struct InvitationResponse {
     pub response: FriendLinkState,
 }
 
+#[derive(Serialize, Clone, Debug)]
+pub struct Name(String);
+
+impl Name {
+    pub fn new(name: &str) -> Self {
+        Self(String::from(name))
+    }
+
+    pub fn as_str(&self) -> &str {
+        &self.0
+    }
+}
+
+struct NameVisitor;
+
+//TODO: FUTURE: look for modern alternative to lazy_static
+//TODO: FUTURE: Look for a crate that would do this cleanly
+//TODO: FUTURE: It may be harder for Name, due to the
+//TODO: FUTURE: Setup custom errors in src/error.rs
+impl<'de> Visitor<'de> for NameVisitor {
+    type Value = Name;
+
+    fn expecting(&self, formatter: &mut fmt::Formatter) -> fmt::Result {
+        formatter
+            .write_str("a string that matches the regex: ^[\\w\\d_][\\w\\d_ \\(\\)\\.,'\\-!]*$")
+    }
+
+    fn visit_str<E>(self, value: &str) -> Result<Self::Value, E>
+    where
+        E: de::Error,
+    {
+        let max_len = 50;
+        let min_len = 1;
+        let char_count = value.chars().count();
+
+        lazy_static! {
+            static ref NAME_REGEX: Regex = Regex::new(r"^[\w\d_][\w\d_ \(\)\.,'\-!]*$").unwrap();
+        }
+
+        if char_count < min_len || char_count > max_len {
+            return Err(E::custom(format!(
+                "Name must be between {} and {} characters",
+                min_len, max_len
+            )));
+        }
+        if !NAME_REGEX.is_match(value) {
+            return Err(E::custom("Name contains invalid characters"));
+        }
+
+        if value.is_inappropriate() {
+            return Err(E::custom("Name contains inappropriate content"));
+        }
+
+        Ok(Name(value.to_owned()))
+    }
+}
+impl<'de> Deserialize<'de> for Name {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: Deserializer<'de>,
+    {
+        deserializer.deserialize_string(NameVisitor)
+    }
+}
 #[derive(Serialize, Deserialize, Clone, Debug, TS)]
 #[serde(rename_all = "camelCase")]
 #[ts(export)]
@@ -821,6 +885,13 @@ mod tests {
     fn serialize_userroles_as_strings() {
         let role_str = serde_json::to_string(&UserRole::User).unwrap();
         assert_eq!(&role_str, "\"user\"");
+    }
+
+    #[test]
+    fn deserialize_shortname_error() {
+        let name_str = String::from("\"\"");
+        let name: Result<Name, serde_json::Error> = serde_json::from_str(&name_str);
+        assert!(name.is_err());
     }
 
     #[test]
