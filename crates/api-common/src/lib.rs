@@ -4,6 +4,9 @@ pub mod oauth;
 
 use core::fmt;
 use derive_more::{Display, Error, FromStr};
+use lazy_static::lazy_static;
+use regex::Regex;
+use rustrict::CensorStr;
 use serde::{
     de::{self, Visitor},
     Deserialize, Deserializer, Serialize,
@@ -32,7 +35,8 @@ pub struct InvitationResponse {
     pub response: FriendLinkState,
 }
 
-#[derive(Serialize, Clone, Debug)]
+#[derive(Serialize, Clone, Debug, TS)]
+#[ts(export)]
 pub struct Name(String);
 
 impl Name {
@@ -72,17 +76,24 @@ impl<'de> Visitor<'de> for NameVisitor {
         }
 
         if char_count < min_len || char_count > max_len {
-            return Err(E::custom(format!(
+            let exp = format!(
                 "Name must be between {} and {} characters",
                 min_len, max_len
-            )));
+            );
+            return Err(E::invalid_length(char_count, &exp.as_str()));
         }
         if !NAME_REGEX.is_match(value) {
-            return Err(E::custom("Name contains invalid characters"));
+            return Err(E::invalid_value(
+                de::Unexpected::Other("invalid characters"),
+                &"a name without special characters, '(', ')', '!', ',', '.', ''', and '-' are allowed, but not as the first character",
+            ));
         }
 
         if value.is_inappropriate() {
-            return Err(E::custom("Name contains inappropriate content"));
+            return Err(E::invalid_value(
+                de::Unexpected::Other("profanity"),
+                &"a name without profanity",
+            ));
         }
 
         Ok(Name(value.to_owned()))
@@ -544,7 +555,7 @@ impl LibraryMetadata {
 #[serde(rename_all = "camelCase")]
 #[ts(export)]
 pub struct CreateGroupData {
-    pub name: String,
+    pub name: Name,
     #[ts(optional)]
     pub services_hosts: Option<Vec<ServiceHost>>,
 }
@@ -577,7 +588,7 @@ pub struct Group {
 #[derive(Serialize, Deserialize, TS)]
 #[ts(export)]
 pub struct UpdateGroupData {
-    pub name: String,
+    pub name: Name,
 }
 
 #[derive(Deserialize, Serialize, Clone, Debug, TS)]
@@ -620,7 +631,7 @@ impl CollaborationInvite {
 #[serde(rename_all = "camelCase")]
 #[ts(export)]
 pub struct UpdateProjectData {
-    pub name: String,
+    pub name: Name,
     #[ts(optional)]
     pub client_id: Option<ClientId>,
 }
@@ -629,7 +640,7 @@ pub struct UpdateProjectData {
 #[serde(rename_all = "camelCase")]
 #[ts(export)]
 pub struct UpdateRoleData {
-    pub name: String,
+    pub name: Name,
     #[ts(optional)]
     pub client_id: Option<ClientId>,
 }
@@ -640,7 +651,7 @@ pub struct UpdateRoleData {
 pub struct CreateProjectData {
     #[ts(optional)]
     pub owner: Option<String>,
-    pub name: String,
+    pub name: Name,
     #[ts(optional)]
     pub roles: Option<Vec<RoleData>>,
     #[ts(optional)]
@@ -892,6 +903,119 @@ mod tests {
         let name_str = String::from("\"\"");
         let name: Result<Name, serde_json::Error> = serde_json::from_str(&name_str);
         assert!(name.is_err());
+    }
+
+    #[test]
+    fn deserialize_profanity_name_error() {
+        let name_str_1 = String::from("\"FUCK\"");
+        let name_str_2 = String::from("\"DICK\"");
+        let name_str_3 = String::from("\"hell\"");
+        let name_str_4 = String::from("\"shitter\"");
+        let name_str_5 = String::from("\"fukker\"");
+        let name_str_6 = String::from("\"f@g\"");
+        let name_1: Result<Name, serde_json::Error> = serde_json::from_str(&name_str_1);
+        let name_2: Result<Name, serde_json::Error> = serde_json::from_str(&name_str_2);
+        let name_3: Result<Name, serde_json::Error> = serde_json::from_str(&name_str_3);
+        let name_4: Result<Name, serde_json::Error> = serde_json::from_str(&name_str_4);
+        let name_5: Result<Name, serde_json::Error> = serde_json::from_str(&name_str_5);
+        let name_6: Result<Name, serde_json::Error> = serde_json::from_str(&name_str_6);
+        assert!(name_1.is_err());
+        assert!(name_2.is_err());
+        assert!(name_3.is_err());
+        assert!(name_4.is_err());
+        assert!(name_5.is_err());
+        assert!(name_6.is_err());
+    }
+
+    #[test]
+    fn deserialize_leading_dash_name_error() {
+        let name_str = String::from("\"-name\"");
+        let name: Result<Name, serde_json::Error> = serde_json::from_str(&name_str);
+        assert!(name.is_err());
+    }
+
+    #[test]
+    fn deserialize_leading_parentheses_name_error() {
+        let name_str = String::from("\"(name\"");
+        let name: Result<Name, serde_json::Error> = serde_json::from_str(&name_str);
+        assert!(name.is_err());
+    }
+
+    #[test]
+    fn deserialize_leading_period_name_error() {
+        let name_str = String::from("\".name\"");
+        let name: Result<Name, serde_json::Error> = serde_json::from_str(&name_str);
+        assert!(name.is_err());
+    }
+
+    #[test]
+    fn deserialize_x_is_valid_name() {
+        let name_str = String::from("\"X\"");
+        let name: Result<Name, serde_json::Error> = serde_json::from_str(&name_str);
+        assert!(name.is_ok());
+    }
+
+    #[test]
+    fn deserialize_is_valid_name_spaces() {
+        let name_str = String::from("\"Player 1\"");
+        let name: Result<Name, serde_json::Error> = serde_json::from_str(&name_str);
+        assert!(name.is_ok());
+    }
+
+    #[test]
+    fn deserialize_is_valid_name_leading_nums() {
+        let name_str = String::from("\"2048 Game\"");
+        let name: Result<Name, serde_json::Error> = serde_json::from_str(&name_str);
+        assert!(name.is_ok());
+    }
+
+    #[test]
+    fn deserialize_is_valid_name_dashes() {
+        let name_str = String::from("\"player-i\"");
+        let name: Result<Name, serde_json::Error> = serde_json::from_str(&name_str);
+        assert!(name.is_ok());
+    }
+
+    #[test]
+    fn deserialize_is_valid_name_long_name() {
+        let name_str = String::from("\"RENAMED-rename-test-1696865702584\"");
+        let name: Result<Name, serde_json::Error> = serde_json::from_str(&name_str);
+        assert!(name.is_ok());
+    }
+
+    #[test]
+    fn deserialize_is_valid_name_parens() {
+        let name_str = String::from("\"untitled (20)\"");
+        let name: Result<Name, serde_json::Error> = serde_json::from_str(&name_str);
+        assert!(name.is_ok());
+    }
+
+    #[test]
+    fn deserialize_is_valid_name_dots() {
+        let name_str = String::from("\"untitled v1.2\"");
+        let name: Result<Name, serde_json::Error> = serde_json::from_str(&name_str);
+        assert!(name.is_ok());
+    }
+
+    #[test]
+    fn deserialize_is_valid_name_comma() {
+        let name_str = String::from("\"Lab2, SomeName\"");
+        let name: Result<Name, serde_json::Error> = serde_json::from_str(&name_str);
+        assert!(name.is_ok());
+    }
+
+    #[test]
+    fn deserialize_is_valid_name_apostrophe() {
+        let name_str = String::from("\"Brian's project\"");
+        let name: Result<Name, serde_json::Error> = serde_json::from_str(&name_str);
+        assert!(name.is_ok());
+    }
+
+    #[test]
+    fn deserialize_is_valid_name_bang() {
+        let name_str = String::from("\"Hello!\"");
+        let name: Result<Name, serde_json::Error> = serde_json::from_str(&name_str);
+        assert!(name.is_ok());
     }
 
     #[test]

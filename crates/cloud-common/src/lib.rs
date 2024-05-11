@@ -162,7 +162,7 @@ impl Group {
         Self {
             id: api::GroupId::new(Uuid::new_v4().to_string()),
             owner,
-            name: data.name,
+            name: data.name.as_str().to_owned(),
             service_settings: HashMap::new(),
             services_hosts: data.services_hosts,
         }

@@ -80,7 +80,7 @@ async fn update_group(
     let auth_eg = auth::try_edit_group(&app, &req, &id).await?;
 
     let actions: GroupActions = app.as_group_actions();
-    let group = actions.rename_group(&auth_eg, &data.name).await?;
+    let group = actions.rename_group(&auth_eg, &data.name.as_str()).await?;
 
     Ok(HttpResponse::Ok().json(group))
 }
@@ -168,9 +168,111 @@ mod tests {
     }
 
     #[actix_web::test]
-    #[ignore]
     async fn test_create_group() {
-        unimplemented!();
+        let user: User = api::NewUser {
+            username: "user".into(),
+            email: "user@netsblox.org".into(),
+            password: None,
+            group_id: None,
+            role: None,
+        }
+        .into();
+
+        test_utils::setup()
+            .with_users(&[user.clone()])
+            .run(|app_data| async move {
+                let app = test::init_service(
+                    App::new()
+                        .app_data(web::Data::new(app_data.clone()))
+                        .wrap(test_utils::cookie::middleware())
+                        .configure(config),
+                )
+                .await;
+
+                let data = api::CreateGroupData {
+                    name: api::Name::new("new_group_name"),
+                    services_hosts: None,
+                };
+
+                let req = test::TestRequest::post()
+                    .uri(&format!("/user/{}/", &user.username))
+                    .cookie(test_utils::cookie::new(&user.username))
+                    .set_json(&data)
+                    .to_request();
+
+                let response = test::call_service(&app, req).await;
+
+                // Check that the group is updated in the db
+                let query = doc! {"name": &data.name};
+                let group = app_data
+                    .groups
+                    .find_one(query, None)
+                    .await
+                    .expect("Could not query DB")
+                    .ok_or(UserError::GroupNotFoundError)
+                    .expect("Group not found in db.");
+
+                assert_eq!(group.name, "new_group_name".to_string());
+
+                // Check response
+                assert_eq!(response.status(), http::StatusCode::OK);
+                let bytes = response.into_body().try_into_bytes().unwrap();
+                let group: api::Group = serde_json::from_slice(&bytes).unwrap();
+
+                assert_eq!(group.name, "new_group_name".to_string());
+            })
+            .await;
+    }
+
+    #[actix_web::test]
+    async fn test_create_group_bad_name_403() {
+        let user: User = api::NewUser {
+            username: "user".into(),
+            email: "user@netsblox.org".into(),
+            password: None,
+            group_id: None,
+            role: None,
+        }
+        .into();
+
+        test_utils::setup()
+            .with_users(&[user.clone()])
+            .run(|app_data| async move {
+                let app = test::init_service(
+                    App::new()
+                        .app_data(web::Data::new(app_data.clone()))
+                        .wrap(test_utils::cookie::middleware())
+                        .configure(config),
+                )
+                .await;
+
+                let data = api::CreateGroupData {
+                    name: api::Name::new("fuck"),
+                    services_hosts: None,
+                };
+
+                let req = test::TestRequest::post()
+                    .uri(&format!("/user/{}/", &user.username))
+                    .cookie(test_utils::cookie::new(&user.username))
+                    .set_json(&data)
+                    .to_request();
+
+                let response = test::call_service(&app, req).await;
+
+                // Check that the group is updated in the db
+                let query = doc! {"name": &data.name};
+                app_data
+                    .groups
+                    .find_one(query, None)
+                    .await
+                    .expect("Could not query DB")
+                    .ok_or(UserError::GroupNotFoundError)
+                    .expect_err("Group with bad name found in DB");
+
+                // Check response
+                assert_ne!(response.status(), http::StatusCode::OK);
+            })
+            .await;
     }
 
     #[actix_web::test]
@@ -204,7 +306,7 @@ mod tests {
                 .await;
 
                 let data = api::UpdateGroupData {
-                    name: "new_name".into(),
+                    name: api::Name::new("new_name"),
                 };
                 let req = test::TestRequest::patch()
                     .uri(&format!("/id/{}", &group.id))
@@ -261,7 +363,7 @@ mod tests {
                 .await;
 
                 let data = api::UpdateGroupData {
-                    name: "new_name".into(),
+                    name: api::Name::new("new_name"),
                 };
                 let req = test::TestRequest::patch()
                     .uri(&format!("/id/{}", &group.id))

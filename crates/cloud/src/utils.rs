@@ -65,8 +65,6 @@ pub(crate) async fn get_valid_project_name(
     owner: &str,
     basename: &str,
 ) -> Result<String, UserError> {
-    ensure_valid_name(basename)?;
-
     let query = doc! {"owner": &owner};
     let cursor = project_metadata
         .find(query, None)
@@ -81,29 +79,6 @@ pub(crate) async fn get_valid_project_name(
         .collect();
 
     get_unique_name(project_names.iter().map(|n| n.as_str()), basename)
-}
-
-// FIXME: Can this be rolled into the data type itself?
-pub(crate) fn ensure_valid_name(name: &str) -> Result<(), UserError> {
-    if !is_valid_name(name) {
-        Err(UserError::InvalidRoleOrProjectName)
-    } else {
-        Ok(())
-    }
-}
-
-fn is_valid_name(name: &str) -> bool {
-    let max_len = 50;
-    let min_len = 1;
-    let char_count = name.chars().count();
-    lazy_static! {
-        static ref NAME_REGEX: Regex = Regex::new(r"^[\w\d_][\w\d_ \(\)\.,'\-!]*$").unwrap();
-    }
-
-    char_count >= min_len
-        && char_count <= max_len
-        && NAME_REGEX.is_match(name)
-        && !name.is_inappropriate()
 }
 
 pub(crate) fn get_unique_name<'a>(
@@ -421,64 +396,6 @@ mod tests {
         let mut cache = project_cache.write().unwrap();
         let metadata = cache.get(&id).unwrap();
         assert_eq!(&metadata.name, "new name");
-    }
-
-    #[actix_web::test]
-    async fn test_x_is_valid_name() {
-        assert!(is_valid_name("X"));
-    }
-
-    #[actix_web::test]
-    async fn test_is_valid_name_spaces() {
-        assert!(is_valid_name("Player 1"));
-    }
-
-    #[actix_web::test]
-    async fn test_is_valid_name_leading_nums() {
-        assert!(is_valid_name("2048 Game"));
-    }
-
-    #[actix_web::test]
-    async fn test_is_valid_name_dashes() {
-        assert!(is_valid_name("Player-i"));
-    }
-
-    #[actix_web::test]
-    async fn test_is_valid_name_long_name() {
-        assert!(is_valid_name("RENAMED-rename-test-1696865702584"));
-    }
-
-    #[actix_web::test]
-    async fn test_is_valid_name_parens() {
-        assert!(is_valid_name("untitled (20)"));
-    }
-
-    #[actix_web::test]
-    async fn test_is_valid_name_dots() {
-        assert!(is_valid_name("untitled v1.2"));
-    }
-
-    #[actix_web::test]
-    async fn test_is_valid_name_comma() {
-        assert!(is_valid_name("Lab2, SomeName"));
-    }
-
-    #[actix_web::test]
-    async fn test_is_valid_name_apostrophe() {
-        assert!(is_valid_name("Brian's project"));
-    }
-
-    #[actix_web::test]
-    async fn test_is_valid_name_profanity() {
-        assert!(!is_valid_name("shit"));
-        assert!(!is_valid_name("fuck"));
-        assert!(!is_valid_name("damn"));
-        assert!(!is_valid_name("hell"));
-    }
-
-    #[actix_web::test]
-    async fn test_is_valid_name_bang() {
-        assert!(is_valid_name("hello!"));
     }
 
     #[actix_web::test]

@@ -62,7 +62,7 @@ impl<'a> ProjectActions<'a> {
         project_data: impl Into<CreateProjectDataDict>,
     ) -> Result<api::ProjectMetadata, UserError> {
         let project_data: CreateProjectDataDict = project_data.into();
-        let name = project_data.name.to_owned();
+        let name = project_data.name.clone();
         let mut roles = project_data.roles;
 
         // Prepare the roles (ensure >=1 exists; upload them)
@@ -469,14 +469,13 @@ impl<'a> ProjectActions<'a> {
         &self,
         ep: &auth::projects::EditProject,
         role_id: RoleId,
-        name: &str,
+        name: &api::Name,
     ) -> Result<api::ProjectMetadata, UserError> {
-        utils::ensure_valid_name(name)?;
         if ep.metadata.roles.contains_key(&role_id) {
             let query = doc! {"id": &ep.metadata.id};
             let update = doc! {
                 "$set": {
-                    format!("roles.{}.name", role_id): name,
+                    format!("roles.{}.name", role_id): name.as_str(),
                     "updated": DateTime::now()
                 }
             };
@@ -866,7 +865,7 @@ impl From<api::CreateProjectData> for CreateProjectDataDict {
         // owner and client ID are not copied over since they are encoded in the
         // EditUser witness (more secure since we don't have to ensure they match)
         Self {
-            name: data.name,
+            name: data.name.as_str().to_string(),
             save_state: data.save_state,
             state: api::PublishState::Private,
             roles,
@@ -1041,10 +1040,9 @@ mod tests {
                     .unwrap();
 
                 let ep = auth::EditProject::test(metadata.clone());
-                actions
-                    .rename_role(&ep, role_id, "secondRole")
-                    .await
-                    .unwrap();
+                let name = api::Name::new("secondRole");
+
+                actions.rename_role(&ep, role_id, &name).await.unwrap();
 
                 let role_data = api::RoleData {
                     name: "role".into(),
