@@ -1,7 +1,6 @@
 use crate::app_data::AppData;
 use crate::auth;
 use crate::errors::UserError;
-use crate::utils::Name;
 use actix_web::{delete, get, patch, post, HttpRequest};
 use actix_web::{web, HttpResponse};
 
@@ -10,7 +9,7 @@ use crate::common::api;
 #[post("/user/{owner}/{name}")]
 async fn create_gallery(
     app: web::Data<AppData>,
-    path: web::Path<(String, Name)>,
+    path: web::Path<(String, String)>,
     req: HttpRequest,
 ) -> Result<HttpResponse, UserError> {
     let (owner, name) = path.into_inner();
@@ -150,22 +149,6 @@ async fn view_gallery_project_xml(
     Ok(HttpResponse::Ok()
         .content_type("application/xml")
         .body(project_xml))
-}
-
-///returns xml of all projects in gallery
-#[get("/id/{id}/projects/xml")]
-async fn view_gallery_projects_xml(
-    app: web::Data<AppData>,
-    path: web::Path<api::GalleryId>,
-    req: HttpRequest,
-) -> Result<HttpResponse, UserError> {
-    let id = path.into_inner();
-    let auth_vgal = auth::try_view_gallery(&app, &req, &id).await?;
-
-    let actions = app.as_gallery_actions();
-    let all_project_xml = actions.get_all_gallery_project_xml(&auth_vgal).await?;
-
-    Ok(HttpResponse::Ok().json(all_project_xml))
 }
 
 #[delete("/id/{id}/projectid/{prid}/xml")]
