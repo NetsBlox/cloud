@@ -2,7 +2,6 @@ use actix::Addr;
 use actix_session::SessionExt;
 use actix_web::HttpRequest;
 use futures::TryStreamExt;
-use lazy_static::lazy_static;
 use lettre::{Message, SmtpTransport, Transport};
 use log::error;
 use lru::LruCache;
@@ -12,7 +11,6 @@ use netsblox_cloud_common::{
     AuthorizedServiceHost, FriendLink, Group, ProjectMetadata, User,
 };
 use nonempty::NonEmpty;
-use regex::Regex;
 use rustrict::CensorStr;
 use sha2::{Digest, Sha512};
 use std::{
