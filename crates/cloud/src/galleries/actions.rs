@@ -1,5 +1,3 @@
-use api::Name;
-use futures::future::try_join_all;
 use futures::TryStreamExt;
 use mongodb::bson::doc;
 use mongodb::options::ReturnDocument;
@@ -42,7 +40,7 @@ impl<'a> GalleryActions<'a> {
     pub(crate) async fn create_gallery(
         &self,
         eu: &auth::EditUser,
-        name: &Name,
+        name: &String,
         state: api::PublishState,
     ) -> Result<Gallery, UserError> {
         // create gallery
@@ -236,25 +234,6 @@ impl<'a> GalleryActions<'a> {
         Ok(xml)
     }
 
-    //FIX: This is taxing on the server
-    //Remove
-    pub(crate) async fn get_all_gallery_project_xml(
-        &self,
-        vgal: &ViewGallery,
-    ) -> Result<Vec<String>, UserError> {
-        let projects = self.get_all_gallery_projects(vgal).await?;
-
-        // Create a vector of futures for fetching each project XML
-        let futures: Vec<_> = projects
-            .iter()
-            .map(|project| self.get_gallery_project_xml(vgal, &project.id))
-            .collect();
-
-        // Resolve all futures concurrently and collect the results
-        let xmls = try_join_all(futures).await?;
-        Ok(xmls)
-    }
-
     pub(crate) async fn add_gallery_project_version(
         &self,
         ap: &AddGalleryProject,
@@ -362,6 +341,8 @@ impl<'a> GalleryActions<'a> {
 
 #[cfg(test)]
 mod tests {
+    use std::str::FromStr;
+
     use crate::test_utils;
 
     use super::*;
@@ -388,7 +369,7 @@ mod tests {
                 let gallery = actions
                     .create_gallery(
                         &auth_eu,
-                        &Name::new("mygallery"),
+                        &"mygallery".to_owned(),
                         api::PublishState::Private,
                     )
                     .await

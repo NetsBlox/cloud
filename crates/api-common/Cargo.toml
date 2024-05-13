@@ -17,10 +17,6 @@ derive_more = "0.99.17"
 serde_json = "1.0.59"
 # TODO: make this a dev dependency or a feature
 ts-rs = { version = "7.0", features = ["uuid-impl", "serde-compat"] }
-# TODO: Should THese be here
-regex = "1"
-lazy_static = "1.4.0"
-rustrict = "0.1.30"
 
 [features]
 to_bson = ["bson"]
