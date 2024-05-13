@@ -40,15 +40,11 @@ impl<'a> GalleryActions<'a> {
     pub(crate) async fn create_gallery(
         &self,
         eu: &auth::EditUser,
-        name: &String,
+        name: &str,
         state: api::PublishState,
     ) -> Result<Gallery, UserError> {
         // create gallery
-        let gallery = Gallery::new(
-            eu.username.clone(),
-            name.as_str().to_string(),
-            state.clone(),
-        );
+        let gallery = Gallery::new(eu.username.clone(), name.to_string(), state.clone());
         // create mongodb formatted gallery
         let query = doc! {
           "name": &gallery.name,
@@ -341,8 +337,6 @@ impl<'a> GalleryActions<'a> {
 
 #[cfg(test)]
 mod tests {
-    use std::str::FromStr;
-
     use crate::test_utils;
 
     use super::*;
@@ -367,11 +361,7 @@ mod tests {
                 let auth_eu = auth::EditUser::test(user.username.clone());
 
                 let gallery = actions
-                    .create_gallery(
-                        &auth_eu,
-                        &"mygallery".to_owned(),
-                        api::PublishState::Private,
-                    )
+                    .create_gallery(&auth_eu, "mygallery", api::PublishState::Private)
                     .await
                     .unwrap();
 
