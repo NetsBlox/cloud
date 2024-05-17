@@ -406,44 +406,72 @@ impl From<Gallery> for Bson {
     }
 }
 
-/// TODO: Explain gallery projects
-// we lose type safety because of serialization boundry
+#[derive(Deserialize, Serialize, Clone, Debug)]
+#[serde(rename_all = "camelCase")]
+pub struct Version {
+    pub key: S3Key,
+    pub updated: DateTime,
+    pub deleted: bool,
+}
+
+impl Version {
+    #[must_use]
+    pub fn new(id: &GalleryId, prid: &ProjectId, index: usize) -> Self {
+        let key = S3Key::new(format!("galleries/{id}/{prid}/{index:05}.xml"));
+        Self {
+            updated: DateTime::now(),
+            key,
+            deleted: false,
+        }
+    }
+}
+
+impl From<Version> for netsblox_api_common::Version {
+    fn from(version: Version) -> netsblox_api_common::Version {
+        netsblox_api_common::Version {
+            updated: version.updated.to_system_time(),
+            key: version.key,
+            deleted: version.deleted,
+        }
+    }
+}
+
+impl From<Version> for Bson {
+    fn from(version: Version) -> Self {
+        Bson::Document(doc! {
+            "updated": version.updated,
+            "key": version.key,
+            "deleted": version.deleted,
+        })
+    }
+}
+
+//NOTE: We lose type safety in serialization boundry
 #[derive(Deserialize, Serialize, Clone, Debug)]
 #[serde(rename_all = "camelCase")]
 pub struct GalleryProjectMetadata {
     pub gallery_id: GalleryId,
     pub id: ProjectId,
-
     pub owner: String,
     pub name: String,
-    pub updated: DateTime, //NOTE: add updated to vector
     pub origin_time: DateTime,
-    pub thumbnail: String, //NOTE: Move to s3, tuple with version
-    pub versions: Vec<Option<S3Key>>,
-}
-
-pub struct version {
-    pub updated: DateTime,
-    //etc//
+    pub versions: Vec<Version>,
 }
 
 impl GalleryProjectMetadata {
     #[must_use]
-    pub fn new(gallery: &Gallery, owner: String, name: String, thumbnail: String) -> Self {
+    pub fn new(gallery: &Gallery, owner: &str, name: &str) -> Self {
         let id = api::ProjectId::new(Uuid::new_v4().to_string());
+        let index: usize = 0;
+        let version = Version::new(&gallery.id, &id, index);
+
         Self {
             gallery_id: gallery.id.clone(),
-            id: id.clone(),
-            owner,
-            name,
-            updated: DateTime::now(),
+            id,
+            owner: owner.to_string(),
+            name: name.to_string(),
             origin_time: DateTime::now(),
-            thumbnail,
-            versions: vec![Some(S3Key::new(format!(
-                "galleries/{}/{}/00001.xml",
-                gallery.id, id,
-            )))],
-            // for galleries, galleries/<gallery ID>/<project ID>/<version index>.xml
+            versions: vec![version],
         }
     }
 }
@@ -455,10 +483,8 @@ impl From<GalleryProjectMetadata> for netsblox_api_common::GalleryProjectMetadat
             id: gal_project.id,
             owner: gal_project.owner,
             name: gal_project.name,
-            updated: gal_project.updated.to_system_time(),
             origin_time: gal_project.origin_time.to_system_time(),
-            thumbnail: gal_project.thumbnail,
-            versions: gal_project.versions,
+            versions: gal_project.versions.into_iter().map(Into::into).collect(),
         }
     }
 }
@@ -470,9 +496,7 @@ impl From<GalleryProjectMetadata> for Bson {
             "id": gal_project.id,
             "owner": gal_project.owner,
             "name": gal_project.name,
-            "updated": gal_project.updated,
             "originTime": gal_project.origin_time,
-            "thumbnail": gal_project.thumbnail,
             "versions": gal_project.versions,
         })
     }

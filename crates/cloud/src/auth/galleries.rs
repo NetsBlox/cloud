@@ -63,6 +63,40 @@ impl AddGalleryProject {
     }
 }
 
+/// witness for authorization for viewing a specific project in a gallery
+pub(crate) struct ViewGalleryProject {
+    pub(crate) metadata: Gallery,
+    pub(crate) project: GalleryProjectMetadata,
+    _private: (),
+}
+#[cfg(test)]
+impl ViewGalleryProject {
+    pub(crate) fn test(gallery: &Gallery, project: &GalleryProjectMetadata) -> ViewGalleryProject {
+        ViewGalleryProject {
+            metadata: gallery.clone(),
+            project: project.clone(),
+            _private: (),
+        }
+    }
+}
+
+/// witness for authorization for editing a specific project in a gallery
+pub(crate) struct EditGalleryProject {
+    pub(crate) metadata: Gallery,
+    pub(crate) project: GalleryProjectMetadata,
+    _private: (),
+}
+#[cfg(test)]
+impl EditGalleryProject {
+    pub(crate) fn test(gallery: &Gallery, project: &GalleryProjectMetadata) -> ViewGalleryProject {
+        ViewGalleryProject {
+            metadata: gallery.clone(),
+            project: project.clone(),
+            _private: (),
+        }
+    }
+}
+
 /// witness for authorization for deleting a specific project in a gallery
 pub(crate) struct DeleteGalleryProject {
     pub(crate) metadata: Gallery,
@@ -143,9 +177,51 @@ pub(crate) async fn try_delete_gallery(
         })
 }
 
-// TODO: Add checking for group memebership.
-// Must add group id to gallery definition
-// this is so a collection of people can "control a gallery"
+/// functions to try to obtain the given permissions
+pub(crate) async fn try_view_gallery_project(
+    app: &AppData,
+    req: &HttpRequest,
+    id: &api::GalleryId,
+    prid: &api::ProjectId,
+) -> Result<ViewGalleryProject, UserError> {
+    let query = doc! {"galleryId": id};
+    let gallery = app
+        .galleries
+        .find_one(query, None)
+        .await
+        .map_err(InternalError::DatabaseConnectionError)?
+        .ok_or(UserError::GalleryNotFoundError)?;
+
+    let is_auth_for_gal = super::try_edit_user(app, req, None, &gallery.owner)
+        .await
+        .is_ok();
+
+    let query = doc! {"id": prid};
+    let proj = app
+        .gallery_projects
+        .find_one(query, None)
+        .await
+        .map_err(InternalError::DatabaseConnectionError)?
+        .ok_or(UserError::GalleryNotFoundError)?;
+
+    if is_auth_for_gal || gallery.state != PublishState::Public {
+        // if power over owner
+        Ok(ViewGalleryProject {
+            metadata: gallery,
+            project: proj,
+            _private: (),
+        })
+    } else {
+        // or project owner
+        super::try_edit_user(app, req, None, &proj.owner).await?;
+        Ok(ViewGalleryProject {
+            metadata: gallery,
+            project: proj,
+            _private: (),
+        })
+    }
+}
+
 pub(crate) async fn try_add_gallery_project(
     app: &AppData,
     req: &HttpRequest,
@@ -159,19 +235,40 @@ pub(crate) async fn try_add_gallery_project(
         })
 }
 
+pub(crate) async fn try_edit_gallery_project(
+    app: &AppData,
+    req: &HttpRequest,
+    id: &api::GalleryId,
+    prid: &api::ProjectId,
+) -> Result<EditGalleryProject, UserError> {
+    try_delete_gallery_project(app, req, id, prid)
+        .await
+        .map(|dgp| EditGalleryProject {
+            metadata: dgp.metadata.clone(),
+            project: dgp.project.clone(),
+            _private: {},
+        })
+}
+
 pub(crate) async fn try_delete_gallery_project(
     app: &AppData,
     req: &HttpRequest,
     id: &api::GalleryId,
     prid: &api::ProjectId,
 ) -> Result<DeleteGalleryProject, UserError> {
-    let gallery = try_edit_gallery(app, req, id).await?.metadata;
+    let query = doc! {"galleryId": id};
+    let gallery = app
+        .galleries
+        .find_one(query, None)
+        .await
+        .map_err(InternalError::DatabaseConnectionError)?
+        .ok_or(UserError::GalleryNotFoundError)?;
 
-    let is_gal_owner = super::try_edit_user(app, req, None, &gallery.owner)
+    let is_auth_gal = super::try_edit_user(app, req, None, &gallery.owner)
         .await
         .is_ok();
 
-    let query = doc! {"galleryId": prid};
+    let query = doc! {"id": prid};
     let proj = app
         .gallery_projects
         .find_one(query, None)
@@ -179,7 +276,7 @@ pub(crate) async fn try_delete_gallery_project(
         .map_err(InternalError::DatabaseConnectionError)?
         .ok_or(UserError::GalleryNotFoundError)?;
 
-    if is_gal_owner {
+    if is_auth_gal {
         // if power over owner
         Ok(DeleteGalleryProject {
             metadata: gallery,

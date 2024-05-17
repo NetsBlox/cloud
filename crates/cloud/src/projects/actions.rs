@@ -1,5 +1,4 @@
 use std::collections::HashMap;
-use std::io::BufWriter;
 use std::sync::{Arc, RwLock};
 
 use crate::auth;
@@ -12,10 +11,6 @@ use aws_sdk_s3 as s3;
 use futures::future::join_all;
 use futures::stream::FuturesUnordered;
 use futures::{join, TryStreamExt};
-use image::{
-    codecs::png::PngEncoder, ColorType, EncodableLayout, GenericImageView, ImageEncoder,
-    ImageFormat, RgbaImage,
-};
 use lru::LruCache;
 use mongodb::bson::{doc, DateTime};
 use mongodb::options::{FindOneAndUpdateOptions, FindOptions, ReturnDocument};
@@ -178,71 +173,7 @@ impl<'a> ProjectActions<'a> {
             .ok_or(UserError::ThumbnailNotFoundError)?;
 
         let code = utils::download(self.s3, self.bucket, &role_metadata.code).await?;
-        self.get_thumbnail(&code, aspect_ratio)
-    }
-
-    pub(crate) fn get_thumbnail(
-        &self,
-        xml: &str,
-        aspect_ratio: Option<f32>,
-    ) -> Result<Bytes, UserError> {
-        let thumbnail_str = self.get_thumbnail_str(&xml);
-        let thumbnail = base64::decode(thumbnail_str)
-            .map_err(|err| {
-                std::convert::Into::<UserError>::into(InternalError::Base64DecodeError(err))
-            })
-            .and_then(|image_data| {
-                image::load_from_memory_with_format(&image_data, ImageFormat::Png)
-                    .map_err(|err| InternalError::ThumbnailDecodeError(err).into())
-            })?;
-
-        let image_content = if let Some(aspect_ratio) = aspect_ratio {
-            let (width, height) = thumbnail.dimensions();
-            let current_ratio = (width as f32) / (height as f32);
-            let (resized_width, resized_height) = if current_ratio < aspect_ratio {
-                let new_width = (aspect_ratio * (height as f32)) as u32;
-                (new_width, height)
-            } else {
-                let new_height = ((width as f32) / aspect_ratio) as u32;
-                (width, new_height)
-            };
-
-            let top_offset: u32 = (resized_height - height) / 2;
-            let left_offset: u32 = (resized_width - width) / 2;
-            let mut image = RgbaImage::new(resized_width, resized_height);
-            for x in 0..width {
-                for y in 0..height {
-                    let pixel = thumbnail.get_pixel(x, y);
-                    image.put_pixel(x + left_offset, y + top_offset, pixel);
-                }
-            }
-            // encode the bytes as a png
-            let mut png_bytes = BufWriter::new(Vec::new());
-            let encoder = PngEncoder::new(&mut png_bytes);
-            let color = ColorType::Rgba8;
-            encoder
-                .write_image(image.as_bytes(), resized_width, resized_height, color)
-                .map_err(InternalError::ThumbnailEncodeError)?;
-            actix_web::web::Bytes::copy_from_slice(&png_bytes.into_inner().unwrap())
-        } else {
-            let (width, height) = thumbnail.dimensions();
-            let mut png_bytes = BufWriter::new(Vec::new());
-            let encoder = PngEncoder::new(&mut png_bytes);
-            let color = ColorType::Rgba8;
-            encoder
-                .write_image(thumbnail.as_bytes(), width, height, color)
-                .map_err(InternalError::ThumbnailEncodeError)?;
-            actix_web::web::Bytes::copy_from_slice(&png_bytes.into_inner().unwrap())
-        };
-
-        Ok(image_content)
-    }
-
-    fn get_thumbnail_str<'b>(&self, xml: &'b str) -> &'b str {
-        xml.split("<thumbnail>data:image/png;base64,")
-            .nth(1)
-            .and_then(|text| text.split("</thumbnail>").next())
-            .unwrap_or(xml)
+        utils::get_thumbnail(&code, aspect_ratio)
     }
 
     pub(crate) fn get_project_metadata(&self, vp: &auth::ViewProject) -> api::ProjectMetadata {
@@ -535,8 +466,8 @@ impl<'a> ProjectActions<'a> {
         let RoleMetadata { media, code, .. } = role;
         join_all(
             [
-                utils::delete(&self.s3, &self.bucket, media.to_owned()),
-                utils::delete(&self.s3, &self.bucket, code.to_owned()),
+                utils::delete(&self.s3, &self.bucket, media.clone()),
+                utils::delete(&self.s3, &self.bucket, code.clone()),
             ]
             .into_iter(),
         )
