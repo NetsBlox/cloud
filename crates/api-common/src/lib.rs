@@ -251,6 +251,12 @@ pub struct FriendInvite {
     pub created_at: SystemTime,
 }
 
+#[derive(Deserialize, Clone, Debug)]
+#[serde(rename_all = "camelCase")]
+pub struct ThumbnailParams {
+    pub aspect_ratio: Option<f32>,
+}
+
 #[derive(Deserialize, Serialize, Clone, Debug, PartialEq, Eq, Display, Hash, TS)]
 #[ts(export)]
 pub struct ProjectId(String);
@@ -579,17 +585,24 @@ pub struct ChangeGalleryData {
 #[derive(Deserialize, Serialize, Clone, Debug, TS)]
 #[serde(rename_all = "camelCase")]
 #[ts(export)]
+pub struct Version {
+    pub key: S3Key,
+    #[ts(type = "any")] // FIXME
+    pub updated: SystemTime,
+    pub deleted: bool,
+}
+
+#[derive(Deserialize, Serialize, Clone, Debug, TS)]
+#[serde(rename_all = "camelCase")]
+#[ts(export)]
 pub struct GalleryProjectMetadata {
     pub gallery_id: GalleryId,
     pub id: ProjectId,
     pub owner: String,
     pub name: String,
     #[ts(type = "any")] // FIXME
-    pub updated: SystemTime,
-    #[ts(type = "any")] // FIXME
     pub origin_time: SystemTime,
-    pub thumbnail: String,
-    pub versions: Vec<Option<S3Key>>,
+    pub versions: Vec<Version>,
 }
 
 #[derive(Deserialize, Serialize, Clone, Debug, TS)]
@@ -598,7 +611,6 @@ pub struct GalleryProjectMetadata {
 pub struct CreateGalleryProjectData {
     pub owner: String,
     pub name: String,
-    pub thumbnail: String, //NOTE:: Redundent, thumbnail in project_xml
     pub project_xml: String,
 }
 

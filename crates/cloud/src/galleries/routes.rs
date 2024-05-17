@@ -27,6 +27,21 @@ async fn create_gallery(
     Ok(HttpResponse::Ok().json(metadata))
 }
 
+#[get("/user/{owner}")]
+async fn view_galleries(
+    app: web::Data<AppData>,
+    path: web::Path<String>,
+    req: HttpRequest,
+) -> Result<HttpResponse, UserError> {
+    let owner = path.into_inner();
+    let auth_eu = auth::try_edit_user(&app, &req, None, &owner).await?;
+
+    let actions = app.as_gallery_actions();
+    let metadata = actions.view_galleries(&auth_eu).await?;
+
+    Ok(HttpResponse::Ok().json(metadata))
+}
+
 #[get("/id/{id}")]
 async fn view_gallery(
     app: web::Data<AppData>,
@@ -39,7 +54,7 @@ async fn view_gallery(
     Ok(HttpResponse::Ok().json(auth_vgal.metadata))
 }
 
-#[patch("/id/{id}/")]
+#[patch("/id/{id}")]
 async fn change_gallery(
     app: web::Data<AppData>,
     path: web::Path<api::GalleryId>,
@@ -78,7 +93,7 @@ async fn add_gallery_project(
     req: HttpRequest,
 ) -> Result<HttpResponse, UserError> {
     let id = path.into_inner();
-    let data: api::CreateGalleryProjectData = body.into_inner();
+    let data = body.into_inner();
 
     let auth_ap = auth::try_add_gallery_project(&app, &req, &id).await?;
 
@@ -99,7 +114,26 @@ async fn view_gallery_project(
 
     let actions = app.as_gallery_actions();
     let project = actions.get_gallery_project(&auth_vgal, &prid).await?;
+
     Ok(HttpResponse::Ok().json(project))
+}
+
+#[get("/id/{id}/project/{prid}/thumbnail")]
+async fn view_gallery_project_thumbnail(
+    app: web::Data<AppData>,
+    path: web::Path<(api::GalleryId, api::ProjectId)>,
+    params: web::Query<api::ThumbnailParams>,
+    req: HttpRequest,
+) -> Result<HttpResponse, UserError> {
+    let (id, prid) = path.into_inner();
+    let auth_vgal = auth::try_view_gallery(&app, &req, &id).await?;
+
+    let actions = app.as_gallery_actions();
+    let thumbnail = actions
+        .get_gallery_project_thumbnail(&auth_vgal, &prid, params.aspect_ratio)
+        .await?;
+
+    Ok(HttpResponse::Ok().content_type("image/png").body(thumbnail))
 }
 
 #[get("/id/{id}/projects")]
@@ -113,23 +147,24 @@ async fn view_gallery_projects(
 
     let actions = app.as_gallery_actions();
     let all_projects = actions.get_all_gallery_projects(&auth_vgal).await?;
+
     Ok(HttpResponse::Ok().json(all_projects))
 }
 
-#[patch("/id/{id}")]
+#[patch("/id/{id}/project/{prid}")]
 async fn add_gallery_project_version(
     app: web::Data<AppData>,
-    path: web::Path<api::GalleryId>,
-    body: web::Json<api::CreateGalleryProjectData>,
+    path: web::Path<(api::GalleryId, api::ProjectId)>,
+    body: web::Json<String>,
     req: HttpRequest,
 ) -> Result<HttpResponse, UserError> {
-    let id = path.into_inner();
-    let data: api::CreateGalleryProjectData = body.into_inner();
+    let (id, prid) = path.into_inner();
+    let data = body.into_inner();
 
-    let auth_ap = auth::try_add_gallery_project(&app, &req, &id).await?;
+    let auth_ep = auth::try_edit_gallery_project(&app, &req, &id, &prid).await?;
 
     let actions = app.as_gallery_actions();
-    let project = actions.add_gallery_project_version(&auth_ap, data).await?;
+    let project = actions.add_gallery_project_version(&auth_ep, data).await?;
 
     Ok(HttpResponse::Ok().json(project))
 }
@@ -141,10 +176,29 @@ async fn view_gallery_project_xml(
     req: HttpRequest,
 ) -> Result<HttpResponse, UserError> {
     let (id, prid) = path.into_inner();
-    let auth_vgal = auth::try_view_gallery(&app, &req, &id).await?;
+    let auth_vgalp = auth::try_view_gallery_project(&app, &req, &id, &prid).await?;
 
     let actions = app.as_gallery_actions();
-    let project_xml = actions.get_gallery_project_xml(&auth_vgal, &prid).await?;
+    let project_xml = actions.get_gallery_project_xml(&auth_vgalp).await?;
+
+    Ok(HttpResponse::Ok()
+        .content_type("application/xml")
+        .body(project_xml))
+}
+
+#[get("/id/{id}/projectid/{prid}/version/{index}/xml")]
+async fn view_gallery_project_xml_version(
+    app: web::Data<AppData>,
+    path: web::Path<(api::GalleryId, api::ProjectId, usize)>,
+    req: HttpRequest,
+) -> Result<HttpResponse, UserError> {
+    let (id, prid, index) = path.into_inner();
+    let auth_vgalp = auth::try_view_gallery_project(&app, &req, &id, &prid).await?;
+
+    let actions = app.as_gallery_actions();
+    let project_xml = actions
+        .get_gallery_project_xml_version(&auth_vgalp, index)
+        .await?;
 
     Ok(HttpResponse::Ok()
         .content_type("application/xml")
@@ -165,11 +219,30 @@ async fn delete_gallery_project(
 
     Ok(HttpResponse::Ok().json(project))
 }
+
+#[delete("/id/{id}/projectid/{prid}/version/{index}/xml")]
+async fn delete_gallery_project_version(
+    app: web::Data<AppData>,
+    path: web::Path<(api::GalleryId, api::ProjectId, usize)>,
+    req: HttpRequest,
+) -> Result<HttpResponse, UserError> {
+    let (id, prid, index) = path.into_inner();
+    let auth_dp = auth::try_delete_gallery_project(&app, &req, &id, &prid).await?;
+
+    let actions = app.as_gallery_actions();
+    let project = actions
+        .remove_project_version_in_gallery(&auth_dp, index)
+        .await?;
+
+    Ok(HttpResponse::Ok().json(project))
+}
+
 // TODO: Create endpoints for the other operations that need to be supported
 // (make a function - like above - then add them to `config` - like below)
 
 pub fn config(cfg: &mut web::ServiceConfig) {
     cfg.service(create_gallery);
+    cfg.service(view_galleries);
     cfg.service(view_gallery);
     cfg.service(change_gallery);
     cfg.service(delete_gallery);
@@ -179,6 +252,7 @@ pub fn config(cfg: &mut web::ServiceConfig) {
     cfg.service(add_gallery_project_version);
     cfg.service(view_gallery_project_xml);
     cfg.service(delete_gallery_project);
+    cfg.service(delete_gallery_project_version);
 }
 
 // use tests that tests functionality of the code in this file.

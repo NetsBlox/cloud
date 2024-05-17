@@ -1,3 +1,4 @@
+use actix_web::web::Bytes;
 use futures::TryStreamExt;
 use mongodb::bson::doc;
 use mongodb::options::ReturnDocument;
@@ -5,13 +6,14 @@ use mongodb::{Collection, Cursor};
 use netsblox_cloud_common::api::ProjectId;
 
 use crate::auth::{
-    self, AddGalleryProject, DeleteGallery, DeleteGalleryProject, EditGallery, ViewGallery,
+    self, AddGalleryProject, DeleteGallery, DeleteGalleryProject, EditGallery, EditGalleryProject,
+    ViewGallery, ViewGalleryProject,
 };
 use crate::errors::{InternalError, UserError};
 use crate::utils;
 
 use aws_sdk_s3 as s3;
-use netsblox_cloud_common::{api, Bucket, Gallery, GalleryProjectMetadata};
+use netsblox_cloud_common::{api, Bucket, Gallery, GalleryProjectMetadata, Version};
 
 pub(crate) struct GalleryActions<'a> {
     galleries: &'a Collection<Gallery>,
@@ -69,6 +71,26 @@ impl<'a> GalleryActions<'a> {
         }
     }
 
+    pub(crate) async fn view_galleries(
+        &self,
+        eu: &auth::EditUser,
+    ) -> Result<Vec<Gallery>, UserError> {
+        let query = doc! {
+          "owner": &eu.username,
+        };
+
+        let result = self
+            .galleries
+            .find(query, None)
+            .await
+            .map_err(InternalError::DatabaseConnectionError)?
+            .try_collect()
+            .await
+            .map_err(InternalError::DatabaseConnectionError)?;
+
+        Ok(result)
+    }
+
     pub(crate) async fn change_gallery(
         &self,
         egal: &EditGallery,
@@ -86,15 +108,13 @@ impl<'a> GalleryActions<'a> {
             update.get_document_mut("$set").unwrap().insert("state", s);
         }
 
-        let fin_update = update;
-
         let options = mongodb::options::FindOneAndUpdateOptions::builder()
             .return_document(ReturnDocument::After)
             .build();
 
         let gallery = self
             .galleries
-            .find_one_and_update(query, fin_update, options)
+            .find_one_and_update(query, update, options)
             .await
             .map_err(InternalError::DatabaseConnectionError)?
             .ok_or(UserError::GalleryNotFoundError)?;
@@ -124,16 +144,18 @@ impl<'a> GalleryActions<'a> {
         ap: &AddGalleryProject,
         project: api::CreateGalleryProjectData,
     ) -> Result<GalleryProjectMetadata, UserError> {
-        //FIXME: how can I get rid of this mut
-        let mut gal_project = GalleryProjectMetadata::new(
+        let gal_project = GalleryProjectMetadata::new(
             &ap.metadata,
-            project.owner.clone(),
-            project.name.clone(),
-            project.thumbnail.clone(),
+            project.owner.as_str(),
+            project.name.as_str(),
         );
 
-        let key: api::S3Key = GalleryActions::get_s3key(ap, &gal_project);
-        gal_project.versions.push(Some(key.clone()));
+        let key: api::S3Key = gal_project
+            .versions
+            .first()
+            .ok_or(UserError::GalleryProjectVersionsEmptyError)?
+            .key
+            .clone();
 
         let query = doc! {
             "galleryId": gal_project.gallery_id.clone(),
@@ -158,6 +180,7 @@ impl<'a> GalleryActions<'a> {
 
         let s3_res = utils::upload(self.s3, self.bucket, &key, project.project_xml.clone()).await;
 
+        //FIX: If this fails, then memory leak in mongo
         if let Err(e) = s3_res {
             self.gallery_projects
                 .delete_one(query, None)
@@ -187,6 +210,34 @@ impl<'a> GalleryActions<'a> {
         Ok(project)
     }
 
+    /// returns project in gallery
+    pub(crate) async fn get_gallery_project_thumbnail(
+        &self,
+        vgal: &ViewGallery,
+        project_id: &ProjectId,
+        aspect_ratio: Option<f32>,
+    ) -> Result<Bytes, UserError> {
+        let query = doc! {"galleryId": &vgal.metadata.id, "id": project_id};
+
+        let key = self
+            .gallery_projects
+            .find_one(query, None)
+            .await
+            .map_err(InternalError::DatabaseConnectionError)?
+            .ok_or(UserError::GalleryNotFoundError)?
+            .versions
+            .iter()
+            .rev()
+            .find(|ver| !ver.deleted)
+            .ok_or(UserError::GalleryProjectVersionsEmptyError)?
+            .key
+            .clone();
+
+        let code = utils::download(self.s3, self.bucket, &key).await?;
+        let thumbnail = utils::get_thumbnail(&code, aspect_ratio)?;
+
+        Ok(thumbnail)
+    }
     /// returns projects in gallery
     pub(crate) async fn get_all_gallery_projects(
         &self,
@@ -208,59 +259,17 @@ impl<'a> GalleryActions<'a> {
         Ok(projects)
     }
 
-    pub(crate) async fn get_gallery_project_xml(
-        &self,
-        vgal: &ViewGallery,
-        project_id: &ProjectId,
-    ) -> Result<String, UserError> {
-        let mut project = self.get_gallery_project(vgal, project_id).await?;
-        // This cleans up deleted versions
-        project.versions.retain(|ver| ver.is_some());
-
-        // What if last is still a tombstone?
-        let s3key: api::S3Key = project
-            .versions
-            .last()
-            .ok_or(UserError::GalleryNotFoundError)? // this resolves the .last() option
-            .clone()
-            .unwrap();
-
-        let xml = utils::download(self.s3, self.bucket, &s3key).await?;
-
-        Ok(xml)
-    }
-
     pub(crate) async fn add_gallery_project_version(
         &self,
-        ap: &AddGalleryProject,
-        new: api::CreateGalleryProjectData,
+        ap: &EditGalleryProject,
+        xml: String,
     ) -> Result<GalleryProjectMetadata, UserError> {
-        //TODO: can I do this in one mongodb query?
-        // It relies on getting the next version without querying the project.
-        let query = doc! {
-            "galleryId": ap.metadata.id.clone(),
-            "owner": new.owner.clone(),
-            "name": new.name.clone(),
-        };
+        let index: usize = ap.project.versions.len();
 
-        let project = self
-            .gallery_projects
-            .find_one(query.clone(), None)
-            .await
-            .map_err(InternalError::DatabaseConnectionError)?
-            .ok_or(UserError::GalleryNotFoundError)?;
+        let version: Version = Version::new(&ap.project.gallery_id, &ap.project.id, index);
 
-        let key: api::S3Key = GalleryActions::get_s3key(ap, &project);
-
-        //WARN::This avoids using a mutable reference; is it worth copying every element?
-        let new_versions = project
-            .versions
-            .iter()
-            .cloned()
-            .chain(std::iter::once(Some(key.clone())))
-            .collect::<Vec<_>>();
-
-        let update = doc! {"$set": {"versions": new_versions}};
+        let query = doc! { "id": ap.project.id.clone() };
+        let update = doc! {"$push": {"versions": version.clone()}};
 
         let options = mongodb::options::FindOneAndUpdateOptions::builder()
             .return_document(ReturnDocument::After)
@@ -268,15 +277,16 @@ impl<'a> GalleryActions<'a> {
 
         let result = self
             .gallery_projects
-            .find_one_and_update(query.clone(), update, options)
+            .find_one_and_update(update.clone(), update, options)
             .await
             .map_err(InternalError::DatabaseConnectionError)?
             .ok_or(UserError::GalleryNotFoundError)?;
 
-        let s3_res = utils::upload(self.s3, self.bucket, &key, new.project_xml.clone()).await;
+        let s3_res = utils::upload(self.s3, self.bucket, &version.key, xml).await;
 
+        //FIXME:: if cleanup fails, we have mongo memory leak
         if let Err(e) = s3_res {
-            let reset = doc! {"$set": {"versions": project.versions}};
+            let reset = doc! {"$set": {"versions": ap.project.versions.clone()}};
             self.gallery_projects
                 .find_one_and_update(query, reset, None)
                 .await
@@ -284,15 +294,52 @@ impl<'a> GalleryActions<'a> {
             return Err(e.into());
         }
 
-        Ok(result.clone())
+        Ok(result)
     }
 
-    //NOTE::is there a reason not to move witnesses?
+    pub(crate) async fn get_gallery_project_xml(
+        &self,
+        vgalp: &ViewGalleryProject,
+    ) -> Result<String, UserError> {
+        let s3key: api::S3Key = vgalp
+            .project
+            .versions
+            .iter()
+            .rev()
+            .find(|ver| !ver.deleted)
+            .ok_or(UserError::GalleryProjectVersionsEmptyError)?
+            .key
+            .clone();
+
+        let xml = utils::download(self.s3, self.bucket, &s3key).await?;
+
+        Ok(xml)
+    }
+
+    pub(crate) async fn get_gallery_project_xml_version(
+        &self,
+        vgalp: &ViewGalleryProject,
+        index: usize,
+    ) -> Result<String, UserError> {
+        let s3key: api::S3Key = vgalp.project.versions[index].key.clone();
+
+        let xml = utils::download(self.s3, self.bucket, &s3key).await?;
+
+        Ok(xml)
+    }
+
     pub(crate) async fn remove_project_in_gallery(
         &self,
         dp: &DeleteGalleryProject,
     ) -> Result<GalleryProjectMetadata, UserError> {
-        utils::delete_multiple(self.s3, self.bucket, dp.project.versions.clone()).await?;
+        let keys: Vec<api::S3Key> = dp
+            .project
+            .versions
+            .iter()
+            .map(|ver| ver.key.clone())
+            .collect();
+
+        utils::delete_multiple(self.s3, self.bucket, keys).await?;
 
         let query = doc! {
           "id": &dp.project.id
@@ -308,30 +355,33 @@ impl<'a> GalleryActions<'a> {
         Ok(project)
     }
 
-    pub(crate) fn remove_project_version_in_gallery(
+    pub(crate) async fn remove_project_version_in_gallery(
         &self,
-        egal: &EditGallery,
-    ) -> Result<Gallery, UserError> {
-        unimplemented!()
-    }
+        dgalp: &DeleteGalleryProject,
+        index: usize,
+    ) -> Result<GalleryProjectMetadata, UserError> {
+        let query = doc! {
+          "id": dgalp.project.id.clone()
+        };
 
-    pub(crate) fn change_project_version_in_gallery(
-        &self,
-        ep: &EditGallery,
-    ) -> Result<Gallery, UserError> {
-        unimplemented!();
-    }
+        let update = doc! {
+            "$set": {
+                format!("gallery_project.versions.{}.deleted", index): true
+            }
+        };
 
-    // for galleries, galleries/<gallery ID>/<project ID>/<version index>.xml
-    // WARN: what should happen if the client exceeds 99999 versions?
-    fn get_s3key(ap: &AddGalleryProject, gal_proj: &GalleryProjectMetadata) -> api::S3Key {
-        let ver_index = gal_proj.versions.len() + 1;
-        let path = format!(
-            "galleries/{}/{}/{:05}.xml",
-            ap.metadata.id, gal_proj.id, ver_index
-        );
+        let options = mongodb::options::FindOneAndUpdateOptions::builder()
+            .return_document(ReturnDocument::After)
+            .build();
 
-        api::S3Key::new(path)
+        let result = self
+            .gallery_projects
+            .find_one_and_update(query.clone(), update, options)
+            .await
+            .map_err(InternalError::DatabaseConnectionError)?
+            .ok_or(UserError::GalleryProjectVersionNotFound)?;
+
+        Ok(result)
     }
 }
 
