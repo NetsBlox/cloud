@@ -580,6 +580,37 @@ impl AppData {
     }
 
     #[cfg(test)]
+    pub(crate) async fn insert_gallery_projects(
+        &self,
+        gallery_projects: &[GalleryProjectMetadata],
+    ) -> Result<(), InternalError> {
+        for project in gallery_projects {
+            for (index, version) in project.versions.iter().enumerate() {
+                let color = crate::test_utils::gallery_projects::TestThumbnail::new(index);
+
+                crate::utils::upload(
+                    &self.s3,
+                    &self.bucket,
+                    &version.key,
+                    format!(
+                        "<project><version>{}</version><thumbnail>{}</thumbnail></project>",
+                        index,
+                        color.as_str(),
+                    ),
+                )
+                .await?;
+            }
+        }
+
+        self.gallery_projects
+            .insert_many(gallery_projects, None)
+            .await
+            .map_err(InternalError::DatabaseConnectionError)?;
+
+        Ok(())
+    }
+
+    #[cfg(test)]
     pub(crate) async fn insert_magic_links(
         &self,
         links: &[MagicLink],

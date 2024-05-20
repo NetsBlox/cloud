@@ -562,6 +562,15 @@ impl GalleryId {
 #[derive(Serialize, Deserialize, Clone, Debug, TS)]
 #[serde(rename_all = "camelCase")]
 #[ts(export)]
+pub struct CreateGalleryData {
+    pub owner: String,
+    pub name: String,
+    pub state: PublishState,
+}
+
+#[derive(Serialize, Deserialize, Clone, Debug, TS)]
+#[serde(rename_all = "camelCase")]
+#[ts(export)]
 pub struct Gallery {
     pub id: GalleryId,
     pub owner: String,
@@ -612,15 +621,6 @@ pub struct CreateGalleryProjectData {
     pub owner: String,
     pub name: String,
     pub project_xml: String,
-}
-
-#[derive(Deserialize, Serialize, TS)]
-#[serde(rename_all = "camelCase")]
-#[ts(export)]
-pub struct UpdateGalleryProjectData {
-    pub owner: String,
-    pub name: String,
-    pub thumbnail: String,
 }
 
 #[derive(Deserialize, Serialize, Clone, Debug, TS)]

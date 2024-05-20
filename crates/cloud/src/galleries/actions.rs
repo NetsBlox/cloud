@@ -41,12 +41,11 @@ impl<'a> GalleryActions<'a> {
 
     pub(crate) async fn create_gallery(
         &self,
-        eu: &auth::EditUser,
-        name: &str,
-        state: api::PublishState,
+        _eu: &auth::EditUser,
+        data: api::CreateGalleryData,
     ) -> Result<Gallery, UserError> {
         // create gallery
-        let gallery = Gallery::new(eu.username.clone(), name.to_string(), state.clone());
+        let gallery: Gallery = data.into();
         // create mongodb formatted gallery
         let query = doc! {
           "name": &gallery.name,
@@ -277,7 +276,7 @@ impl<'a> GalleryActions<'a> {
 
         let result = self
             .gallery_projects
-            .find_one_and_update(update.clone(), update, options)
+            .find_one_and_update(query.clone(), update, options)
             .await
             .map_err(InternalError::DatabaseConnectionError)?
             .ok_or(UserError::GalleryNotFoundError)?;
@@ -285,8 +284,9 @@ impl<'a> GalleryActions<'a> {
         let s3_res = utils::upload(self.s3, self.bucket, &version.key, xml).await;
 
         //FIXME:: if cleanup fails, we have mongo memory leak
+        //NOTE:: how would I test this
         if let Err(e) = s3_res {
-            let reset = doc! {"$set": {"versions": ap.project.versions.clone()}};
+            let reset = doc! {"$pull": {"versions": version.key}};
             self.gallery_projects
                 .find_one_and_update(query, reset, None)
                 .await
@@ -410,10 +410,12 @@ mod tests {
 
                 let auth_eu = auth::EditUser::test(user.username.clone());
 
-                let gallery = actions
-                    .create_gallery(&auth_eu, "mygallery", api::PublishState::Private)
-                    .await
-                    .unwrap();
+                let data = api::CreateGalleryData {
+                    owner: auth_eu.username.clone(),
+                    name: String::from("mygallery"),
+                    state: api::PublishState::Private,
+                };
+                let gallery = actions.create_gallery(&auth_eu, data).await.unwrap();
 
                 // Check that it exists in the database
                 let query = doc! {"id": gallery.id};
