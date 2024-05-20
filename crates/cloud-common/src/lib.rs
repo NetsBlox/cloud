@@ -372,6 +372,12 @@ pub struct Gallery {
     pub state: api::PublishState,
 }
 
+impl From<api::CreateGalleryData> for Gallery {
+    fn from(data: api::CreateGalleryData) -> Gallery {
+        Gallery::new(data.owner, data.name, data.state)
+    }
+}
+
 impl Gallery {
     #[must_use]
     pub fn new(owner: String, name: String, state: api::PublishState) -> Self {

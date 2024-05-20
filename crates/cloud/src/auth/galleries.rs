@@ -184,7 +184,7 @@ pub(crate) async fn try_view_gallery_project(
     id: &api::GalleryId,
     prid: &api::ProjectId,
 ) -> Result<ViewGalleryProject, UserError> {
-    let query = doc! {"galleryId": id};
+    let query = doc! {"id": id};
     let gallery = app
         .galleries
         .find_one(query, None)
@@ -226,7 +226,10 @@ pub(crate) async fn try_add_gallery_project(
     app: &AppData,
     req: &HttpRequest,
     id: &api::GalleryId,
+    data: &api::CreateGalleryProjectData,
 ) -> Result<AddGalleryProject, UserError> {
+    super::try_edit_user(app, req, None, &data.owner).await?;
+
     try_edit_gallery(app, req, id)
         .await
         .map(|eg| AddGalleryProject {
@@ -256,7 +259,7 @@ pub(crate) async fn try_delete_gallery_project(
     id: &api::GalleryId,
     prid: &api::ProjectId,
 ) -> Result<DeleteGalleryProject, UserError> {
-    let query = doc! {"galleryId": id};
+    let query = doc! {"id": id};
     let gallery = app
         .galleries
         .find_one(query, None)
