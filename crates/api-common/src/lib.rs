@@ -40,12 +40,30 @@ pub struct InvitationResponse {
 pub struct Name(String);
 
 impl Name {
-    pub fn new(name: &str) -> Self {
-        Self(String::from(name))
+    //pub fn new(name: impl Into<String>) -> Self {
+    pub fn new<T: Into<String>>(name: T) -> Self {
+        let name: String = name.into();
+        Self(name)
+    }
+
+    pub fn mk_string(&self) -> impl Into<String> {
+        if true {
+            "thing"
+        } else {
+            "I am a string"
+        }
     }
 
     pub fn as_str(&self) -> &str {
         &self.0
+    }
+}
+
+struct NameArg;
+
+impl From<NameArg> for String {
+    fn from(_value: NameArg) -> Self {
+        String::from("hey there! I am coming from a zero sized type :)")
     }
 }
 
@@ -939,6 +957,11 @@ mod tests {
         let name_str = String::from("\"(name\"");
         let name: Result<Name, serde_json::Error> = serde_json::from_str(&name_str);
         assert!(name.is_err());
+    }
+
+    #[test]
+    fn name_arg() {
+        let name = Name::new(NameArg);
     }
 
     #[test]
