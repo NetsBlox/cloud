@@ -40,7 +40,7 @@ pub(crate) fn setup() -> TestSetupBuilder {
         authorized_services: Vec::new(),
         galleries: Vec::new(),
         gallery_projects: Vec::new(),
-        // network: None,
+        with_s3: true, // network: None,
     }
 }
 
@@ -58,7 +58,7 @@ pub(crate) struct TestSetupBuilder {
     banned_users: Vec<String>,
     collab_invites: Vec<CollaborationInvite>,
     authorized_services: Vec<AuthorizedServiceHost>,
-    //network: Option<Addr<TopologyActor>>,
+    with_s3: bool, //network: Option<Addr<TopologyActor>>,
 }
 
 impl TestSetupBuilder {
@@ -130,6 +130,11 @@ impl TestSetupBuilder {
     //     self
     // }
 
+    pub(crate) fn without_s3(mut self) -> Self {
+        self.with_s3 = false;
+        self
+    }
+
     #[allow(clippy::too_many_lines)]
     pub(crate) async fn run<Fut>(self, f: impl FnOnce(AppData) -> Fut)
     where
@@ -145,7 +150,7 @@ impl TestSetupBuilder {
         settings.database.name = db_name.clone();
         settings.s3.bucket = format!("{}-{}", &self.prefix, settings.s3.bucket);
 
-        let app_data = AppData::new(client.clone(), settings, None, None, None);
+        let mut app_data = AppData::new(client.clone(), settings, None, None, None); //FIXME: how can I drop s3 without this being mutable
 
         // create the test fixtures (users, projects, etc)
         client.database(&db_name).drop(None).await.unwrap();
@@ -263,6 +268,9 @@ impl TestSetupBuilder {
                 .insert_many(self.authorized_services, None)
                 .await
                 .unwrap();
+        }
+        if !self.with_s3 {
+            app_data.drop_s3();
         }
 
         // Connect the clients
@@ -522,12 +530,14 @@ pub(crate) mod gallery_projects {
     }
 
     #[must_use]
-    pub fn get_version(xml: &str) -> String {
+    pub fn get_version(xml: &str) -> usize {
         xml.split("<version>")
             .nth(1)
             .and_then(|text| text.split("</version>").next())
             .unwrap_or(xml)
             .to_owned()
+            .parse::<usize>()
+            .expect("failed to parse version from xml")
     }
 
     pub struct TestThumbnail(String);

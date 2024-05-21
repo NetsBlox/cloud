@@ -204,7 +204,7 @@ pub(crate) async fn try_view_gallery_project(
         .map_err(InternalError::DatabaseConnectionError)?
         .ok_or(UserError::GalleryNotFoundError)?;
 
-    if is_auth_for_gal || gallery.state != PublishState::Public {
+    if is_auth_for_gal || gallery.state == PublishState::Public {
         // if power over owner
         Ok(ViewGalleryProject {
             metadata: gallery,
@@ -277,7 +277,7 @@ pub(crate) async fn try_delete_gallery_project(
         .find_one(query, None)
         .await
         .map_err(InternalError::DatabaseConnectionError)?
-        .ok_or(UserError::GalleryNotFoundError)?;
+        .ok_or(UserError::GalleryProjectNotFoundError)?;
 
     if is_auth_gal {
         // if power over owner

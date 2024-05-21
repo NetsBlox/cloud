@@ -51,10 +51,12 @@ pub enum UserError {
     GroupNotFoundError,
     #[display(fmt = "Gallery not found.")]
     GalleryNotFoundError,
+    #[display(fmt = "Gallery project not found.")]
+    GalleryProjectNotFoundError,
     #[display(fmt = "Gallery Project Versions empty.")]
     GalleryProjectVersionsEmptyError,
     #[display(fmt = "Gallery Project Versions not found.")]
-    GalleryProjectVersionNotFound,
+    GalleryProjectVersionNotFoundError,
     #[display(fmt = "User not found.")]
     UserNotFoundError,
     #[display(fmt = "Friend not found.")]
@@ -87,8 +89,6 @@ pub enum UserError {
     GroupExistsError,
     #[display(fmt = "Gallery already exists.")]
     GalleryExistsError,
-    #[display(fmt = "Gallery project not found.")]
-    GalleryProjectNotFoundError,
     #[display(fmt = "Gallery project already exists.")]
     GalleryProjectExistsError,
     #[display(fmt = "Invalid username.")]
@@ -209,7 +209,7 @@ impl error::ResponseError for UserError {
             | Self::OAuthTokenNotFoundError
             | Self::GalleryNotFoundError
             | Self::GalleryProjectVersionsEmptyError
-            | Self::GalleryProjectVersionNotFound
+            | Self::GalleryProjectVersionNotFoundError
             | Self::GroupNotFoundError => StatusCode::NOT_FOUND,
             Self::InternalError | Self::SnapConnectionError => StatusCode::INTERNAL_SERVER_ERROR,
             Self::InvalidUsername
