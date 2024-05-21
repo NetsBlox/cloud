@@ -274,6 +274,11 @@ impl<'a> GalleryActions<'a> {
             .return_document(ReturnDocument::After)
             .build();
 
+        // NOTE::Wrap these two operations together, use transactions, make actions abortable.
+        // Use closures.
+        // wrapping lets us specify fail times for test
+        // abstract a retrier and an aborter
+        // NOTE::FUTURE new pull request
         let result = self
             .gallery_projects
             .find_one_and_update(query.clone(), update, options)
@@ -284,7 +289,6 @@ impl<'a> GalleryActions<'a> {
         let s3_res = utils::upload(self.s3, self.bucket, &version.key, xml).await;
 
         //FIXME:: if cleanup fails, we have mongo memory leak
-        //NOTE:: how would I test this
         if let Err(e) = s3_res {
             let reset = doc! {"$pull": {"versions": version.key}};
             self.gallery_projects
@@ -321,7 +325,13 @@ impl<'a> GalleryActions<'a> {
         vgalp: &ViewGalleryProject,
         index: usize,
     ) -> Result<String, UserError> {
-        let s3key: api::S3Key = vgalp.project.versions[index].key.clone();
+        let s3key: api::S3Key = vgalp
+            .project
+            .versions
+            .get(index)
+            .ok_or(UserError::GalleryProjectVersionNotFoundError)?
+            .key
+            .clone();
 
         let xml = utils::download(self.s3, self.bucket, &s3key).await?;
 
@@ -366,7 +376,7 @@ impl<'a> GalleryActions<'a> {
 
         let update = doc! {
             "$set": {
-                format!("gallery_project.versions.{}.deleted", index): true
+                format!("versions.{}.deleted", index): true
             }
         };
 
@@ -379,7 +389,7 @@ impl<'a> GalleryActions<'a> {
             .find_one_and_update(query.clone(), update, options)
             .await
             .map_err(InternalError::DatabaseConnectionError)?
-            .ok_or(UserError::GalleryProjectVersionNotFound)?;
+            .ok_or(UserError::GalleryProjectVersionNotFoundError)?;
 
         Ok(result)
     }

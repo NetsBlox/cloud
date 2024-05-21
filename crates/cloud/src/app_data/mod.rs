@@ -742,6 +742,13 @@ impl AppData {
     }
 
     #[cfg(test)]
+    pub(crate) fn drop_s3(&mut self) {
+        let config = SdkConfig::builder().build();
+
+        self.s3 = s3::Client::new(&config);
+    }
+
+    #[cfg(test)]
     pub(crate) async fn drop_all_data(&self) -> Result<(), InternalError> {
         let bucket = &self.settings.s3.bucket;
 

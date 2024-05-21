@@ -163,7 +163,7 @@ async fn add_gallery_project_version(
     Ok(HttpResponse::Ok().json(project))
 }
 
-#[get("/id/{id}/projectid/{prid}/xml")]
+#[get("/id/{id}/project/{prid}/xml")]
 async fn view_gallery_project_xml(
     app: web::Data<AppData>,
     path: web::Path<(api::GalleryId, api::ProjectId)>,
@@ -180,7 +180,7 @@ async fn view_gallery_project_xml(
         .body(project_xml))
 }
 
-#[get("/id/{id}/projectid/{prid}/version/{index}/xml")]
+#[get("/id/{id}/project/{prid}/version/{index}/xml")]
 async fn view_gallery_project_xml_version(
     app: web::Data<AppData>,
     path: web::Path<(api::GalleryId, api::ProjectId, usize)>,
@@ -199,7 +199,7 @@ async fn view_gallery_project_xml_version(
         .body(project_xml))
 }
 
-#[delete("/id/{id}/projectid/{prid}/xml")]
+#[delete("/id/{id}/project/{prid}")]
 async fn delete_gallery_project(
     app: web::Data<AppData>,
     path: web::Path<(api::GalleryId, api::ProjectId)>,
@@ -214,7 +214,7 @@ async fn delete_gallery_project(
     Ok(HttpResponse::Ok().json(project))
 }
 
-#[delete("/id/{id}/projectid/{prid}/version/{index}/xml")]
+#[delete("/id/{id}/project/{prid}/version/{index}")]
 async fn delete_gallery_project_version(
     app: web::Data<AppData>,
     path: web::Path<(api::GalleryId, api::ProjectId, usize)>,
@@ -1240,6 +1240,7 @@ mod tests {
     #[actix_web::test]
     async fn test_view_gallery_project_owner() {
         let (owner, name, project_name) = ("user", "mygallery", "myproject");
+        let additional_versions = 2;
         let user: User = api::NewUser {
             username: owner.into(),
             email: "user@netsblox.org".into(),
@@ -1250,9 +1251,12 @@ mod tests {
         .into();
         let gallery = Gallery::new(owner.into(), name.into(), api::PublishState::Private);
 
-        // this adds three gallery project versions, 0, 1, and 2
-        let project =
-            test_utils::gallery_projects::with_version_count(&gallery, owner, project_name, 2);
+        let project = test_utils::gallery_projects::with_version_count(
+            &gallery,
+            owner,
+            project_name,
+            additional_versions,
+        );
 
         test_utils::setup()
             .with_users(&[user.clone()])
@@ -1272,10 +1276,10 @@ mod tests {
                     .cookie(test_utils::cookie::new(&user.username))
                     .to_request();
 
-                let project: GalleryProjectMetadata =
+                let response: GalleryProjectMetadata =
                     test::call_and_read_body_json(&app, req).await;
                 assert_eq!(project.versions.len(), 3);
-                assert_eq!(project.name, project_name);
+                assert_eq!(response.id, project.id);
             })
             .await;
     }
@@ -1283,6 +1287,8 @@ mod tests {
     #[actix_web::test]
     async fn test_view_gallery_project_other_private_403() {
         let (owner, name, project_name) = ("user", "mygallery", "myproject");
+        let additional_versions = 2;
+
         let other: User = api::NewUser {
             username: "other".into(),
             email: "other@netsblox.org".into(),
@@ -1293,9 +1299,12 @@ mod tests {
         .into();
         let gallery = Gallery::new(owner.into(), name.into(), api::PublishState::Private);
 
-        // this adds three gallery project versions, 0, 1, and 2
-        let project =
-            test_utils::gallery_projects::with_version_count(&gallery, owner, project_name, 2);
+        let project = test_utils::gallery_projects::with_version_count(
+            &gallery,
+            owner,
+            project_name,
+            additional_versions,
+        );
 
         test_utils::setup()
             .with_users(&[other.clone()])
@@ -1324,6 +1333,7 @@ mod tests {
     #[actix_web::test]
     async fn test_view_gallery_project_other_public() {
         let (owner, name, project_name) = ("user", "mygallery", "myproject");
+        let additional_versions = 2;
         let other: User = api::NewUser {
             username: "parrytheplatypus".into(),
             email: "perry@netsblox.org".into(),
@@ -1334,9 +1344,12 @@ mod tests {
         .into();
         let gallery = Gallery::new(owner.into(), name.into(), api::PublishState::Public);
 
-        // this adds three gallery project versions, 0, 1, and 2
-        let project =
-            test_utils::gallery_projects::with_version_count(&gallery, owner, project_name, 2);
+        let project = test_utils::gallery_projects::with_version_count(
+            &gallery,
+            owner,
+            project_name,
+            additional_versions,
+        );
 
         test_utils::setup()
             .with_users(&[other.clone()])
@@ -1356,10 +1369,10 @@ mod tests {
                     .cookie(test_utils::cookie::new(&other.username))
                     .to_request();
 
-                let project: GalleryProjectMetadata =
+                let response: GalleryProjectMetadata =
                     test::call_and_read_body_json(&app, req).await;
                 assert_eq!(project.versions.len(), 3);
-                assert_eq!(project.name, project_name);
+                assert_eq!(response.id, project.id);
             })
             .await;
     }
@@ -1367,6 +1380,7 @@ mod tests {
     #[actix_web::test]
     async fn test_view_gallery_project_admin() {
         let (owner, name, project_name) = ("user", "mygallery", "myproject");
+        let additional_versions = 2;
         let admin: User = api::NewUser {
             username: "admin".into(),
             email: "admin@netsblox.org".into(),
@@ -1377,9 +1391,12 @@ mod tests {
         .into();
         let gallery = Gallery::new(owner.into(), name.into(), api::PublishState::Private);
 
-        // this adds three gallery project versions, 0, 1, and 2
-        let project =
-            test_utils::gallery_projects::with_version_count(&gallery, owner, project_name, 2);
+        let project = test_utils::gallery_projects::with_version_count(
+            &gallery,
+            owner,
+            project_name,
+            additional_versions,
+        );
 
         test_utils::setup()
             .with_users(&[admin.clone()])
@@ -1399,10 +1416,10 @@ mod tests {
                     .cookie(test_utils::cookie::new(&admin.username))
                     .to_request();
 
-                let project: GalleryProjectMetadata =
+                let response: GalleryProjectMetadata =
                     test::call_and_read_body_json(&app, req).await;
                 assert_eq!(project.versions.len(), 3);
-                assert_eq!(project.name, project_name);
+                assert_eq!(response.id, project.id);
             })
             .await;
     }
@@ -1410,7 +1427,7 @@ mod tests {
     #[actix_web::test]
     async fn test_view_gallery_project_thumbnail_owner() {
         let (owner, name, project_name) = ("user", "mygallery", "myproject");
-        let version_count = 2;
+        let additional_versions = 2;
         let user: User = api::NewUser {
             username: owner.into(),
             email: "user@netsblox.org".into(),
@@ -1421,17 +1438,16 @@ mod tests {
         .into();
         let gallery = Gallery::new(owner.into(), name.into(), api::PublishState::Private);
 
-        // this adds three gallery project versions, 0, 1, and 2
         let project = test_utils::gallery_projects::with_version_count(
             &gallery,
             owner,
             project_name,
-            version_count,
+            additional_versions,
         );
 
         let thumbnail_xml = format!(
             "<thumbnail>{}</thumbnail>",
-            test_utils::gallery_projects::TestThumbnail::new(version_count).as_str()
+            test_utils::gallery_projects::TestThumbnail::new(additional_versions).as_str()
         );
         let exp_thumbnail =
             get_thumbnail(&thumbnail_xml, None).expect("failed to get expected thumbnail");
@@ -1466,7 +1482,7 @@ mod tests {
     #[actix_web::test]
     async fn test_view_gallery_project_thumbnail_owner_resize() {
         let (owner, name, project_name) = ("user", "mygallery", "myproject");
-        let version_count = 1;
+        let additional_versions = 1;
         let aspect_ratio = 2.0;
 
         let user: User = api::NewUser {
@@ -1479,17 +1495,16 @@ mod tests {
         .into();
         let gallery = Gallery::new(owner.into(), name.into(), api::PublishState::Private);
 
-        // this adds three gallery project versions, 0, 1, and 2
         let project = test_utils::gallery_projects::with_version_count(
             &gallery,
             owner,
             project_name,
-            version_count,
+            additional_versions,
         );
 
         let thumbnail_xml = format!(
             "<thumbnail>{}</thumbnail>",
-            test_utils::gallery_projects::TestThumbnail::new(version_count).as_str()
+            test_utils::gallery_projects::TestThumbnail::new(additional_versions).as_str()
         );
         let exp_thumbnail = get_thumbnail(&thumbnail_xml, Some(aspect_ratio))
             .expect("failed to get expected thumbnail");
@@ -1524,7 +1539,7 @@ mod tests {
     #[actix_web::test]
     async fn test_view_gallery_project_thumbnail_other_private_403() {
         let (owner, name, project_name) = ("user", "mygallery", "myproject");
-        let version_count = 4;
+        let additional_versions = 4;
         let other: User = api::NewUser {
             username: "other".into(),
             email: "other@netsblox.org".into(),
@@ -1535,12 +1550,11 @@ mod tests {
         .into();
         let gallery = Gallery::new(owner.into(), name.into(), api::PublishState::Private);
 
-        // this adds three gallery project versions, 0, 1, and 2
         let project = test_utils::gallery_projects::with_version_count(
             &gallery,
             owner,
             project_name,
-            version_count,
+            additional_versions,
         );
 
         test_utils::setup()
@@ -1573,7 +1587,7 @@ mod tests {
     #[actix_web::test]
     async fn test_view_gallery_project_thumbnail_other_public() {
         let (owner, name, project_name) = ("user", "mygallery", "myproject");
-        let version_count = 3;
+        let additional_versions = 3;
 
         let other: User = api::NewUser {
             username: "other".into(),
@@ -1585,17 +1599,16 @@ mod tests {
         .into();
         let gallery = Gallery::new(owner.into(), name.into(), api::PublishState::Public);
 
-        // this adds three gallery project versions, 0, 1, and 2
         let project = test_utils::gallery_projects::with_version_count(
             &gallery,
             owner,
             project_name,
-            version_count,
+            additional_versions,
         );
 
         let thumbnail_xml = format!(
             "<thumbnail>{}</thumbnail>",
-            test_utils::gallery_projects::TestThumbnail::new(version_count).as_str()
+            test_utils::gallery_projects::TestThumbnail::new(additional_versions).as_str()
         );
         let exp_thumbnail =
             get_thumbnail(&thumbnail_xml, None).expect("failed to get expected thumbnail");
@@ -1630,7 +1643,7 @@ mod tests {
     #[actix_web::test]
     async fn test_view_gallery_project_thumbnail_admin() {
         let (owner, name, project_name) = ("user", "mygallery", "myproject");
-        let version_count = 7;
+        let additional_versions = 7;
 
         let admin: User = api::NewUser {
             username: "admin".into(),
@@ -1642,17 +1655,16 @@ mod tests {
         .into();
         let gallery = Gallery::new(owner.into(), name.into(), api::PublishState::Private);
 
-        // this adds three gallery project versions, 0, 1, and 2
         let project = test_utils::gallery_projects::with_version_count(
             &gallery,
             owner,
             project_name,
-            version_count,
+            additional_versions,
         );
 
         let thumbnail_xml = format!(
             "<thumbnail>{}</thumbnail>",
-            test_utils::gallery_projects::TestThumbnail::new(version_count).as_str()
+            test_utils::gallery_projects::TestThumbnail::new(additional_versions).as_str()
         );
         let exp_thumbnail =
             get_thumbnail(&thumbnail_xml, None).expect("failed to get expected thumbnail");
@@ -1699,7 +1711,6 @@ mod tests {
         .into();
         let gallery = Gallery::new(owner.into(), name.into(), api::PublishState::Private);
 
-        // this adds three gallery project versions, 0, 1, and 2
         let project1 =
             test_utils::gallery_projects::with_version_count(&gallery, owner, project_name1, 3);
 
@@ -1749,7 +1760,6 @@ mod tests {
         .into();
         let gallery = Gallery::new(owner.into(), name.into(), api::PublishState::Private);
 
-        // this adds three gallery project versions, 0, 1, and 2
         let project1 =
             test_utils::gallery_projects::with_version_count(&gallery, owner, project_name1, 3);
 
@@ -1795,7 +1805,6 @@ mod tests {
         .into();
         let gallery = Gallery::new(owner.into(), name.into(), api::PublishState::Public);
 
-        // this adds three gallery project versions, 0, 1, and 2
         let project1 =
             test_utils::gallery_projects::with_version_count(&gallery, owner, project_name1, 3);
 
@@ -1845,7 +1854,6 @@ mod tests {
         .into();
         let gallery = Gallery::new(owner.into(), name.into(), api::PublishState::Private);
 
-        // this adds three gallery project versions, 0, 1, and 2
         let project1 =
             test_utils::gallery_projects::with_version_count(&gallery, owner, project_name1, 3);
 
@@ -1895,7 +1903,6 @@ mod tests {
         .into();
         let gallery = Gallery::new(owner.into(), name.into(), api::PublishState::Private);
 
-        // this adds three gallery project versions, 0, 1, and 2
         let project = test_utils::gallery_projects::with_version_count(
             &gallery,
             owner,
@@ -1932,6 +1939,56 @@ mod tests {
     }
 
     #[actix_web::test]
+    async fn test_add_gallery_project_version_owner_no_s3_connection() {
+        let (owner, name, project_name) = ("user", "mygallery", "myproject");
+        let additional_versions = 0;
+
+        let user: User = api::NewUser {
+            username: owner.into(),
+            email: "user@netsblox.org".into(),
+            password: None,
+            group_id: None,
+            role: None,
+        }
+        .into();
+        let gallery = Gallery::new(owner.into(), name.into(), api::PublishState::Private);
+
+        let project = test_utils::gallery_projects::with_version_count(
+            &gallery,
+            owner,
+            project_name,
+            additional_versions,
+        );
+
+        let xml = "data";
+
+        test_utils::setup()
+            .with_users(&[user.clone()])
+            .with_galleries(&[gallery.clone()])
+            .with_gallery_projects(&[project.clone()])
+            .without_s3()
+            .run(|app_data| async move {
+                let app = test::init_service(
+                    App::new()
+                        .app_data(web::Data::new(app_data.clone()))
+                        .wrap(test_utils::cookie::middleware())
+                        .configure(config),
+                )
+                .await;
+
+                let req = test::TestRequest::post()
+                    .uri(&format!("/id/{}/project/{}", gallery.id, project.id))
+                    .cookie(test_utils::cookie::new(&user.username))
+                    .set_json(xml)
+                    .to_request();
+
+                let response = test::call_service(&app, req).await;
+                assert_eq!(response.status(), http::StatusCode::INTERNAL_SERVER_ERROR);
+            })
+            .await;
+    }
+
+    #[actix_web::test]
     async fn test_add_gallery_project_version_other_403() {
         let (owner, name, project_name) = ("user", "mygallery", "myproject");
         let additional_versions = 0;
@@ -1944,9 +2001,8 @@ mod tests {
             role: None,
         }
         .into();
-        let gallery = Gallery::new(owner.into(), name.into(), api::PublishState::Private);
+        let gallery = Gallery::new(owner.into(), name.into(), api::PublishState::Public);
 
-        // this adds three gallery project versions, 0, 1, and 2
         let project = test_utils::gallery_projects::with_version_count(
             &gallery,
             owner,
@@ -1982,56 +2038,6 @@ mod tests {
     }
 
     #[actix_web::test]
-    async fn test_add_gallery_project_version_owner_no_s3_connection() {
-        let (owner, name, project_name) = ("user", "mygallery", "myproject");
-        let additional_versions = 0;
-
-        let user: User = api::NewUser {
-            username: owner.into(),
-            email: "user@netsblox.org".into(),
-            password: None,
-            group_id: None,
-            role: None,
-        }
-        .into();
-        let gallery = Gallery::new(owner.into(), name.into(), api::PublishState::Private);
-
-        // this adds three gallery project versions, 0, 1, and 2
-        let project = test_utils::gallery_projects::with_version_count(
-            &gallery,
-            owner,
-            project_name,
-            additional_versions,
-        );
-
-        let xml = "data";
-
-        test_utils::setup()
-            .with_users(&[user.clone()])
-            .with_galleries(&[gallery.clone()])
-            .with_gallery_projects(&[project.clone()])
-            .run(|app_data| async move {
-                let app = test::init_service(
-                    App::new()
-                        .app_data(web::Data::new(app_data.clone()))
-                        .wrap(test_utils::cookie::middleware())
-                        .configure(config),
-                )
-                .await;
-
-                let req = test::TestRequest::post()
-                    .uri(&format!("/id/{}/project/{}", gallery.id, project.id))
-                    .cookie(test_utils::cookie::new(&user.username))
-                    .set_json(xml)
-                    .to_request();
-
-                let response = test::call_service(&app, req).await;
-                assert_eq!(response.status(), http::StatusCode::INTERNAL_SERVER_ERROR);
-            })
-            .await;
-    }
-
-    #[actix_web::test]
     async fn test_add_gallery_project_version_admin() {
         let (owner, name, project_name) = ("user", "mygallery", "myproject");
         let additional_versions = 0;
@@ -2046,7 +2052,6 @@ mod tests {
         .into();
         let gallery = Gallery::new(owner.into(), name.into(), api::PublishState::Private);
 
-        // this adds three gallery project versions, 0, 1, and 2
         let project = test_utils::gallery_projects::with_version_count(
             &gallery,
             owner,
@@ -2078,6 +2083,847 @@ mod tests {
                 let project: GalleryProjectMetadata =
                     test::call_and_read_body_json(&app, req).await;
                 assert_eq!(project.versions.len(), 2);
+            })
+            .await;
+    }
+
+    #[actix_web::test]
+    async fn test_view_gallery_project_xml_owner() {
+        let (owner, name, project_name) = ("user", "mygallery", "myproject");
+        let additional_versions = 3;
+
+        let user: User = api::NewUser {
+            username: owner.into(),
+            email: "user@netsblox.org".into(),
+            password: None,
+            group_id: None,
+            role: None,
+        }
+        .into();
+        let gallery = Gallery::new(owner.into(), name.into(), api::PublishState::Private);
+
+        let project = test_utils::gallery_projects::with_version_count(
+            &gallery,
+            owner,
+            project_name,
+            additional_versions,
+        );
+
+        test_utils::setup()
+            .with_users(&[user.clone()])
+            .with_galleries(&[gallery.clone()])
+            .with_gallery_projects(&[project.clone()])
+            .run(|app_data| async move {
+                let app = test::init_service(
+                    App::new()
+                        .app_data(web::Data::new(app_data.clone()))
+                        .wrap(test_utils::cookie::middleware())
+                        .configure(config),
+                )
+                .await;
+
+                let req = test::TestRequest::get()
+                    .uri(&format!("/id/{}/project/{}/xml", gallery.id, project.id))
+                    .cookie(test_utils::cookie::new(&user.username))
+                    .to_request();
+
+                let xml = test::call_and_read_body(&app, req).await;
+                let xml_str = String::from_utf8(xml.to_vec()).unwrap();
+                let version: usize = test_utils::gallery_projects::get_version(&xml_str);
+                assert_eq!(version, additional_versions);
+            })
+            .await;
+    }
+
+    #[actix_web::test]
+    async fn test_view_gallery_project_xml_other_private_403() {
+        let (owner, name, project_name) = ("user", "mygallery", "myproject");
+        let additional_versions = 31;
+        let other: User = api::NewUser {
+            username: "other".into(),
+            email: "other@netsblox.org".into(),
+            password: None,
+            group_id: None,
+            role: None,
+        }
+        .into();
+        let gallery = Gallery::new(owner.into(), name.into(), api::PublishState::Private);
+
+        let project = test_utils::gallery_projects::with_version_count(
+            &gallery,
+            owner,
+            project_name,
+            additional_versions,
+        );
+
+        test_utils::setup()
+            .with_users(&[other.clone()])
+            .with_galleries(&[gallery.clone()])
+            .with_gallery_projects(&[project.clone()])
+            .run(|app_data| async move {
+                let app = test::init_service(
+                    App::new()
+                        .app_data(web::Data::new(app_data.clone()))
+                        .wrap(test_utils::cookie::middleware())
+                        .configure(config),
+                )
+                .await;
+
+                let req = test::TestRequest::get()
+                    .uri(&format!("/id/{}/project/{}/xml", gallery.id, project.id))
+                    .cookie(test_utils::cookie::new(&other.username))
+                    .to_request();
+
+                let response = test::call_service(&app, req).await;
+                assert_eq!(response.status(), http::StatusCode::FORBIDDEN);
+            })
+            .await;
+    }
+
+    #[actix_web::test]
+    async fn test_view_gallery_project_xml_other_private_proj_owner() {
+        let (owner, name, project_name) = ("user", "mygallery", "myproject");
+        let additional_versions = 31;
+        let proj_owner = "other";
+        let other: User = api::NewUser {
+            username: proj_owner.into(),
+            email: "other@netsblox.org".into(),
+            password: None,
+            group_id: None,
+            role: None,
+        }
+        .into();
+        let gallery = Gallery::new(owner.into(), name.into(), api::PublishState::Private);
+
+        let project = test_utils::gallery_projects::with_version_count(
+            &gallery,
+            proj_owner,
+            project_name,
+            additional_versions,
+        );
+
+        test_utils::setup()
+            .with_users(&[other.clone()])
+            .with_galleries(&[gallery.clone()])
+            .with_gallery_projects(&[project.clone()])
+            .run(|app_data| async move {
+                let app = test::init_service(
+                    App::new()
+                        .app_data(web::Data::new(app_data.clone()))
+                        .wrap(test_utils::cookie::middleware())
+                        .configure(config),
+                )
+                .await;
+
+                let req = test::TestRequest::get()
+                    .uri(&format!("/id/{}/project/{}/xml", gallery.id, project.id))
+                    .cookie(test_utils::cookie::new(&other.username))
+                    .to_request();
+
+                let xml = test::call_and_read_body(&app, req).await;
+                let xml_str = String::from_utf8(xml.to_vec()).unwrap();
+                let version: usize = test_utils::gallery_projects::get_version(&xml_str);
+                assert_eq!(version, additional_versions);
+            })
+            .await;
+    }
+
+    #[actix_web::test]
+    async fn test_view_gallery_project_xml_other_public() {
+        let (owner, name, project_name) = ("user", "mygallery", "myproject");
+        let additional_versions = 25;
+        let other: User = api::NewUser {
+            username: "other".into(),
+            email: "other@netsblox.org".into(),
+            password: None,
+            group_id: None,
+            role: None,
+        }
+        .into();
+        let gallery = Gallery::new(owner.into(), name.into(), api::PublishState::Public);
+
+        let project = test_utils::gallery_projects::with_version_count(
+            &gallery,
+            owner,
+            project_name,
+            additional_versions,
+        );
+
+        test_utils::setup()
+            .with_users(&[other.clone()])
+            .with_galleries(&[gallery.clone()])
+            .with_gallery_projects(&[project.clone()])
+            .run(|app_data| async move {
+                let app = test::init_service(
+                    App::new()
+                        .app_data(web::Data::new(app_data.clone()))
+                        .wrap(test_utils::cookie::middleware())
+                        .configure(config),
+                )
+                .await;
+
+                let req = test::TestRequest::get()
+                    .uri(&format!("/id/{}/project/{}/xml", gallery.id, project.id))
+                    .cookie(test_utils::cookie::new(&other.username))
+                    .to_request();
+
+                let xml = test::call_and_read_body(&app, req).await;
+                let xml_str = String::from_utf8(xml.to_vec()).unwrap();
+                let version: usize = test_utils::gallery_projects::get_version(&xml_str);
+                assert_eq!(version, additional_versions);
+            })
+            .await;
+    }
+
+    #[actix_web::test]
+    async fn test_view_gallery_project_xml_admin() {
+        let (owner, name, project_name) = ("user", "mygallery", "myproject");
+        let additional_versions = 17;
+        let admin: User = api::NewUser {
+            username: "admin".into(),
+            email: "admin@netsblox.org".into(),
+            password: None,
+            group_id: None,
+            role: Some(UserRole::Admin),
+        }
+        .into();
+        let gallery = Gallery::new(owner.into(), name.into(), api::PublishState::Private);
+
+        let project = test_utils::gallery_projects::with_version_count(
+            &gallery,
+            owner,
+            project_name,
+            additional_versions,
+        );
+
+        test_utils::setup()
+            .with_users(&[admin.clone()])
+            .with_galleries(&[gallery.clone()])
+            .with_gallery_projects(&[project.clone()])
+            .run(|app_data| async move {
+                let app = test::init_service(
+                    App::new()
+                        .app_data(web::Data::new(app_data.clone()))
+                        .wrap(test_utils::cookie::middleware())
+                        .configure(config),
+                )
+                .await;
+
+                let req = test::TestRequest::get()
+                    .uri(&format!("/id/{}/project/{}/xml", gallery.id, project.id))
+                    .cookie(test_utils::cookie::new(&admin.username))
+                    .to_request();
+
+                let xml = test::call_and_read_body(&app, req).await;
+                let xml_str = String::from_utf8(xml.to_vec()).unwrap();
+                let version: usize = test_utils::gallery_projects::get_version(&xml_str);
+                assert_eq!(version, additional_versions);
+            })
+            .await;
+    }
+
+    #[actix_web::test]
+    async fn test_view_gallery_project_version_xml_owner() {
+        let (owner, name, project_name) = ("user", "mygallery", "myproject");
+        let additional_versions = 3;
+        let get_version = 1;
+
+        let user: User = api::NewUser {
+            username: owner.into(),
+            email: "user@netsblox.org".into(),
+            password: None,
+            group_id: None,
+            role: None,
+        }
+        .into();
+        let gallery = Gallery::new(owner.into(), name.into(), api::PublishState::Private);
+
+        let project = test_utils::gallery_projects::with_version_count(
+            &gallery,
+            owner,
+            project_name,
+            additional_versions,
+        );
+
+        test_utils::setup()
+            .with_users(&[user.clone()])
+            .with_galleries(&[gallery.clone()])
+            .with_gallery_projects(&[project.clone()])
+            .run(|app_data| async move {
+                let app = test::init_service(
+                    App::new()
+                        .app_data(web::Data::new(app_data.clone()))
+                        .wrap(test_utils::cookie::middleware())
+                        .configure(config),
+                )
+                .await;
+
+                let req = test::TestRequest::get()
+                    .uri(&format!(
+                        "/id/{}/project/{}/version/{}/xml",
+                        gallery.id, project.id, get_version
+                    ))
+                    .cookie(test_utils::cookie::new(&user.username))
+                    .to_request();
+
+                let xml = test::call_and_read_body(&app, req).await;
+                let xml_str = String::from_utf8(xml.to_vec()).unwrap();
+                let version: usize = test_utils::gallery_projects::get_version(&xml_str);
+                assert_eq!(version, get_version);
+            })
+            .await;
+    }
+
+    #[actix_web::test]
+    async fn test_view_gallery_project_version_xml_owner_outofbounds_404() {
+        let (owner, name, project_name) = ("user", "mygallery", "myproject");
+        let additional_versions = 3;
+        let get_version = 5;
+
+        let user: User = api::NewUser {
+            username: owner.into(),
+            email: "user@netsblox.org".into(),
+            password: None,
+            group_id: None,
+            role: None,
+        }
+        .into();
+        let gallery = Gallery::new(owner.into(), name.into(), api::PublishState::Private);
+
+        let project = test_utils::gallery_projects::with_version_count(
+            &gallery,
+            owner,
+            project_name,
+            additional_versions,
+        );
+
+        test_utils::setup()
+            .with_users(&[user.clone()])
+            .with_galleries(&[gallery.clone()])
+            .with_gallery_projects(&[project.clone()])
+            .run(|app_data| async move {
+                let app = test::init_service(
+                    App::new()
+                        .app_data(web::Data::new(app_data.clone()))
+                        .wrap(test_utils::cookie::middleware())
+                        .configure(config),
+                )
+                .await;
+
+                let req = test::TestRequest::get()
+                    .uri(&format!(
+                        "/id/{}/project/{}/version/{}/xml",
+                        gallery.id, project.id, get_version
+                    ))
+                    .cookie(test_utils::cookie::new(&user.username))
+                    .to_request();
+
+                let response = test::call_service(&app, req).await;
+                assert_eq!(response.status(), http::StatusCode::NOT_FOUND);
+            })
+            .await;
+    }
+
+    #[actix_web::test]
+    async fn test_view_gallery_project_xml_version_other_private_403() {
+        let (owner, name, project_name) = ("user", "mygallery", "myproject");
+        let additional_versions = 31;
+        let get_version = 10;
+        let other: User = api::NewUser {
+            username: "other".into(),
+            email: "other@netsblox.org".into(),
+            password: None,
+            group_id: None,
+            role: None,
+        }
+        .into();
+        let gallery = Gallery::new(owner.into(), name.into(), api::PublishState::Private);
+
+        let project = test_utils::gallery_projects::with_version_count(
+            &gallery,
+            owner,
+            project_name,
+            additional_versions,
+        );
+
+        test_utils::setup()
+            .with_users(&[other.clone()])
+            .with_galleries(&[gallery.clone()])
+            .with_gallery_projects(&[project.clone()])
+            .run(|app_data| async move {
+                let app = test::init_service(
+                    App::new()
+                        .app_data(web::Data::new(app_data.clone()))
+                        .wrap(test_utils::cookie::middleware())
+                        .configure(config),
+                )
+                .await;
+
+                let req = test::TestRequest::get()
+                    .uri(&format!(
+                        "/id/{}/project/{}/version/{}/xml",
+                        gallery.id, project.id, get_version
+                    ))
+                    .cookie(test_utils::cookie::new(&other.username))
+                    .to_request();
+
+                let response = test::call_service(&app, req).await;
+                assert_eq!(response.status(), http::StatusCode::FORBIDDEN);
+            })
+            .await;
+    }
+
+    #[actix_web::test]
+    async fn test_view_gallery_project_xml_version_other_private_proj_owner() {
+        let (owner, name, project_name) = ("user", "mygallery", "myproject");
+        let additional_versions = 31;
+        let get_version = 10;
+
+        let proj_owner = "other";
+        let other: User = api::NewUser {
+            username: proj_owner.into(),
+            email: "other@netsblox.org".into(),
+            password: None,
+            group_id: None,
+            role: None,
+        }
+        .into();
+        let gallery = Gallery::new(owner.into(), name.into(), api::PublishState::Private);
+
+        let project = test_utils::gallery_projects::with_version_count(
+            &gallery,
+            proj_owner,
+            project_name,
+            additional_versions,
+        );
+
+        test_utils::setup()
+            .with_users(&[other.clone()])
+            .with_galleries(&[gallery.clone()])
+            .with_gallery_projects(&[project.clone()])
+            .run(|app_data| async move {
+                let app = test::init_service(
+                    App::new()
+                        .app_data(web::Data::new(app_data.clone()))
+                        .wrap(test_utils::cookie::middleware())
+                        .configure(config),
+                )
+                .await;
+
+                let req = test::TestRequest::get()
+                    .uri(&format!(
+                        "/id/{}/project/{}/version/{}/xml",
+                        gallery.id, project.id, get_version
+                    ))
+                    .cookie(test_utils::cookie::new(&other.username))
+                    .to_request();
+
+                let xml = test::call_and_read_body(&app, req).await;
+                let xml_str = String::from_utf8(xml.to_vec()).unwrap();
+                let version: usize = test_utils::gallery_projects::get_version(&xml_str);
+                assert_eq!(version, get_version);
+            })
+            .await;
+    }
+
+    #[actix_web::test]
+    async fn test_view_gallery_project_xml_version_other_public() {
+        let (owner, name, project_name) = ("user", "mygallery", "myproject");
+        let additional_versions = 14;
+        let get_version = 8;
+        let other: User = api::NewUser {
+            username: "other".into(),
+            email: "other@netsblox.org".into(),
+            password: None,
+            group_id: None,
+            role: None,
+        }
+        .into();
+        let gallery = Gallery::new(owner.into(), name.into(), api::PublishState::Public);
+
+        let project = test_utils::gallery_projects::with_version_count(
+            &gallery,
+            owner,
+            project_name,
+            additional_versions,
+        );
+
+        test_utils::setup()
+            .with_users(&[other.clone()])
+            .with_galleries(&[gallery.clone()])
+            .with_gallery_projects(&[project.clone()])
+            .run(|app_data| async move {
+                let app = test::init_service(
+                    App::new()
+                        .app_data(web::Data::new(app_data.clone()))
+                        .wrap(test_utils::cookie::middleware())
+                        .configure(config),
+                )
+                .await;
+
+                let req = test::TestRequest::get()
+                    .uri(&format!(
+                        "/id/{}/project/{}/version/{}/xml",
+                        gallery.id, project.id, get_version
+                    ))
+                    .cookie(test_utils::cookie::new(&other.username))
+                    .to_request();
+
+                let xml = test::call_and_read_body(&app, req).await;
+                let xml_str = String::from_utf8(xml.to_vec()).unwrap();
+                let version: usize = test_utils::gallery_projects::get_version(&xml_str);
+                assert_eq!(version, get_version);
+            })
+            .await;
+    }
+
+    #[actix_web::test]
+    async fn test_view_gallery_project_xml_version_admin() {
+        let (owner, name, project_name) = ("user", "mygallery", "myproject");
+        let additional_versions = 17;
+        let get_version = 2;
+
+        let admin: User = api::NewUser {
+            username: "admin".into(),
+            email: "admin@netsblox.org".into(),
+            password: None,
+            group_id: None,
+            role: Some(UserRole::Admin),
+        }
+        .into();
+
+        let gallery = Gallery::new(owner.into(), name.into(), api::PublishState::Private);
+
+        let project = test_utils::gallery_projects::with_version_count(
+            &gallery,
+            owner,
+            project_name,
+            additional_versions,
+        );
+
+        test_utils::setup()
+            .with_users(&[admin.clone()])
+            .with_galleries(&[gallery.clone()])
+            .with_gallery_projects(&[project.clone()])
+            .run(|app_data| async move {
+                let app = test::init_service(
+                    App::new()
+                        .app_data(web::Data::new(app_data.clone()))
+                        .wrap(test_utils::cookie::middleware())
+                        .configure(config),
+                )
+                .await;
+
+                let req = test::TestRequest::get()
+                    .uri(&format!(
+                        "/id/{}/project/{}/version/{}/xml",
+                        gallery.id, project.id, get_version
+                    ))
+                    .cookie(test_utils::cookie::new(&admin.username))
+                    .to_request();
+
+                let xml = test::call_and_read_body(&app, req).await;
+                let xml_str = String::from_utf8(xml.to_vec()).unwrap();
+                let version: usize = test_utils::gallery_projects::get_version(&xml_str);
+                assert_eq!(version, get_version);
+            })
+            .await;
+    }
+
+    #[actix_web::test]
+    async fn test_delete_gallery_project_owner() {
+        let (owner, name, project_name) = ("user", "mygallery", "myproject");
+        let additional_versions = 2;
+        let user: User = api::NewUser {
+            username: owner.into(),
+            email: "user@netsblox.org".into(),
+            password: None,
+            group_id: None,
+            role: None,
+        }
+        .into();
+        let gallery = Gallery::new(owner.into(), name.into(), api::PublishState::Private);
+
+        let project = test_utils::gallery_projects::with_version_count(
+            &gallery,
+            owner,
+            project_name,
+            additional_versions,
+        );
+
+        test_utils::setup()
+            .with_users(&[user.clone()])
+            .with_galleries(&[gallery.clone()])
+            .with_gallery_projects(&[project.clone()])
+            .run(|app_data| async move {
+                let app = test::init_service(
+                    App::new()
+                        .app_data(web::Data::new(app_data.clone()))
+                        .wrap(test_utils::cookie::middleware())
+                        .configure(config),
+                )
+                .await;
+
+                let req = test::TestRequest::delete()
+                    .uri(&format!("/id/{}/project/{}", gallery.id, project.id))
+                    .cookie(test_utils::cookie::new(&user.username))
+                    .to_request();
+
+                let deleted_project: GalleryProjectMetadata =
+                    test::call_and_read_body_json(&app, req).await;
+                assert_eq!(deleted_project.id, project.id);
+            })
+            .await;
+    }
+
+    #[actix_web::test]
+    async fn test_delete_gallery_project_other_403() {
+        let (owner, name, project_name) = ("user", "mygallery", "myproject");
+        let additional_versions = 2;
+        let other: User = api::NewUser {
+            username: "other".into(),
+            email: "other@netsblox.org".into(),
+            password: None,
+            group_id: None,
+            role: None,
+        }
+        .into();
+        let gallery = Gallery::new(owner.into(), name.into(), api::PublishState::Private);
+
+        let project = test_utils::gallery_projects::with_version_count(
+            &gallery,
+            owner,
+            project_name,
+            additional_versions,
+        );
+
+        test_utils::setup()
+            .with_users(&[other.clone()])
+            .with_galleries(&[gallery.clone()])
+            .with_gallery_projects(&[project.clone()])
+            .run(|app_data| async move {
+                let app = test::init_service(
+                    App::new()
+                        .app_data(web::Data::new(app_data.clone()))
+                        .wrap(test_utils::cookie::middleware())
+                        .configure(config),
+                )
+                .await;
+                let req = test::TestRequest::delete()
+                    .uri(&format!("/id/{}/project/{}", gallery.id, project.id))
+                    .cookie(test_utils::cookie::new(&other.username))
+                    .to_request();
+                let response = test::call_service(&app, req).await;
+                assert_eq!(response.status(), http::StatusCode::FORBIDDEN);
+            })
+            .await;
+    }
+
+    #[actix_web::test]
+    async fn test_delete_gallery_project_admin() {
+        let (owner, name, project_name) = ("user", "mygallery", "myproject");
+        let additional_versions = 2;
+        let admin: User = api::NewUser {
+            username: "admin".into(),
+            email: "admin@netsblox.org".into(),
+            password: None,
+            group_id: None,
+            role: Some(UserRole::Admin),
+        }
+        .into();
+        let gallery = Gallery::new(owner.into(), name.into(), api::PublishState::Private);
+
+        let project = test_utils::gallery_projects::with_version_count(
+            &gallery,
+            owner,
+            project_name,
+            additional_versions,
+        );
+
+        test_utils::setup()
+            .with_users(&[admin.clone()])
+            .with_galleries(&[gallery.clone()])
+            .with_gallery_projects(&[project.clone()])
+            .run(|app_data| async move {
+                let app = test::init_service(
+                    App::new()
+                        .app_data(web::Data::new(app_data.clone()))
+                        .wrap(test_utils::cookie::middleware())
+                        .configure(config),
+                )
+                .await;
+
+                let req = test::TestRequest::delete()
+                    .uri(&format!("/id/{}/project/{}", gallery.id, project.id))
+                    .cookie(test_utils::cookie::new(&admin.username))
+                    .to_request();
+
+                let deleted_project: GalleryProjectMetadata =
+                    test::call_and_read_body_json(&app, req).await;
+                assert_eq!(deleted_project.id, project.id);
+            })
+            .await;
+    }
+
+    #[actix_web::test]
+    async fn test_delete_gallery_project_version_owner() {
+        let (owner, name, project_name) = ("user", "mygallery", "myproject");
+        let additional_versions = 8;
+        let delete_index = 6;
+
+        let user: User = api::NewUser {
+            username: owner.into(),
+            email: "user@netsblox.org".into(),
+            password: None,
+            group_id: None,
+            role: None,
+        }
+        .into();
+        let gallery = Gallery::new(owner.into(), name.into(), api::PublishState::Private);
+
+        let project = test_utils::gallery_projects::with_version_count(
+            &gallery,
+            owner,
+            project_name,
+            additional_versions,
+        );
+
+        test_utils::setup()
+            .with_users(&[user.clone()])
+            .with_galleries(&[gallery.clone()])
+            .with_gallery_projects(&[project.clone()])
+            .run(|app_data| async move {
+                let app = test::init_service(
+                    App::new()
+                        .app_data(web::Data::new(app_data.clone()))
+                        .wrap(test_utils::cookie::middleware())
+                        .configure(config),
+                )
+                .await;
+
+                let req = test::TestRequest::delete()
+                    .uri(&format!(
+                        "/id/{}/project/{}/version/{}",
+                        gallery.id, project.id, delete_index
+                    ))
+                    .cookie(test_utils::cookie::new(&user.username))
+                    .to_request();
+
+                let response_project: GalleryProjectMetadata =
+                    test::call_and_read_body_json(&app, req).await;
+                for (index, version) in response_project.versions.iter().enumerate() {
+                    if index == delete_index {
+                        assert!(version.deleted);
+                    } else {
+                        assert!(!version.deleted);
+                    }
+                }
+            })
+            .await;
+    }
+    #[actix_web::test]
+    async fn test_delete_gallery_project_version_other_403() {
+        let (owner, name, project_name) = ("user", "mygallery", "myproject");
+        let additional_versions = 8;
+        let delete_index = 6;
+
+        let other: User = api::NewUser {
+            username: "other".into(),
+            email: "other@netsblox.org".into(),
+            password: None,
+            group_id: None,
+            role: None,
+        }
+        .into();
+        let gallery = Gallery::new(owner.into(), name.into(), api::PublishState::Public);
+
+        let project = test_utils::gallery_projects::with_version_count(
+            &gallery,
+            owner,
+            project_name,
+            additional_versions,
+        );
+
+        test_utils::setup()
+            .with_users(&[other.clone()])
+            .with_galleries(&[gallery.clone()])
+            .with_gallery_projects(&[project.clone()])
+            .run(|app_data| async move {
+                let app = test::init_service(
+                    App::new()
+                        .app_data(web::Data::new(app_data.clone()))
+                        .wrap(test_utils::cookie::middleware())
+                        .configure(config),
+                )
+                .await;
+
+                let req = test::TestRequest::delete()
+                    .uri(&format!(
+                        "/id/{}/project/{}/version/{}",
+                        gallery.id, project.id, delete_index
+                    ))
+                    .cookie(test_utils::cookie::new(&other.username))
+                    .to_request();
+
+                let response = test::call_service(&app, req).await;
+                assert_eq!(response.status(), http::StatusCode::FORBIDDEN);
+            })
+            .await;
+    }
+
+    #[actix_web::test]
+    async fn test_delete_gallery_project_version_admin() {
+        let (owner, name, project_name) = ("user", "mygallery", "myproject");
+        let additional_versions = 8;
+        let delete_index = 6;
+
+        let admin: User = api::NewUser {
+            username: "admin".into(),
+            email: "admin@netsblox.org".into(),
+            password: None,
+            group_id: None,
+            role: Some(UserRole::Admin),
+        }
+        .into();
+        let gallery = Gallery::new(owner.into(), name.into(), api::PublishState::Private);
+
+        let project = test_utils::gallery_projects::with_version_count(
+            &gallery,
+            owner,
+            project_name,
+            additional_versions,
+        );
+
+        test_utils::setup()
+            .with_users(&[admin.clone()])
+            .with_galleries(&[gallery.clone()])
+            .with_gallery_projects(&[project.clone()])
+            .run(|app_data| async move {
+                let app = test::init_service(
+                    App::new()
+                        .app_data(web::Data::new(app_data.clone()))
+                        .wrap(test_utils::cookie::middleware())
+                        .configure(config),
+                )
+                .await;
+
+                let req = test::TestRequest::delete()
+                    .uri(&format!(
+                        "/id/{}/project/{}/version/{}",
+                        gallery.id, project.id, delete_index
+                    ))
+                    .cookie(test_utils::cookie::new(&admin.username))
+                    .to_request();
+
+                let response_project: GalleryProjectMetadata =
+                    test::call_and_read_body_json(&app, req).await;
+                for (index, version) in response_project.versions.iter().enumerate() {
+                    if index == delete_index {
+                        assert!(version.deleted);
+                    } else {
+                        assert!(!version.deleted);
+                    }
+                }
             })
             .await;
     }
