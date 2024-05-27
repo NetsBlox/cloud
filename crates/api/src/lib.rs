@@ -4,7 +4,7 @@ pub mod error;
 use crate::common::*;
 use futures_util::SinkExt;
 use netsblox_api_common::{
-    CreateGroupData, CreateMagicLinkData, Name, ProjectName, ServiceHostScope, UpdateGroupData,
+    CreateGroupData, CreateMagicLinkData, GroupName, ProjectName, ServiceHostScope, UpdateGroupData,
 };
 use reqwest::{self, Method, RequestBuilder, Response};
 use serde::{Deserialize, Serialize};
@@ -802,7 +802,7 @@ impl Client {
     pub async fn create_group(&self, owner: &str, name: &str) -> Result<(), error::Error> {
         let path = format!("/groups/user/{}/", owner);
         let group = CreateGroupData {
-            name: Name::new(name),
+            name: GroupName::new(name),
             services_hosts: None,
         };
         let response = self
@@ -845,7 +845,7 @@ impl Client {
         let response = self
             .request(Method::PATCH, &path)
             .json(&UpdateGroupData {
-                name: Name::new(name),
+                name: GroupName::new(name),
             })
             .send()
             .await

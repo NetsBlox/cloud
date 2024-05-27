@@ -258,7 +258,7 @@ mod tests {
                     categories: vec!["someCategory".into()],
                 }];
                 let data = api::CreateGroupData {
-                    name: api::Name::new("someGroup"),
+                    name: api::GroupName::new("someGroup"),
                     services_hosts: Some(hosts),
                 };
                 let group = actions.create_group(&auth_eu, data).await.unwrap();

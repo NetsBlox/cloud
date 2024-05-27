@@ -190,7 +190,7 @@ mod tests {
                 .await;
 
                 let data = api::CreateGroupData {
-                    name: api::Name::new("new_group_name"),
+                    name: api::GroupName::new("new_group_name"),
                     services_hosts: None,
                 };
 
@@ -247,7 +247,7 @@ mod tests {
                 .await;
 
                 let data = api::CreateGroupData {
-                    name: api::Name::new("fuck"),
+                    name: api::GroupName::new("fuck"),
                     services_hosts: None,
                 };
 
@@ -306,7 +306,7 @@ mod tests {
                 .await;
 
                 let data = api::UpdateGroupData {
-                    name: api::Name::new("new_name"),
+                    name: api::GroupName::new("new_name"),
                 };
                 let req = test::TestRequest::patch()
                     .uri(&format!("/id/{}", &group.id))
@@ -363,7 +363,7 @@ mod tests {
                 .await;
 
                 let data = api::UpdateGroupData {
-                    name: api::Name::new("new_name"),
+                    name: api::GroupName::new("new_name"),
                 };
                 let req = test::TestRequest::patch()
                     .uri(&format!("/id/{}", &group.id))

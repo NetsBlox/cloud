@@ -15,7 +15,6 @@ use serde_json::Value;
 use std::{collections::HashMap, marker::PhantomData, str::FromStr, time::SystemTime};
 use ts_rs::TS;
 use uuid::Uuid;
-
 const APP_NAME: &str = "NetsBlox";
 
 #[derive(Deserialize, Serialize, TS)]
@@ -34,104 +33,49 @@ pub struct ClientConfig {
 pub struct InvitationResponse {
     pub response: FriendLinkState,
 }
-#[derive(Serialize, Clone, Debug, TS)]
-#[ts(export)]
-pub struct Name(String);
 
-impl Name {
-    pub fn new<T: Into<String>>(name: T) -> Self {
-        let name: String = name.into();
-        Self(name)
-    }
-
-    pub fn mk_string(&self) -> impl Into<String> {
-        if true {
-            "thing"
-        } else {
-            "I am a string"
-        }
-    }
-
-    pub fn as_str(&self) -> &str {
-        &self.0
-    }
+pub struct ValidateOptions {
+    min: usize,
+    max: usize,
+    deny_profanity: bool,
 }
 
-struct NameArg;
+pub trait Validate {
+    fn test_regex<E: de::Error>(str: &str) -> Result<String, E>;
+    fn get_options() -> ValidateOptions;
+    fn validate<E: de::Error>(str: impl Into<String>) -> Result<String, E> {
+        let ValidateOptions {
+            min,
+            max,
+            deny_profanity,
+            ..
+        } = Self::get_options();
+        let string: String = str.into();
+        let char_count = string.chars().count();
 
-impl From<NameArg> for String {
-    fn from(_value: NameArg) -> Self {
-        String::from("hey there! I am coming from a zero sized type :)")
-    }
-}
-
-struct NameV;
-
-impl<'de> Visitor<'de> for NameV {
-    type Value = Name;
-
-    fn expecting(&self, formatter: &mut fmt::Formatter) -> fmt::Result {
-        formatter
-            .write_str("a string that matches the regex: ^[\\w\\d_][\\w\\d_ \\(\\)\\.,'\\-!]*$")
-    }
-
-    fn visit_str<E>(self, value: &str) -> Result<Self::Value, E>
-    where
-        E: de::Error,
-    {
-        let max_len = 50;
-        let min_len = 1;
-        let char_count = value.chars().count();
-
-        lazy_static! {
-            static ref NAME_REGEX: Regex = Regex::new(r"^[\w\d_][\w\d_ \(\)\.,'\-!]*$").unwrap();
-        }
-
-        if char_count < min_len || char_count > max_len {
-            let exp = format!(
-                "Name must be between {} and {} characters",
-                min_len, max_len
-            );
+        if char_count < min || char_count > max {
+            let exp = format!("Name must be between {min} and {max} characters");
             return Err(E::invalid_length(char_count, &exp.as_str()));
         }
 
-        if !NAME_REGEX.is_match(value) {
-            return Err(E::invalid_value(
-                de::Unexpected::Other("invalid characters"),
-                &"a name without special characters, '(', ')', '!', ',', '.', ''', and '-' are allowed, but not as the first character",
-            ));
-        }
-
-        if value.is_inappropriate() {
+        if deny_profanity && string.is_inappropriate() {
             return Err(E::invalid_value(
                 de::Unexpected::Other("profanity"),
                 &"a name without profanity",
             ));
         }
 
-        Ok(Name(value.to_owned()))
+        Self::test_regex(&string)
     }
-}
-impl<'de> Deserialize<'de> for Name {
-    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
-    where
-        D: Deserializer<'de>,
-    {
-        deserializer.deserialize_string(NameV)
-    }
-}
-
-pub trait Validate {
-    fn validate<E: de::Error>(str: impl Into<String>) -> Result<String, E>;
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, TS)]
-pub struct Names<T: Validate>(String, std::marker::PhantomData<T>);
+pub struct Name<T: Validate>(String, std::marker::PhantomData<T>);
 
-impl<T: Validate> Names<T> {
+impl<T: Validate> Name<T> {
     #[must_use]
     pub fn new(name: impl Into<String>) -> Self {
-        Names::<T>(name.into(), std::marker::PhantomData::<T>)
+        Name::<T>(name.into(), std::marker::PhantomData::<T>)
     }
 
     #[must_use]
@@ -140,7 +84,7 @@ impl<T: Validate> Names<T> {
     }
 }
 
-impl<T: Validate> fmt::Display for Names<T> {
+impl<T: Validate> fmt::Display for Name<T> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write! {f, "{}", self.0}
     }
@@ -153,7 +97,7 @@ struct NameVisitor<T: Validate>(PhantomData<T>);
 // //TODO: FUTURE: It may be harder for Name, due to the
 // //TODO: FUTURE: Setup custom errors in src/error.rs
 impl<'de, T: Validate> Visitor<'de> for NameVisitor<T> {
-    type Value = Names<T>;
+    type Value = Name<T>;
 
     fn expecting(&self, formatter: &mut fmt::Formatter) -> fmt::Result {
         formatter.write_str(r"a string that matches the regex: ^[\w\d_][\w\d_ \(\)\.,'\-!]*$")
@@ -161,10 +105,10 @@ impl<'de, T: Validate> Visitor<'de> for NameVisitor<T> {
 
     fn visit_str<E: de::Error>(self, value: &str) -> Result<Self::Value, E> {
         let name: String = T::validate(value.to_owned())?;
-        Ok(Names(name, PhantomData::<T>))
+        Ok(Name(name, PhantomData::<T>))
     }
 }
-impl<'de, T: Validate> Deserialize<'de> for Names<T> {
+impl<'de, T: Validate> Deserialize<'de> for Name<T> {
     fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
     where
         D: Deserializer<'de>,
@@ -172,7 +116,7 @@ impl<'de, T: Validate> Deserialize<'de> for Names<T> {
         deserializer.deserialize_string(NameVisitor::<T>(PhantomData::<T>))
     }
 }
-impl<T: Validate> Serialize for Names<T> {
+impl<T: Validate> Serialize for Name<T> {
     fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
     where
         S: Serializer,
@@ -184,150 +128,159 @@ impl<T: Validate> Serialize for Names<T> {
 #[derive(Serialize, Clone, Debug, PartialEq, Eq, TS)]
 #[ts(export)]
 pub struct ProjectNameValidator;
-pub type ProjectName = Names<ProjectNameValidator>;
+pub type ProjectName = Name<ProjectNameValidator>;
 
 impl Validate for ProjectNameValidator {
-    fn validate<E: de::Error>(str: impl Into<String>) -> Result<String, E> {
-        let string: String = str.into();
-        let max_len = 50;
-        let min_len = 1;
-        let char_count = string.chars().count();
-
+    fn test_regex<E: de::Error>(str: &str) -> Result<String, E> {
         lazy_static! {
             static ref PROJECTNAME_REGEX: Regex =
                 Regex::new(r"^[\w\d_][\w\d_ \(\)\.,'\-!]*$").unwrap();
         }
-
-        if char_count < min_len || char_count > max_len {
-            let exp = format!("Name must be between {min_len} and {max_len} characters");
-            return Err(E::invalid_length(char_count, &exp.as_str()));
-        }
-
-        if !PROJECTNAME_REGEX.is_match(&string) {
-            return Err(E::invalid_value(
+        if PROJECTNAME_REGEX.is_match(str) {
+            Ok(str.to_owned())
+        } else {
+            Err(E::invalid_value(
                 de::Unexpected::Other("invalid characters"),
                 &r"a name without certain special characters. 
                 '(', ')', '!', ',', '.', ''', and '-' are allowed, but not as the first character. 
                 Regex: '^[\w\d_][\w\d_ \(\)\.,'!-]*$'",
-            ));
+            ))
         }
+    }
 
-        if string.is_inappropriate() {
-            return Err(E::invalid_value(
-                de::Unexpected::Other("profanity"),
-                &"a name without profanity",
-            ));
+    fn get_options() -> ValidateOptions {
+        ValidateOptions {
+            min: 1,
+            max: 50,
+            deny_profanity: true,
         }
-
-        Ok(string)
     }
 }
 
 #[derive(Serialize, Clone, Debug, PartialEq, Eq, TS)]
 #[ts(export)]
 pub struct LibraryNameValidator;
-pub type LibraryName = Names<LibraryNameValidator>;
+pub type LibraryName = Name<LibraryNameValidator>;
 
 impl Validate for LibraryNameValidator {
-    fn validate<E>(str: impl Into<String>) -> Result<String, E>
-    where
-        E: de::Error,
-    {
-        let string: String = str.into();
-
+    fn test_regex<E: de::Error>(str: &str) -> Result<String, E> {
         lazy_static! {
             static ref LIBRARYNAME_REGEX: Regex = Regex::new(r"^[A-zÀ-ÿ0-9 \(\)_-]+$").unwrap();
         }
 
-        if !LIBRARYNAME_REGEX.is_match(&string) {
-            return Err(E::invalid_value(
+        if LIBRARYNAME_REGEX.is_match(str) {
+            Ok(str.to_owned())
+        } else {
+            Err(E::invalid_value(
                 de::Unexpected::Other("invalid characters"),
-                &"a name without certain special characters. 
-                '(', ')', '_', and '-' are allowed. 
+                &"a name without certain special characters.
+                '(', ')', '_', and '-' are allowed.
                 Regex: \'^[A-zÀ-ÿ0-9 \\(\\)_-]+$\'",
-            ));
+            ))
         }
-
-        if string.is_inappropriate() {
-            return Err(E::invalid_value(
-                de::Unexpected::Other("profanity"),
-                &"a name without profanity",
-            ));
+    }
+    fn get_options() -> ValidateOptions {
+        ValidateOptions {
+            min: 1,
+            max: 100,
+            deny_profanity: false,
         }
-
-        Ok(string)
     }
 }
 
 #[derive(Serialize, Clone, Debug, PartialEq, Eq, TS)]
 #[ts(export)]
 pub struct UsernameValidator;
-pub type Username = Names<UsernameValidator>;
+pub type Username = Name<UsernameValidator>;
 
 impl Validate for UsernameValidator {
-    fn validate<E>(str: impl Into<String>) -> Result<String, E>
-    where
-        E: de::Error,
-    {
-        let string: String = str.into();
-        let max_len = 25;
-        let min_len = 3;
-        let char_count = string.chars().count();
-
-        if char_count < min_len || char_count > max_len {
-            let exp = format!("Name must be between {min_len} and {max_len} characters");
-            return Err(E::invalid_length(char_count, &exp.as_str()));
-        }
-
+    fn test_regex<E: de::Error>(str: &str) -> Result<String, E> {
         lazy_static! {
             static ref USERNAME_REGEX: Regex = Regex::new(r"^[A-z][A-Z0-9_\-]+$").unwrap();
         }
 
-        if !USERNAME_REGEX.is_match(&string) {
-            return Err(E::invalid_value(
+        if USERNAME_REGEX.is_match(str) {
+            Ok(str.to_owned())
+        } else {
+            Err(E::invalid_value(
                 de::Unexpected::Other("invalid characters"),
-                &"a name without special characters. 
-                [0-9], '-', and '_' are allowed, but not for the first character. 
+                &"a name without special characters.
+                [0-9], '-', and '_' are allowed, but not for the first character.
                 Regex: \'^[A-z][A-z0-9_\\-]\'",
-            ));
+            ))
         }
+    }
 
-        if string.is_inappropriate() {
-            return Err(E::invalid_value(
-                de::Unexpected::Other("profanity"),
-                &"a name without profanity",
-            ));
+    fn get_options() -> ValidateOptions {
+        ValidateOptions {
+            min: 1,
+            max: 50,
+            deny_profanity: true,
         }
-
-        Ok(string)
     }
 }
 
 #[derive(Serialize, Clone, Debug, PartialEq, Eq, TS)]
 #[ts(export)]
 pub struct GroupNameValidator;
-pub type GroupName = Names<GroupNameValidator>;
+pub type GroupName = Name<GroupNameValidator>;
 
 impl Validate for GroupNameValidator {
-    fn validate<E>(str: impl Into<String>) -> Result<String, E>
-    where
-        E: de::Error,
-    {
-        ProjectNameValidator::validate(str)
+    fn test_regex<E: de::Error>(str: &str) -> Result<String, E> {
+        lazy_static! {
+            static ref GROUPNAME_REGEX: Regex =
+                Regex::new(r"^[\w\d_][\w\d_ \(\)\.,'\-!]*$").unwrap();
+        }
+        if GROUPNAME_REGEX.is_match(str) {
+            Ok(str.to_owned())
+        } else {
+            Err(E::invalid_value(
+                de::Unexpected::Other("invalid characters"),
+                &r"a name without certain special characters. 
+                '(', ')', '!', ',', '.', ''', and '-' are allowed, but not as the first character. 
+                Regex: '^[\w\d_][\w\d_ \(\)\.,'!-]*$'",
+            ))
+        }
+    }
+
+    fn get_options() -> ValidateOptions {
+        ValidateOptions {
+            min: 1,
+            max: 50,
+            deny_profanity: true,
+        }
     }
 }
 
 #[derive(Serialize, Clone, Debug, PartialEq, Eq, TS)]
 #[ts(export)]
 pub struct RoleNameValidator;
-pub type RoleName = Names<RoleNameValidator>;
+pub type RoleName = Name<RoleNameValidator>;
 
 impl Validate for RoleNameValidator {
-    fn validate<E>(str: impl Into<String>) -> Result<String, E>
-    where
-        E: de::Error,
-    {
-        ProjectNameValidator::validate(str)
+    fn test_regex<E: de::Error>(str: &str) -> Result<String, E> {
+        lazy_static! {
+            static ref ROLENAME_REGEX: Regex =
+                Regex::new(r"^[\w\d_][\w\d_ \(\)\.,'\-!]*$").unwrap();
+        }
+        if ROLENAME_REGEX.is_match(str) {
+            Ok(str.to_owned())
+        } else {
+            Err(E::invalid_value(
+                de::Unexpected::Other("invalid characters"),
+                &r"a name without certain special characters. 
+                '(', ')', '!', ',', '.', ''', and '-' are allowed, but not as the first character. 
+                Regex: '^[\w\d_][\w\d_ \(\)\.,'!-]*$'",
+            ))
+        }
+    }
+
+    fn get_options() -> ValidateOptions {
+        ValidateOptions {
+            min: 1,
+            max: 50,
+            deny_profanity: true,
+        }
     }
 }
 
@@ -779,7 +732,7 @@ impl LibraryMetadata {
 #[serde(rename_all = "camelCase")]
 #[ts(export)]
 pub struct CreateGroupData {
-    pub name: Name,
+    pub name: GroupName,
     #[ts(optional)]
     pub services_hosts: Option<Vec<ServiceHost>>,
 }
@@ -812,7 +765,7 @@ pub struct Group {
 #[derive(Serialize, Deserialize, TS)]
 #[ts(export)]
 pub struct UpdateGroupData {
-    pub name: Name,
+    pub name: GroupName,
 }
 
 #[derive(Deserialize, Serialize, Clone, Debug, TS)]
