@@ -4,7 +4,7 @@ pub mod error;
 use crate::common::*;
 use futures_util::SinkExt;
 use netsblox_api_common::{
-    CreateGroupData, CreateMagicLinkData, Name, ServiceHostScope, UpdateGroupData,
+    CreateGroupData, CreateMagicLinkData, Name, ProjectName, ServiceHostScope, UpdateGroupData,
 };
 use reqwest::{self, Method, RequestBuilder, Response};
 use serde::{Deserialize, Serialize};
@@ -332,7 +332,7 @@ impl Client {
         let response = self
             .request(Method::PATCH, &format!("/projects/id/{}", &id))
             .json(&UpdateProjectData {
-                name: Name::new(name),
+                name: ProjectName::new(name),
                 client_id: None,
             })
             .send()
@@ -353,7 +353,7 @@ impl Client {
         let response = self
             .request(Method::PATCH, &format!("/projects/id/{}/{}", &id, &role_id))
             .json(&UpdateRoleData {
-                name: Name::new(name),
+                name: RoleName::new(name),
                 client_id: None,
             })
             .send()

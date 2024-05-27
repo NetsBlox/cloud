@@ -129,7 +129,7 @@ impl ProjectNetwork {
         RoomState {
             id: self.id.to_owned(),
             owner: project.owner,
-            name: project.name,
+            name: api::RoleName::new(project.name.as_str()),
             roles,
             collaborators: project.collaborators,
             version,
@@ -271,14 +271,14 @@ impl Topology {
                     metadata
                         .roles
                         .values()
-                        .map(|role| role.name.to_owned())
+                        .map(|role| role.name.to_string())
                         .collect()
                 });
 
                 let name2id = metadata
                     .roles
                     .into_iter()
-                    .map(|(k, v)| (v.name, k))
+                    .map(|(k, v)| (v.name.to_string(), k))
                     .collect::<HashMap<_, _>>();
 
                 role_names

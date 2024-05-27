@@ -99,6 +99,8 @@ pub(crate) fn find_first_unique<'a>(
 }
 
 pub(crate) fn is_approval_required(text: &str) -> bool {
+    dbg!(&text);
+    dbg!(text.is_inappropriate());
     text.contains("reportJSFunction") || text.is_inappropriate()
 }
 
@@ -361,7 +363,7 @@ mod tests {
         let original = ProjectMetadata::new("owner", "name", HashMap::new(), api::SaveState::Saved);
         let id = original.id.clone();
         let mut new_project = original.clone();
-        new_project.name = "new name".into();
+        new_project.name = api::ProjectName::new("new name");
         new_project.updated =
             DateTime::from_system_time(SystemTime::now() + Duration::from_secs(10));
 
@@ -374,7 +376,7 @@ mod tests {
         // check that it still has the latest
         let mut cache = project_cache.write().unwrap();
         let metadata = cache.get(&id).unwrap();
-        assert_eq!(&metadata.name, "new name");
+        assert_eq!(metadata.name.as_str(), "new name");
     }
 
     #[actix_web::test]
@@ -382,7 +384,7 @@ mod tests {
         let original = ProjectMetadata::new("owner", "name", HashMap::new(), api::SaveState::Saved);
         let id = original.id.clone();
         let mut new_project = original.clone();
-        new_project.name = "new name".into();
+        new_project.name = api::ProjectName::new("new name");
 
         let project_cache = Arc::new(RwLock::new(LruCache::new(NonZeroUsize::new(2).unwrap())));
 
@@ -393,7 +395,7 @@ mod tests {
         // check that it still has the latest
         let mut cache = project_cache.write().unwrap();
         let metadata = cache.get(&id).unwrap();
-        assert_eq!(&metadata.name, "new name");
+        assert_eq!(metadata.name.as_str(), "new name");
     }
 
     #[actix_web::test]

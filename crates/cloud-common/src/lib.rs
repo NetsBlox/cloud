@@ -1,3 +1,4 @@
+use api::RoleName;
 use mongodb::bson::{self, doc, document::Document, Bson, DateTime};
 pub use netsblox_api_common as api;
 use netsblox_api_common::{
@@ -352,7 +353,7 @@ impl From<NetworkTraceMetadata> for netsblox_api_common::NetworkTraceMetadata {
 pub struct ProjectMetadata {
     pub id: ProjectId,
     pub owner: String,
-    pub name: String,
+    pub name: api::ProjectName,
     pub updated: DateTime,
     pub state: PublishState,
     pub collaborators: std::vec::Vec<String>,
@@ -385,7 +386,7 @@ impl ProjectMetadata {
         ProjectMetadata {
             id: ProjectId::new(Uuid::new_v4().to_string()),
             owner: owner.to_owned(),
-            name: name.to_owned(),
+            name: api::ProjectName::new(name),
             updated: origin_time,
             origin_time,
             state: PublishState::Private,
@@ -451,7 +452,7 @@ impl From<ProjectMetadata> for netsblox_api_common::ProjectMetadata {
 pub struct Project {
     pub id: ProjectId,
     pub owner: String,
-    pub name: String,
+    pub name: api::ProjectName,
     pub updated: DateTime,
     pub state: PublishState,
     pub collaborators: std::vec::Vec<String>,
@@ -479,7 +480,7 @@ impl From<Project> for netsblox_api_common::Project {
 #[derive(Deserialize, Serialize, Clone, Debug)]
 #[serde(rename_all = "camelCase")]
 pub struct RoleMetadata {
-    pub name: String,
+    pub name: RoleName,
     pub code: String,
     pub media: String,
     pub updated: DateTime,

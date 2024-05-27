@@ -110,6 +110,7 @@ impl TestSetupBuilder {
     //     self
     // }
 
+    #[allow(clippy::too_many_lines)] //FIXME
     pub(crate) async fn run<Fut>(self, f: impl FnOnce(AppData) -> Fut)
     where
         Fut: Future<Output = ()>,
@@ -292,7 +293,7 @@ pub(crate) mod project {
     pub(crate) struct ProjectBuilder {
         id: Option<api::ProjectId>,
         owner: Option<String>,
-        name: Option<String>,
+        name: Option<api::ProjectName>,
         collaborators: Vec<String>,
         roles: HashMap<api::RoleId, api::RoleData>,
         traces: Vec<NetworkTraceMetadata>,
@@ -301,7 +302,7 @@ pub(crate) mod project {
 
     impl ProjectBuilder {
         pub(crate) fn with_name(mut self, name: &str) -> Self {
-            self.name = Some(name.to_owned());
+            self.name = Some(api::ProjectName::new(name));
             self
         }
 
@@ -346,7 +347,7 @@ pub(crate) mod project {
                 self.roles.insert(
                     RoleId::new(Uuid::new_v4().to_string()),
                     RoleData {
-                        name: "myRole".to_owned(),
+                        name: api::RoleName::new("myRole"),
                         code: "".to_owned(),
                         media: "".to_owned(),
                     },
@@ -356,7 +357,7 @@ pub(crate) mod project {
             ProjectFixture {
                 id,
                 owner,
-                name: self.name.unwrap_or("my project".into()),
+                name: self.name.unwrap_or(api::ProjectName::new("my_project")),
                 collaborators: self.collaborators,
                 roles: self.roles,
                 state: self.state,
@@ -370,7 +371,7 @@ pub(crate) mod project {
     pub(crate) struct ProjectFixture {
         pub(crate) id: api::ProjectId,
         pub(crate) owner: String,
-        pub(crate) name: String,
+        pub(crate) name: api::ProjectName,
         pub(crate) collaborators: std::vec::Vec<String>,
         //pub(crate) save_state: api::SaveState,
         pub(crate) roles: HashMap<RoleId, RoleData>,

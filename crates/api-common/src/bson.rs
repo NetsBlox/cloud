@@ -1,7 +1,7 @@
 use crate::{
     oauth, FriendInvite, FriendLinkState, GroupId, InvitationState, LinkedAccount, MagicLinkId,
-    Name, ProjectId, PublishState, RoleMetadata, SaveState, ServiceHost, ServiceHostScope,
-    UserRole,
+    Name, Names, ProjectId, ProjectName, PublishState, RoleMetadata, SaveState, ServiceHost,
+    ServiceHostScope, UserRole,
 };
 use bson::{doc, Bson, DateTime};
 
@@ -100,6 +100,12 @@ impl From<Name> for Bson {
     }
 }
 
+impl<T: crate::Validate> From<Names<T>> for Bson {
+    fn from(name: Names<T>) -> Bson {
+        Bson::String(name.to_string())
+    }
+}
+
 impl From<InvitationState> for Bson {
     fn from(state: InvitationState) -> Bson {
         match state {
@@ -174,6 +180,8 @@ impl From<MagicLinkId> for Bson {
 
 #[cfg(test)]
 mod tests {
+    use bson::to_bson;
+
     use super::*;
 
     #[test]
@@ -190,5 +198,22 @@ mod tests {
             .to_string();
         let scope: Result<ServiceHostScope, _> = serde_json::from_str(&data);
         assert!(scope.is_ok());
+    }
+    #[test]
+    fn test_bson_serialize_update_project_data() {
+        let new_name = "new project";
+        let name = ProjectName::new(new_name.to_string());
+
+        // Serialize the struct to BSON
+        let serialized = to_bson(&name).expect("Failed to serialize to BSON");
+        println!("Serialized BSON: {:?}", serialized);
+
+        // Deserialize the BSON back to the struct
+        let deserialized: ProjectName =
+            bson::from_bson(serialized).expect("Failed to deserialize from BSON");
+        println!("Deserialized struct: {:?}", deserialized);
+
+        // Check that the deserialized value matches the original
+        assert_eq!(deserialized.as_str(), new_name);
     }
 }

@@ -1,8 +1,7 @@
 use crate::app_data::AppData;
 use crate::common::api;
 use crate::common::api::{
-    ClientId, CreateProjectData, Name, ProjectId, RoleData, RoleId, UpdateProjectData,
-    UpdateRoleData,
+    ClientId, CreateProjectData, ProjectId, RoleData, RoleId, UpdateProjectData, UpdateRoleData,
 };
 use crate::errors::{InternalError, UserError};
 use crate::projects::actions::ProjectActions;
@@ -275,9 +274,7 @@ async fn update_project(
     let auth_ep = auth::try_edit_project(&app, &req, body.client_id, &project_id).await?;
 
     let actions: ProjectActions = app.as_project_actions();
-    let metadata = actions
-        .rename_project(&auth_ep, &body.name.as_str())
-        .await?;
+    let metadata = actions.rename_project(&auth_ep, body.name.as_str()).await?;
     Ok(HttpResponse::Ok().json(metadata))
 }
 
@@ -393,7 +390,7 @@ async fn get_thumbnail(
 
 #[derive(Deserialize)]
 struct CreateRoleData {
-    name: String,
+    name: api::RoleName,
     code: Option<String>,
     media: Option<String>,
 }
@@ -486,7 +483,7 @@ async fn rename_role(
     let auth_ep = auth::try_edit_project(&app, &req, body.client_id, &project_id).await?;
 
     let actions: ProjectActions = app.as_project_actions();
-    let metadata = actions.rename_role(&auth_ep, role_id, &body.name).await?;
+    let metadata = actions.rename_role(&auth_ep, role_id, body.name).await?;
     Ok(HttpResponse::Ok().json(metadata))
 }
 
@@ -966,7 +963,7 @@ mod tests {
                 .await;
 
                 let update_data = api::UpdateProjectData {
-                    name: Name::new("new name"),
+                    name: api::ProjectName::new("new name"),
                     client_id: None,
                 };
                 let req = test::TestRequest::patch()
@@ -976,7 +973,7 @@ mod tests {
                     .to_request();
 
                 let metadata: api::ProjectMetadata = test::call_and_read_body_json(&app, req).await;
-                assert_eq!(metadata.name, update_data.name.as_str());
+                assert_eq!(metadata.name, update_data.name);
 
                 // TODO: check the database is updated, too
             })
@@ -1025,7 +1022,7 @@ mod tests {
                 .await;
 
                 let update_data = api::UpdateProjectData {
-                    name: Name::new(existing.name.as_str()),
+                    name: existing.name.clone(),
                     client_id: None,
                 };
                 let req = test::TestRequest::patch()
@@ -1036,7 +1033,10 @@ mod tests {
 
                 let metadata: api::ProjectMetadata = test::call_and_read_body_json(&app, req).await;
                 assert_ne!(metadata.name, existing.name);
-                assert!(metadata.name.starts_with(&update_data.name.as_str()));
+                assert!(metadata
+                    .name
+                    .as_str()
+                    .starts_with(&update_data.name.as_str()));
 
                 // TODO: check the database is updated, too
             })
@@ -1152,7 +1152,7 @@ mod tests {
                 assert_eq!(projects.len(), 2);
                 projects.into_iter().for_each(|project| {
                     assert!(matches!(project.state, api::PublishState::PendingApproval));
-                    assert!(project.name.starts_with("pending"));
+                    assert!(project.name.as_str().starts_with("pending"));
                 })
             })
             .await;
@@ -1220,7 +1220,7 @@ mod tests {
         let id = project.id.clone();
         let new_name = "new project";
         let project_update = UpdateProjectData {
-            name: Name::new(new_name),
+            name: api::ProjectName::new(new_name),
             client_id: None,
         };
 
@@ -1252,7 +1252,7 @@ mod tests {
                     .unwrap()
                     .unwrap();
 
-                assert_eq!(project.name, new_name);
+                assert_eq!(project.name.as_str(), new_name);
             })
             .await;
     }
@@ -1267,7 +1267,7 @@ mod tests {
         let id = project.id.clone();
         let new_name = "shit";
         let project_update = UpdateProjectData {
-            name: Name::new(new_name),
+            name: api::ProjectName::new(new_name),
             client_id: None,
         };
 
@@ -1299,7 +1299,7 @@ mod tests {
                     .unwrap()
                     .unwrap();
 
-                assert_eq!(project.name, "old name".to_string());
+                assert_eq!(project.name.as_str(), "old name");
             })
             .await;
     }
@@ -1308,7 +1308,7 @@ mod tests {
     async fn test_rename_project_401() {
         let new_name = "some new name";
         let project_update = UpdateProjectData {
-            name: Name::new(new_name),
+            name: api::ProjectName::new(new_name),
             client_id: None,
         };
         let id = "abc123";
@@ -1363,7 +1363,7 @@ mod tests {
         let id = project.id.clone();
         let new_name = "new project";
         let project_update = UpdateProjectData {
-            name: Name::new(new_name),
+            name: api::ProjectName::new(new_name),
             client_id: None,
         };
 
@@ -1499,7 +1499,7 @@ mod tests {
         .into();
         let role_id = api::RoleId::new("someRole".into());
         let role_data = api::RoleData {
-            name: "role".into(),
+            name: api::RoleName::new("role"),
             code: "<code/>".into(),
             media: "<media/>".into(),
         };
@@ -1521,7 +1521,7 @@ mod tests {
                 .await;
 
                 let data = UpdateRoleData {
-                    name: Name::new("new_name"),
+                    name: api::RoleName::new("new_name"),
                     client_id: None,
                 };
                 let req = test::TestRequest::patch()
@@ -1532,11 +1532,11 @@ mod tests {
 
                 let project: api::ProjectMetadata = test::call_and_read_body_json(&app, req).await;
                 let role = project.roles.get(&role_id).unwrap();
-                assert_eq!(role.name, data.name.as_str());
+                assert_eq!(role.name, data.name);
 
                 let project = app_data.get_project_metadatum(&project.id).await.unwrap();
                 let role = project.roles.get(&role_id).unwrap();
-                assert_eq!(role.name, data.name.as_str());
+                assert_eq!(role.name, data.name);
             })
             .await;
     }
@@ -1546,7 +1546,7 @@ mod tests {
         let username = "user1";
         let role_id = api::RoleId::new("someRole".into());
         let role_data = api::RoleData {
-            name: "role".into(),
+            name: api::RoleName::new("role"),
             code: "<code/>".into(),
             media: "<media/>".into(),
         };
@@ -1568,7 +1568,7 @@ mod tests {
                 .await;
 
                 let data = UpdateRoleData {
-                    name: Name::new("$ .1 damn"),
+                    name: api::RoleName::new("$ .1 damn"),
                     client_id: None,
                 };
                 let req = test::TestRequest::patch()
@@ -1582,7 +1582,7 @@ mod tests {
 
                 let project = app_data.get_project_metadatum(&project.id).await.unwrap();
                 let role = project.roles.get(&role_id).unwrap();
-                assert_eq!(role.name, "role".to_string());
+                assert_eq!(role.name.as_str(), "role");
             })
             .await;
     }
@@ -1592,7 +1592,7 @@ mod tests {
         let username = "user1";
         let role_id = api::RoleId::new("someRole".into());
         let role_data = api::RoleData {
-            name: "role".into(),
+            name: api::RoleName::new("role"),
             code: "<code/>".into(),
             media: "<media/>".into(),
         };
@@ -1614,7 +1614,7 @@ mod tests {
                 .await;
 
                 let data = UpdateRoleData {
-                    name: Name::new("X"),
+                    name: api::RoleName::new("X"),
                     client_id: None,
                 };
                 let req = test::TestRequest::patch()
@@ -1628,7 +1628,7 @@ mod tests {
 
                 let project = app_data.get_project_metadatum(&project.id).await.unwrap();
                 let role = project.roles.get(&role_id).unwrap();
-                assert_eq!(role.name, "role".to_string());
+                assert_eq!(role.name.as_str(), "role");
             })
             .await;
     }
@@ -1646,7 +1646,7 @@ mod tests {
 
         let role_id = api::RoleId::new("someRole".into());
         let role_data = api::RoleData {
-            name: "role".into(),
+            name: api::RoleName::new("role"),
             code: "<code/>".into(),
             media: "<media/>".into(),
         };
@@ -1668,7 +1668,7 @@ mod tests {
                 .await;
 
                 let data = UpdateRoleData {
-                    name: Name::new("new_name"),
+                    name: api::RoleName::new("new_name"),
                     client_id: None,
                 };
                 let req = test::TestRequest::patch()
@@ -1679,11 +1679,11 @@ mod tests {
 
                 let project: api::ProjectMetadata = test::call_and_read_body_json(&app, req).await;
                 let role = project.roles.get(&role_id).unwrap();
-                assert_eq!(role.name, data.name.as_str());
+                assert_eq!(role.name, data.name);
 
                 let project = app_data.get_project_metadatum(&project.id).await.unwrap();
                 let role = project.roles.get(&role_id).unwrap();
-                assert_eq!(role.name, "new_name".to_string());
+                assert_eq!(role.name.as_str(), "new_name");
             })
             .await;
     }
@@ -1700,7 +1700,7 @@ mod tests {
         .into();
         let role_id = api::RoleId::new("someRole".into());
         let role_data = api::RoleData {
-            name: "role".into(),
+            name: api::RoleName::new("role"),
             code: "<code/>".into(),
             media: "<media/>".into(),
         };
@@ -1722,7 +1722,7 @@ mod tests {
                 .await;
 
                 let data = api::RoleData {
-                    name: "new name".into(),
+                    name: api::RoleName::new("new name"),
                     code: "<new code/>".into(),
                     media: "<new media/>".into(),
                 };
@@ -1740,7 +1740,7 @@ mod tests {
                     .uri(&format!("/id/{}/{}", &project.id, &role_id))
                     .to_request();
                 let role: api::RoleData = test::call_and_read_body_json(&app, req).await;
-                assert_eq!(&role.name, "new name");
+                assert_eq!(role.name.as_str(), "new name");
                 assert_eq!(&role.code, "<new code/>");
                 assert_eq!(&role.media, "<new media/>");
             })
@@ -1767,7 +1767,7 @@ mod tests {
         .into();
         let role_id = api::RoleId::new("someRole".into());
         let role_data = api::RoleData {
-            name: "role".into(),
+            name: api::RoleName::new("role"),
             code: "<code/>".into(),
             media: "<media/>".into(),
         };
@@ -1789,7 +1789,7 @@ mod tests {
                 .await;
 
                 let data = api::RoleData {
-                    name: "new name".into(),
+                    name: api::RoleName::new("new name"),
                     code: "<new code/>".into(),
                     media: "<new media/>".into(),
                 };
@@ -1825,7 +1825,7 @@ mod tests {
         .into();
         let role_id = api::RoleId::new("someRole".into());
         let role_data = api::RoleData {
-            name: "role".into(),
+            name: api::RoleName::new("role"),
             code: "<code/>".into(),
             media: "<media/>".into(),
         };
@@ -1847,7 +1847,7 @@ mod tests {
                 .await;
 
                 let data = api::RoleData {
-                    name: "new name".into(),
+                    name: api::RoleName::new("new name"),
                     code: "<new code/>".into(),
                     media: "<new media/>".into(),
                 };
@@ -1875,13 +1875,13 @@ mod tests {
         .into();
         let role_id = api::RoleId::new("someRole".into());
         let role_data = api::RoleData {
-            name: "role".into(),
+            name: api::RoleName::new("role"),
             code: "<code/>".into(),
             media: "<media/>".into(),
         };
         let role2_id = api::RoleId::new("role2Id".into());
         let role2_data = api::RoleData {
-            name: "role2".into(),
+            name: api::RoleName::new("role2"),
             code: "<code/>".into(),
             media: "<media/>".into(),
         };

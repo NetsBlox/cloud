@@ -579,7 +579,7 @@ mod tests {
             (
                 r1_id.clone(),
                 api::RoleData {
-                    name: "sender".into(),
+                    name: api::RoleName::new("sender"),
                     code: "<code/>".into(),
                     media: "<media/>".into(),
                 },
@@ -587,7 +587,7 @@ mod tests {
             (
                 r2_id.clone(),
                 api::RoleData {
-                    name: "rcvr".into(),
+                    name: api::RoleName::new("rcvr"),
                     code: "<code/>".into(),
                     media: "<media/>".into(),
                 },
@@ -719,7 +719,7 @@ mod tests {
             (
                 r1_id.clone(),
                 api::RoleData {
-                    name: "sender".into(),
+                    name: api::RoleName::new("sender"),
                     code: "<code/>".into(),
                     media: "<media/>".into(),
                 },
@@ -727,7 +727,7 @@ mod tests {
             (
                 r2_id.clone(),
                 api::RoleData {
-                    name: "rcvr".into(),
+                    name: api::RoleName::new("rcvr"),
                     code: "<code/>".into(),
                     media: "<media/>".into(),
                 },
@@ -863,7 +863,7 @@ mod tests {
             (
                 r1_id.clone(),
                 api::RoleData {
-                    name: "sender".into(),
+                    name: api::RoleName::new("sender"),
                     code: "<code/>".into(),
                     media: "<media/>".into(),
                 },
@@ -871,7 +871,7 @@ mod tests {
             (
                 r2_id.clone(),
                 api::RoleData {
-                    name: "rcvr".into(),
+                    name: api::RoleName::new("rcvr"),
                     code: "<code/>".into(),
                     media: "<media/>".into(),
                 },

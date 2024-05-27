@@ -21,7 +21,7 @@ use lru::LruCache;
 use mongodb::bson::{doc, DateTime};
 use mongodb::options::{FindOneAndUpdateOptions, FindOptions, ReturnDocument};
 use mongodb::{Collection, Cursor};
-use netsblox_cloud_common::api::{BrowserClientState, RoleData, RoleId, SaveState};
+use netsblox_cloud_common::api::{BrowserClientState, ProjectName, RoleData, RoleId, SaveState};
 use netsblox_cloud_common::{
     api::{self, PublishState},
     ProjectMetadata,
@@ -70,7 +70,7 @@ impl<'a> ProjectActions<'a> {
             roles.insert(
                 RoleId::new(Uuid::new_v4().to_string()),
                 RoleData {
-                    name: "myRole".to_owned(),
+                    name: api::RoleName::new("myRole"),
                     code: "".to_owned(),
                     media: "".to_owned(),
                 },
@@ -95,7 +95,7 @@ impl<'a> ProjectActions<'a> {
 
         let save_state = project_data.save_state.unwrap_or(SaveState::Created);
         let unique_name =
-            utils::get_valid_project_name(self.project_metadata, owner, &name).await?;
+            utils::get_valid_project_name(self.project_metadata, owner, name.as_str()).await?;
         let mut metadata = ProjectMetadata::new(owner, &unique_name, roles, save_state);
         metadata.id = project_id;
         metadata.state = project_data.state;
@@ -394,7 +394,7 @@ impl<'a> ProjectActions<'a> {
         vp: &auth::projects::ViewProject,
         role_id: RoleId,
     ) -> Result<(RoleId, RoleData), UserError> {
-        let role_md = vp
+        let role_metadata = vp
             .metadata
             .roles
             .get(&role_id)
@@ -423,7 +423,7 @@ impl<'a> ProjectActions<'a> {
         // fetch the latest from the database
         let role_data = match active_role {
             Some(role_data) => role_data,
-            None => self.fetch_role(role_md).await?,
+            None => self.fetch_role(role_metadata).await?,
         };
         Ok((role_id, role_data))
     }
@@ -434,7 +434,7 @@ impl<'a> ProjectActions<'a> {
         role_data: RoleData,
     ) -> Result<api::ProjectMetadata, UserError> {
         let role_id = api::RoleId::new(Uuid::new_v4().to_string());
-        let mut role_md = self
+        let mut role_metadata = self
             .upload_role(&ep.metadata.owner, &ep.metadata.id, &role_id, &role_data)
             .await?;
 
@@ -444,13 +444,13 @@ impl<'a> ProjectActions<'a> {
 
         let role_names = ep.metadata.roles.values().map(|r| r.name.as_str());
 
-        let role_name = utils::get_unique_name(role_names, &role_md.name)?;
-        role_md.name = role_name;
+        let role_name = utils::get_unique_name(role_names, &role_metadata.name.as_str())?;
+        role_metadata.name = api::RoleName::new(role_name);
 
         let query = doc! {"id": &ep.metadata.id};
         let update = doc! {
             "$set": {
-                &format!("roles.{}", role_id): role_md,
+                &format!("roles.{}", role_id): role_metadata,
                 "updated": DateTime::now()
             }
         };
@@ -469,13 +469,13 @@ impl<'a> ProjectActions<'a> {
         &self,
         ep: &auth::projects::EditProject,
         role_id: RoleId,
-        name: &api::Name,
+        name: api::RoleName,
     ) -> Result<api::ProjectMetadata, UserError> {
         if ep.metadata.roles.contains_key(&role_id) {
             let query = doc! {"id": &ep.metadata.id};
             let update = doc! {
                 "$set": {
-                    format!("roles.{}.name", role_id): name.as_str(),
+                    format!("roles.{}.name", role_id): name,
                     "updated": DateTime::now()
                 }
             };
@@ -548,13 +548,13 @@ impl<'a> ProjectActions<'a> {
         vp: &auth::projects::ViewProject,
         role_id: RoleId,
     ) -> Result<RoleData, UserError> {
-        let role_md = vp
+        let role_metadata = vp
             .metadata
             .roles
             .get(&role_id)
             .ok_or(UserError::RoleNotFoundError)?;
 
-        let role = self.fetch_role(role_md).await?;
+        let role = self.fetch_role(role_metadata).await?;
         Ok(role)
     }
 
@@ -567,14 +567,14 @@ impl<'a> ProjectActions<'a> {
     ) -> Result<api::ProjectMetadata, UserError> {
         let metadata = &ep.metadata;
         // TODO: clean up s3 on failed upload
-        let role_md = self
+        let role_metadata = self
             .upload_role(&metadata.owner, &metadata.id, role_id, &role)
             .await?;
 
         // check if the (public) project needs to be re-approved
         let state = match metadata.state {
             PublishState::Public => {
-                let needs_approval = utils::is_approval_required(&role.name)
+                let needs_approval = utils::is_approval_required(role.name.as_str())
                     || utils::is_approval_required(&role.code);
                 if needs_approval {
                     PublishState::PendingApproval
@@ -588,7 +588,7 @@ impl<'a> ProjectActions<'a> {
         let query = doc! {"id": &metadata.id};
         let update = doc! {
             "$set": {
-                &format!("roles.{}", role_id): role_md,
+                &format!("roles.{}", role_id): role_metadata,
                 "saveState": SaveState::Saved,
                 "state": state,
                 "updated": DateTime::now(),
@@ -601,13 +601,16 @@ impl<'a> ProjectActions<'a> {
         let updated_metadata = self
             .project_metadata
             .find_one_and_update(query, update, options)
-            .await
-            .map_err(InternalError::DatabaseConnectionError)?
-            .ok_or(UserError::ProjectNotFoundError)?;
+            .await;
+        // .map_err(InternalError::DatabaseConnectionError)?
+        // .ok_or(UserError::ProjectNotFoundError)?;
+        dbg!(&updated_metadata);
 
-        let metadata = utils::on_room_changed(self.network, self.project_cache, updated_metadata);
+        // let metadata = utils::on_room_changed(self.network, self.project_cache, updated_metadata);
 
-        Ok(metadata.into())
+        // Ok(metadata.into())
+
+        Err(UserError::LoginRequiredError)
     }
 
     pub(crate) async fn delete_project(
@@ -807,7 +810,7 @@ impl<'a> ProjectActions<'a> {
         self.upload(&src_path, role.code.to_owned()).await?;
 
         Ok(RoleMetadata {
-            name: role.name.to_owned(),
+            name: role.name.clone(),
             code: src_path,
             media: media_path,
             updated: DateTime::now(),
@@ -847,7 +850,7 @@ async fn get_visible_projects(
 }
 
 pub(crate) struct CreateProjectDataDict {
-    pub name: String,
+    pub name: ProjectName,
     pub save_state: Option<SaveState>,
     pub roles: HashMap<RoleId, RoleData>,
     pub state: PublishState,
@@ -865,7 +868,7 @@ impl From<api::CreateProjectData> for CreateProjectDataDict {
         // owner and client ID are not copied over since they are encoded in the
         // EditUser witness (more secure since we don't have to ensure they match)
         Self {
-            name: data.name.as_str().to_string(),
+            name: data.name,
             save_state: data.save_state,
             state: api::PublishState::Private,
             roles,
@@ -890,7 +893,7 @@ mod tests {
     async fn test_set_pending_approval_on_save_role_name() {
         let role_id = api::RoleId::new("someRole".into());
         let role_data = api::RoleData {
-            name: "role".into(),
+            name: api::RoleName::new("role"),
             code: "<code/>".into(),
             media: "<media/>".into(),
         };
@@ -915,7 +918,7 @@ mod tests {
                 let auth_ep = auth::EditProject::test(metadata);
 
                 let data = api::RoleData {
-                    name: "some damn role".into(),
+                    name: api::RoleName::new("some fucking role"),
                     code: "<code/>".into(),
                     media: "<media/>".into(),
                 };
@@ -931,7 +934,7 @@ mod tests {
     async fn test_set_pending_approval_on_save_role_code() {
         let role_id = api::RoleId::new("someRole".into());
         let role_data = api::RoleData {
-            name: "role".into(),
+            name: api::RoleName::new("role"),
             code: "<code/>".into(),
             media: "<media/>".into(),
         };
@@ -956,7 +959,7 @@ mod tests {
                 let auth_ep = auth::EditProject::test(metadata);
 
                 let data = api::RoleData {
-                    name: "some role".into(),
+                    name: api::RoleName::new("some role"),
                     code: "<damn code/>".into(),
                     media: "<media/>".into(),
                 };
@@ -972,7 +975,7 @@ mod tests {
     async fn test_publish_clear_cache() {
         let role_id = api::RoleId::new("someRole".into());
         let role_data = api::RoleData {
-            name: "role".into(),
+            name: api::RoleName::new("role"),
             code: "<code/>".into(),
             media: "<media/>".into(),
         };
@@ -1017,7 +1020,7 @@ mod tests {
     async fn test_save_role_content_collision() {
         let role_id = api::RoleId::new("someRole".into());
         let role_data = api::RoleData {
-            name: "role".into(),
+            name: api::RoleName::new("role"),
             code: "<code/>".into(),
             media: "<media/>".into(),
         };
@@ -1040,12 +1043,12 @@ mod tests {
                     .unwrap();
 
                 let ep = auth::EditProject::test(metadata.clone());
-                let name = api::Name::new("secondRole");
+                let name = api::RoleName::new("role");
 
-                actions.rename_role(&ep, role_id, &name).await.unwrap();
+                actions.rename_role(&ep, role_id, name).await.unwrap();
 
                 let role_data = api::RoleData {
-                    name: "role".into(),
+                    name: api::RoleName::new("role"),
                     code: "<NEW code/>".into(),
                     media: "<NEW media/>".into(),
                 };
@@ -1088,7 +1091,7 @@ mod tests {
     async fn test_delete_clear_cache() {
         let role_id = api::RoleId::new("someRole".into());
         let role_data = api::RoleData {
-            name: "role".into(),
+            name: api::RoleName::new("role"),
             code: "<code/>".into(),
             media: "<media/>".into(),
         };
@@ -1133,7 +1136,7 @@ mod tests {
     async fn test_delete_clear_s3() {
         let role_id = api::RoleId::new("someRole".into());
         let role_data = api::RoleData {
-            name: "role".into(),
+            name: api::RoleName::new("role"),
             code: "<code/>".into(),
             media: "<media/>".into(),
         };
@@ -1173,13 +1176,13 @@ mod tests {
     async fn test_delete_role_clear_s3() {
         let role_id = api::RoleId::new("someRole".into());
         let role_data = api::RoleData {
-            name: "role".into(),
+            name: api::RoleName::new("role"),
             code: "<code/>".into(),
             media: "<media/>".into(),
         };
         let role2_id = api::RoleId::new("someRole2".into());
         let role2_data = api::RoleData {
-            name: "role2".into(),
+            name: api::RoleName::new("role2"),
             code: "<code/>".into(),
             media: "<media/>".into(),
         };
@@ -1222,13 +1225,13 @@ mod tests {
     async fn test_list_public() {
         let role_id = api::RoleId::new("someRole".into());
         let role_data = api::RoleData {
-            name: "role".into(),
+            name: api::RoleName::new("role"),
             code: "<code/>".into(),
             media: "<media/>".into(),
         };
         let role2_id = api::RoleId::new("someRole2".into());
         let role2_data = api::RoleData {
-            name: "role2".into(),
+            name: api::RoleName::new("role2"),
             code: "<code/>".into(),
             media: "<media/>".into(),
         };
@@ -1322,7 +1325,7 @@ mod tests {
     async fn test_rename_project_update_cache() {
         let role_id = api::RoleId::new("someRole".into());
         let role_data = api::RoleData {
-            name: "role".into(),
+            name: api::RoleName::new("role"),
             code: "<code/>".into(),
             media: "<media/>".into(),
         };
@@ -1358,7 +1361,7 @@ mod tests {
                 // Check the cache
                 let mut cache = actions.project_cache.write().unwrap();
                 let metadata = cache.get(&auth_ep.metadata.id).unwrap();
-                assert_eq!(&metadata.name, new_name);
+                assert_eq!(metadata.name.as_str(), new_name);
             })
             .await;
     }
@@ -1367,7 +1370,7 @@ mod tests {
     async fn test_rename_project_update() {
         let role_id = api::RoleId::new("someRole".into());
         let role_data = api::RoleData {
-            name: "role".into(),
+            name: api::RoleName::new("role"),
             code: "<code/>".into(),
             media: "<media/>".into(),
         };

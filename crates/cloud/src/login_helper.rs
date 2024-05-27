@@ -106,9 +106,12 @@ impl<'a> LoginHelper<'a> {
             .map_err(InternalError::DatabaseConnectionError)?
         {
             // No project will be found for non-NetsBlox clients such as PyBlox
-            let name =
-                utils::get_valid_project_name(self.project_metadata, username, &metadata.name)
-                    .await?;
+            let name = utils::get_valid_project_name(
+                self.project_metadata,
+                username,
+                &metadata.name.as_str(),
+            )
+            .await?;
             let update = doc! {
                 "$set": {
                     "owner": username,

@@ -10,8 +10,8 @@ use futures_util::StreamExt;
 use inquire::{Confirm, Password, PasswordDisplayMode};
 use netsblox_api::common::{
     oauth, ClientId, CreateMagicLinkData, CreateProjectData, Credentials, FriendLinkState,
-    InvitationState, LinkedAccount, Name, ProjectId, PublishState, RoleData, SaveState,
-    ServiceHost, ServiceHostScope, UserRole,
+    InvitationState, LinkedAccount, ProjectId, ProjectName, PublishState, RoleData, RoleName,
+    SaveState, ServiceHost, ServiceHostScope, UserRole,
 };
 use netsblox_api::{self, serde_json, Client};
 use std::path::Path;
@@ -928,7 +928,7 @@ async fn do_command(mut cfg: Config, args: Cli) -> Result<(), error::Error> {
                     .map(|rspan| rspan.into_role(&project_xml))
                     .collect();
 
-                let name: Name = Name::new(name.as_deref().unwrap_or_else(|| {
+                let name: ProjectName = ProjectName::new(name.as_deref().unwrap_or_else(|| {
                     Path::new(filename)
                         .file_stem()
                         .expect("Could not determine default name. Try passing --name")
@@ -958,7 +958,7 @@ async fn do_command(mut cfg: Config, args: Cli) -> Result<(), error::Error> {
                     let role_id = metadata
                         .roles
                         .into_iter()
-                        .find(|(_id, role_md)| role_md.name == *role)
+                        .find(|(_id, role_md)| role_md.name.to_string() == *role)
                         .map(|(id, _role_md)| id)
                         .expect("Role not found");
 
@@ -1069,7 +1069,7 @@ async fn do_command(mut cfg: Config, args: Cli) -> Result<(), error::Error> {
                     let role_id = metadata
                         .roles
                         .into_iter()
-                        .find(|(_id, role)| role.name == *role_name)
+                        .find(|(_id, role)| role.name.to_string() == *role_name)
                         .map(|(id, _role)| id)
                         .expect("Role not found.");
 
@@ -1090,7 +1090,7 @@ async fn do_command(mut cfg: Config, args: Cli) -> Result<(), error::Error> {
                     let role_id = metadata
                         .roles
                         .into_iter()
-                        .find(|(_id, role)| role.name == *role_name)
+                        .find(|(_id, role)| role.name.to_string() == *role_name)
                         .map(|(id, _role)| id)
                         .expect("Role not found.");
 
@@ -1663,7 +1663,7 @@ impl RoleSpan {
         let media = &xml[self.media_start..self.end];
 
         RoleData {
-            name: self.name,
+            name: RoleName::new(self.name),
             code: code.to_owned(),
             media: media.to_owned(),
         }
