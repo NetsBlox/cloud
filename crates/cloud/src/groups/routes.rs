@@ -80,7 +80,7 @@ async fn update_group(
     let auth_eg = auth::try_edit_group(&app, &req, &id).await?;
 
     let actions: GroupActions = app.as_group_actions();
-    let group = actions.rename_group(&auth_eg, &data.name.as_str()).await?;
+    let group = actions.rename_group(&auth_eg, &data.name).await?;
 
     Ok(HttpResponse::Ok().json(group))
 }

@@ -365,9 +365,10 @@ pub struct ProjectMetadata {
 }
 
 impl ProjectMetadata {
+    #[must_use]
     pub fn new(
         owner: &str,
-        name: &str,
+        name: &api::ProjectName,
         roles: HashMap<RoleId, RoleMetadata>,
         save_state: SaveState,
     ) -> ProjectMetadata {
@@ -386,7 +387,7 @@ impl ProjectMetadata {
         ProjectMetadata {
             id: ProjectId::new(Uuid::new_v4().to_string()),
             owner: owner.to_owned(),
-            name: api::ProjectName::new(name),
+            name: name.clone(),
             updated: origin_time,
             origin_time,
             state: PublishState::Private,
@@ -851,16 +852,16 @@ mod tests {
 
     #[test]
     fn test_dont_schedule_deletion_for_saved_projects() {
-        let metadata =
-            ProjectMetadata::new("owner", "someProject", HashMap::new(), SaveState::Saved);
+        let name = api::ProjectName::new("someProject");
+        let metadata = ProjectMetadata::new("owner", &name, HashMap::new(), SaveState::Saved);
         assert!(metadata.delete_at.is_none());
     }
 
     #[test]
     fn test_schedule_deletion_for_created_projects() {
         // This gives them 10 minutes to be occupied before deletion
-        let metadata =
-            ProjectMetadata::new("owner", "someProject", HashMap::new(), SaveState::Created);
+        let name = api::ProjectName::new("someProject");
+        let metadata = ProjectMetadata::new("owner", &name, HashMap::new(), SaveState::Created);
         assert!(metadata.delete_at.is_some());
     }
 

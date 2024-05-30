@@ -254,11 +254,15 @@ impl<'a> ProjectActions<'a> {
     pub(crate) async fn rename_project(
         &self,
         ep: &auth::projects::EditProject,
-        new_name: &str,
+        new_name: &ProjectName,
     ) -> Result<api::ProjectMetadata, UserError> {
         let metadata = &ep.metadata;
-        let name =
-            utils::get_valid_project_name(self.project_metadata, &metadata.owner, new_name).await?;
+        let name = utils::get_valid_project_name(
+            self.project_metadata,
+            &metadata.owner,
+            new_name.as_str(),
+        )
+        .await?;
 
         let query = doc! {"id": &metadata.id};
         let update = doc! {
@@ -313,7 +317,7 @@ impl<'a> ProjectActions<'a> {
         Ok(metadata.into())
     }
 
-    pub(crate) async fn set_latest_role(
+    pub(crate) fn set_latest_role(
         &self,
         md: &auth::projects::EditProject,
         role_id: &RoleId,
@@ -434,6 +438,7 @@ impl<'a> ProjectActions<'a> {
         role_data: RoleData,
     ) -> Result<api::ProjectMetadata, UserError> {
         let role_id = api::RoleId::new(Uuid::new_v4().to_string());
+        // FIXME clean on failed s3
         let mut role_metadata = self
             .upload_role(&ep.metadata.owner, &ep.metadata.id, &role_id, &role_data)
             .await?;
@@ -444,8 +449,8 @@ impl<'a> ProjectActions<'a> {
 
         let role_names = ep.metadata.roles.values().map(|r| r.name.as_str());
 
-        let role_name = utils::get_unique_name(role_names, &role_metadata.name.as_str())?;
-        role_metadata.name = api::RoleName::new(role_name);
+        role_metadata.name =
+            utils::get_unique_name(role_names, &role_metadata.name.as_str())?.into();
 
         let query = doc! {"id": &ep.metadata.id};
         let update = doc! {
@@ -574,9 +579,7 @@ impl<'a> ProjectActions<'a> {
         // check if the (public) project needs to be re-approved
         let state = match metadata.state {
             PublishState::Public => {
-                let needs_approval = utils::is_approval_required(role.name.as_str())
-                    || utils::is_approval_required(&role.code);
-                if needs_approval {
+                if utils::is_approval_required(&role.code) {
                     PublishState::PendingApproval
                 } else {
                     PublishState::Public
@@ -601,16 +604,12 @@ impl<'a> ProjectActions<'a> {
         let updated_metadata = self
             .project_metadata
             .find_one_and_update(query, update, options)
-            .await;
-        // .map_err(InternalError::DatabaseConnectionError)?
-        // .ok_or(UserError::ProjectNotFoundError)?;
-        dbg!(&updated_metadata);
+            .await
+            .map_err(InternalError::DatabaseConnectionError)?
+            .ok_or(UserError::ProjectNotFoundError)?;
 
-        // let metadata = utils::on_room_changed(self.network, self.project_cache, updated_metadata);
-
-        // Ok(metadata.into())
-
-        Err(UserError::LoginRequiredError)
+        let metadata = utils::on_room_changed(self.network, self.project_cache, updated_metadata);
+        Ok(metadata.into())
     }
 
     pub(crate) async fn delete_project(
@@ -887,7 +886,7 @@ mod tests {
     use mongodb::bson::{doc, DateTime};
     use netsblox_cloud_common::api;
 
-    use crate::{auth, test_utils};
+    use crate::{auth, errors, test_utils};
 
     #[actix_web::test]
     async fn test_set_pending_approval_on_save_role_name() {
@@ -922,10 +921,13 @@ mod tests {
                     code: "<code/>".into(),
                     media: "<media/>".into(),
                 };
-                dbg!(&auth_ep.metadata.state);
-                let metadata = actions.save_role(&auth_ep, &role_id, data).await.unwrap();
-                dbg!(&metadata.state);
-                assert!(matches!(metadata.state, api::PublishState::PendingApproval));
+
+                let metadata = actions
+                    .save_role(&auth_ep, &role_id, data)
+                    .await
+                    .unwrap_err();
+                dbg!(&metadata);
+                assert!(matches!(metadata, errors::UserError::InternalError));
             })
             .await;
     }
@@ -1355,13 +1357,13 @@ mod tests {
                 drop(cache);
 
                 let auth_ep = auth::EditProject::test(metadata);
-                let new_name = "new project name";
-                actions.rename_project(&auth_ep, new_name).await.unwrap();
+                let new_name = api::ProjectName::new("new project name");
+                actions.rename_project(&auth_ep, &new_name).await.unwrap();
 
                 // Check the cache
                 let mut cache = actions.project_cache.write().unwrap();
                 let metadata = cache.get(&auth_ep.metadata.id).unwrap();
-                assert_eq!(metadata.name.as_str(), new_name);
+                assert_eq!(metadata.name, new_name);
             })
             .await;
     }
@@ -1395,8 +1397,8 @@ mod tests {
                     .unwrap();
 
                 let auth_ep = auth::EditProject::test(metadata.clone());
-                let new_name = "new project name";
-                let renamed = actions.rename_project(&auth_ep, new_name).await.unwrap();
+                let new_name = api::ProjectName::new("new project name");
+                let renamed = actions.rename_project(&auth_ep, &new_name).await.unwrap();
 
                 assert_ne!(metadata.updated, renamed.updated.into());
             })

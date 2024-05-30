@@ -62,7 +62,7 @@ pub(crate) async fn get_valid_project_name(
     project_metadata: &Collection<ProjectMetadata>,
     owner: &str,
     basename: &str,
-) -> Result<String, UserError> {
+) -> Result<api::ProjectName, UserError> {
     let query = doc! {"owner": &owner};
     let cursor = project_metadata
         .find(query, None)
@@ -76,7 +76,8 @@ pub(crate) async fn get_valid_project_name(
         .map(|md| md.name)
         .collect();
 
-    get_unique_name(project_names.iter().map(|n| n.as_str()), basename)
+    let name_str = get_unique_name(project_names.iter().map(|n| n.as_str()), basename)?;
+    Ok(api::ProjectName::new(name_str))
 }
 
 pub(crate) fn get_unique_name<'a>(
@@ -99,8 +100,6 @@ pub(crate) fn find_first_unique<'a>(
 }
 
 pub(crate) fn is_approval_required(text: &str) -> bool {
-    dbg!(&text);
-    dbg!(text.is_inappropriate());
     text.contains("reportJSFunction") || text.is_inappropriate()
 }
 
@@ -360,7 +359,8 @@ mod tests {
         //   - add update time and use this when updating the cache?
         // - update cache with metadata2
         // - update cache with metadata1
-        let original = ProjectMetadata::new("owner", "name", HashMap::new(), api::SaveState::Saved);
+        let name = api::ProjectName::new("name");
+        let original = ProjectMetadata::new("owner", &name, HashMap::new(), api::SaveState::Saved);
         let id = original.id.clone();
         let mut new_project = original.clone();
         new_project.name = api::ProjectName::new("new name");
@@ -381,7 +381,8 @@ mod tests {
 
     #[actix_web::test]
     async fn test_update_project_cache_tie_goes_to_update() {
-        let original = ProjectMetadata::new("owner", "name", HashMap::new(), api::SaveState::Saved);
+        let name = api::ProjectName::new("name");
+        let original = ProjectMetadata::new("owner", &name, HashMap::new(), api::SaveState::Saved);
         let id = original.id.clone();
         let mut new_project = original.clone();
         new_project.name = api::ProjectName::new("new name");

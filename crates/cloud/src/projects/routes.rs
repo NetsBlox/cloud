@@ -274,7 +274,7 @@ async fn update_project(
     let auth_ep = auth::try_edit_project(&app, &req, body.client_id, &project_id).await?;
 
     let actions: ProjectActions = app.as_project_actions();
-    let metadata = actions.rename_project(&auth_ep, body.name.as_str()).await?;
+    let metadata = actions.rename_project(&auth_ep, &body.name).await?;
     Ok(HttpResponse::Ok().json(metadata))
 }
 
@@ -524,9 +524,7 @@ async fn report_latest_role(
     let auth_ep = auth::try_edit_project(&app, &req, client_id, &project_id).await?;
     let actions: ProjectActions = app.as_project_actions();
     let resp = body.into_inner();
-    actions
-        .set_latest_role(&auth_ep, &role_id, &resp.id, resp.data)
-        .await?;
+    actions.set_latest_role(&auth_ep, &role_id, &resp.id, resp.data)?;
 
     Ok(HttpResponse::Ok().finish())
 }
