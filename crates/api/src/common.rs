@@ -7,5 +7,6 @@ pub use netsblox_api_common::{
     ServiceSettings, UpdateProjectData, UpdateRoleData, UserRole,
 };
 pub use netsblox_api_common::{
-    FriendInvite, FriendLinkState, InvitationResponse, ProjectMetadata, ProjectName, RoleName, User,
+    FriendInvite, FriendLinkState, InvitationResponse, LibraryName, ProjectMetadata, ProjectName,
+    RoleName, User,
 };

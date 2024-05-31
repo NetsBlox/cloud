@@ -1,6 +1,6 @@
 use crate::app_data::AppData;
 use crate::auth;
-use crate::common::api::{CreateLibraryData, PublishState};
+use crate::common::api::{self, CreateLibraryData, PublishState};
 use crate::errors::UserError;
 use crate::libraries::actions::LibraryActions;
 use actix_web::{delete, get, post, HttpRequest};
@@ -33,14 +33,13 @@ async fn list_user_libraries(
 #[get("/user/{owner}/{name}")]
 async fn get_user_library(
     app: web::Data<AppData>,
-    path: web::Path<(String, String)>,
+    path: web::Path<(String, api::LibraryName)>,
     req: HttpRequest,
 ) -> Result<HttpResponse, UserError> {
     let (owner, name) = path.into_inner();
     let auth_vl = auth::try_view_library(&app, &req, &owner, &name).await?;
 
-    let actions: LibraryActions = app.as_library_actions();
-    let blocks = actions.get_library_code(&auth_vl);
+    let blocks = LibraryActions::get_library_code(&auth_vl);
 
     Ok(HttpResponse::Ok().body(blocks))
 }
@@ -65,7 +64,7 @@ async fn save_user_library(
 #[delete("/user/{owner}/{name}")]
 async fn delete_user_library(
     app: web::Data<AppData>,
-    path: web::Path<(String, String)>,
+    path: web::Path<(String, api::LibraryName)>,
     req: HttpRequest,
 ) -> Result<HttpResponse, UserError> {
     let (owner, name) = path.into_inner();
@@ -80,7 +79,7 @@ async fn delete_user_library(
 #[post("/user/{owner}/{name}/publish")]
 async fn publish_user_library(
     app: web::Data<AppData>,
-    path: web::Path<(String, String)>,
+    path: web::Path<(String, api::LibraryName)>,
     req: HttpRequest,
 ) -> Result<HttpResponse, UserError> {
     let (owner, name) = path.into_inner();
@@ -95,7 +94,7 @@ async fn publish_user_library(
 #[post("/user/{owner}/{name}/unpublish")]
 async fn unpublish_user_library(
     app: web::Data<AppData>,
-    path: web::Path<(String, String)>,
+    path: web::Path<(String, api::LibraryName)>,
     req: HttpRequest,
 ) -> Result<HttpResponse, UserError> {
     let (owner, name) = path.into_inner();
@@ -123,7 +122,7 @@ async fn list_pending_libraries(
 #[post("/mod/{owner}/{name}")]
 async fn set_library_state(
     app: web::Data<AppData>,
-    path: web::Path<(String, String)>,
+    path: web::Path<(String, api::LibraryName)>,
     state: web::Json<PublishState>,
     req: HttpRequest,
 ) -> Result<HttpResponse, UserError> {
@@ -167,15 +166,15 @@ mod tests {
         }
         .into();
         let priv_lib = Library {
-            owner: user.username.to_owned(),
-            name: "private library".into(),
+            owner: user.username.clone(),
+            name: api::LibraryName::new("private library"),
             notes: "my notes".into(),
             blocks: "<blocks/>".into(),
             state: api::PublishState::Private,
         };
         let pub_lib = Library {
-            owner: user.username.to_owned(),
-            name: "pub library".into(),
+            owner: user.username.clone(),
+            name: api::LibraryName::new("pub library"),
             notes: "my notes".into(),
             blocks: "<blocks/>".into(),
             state: api::PublishState::Public,
@@ -223,8 +222,8 @@ mod tests {
         }
         .into();
         let pub_lib = Library {
-            owner: user.username.to_owned(),
-            name: "pub library".into(),
+            owner: user.username.clone(),
+            name: api::LibraryName::new("pub library"),
             notes: "my notes".into(),
             blocks: "<blocks/>".into(),
             state: api::PublishState::Public,
@@ -243,7 +242,7 @@ mod tests {
                 .await;
 
                 let lib_data = api::CreateLibraryData {
-                    name: "pub library".into(),
+                    name: api::LibraryName::new("pub library"),
                     notes: "my notes".into(),
                     blocks: "<blocks><reportJSFunction/></blocks>".into(),
                 };

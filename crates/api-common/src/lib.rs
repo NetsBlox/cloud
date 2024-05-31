@@ -654,7 +654,7 @@ pub struct ExternalClientState {
 #[derive(Serialize, Deserialize, TS)]
 #[ts(export)]
 pub struct CreateLibraryData {
-    pub name: String,
+    pub name: LibraryName,
     pub notes: String,
     pub blocks: String,
 }
@@ -672,7 +672,7 @@ pub enum PublishState {
 #[ts(export)]
 pub struct LibraryMetadata {
     pub owner: String,
-    pub name: String,
+    pub name: LibraryName,
     pub notes: String,
     pub state: PublishState,
 }
@@ -680,7 +680,7 @@ pub struct LibraryMetadata {
 impl LibraryMetadata {
     pub fn new(
         owner: String,
-        name: String,
+        name: LibraryName,
         state: PublishState,
         notes: Option<String>,
     ) -> LibraryMetadata {

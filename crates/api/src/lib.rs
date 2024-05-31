@@ -715,7 +715,7 @@ impl Client {
         let response = self
             .request(Method::POST, &path)
             .json(&CreateLibraryData {
-                name: name.to_owned(),
+                name: LibraryName::new(name),
                 blocks: blocks.to_owned(),
                 notes: notes.to_owned(),
             })

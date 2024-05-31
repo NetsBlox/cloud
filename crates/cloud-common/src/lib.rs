@@ -682,7 +682,7 @@ impl From<AuthorizedServiceHost> for netsblox_api_common::ServiceHost {
 #[serde(rename_all = "camelCase")]
 pub struct Library {
     pub owner: String,
-    pub name: String,
+    pub name: api::LibraryName,
     pub notes: String,
     pub blocks: String,
     pub state: PublishState,

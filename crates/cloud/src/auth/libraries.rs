@@ -4,6 +4,7 @@ use crate::errors::{InternalError, UserError};
 use actix_session::SessionExt;
 use actix_web::HttpRequest;
 use mongodb::bson::doc;
+use netsblox_cloud_common::api;
 use netsblox_cloud_common::api::PublishState;
 use netsblox_cloud_common::Library;
 
@@ -55,7 +56,7 @@ pub(crate) async fn try_view_library(
     app: &AppData,
     req: &HttpRequest,
     owner: &str,
-    name: &str,
+    name: &api::LibraryName,
 ) -> Result<ViewLibrary, UserError> {
     // Check that the library is public or the user is editable by the current session
     let query = doc! {"owner": owner, "name": name};

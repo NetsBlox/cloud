@@ -1,5 +1,4 @@
 use futures::TryStreamExt;
-use lazy_static::lazy_static;
 use mongodb::{
     bson::doc,
     options::{FindOneAndUpdateOptions, FindOptions, ReturnDocument},
@@ -9,8 +8,6 @@ use netsblox_cloud_common::{
     api::{self, PublishState},
     Library,
 };
-use regex::Regex;
-use rustrict::CensorStr;
 
 use crate::{
     auth,
@@ -53,12 +50,13 @@ impl<'a> LibraryActions<'a> {
         &self,
         ll: &auth::ListLibraries,
     ) -> Result<Vec<api::LibraryMetadata>, UserError> {
-        let query = match ll.visibility {
-            PublishState::Private => doc! {"owner": &ll.username},
-            _ => doc! {
+        let query = if ll.visibility == PublishState::Private {
+            doc! {"owner": &ll.username}
+        } else {
+            doc! {
             "owner": &ll.username,
             "state": PublishState::Public,
-            },
+            }
         };
 
         let options = FindOptions::builder().sort(doc! {"name": 1}).build();
@@ -77,8 +75,8 @@ impl<'a> LibraryActions<'a> {
         Ok(libraries)
     }
 
-    pub(crate) fn get_library_code(&self, vl: &auth::ViewLibrary) -> String {
-        vl.library.blocks.to_owned()
+    pub(crate) fn get_library_code(vl: &auth::ViewLibrary) -> String {
+        vl.library.blocks.clone()
     }
 
     pub(crate) async fn save_library(
@@ -86,8 +84,6 @@ impl<'a> LibraryActions<'a> {
         el: &auth::EditLibrary,
         data: &api::CreateLibraryData,
     ) -> Result<api::LibraryMetadata, UserError> {
-        ensure_valid_name(&data.name)?;
-
         let query = doc! {"owner": &el.owner, "name": &data.name};
         let update = doc! {
             "$set": {
@@ -144,7 +140,7 @@ impl<'a> LibraryActions<'a> {
     pub(crate) async fn delete_library(
         &self,
         vl: &auth::EditLibrary,
-        name: &str,
+        name: &api::LibraryName,
     ) -> Result<api::LibraryMetadata, UserError> {
         let query = doc! {"owner": &vl.owner, "name": name};
         let library = self
@@ -160,7 +156,7 @@ impl<'a> LibraryActions<'a> {
     pub(crate) async fn publish(
         &self,
         pl: &auth::PublishLibrary,
-        name: &str,
+        name: &api::LibraryName,
     ) -> Result<api::LibraryMetadata, UserError> {
         let query = doc! {"owner": &pl.owner, "name": name};
         let update = doc! {"$set": {"state": PublishState::PendingApproval}};
@@ -196,7 +192,7 @@ impl<'a> LibraryActions<'a> {
     pub(crate) async fn unpublish(
         &self,
         pl: &auth::PublishLibrary,
-        name: &str,
+        name: &api::LibraryName,
     ) -> Result<api::LibraryMetadata, UserError> {
         let query = doc! {"owner": &pl.owner, "name": name};
         let update = doc! {"$set": {"state": PublishState::Private}};
@@ -239,7 +235,7 @@ impl<'a> LibraryActions<'a> {
         &self,
         _ml: &auth::ModerateLibraries,
         owner: &str,
-        name: &str,
+        name: &api::LibraryName,
         state: api::PublishState,
     ) -> Result<api::LibraryMetadata, UserError> {
         let query = doc! {"owner": owner, "name": name};
@@ -259,58 +255,12 @@ impl<'a> LibraryActions<'a> {
     }
 }
 
-fn ensure_valid_name(name: &str) -> Result<(), UserError> {
-    if is_valid_name(name) {
-        Ok(())
-    } else {
-        Err(UserError::InvalidLibraryName)
-    }
-}
-
-fn is_valid_name(name: &str) -> bool {
-    lazy_static! {
-        static ref LIBRARY_NAME: Regex = Regex::new(r"^[A-zÀ-ÿ0-9 \(\)_-]+$").unwrap();
-    }
-    LIBRARY_NAME.is_match(name) && !name.is_inappropriate()
-}
-
 #[cfg(test)]
 mod tests {
     use crate::test_utils;
 
     use super::*;
-    use actix_web::test;
     use netsblox_cloud_common::User;
-
-    #[test]
-    async fn test_is_valid_name() {
-        assert!(is_valid_name("hello library"));
-    }
-
-    #[test]
-    async fn test_is_valid_name_diacritic() {
-        assert!(is_valid_name("hola libré"));
-    }
-
-    #[test]
-    async fn test_is_valid_name_weird_symbol() {
-        assert!(!is_valid_name("<hola libré>"));
-    }
-
-    #[test]
-    async fn test_ensure_valid_name() {
-        ensure_valid_name("hello library").unwrap();
-    }
-
-    #[test]
-    async fn test_ensure_valid_name_diacritic() {
-        ensure_valid_name("hola libré").unwrap();
-    }
-
-    #[test]
-    async fn test_ensure_valid_name_weird_symbol() {
-        assert!(ensure_valid_name("<hola libré>").is_err());
-    }
 
     #[actix_web::test]
     async fn test_save_user_lib() {
@@ -328,7 +278,7 @@ mod tests {
                 let actions = app_data.as_library_actions();
                 let auth_el = auth::EditLibrary::test(user.username.clone());
                 let data = api::CreateLibraryData {
-                    name: "mylibrary".into(),
+                    name: api::LibraryName::new("mylibrary"),
                     notes: "some notes".into(),
                     blocks: "<blocks/>".into(),
                 };
@@ -339,7 +289,7 @@ mod tests {
 
                 assert!(metadata.is_some(), "Library not found in the database");
                 let metadata = metadata.unwrap();
-                assert_eq!(&metadata.name, "mylibrary");
+                assert_eq!(metadata.name.as_str(), "mylibrary");
             })
             .await;
     }
@@ -356,21 +306,21 @@ mod tests {
         .into();
         let pub1 = Library {
             owner: user.username.clone(),
-            name: "pub1".into(),
+            name: api::LibraryName::new("pub1"),
             notes: "".into(),
             blocks: "<blocks/>".into(),
             state: api::PublishState::Public,
         };
         let pub2 = Library {
             owner: user.username.clone(),
-            name: "pub2".into(),
+            name: api::LibraryName::new("pub2"),
             notes: "".into(),
             blocks: "<blocks/>".into(),
             state: api::PublishState::Public,
         };
         let private = Library {
             owner: user.username.clone(),
-            name: "priv".into(),
+            name: api::LibraryName::new("priv"),
             notes: "".into(),
             blocks: "<blocks/>".into(),
             state: api::PublishState::Private,
@@ -404,21 +354,21 @@ mod tests {
         .into();
         let pub1 = Library {
             owner: user.username.clone(),
-            name: "pub1".into(),
+            name: api::LibraryName::new("pub1"),
             notes: "".into(),
             blocks: "<blocks/>".into(),
             state: api::PublishState::Public,
         };
         let pub2 = Library {
             owner: user.username.clone(),
-            name: "pub2".into(),
+            name: api::LibraryName::new("pub2"),
             notes: "".into(),
             blocks: "<blocks/>".into(),
             state: api::PublishState::Public,
         };
         let private = Library {
             owner: user.username.clone(),
-            name: "priv".into(),
+            name: api::LibraryName::new("priv"),
             notes: "".into(),
             blocks: "<blocks/>".into(),
             state: api::PublishState::Private,
@@ -451,7 +401,7 @@ mod tests {
         .into();
         let lib = Library {
             owner: user.username.clone(),
-            name: "lib".into(),
+            name: api::LibraryName::new("lib"),
             notes: "".into(),
             blocks: "<blocks/>".into(),
             state: api::PublishState::PendingApproval,
