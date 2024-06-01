@@ -1,8 +1,6 @@
 use futures::TryStreamExt;
-use lazy_static::lazy_static;
 use mongodb::{bson::doc, options::UpdateOptions, Collection};
 use netsblox_cloud_common::{api, AuthorizedServiceHost};
-use regex::Regex;
 
 use crate::{
     auth,

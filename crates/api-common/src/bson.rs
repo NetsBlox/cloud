@@ -1,7 +1,7 @@
 use crate::{
     oauth, FriendInvite, FriendLinkState, GroupId, InvitationState, LinkedAccount, MagicLinkId,
-    Name, ProjectId, ProjectName, PublishState, RoleMetadata, SaveState, ServiceHost,
-    ServiceHostScope, UserRole,
+    Name, ProjectId, PublishState, RoleMetadata, SaveState, ServiceHost, ServiceHostScope,
+    UserRole,
 };
 use bson::{doc, Bson, DateTime};
 
@@ -196,14 +196,14 @@ mod tests {
     #[test]
     fn test_bson_serialize_update_project_data() {
         let new_name = "new project";
-        let name = ProjectName::new(new_name.to_string());
+        let name = crate::ProjectName::new(new_name.to_string());
 
         // Serialize the struct to BSON
         let serialized = to_bson(&name).expect("Failed to serialize to BSON");
         println!("Serialized BSON: {:?}", serialized);
 
         // Deserialize the BSON back to the struct
-        let deserialized: ProjectName =
+        let deserialized: crate::ProjectName =
             bson::from_bson(serialized).expect("Failed to deserialize from BSON");
         println!("Deserialized struct: {:?}", deserialized);
 
