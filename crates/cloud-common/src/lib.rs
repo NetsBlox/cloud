@@ -1,4 +1,3 @@
-use api::RoleName;
 use mongodb::bson::{self, doc, document::Document, Bson, DateTime};
 pub use netsblox_api_common as api;
 use netsblox_api_common::{
@@ -32,6 +31,7 @@ pub struct User {
 }
 
 impl User {
+    #[must_use]
     pub fn is_member(&self) -> bool {
         self.group_id.is_some()
     }
@@ -481,7 +481,7 @@ impl From<Project> for netsblox_api_common::Project {
 #[derive(Deserialize, Serialize, Clone, Debug)]
 #[serde(rename_all = "camelCase")]
 pub struct RoleMetadata {
-    pub name: RoleName,
+    pub name: api::RoleName,
     pub code: String,
     pub media: String,
     pub updated: DateTime,

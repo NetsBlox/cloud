@@ -2588,6 +2588,7 @@ dependencies = [
  "bson",
  "derive_more",
  "lazy_static",
+ "lettre",
  "regex",
  "rustrict",
  "serde 1.0.188",

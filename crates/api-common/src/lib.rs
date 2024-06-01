@@ -5,12 +5,14 @@ pub mod oauth;
 use core::fmt;
 use derive_more::{Display, Error, FromStr};
 use lazy_static::lazy_static;
+use lettre::Address;
 use regex::Regex;
 use rustrict::CensorStr;
 use serde::{
     de::{self, Visitor},
     Deserialize, Deserializer, Serialize, Serializer,
 };
+
 use serde_json::Value;
 use std::{collections::HashMap, marker::PhantomData, str::FromStr, time::SystemTime};
 use ts_rs::TS;
@@ -246,6 +248,28 @@ impl Validate for RoleNameValidator {
         E: de::Error,
     {
         ProjectNameValidator::validate(str)
+    }
+}
+
+#[derive(Serialize, Clone, Debug, PartialEq, Eq, TS)]
+#[ts(export)]
+pub struct EmailValidator;
+pub type Email = Name<EmailValidator>;
+
+impl Validate for EmailValidator {
+    fn validate<E>(str: impl Into<String>) -> Result<String, E>
+    where
+        E: de::Error,
+    {
+        let email: String = str.into();
+        email.parse::<Address>().map_err(|_err| {
+            E::invalid_value(
+                de::Unexpected::Other("invalid email"),
+                &"a valid email address",
+            )
+        })?;
+
+        Ok(email)
     }
 }
 
