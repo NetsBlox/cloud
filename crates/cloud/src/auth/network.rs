@@ -159,9 +159,7 @@ pub(crate) async fn try_send_message(
         return Ok(SendMessage { _private: (), msg });
     }
 
-    dbg!("before get auth host");
     let host = utils::get_authorized_host(&app.authorized_services, req).await?;
-    dbg!("after get auth host");
 
     // Sending messages is allowed if you:
     // - are an authorized host
