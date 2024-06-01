@@ -1,6 +1,7 @@
 use std::{env, num::NonZeroUsize};
 
 use config::{Config, ConfigError, File};
+use netsblox_cloud_common::api;
 use netsblox_cloud_common::api::ServiceHostScope;
 use serde::Deserialize;
 
@@ -67,7 +68,7 @@ pub struct CacheSettings {
 
 #[derive(Clone, Deserialize)]
 pub struct AuthorizedServiceHost {
-    pub(crate) id: String,
+    pub(crate) id: api::ServiceID,
     pub(crate) url: String,
     pub(crate) secret: String,
     pub(crate) category: Option<String>,

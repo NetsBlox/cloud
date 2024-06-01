@@ -46,8 +46,6 @@ impl<'a> HostActions<'a> {
         _ah: &auth::AuthorizeHost,
         host: api::AuthorizedServiceHost,
     ) -> Result<String, UserError> {
-        ensure_valid_service_id(&host.id)?;
-
         let query = doc! {"id": &host.id};
         let host: AuthorizedServiceHost = host.into();
         let update = doc! {"$setOnInsert": &host};
@@ -79,22 +77,5 @@ impl<'a> HostActions<'a> {
             .ok_or(UserError::ServiceHostNotFoundError)?;
 
         Ok(host.into())
-    }
-}
-
-pub fn ensure_valid_service_id(id: &str) -> Result<(), UserError> {
-    let max_len = 25;
-    let min_len = 3;
-    let char_count = id.chars().count();
-    lazy_static! {
-        // This is safe to unwrap since it is a constant
-        static ref SERVICE_ID_REGEX: Regex = Regex::new(r"^[A-Za-z][A-Za-z0-9_\-]+$").unwrap();
-    }
-
-    let is_valid = char_count > min_len && char_count < max_len && SERVICE_ID_REGEX.is_match(id);
-    if is_valid {
-        Ok(())
-    } else {
-        Err(UserError::InvalidServiceHostIDError)
     }
 }

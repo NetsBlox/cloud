@@ -948,7 +948,7 @@ impl Client {
     ) -> Result<String, error::Error> {
         let host = AuthorizedServiceHost {
             url: url.to_owned(),
-            id: id.to_owned(),
+            id: netsblox_api_common::ServiceID::new(id),
             visibility,
         };
         let response = self

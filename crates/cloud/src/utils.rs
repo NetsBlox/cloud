@@ -284,12 +284,11 @@ pub(crate) async fn get_authorized_host(
         })
         .map(|(id, secret)| doc! {"id": id, "secret": secret});
 
-    let host = authorized_services
-        .find_one(query, None)
-        .await
-        .map_err(InternalError::DatabaseConnectionError)?;
+    let host = authorized_services.find_one(query, None).await;
+    //.map_err(InternalError::DatabaseConnectionError)?;
+    dbg!(&host);
 
-    Ok(host)
+    Ok(host.unwrap())
 }
 
 pub(crate) fn send_email(

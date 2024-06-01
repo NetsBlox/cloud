@@ -108,6 +108,7 @@ pub struct BannedAccount {
 }
 
 impl BannedAccount {
+    #[must_use]
     pub fn new(username: String, email: String) -> BannedAccount {
         let banned_at = DateTime::now();
         BannedAccount {
@@ -149,6 +150,7 @@ pub struct Group {
 }
 
 impl Group {
+    #[must_use]
     pub fn new(owner: String, name: String) -> Self {
         Self {
             id: api::GroupId::new(Uuid::new_v4().to_string()),
@@ -159,6 +161,7 @@ impl Group {
         }
     }
 
+    #[must_use]
     pub fn from_data(owner: String, data: api::CreateGroupData) -> Self {
         Self {
             id: api::GroupId::new(Uuid::new_v4().to_string()),
@@ -210,6 +213,7 @@ pub struct CollaborationInvite {
 }
 
 impl CollaborationInvite {
+    #[must_use]
     pub fn new(sender: String, receiver: String, project_id: ProjectId) -> Self {
         CollaborationInvite {
             id: Uuid::new_v4().to_string(),
@@ -260,6 +264,7 @@ pub struct FriendLink {
 }
 
 impl FriendLink {
+    #[must_use]
     pub fn new(sender: String, recipient: String, state: Option<FriendLinkState>) -> FriendLink {
         let created_at = DateTime::from_system_time(SystemTime::now());
         FriendLink {
@@ -319,6 +324,7 @@ pub struct NetworkTraceMetadata {
 }
 
 impl NetworkTraceMetadata {
+    #[must_use]
     pub fn new() -> Self {
         Self {
             id: Uuid::new_v4().to_string(),
@@ -615,24 +621,26 @@ impl From<SetPasswordToken> for Bson {
 #[serde(rename_all = "camelCase")]
 pub struct AuthorizedServiceHost {
     pub url: String,
-    pub id: String,
+    pub id: api::ServiceID,
     pub visibility: ServiceHostScope,
     pub secret: String,
 }
 
 impl AuthorizedServiceHost {
-    pub fn new(url: String, id: String, visibility: ServiceHostScope) -> Self {
+    #[must_use]
+    pub fn new(url: String, id: api::ServiceID, visibility: ServiceHostScope) -> Self {
         let secret = Uuid::new_v4().to_string();
         AuthorizedServiceHost {
             url,
             id,
-            secret,
             visibility,
+            secret,
         }
     }
 
+    #[must_use]
     pub fn auth_header(&self) -> (&'static str, String) {
-        let token = self.id.clone() + ":" + &self.secret;
+        let token = self.id.to_string() + ":" + &self.secret;
         ("X-Authorization", token)
     }
 }
@@ -722,6 +730,7 @@ pub struct OAuthClient {
 }
 
 impl OAuthClient {
+    #[must_use]
     pub fn new(name: String, password: String) -> Self {
         let salt = passwords::PasswordGenerator::new()
             .length(8)
@@ -773,6 +782,7 @@ pub struct OAuthToken {
 }
 
 impl OAuthToken {
+    #[must_use]
     pub fn new(client_id: oauth::ClientId, username: String) -> Self {
         let id = oauth::TokenId::new(Uuid::new_v4().to_string());
         let created_at = DateTime::from_system_time(SystemTime::now());
@@ -827,6 +837,7 @@ pub struct MagicLink {
 }
 
 impl MagicLink {
+    #[must_use]
     pub fn new(email: String) -> Self {
         Self {
             id: api::MagicLinkId::new(Uuid::new_v4().to_string()),
@@ -870,7 +881,7 @@ mod tests {
         let categories = vec!["cat1".into()];
         let auth_host = AuthorizedServiceHost {
             url: "http://localhost:8000".into(),
-            id: "SomeTrustedHost".into(),
+            id: api::ServiceID::new("SomeTrustedHost"),
             secret: "SomeSecret".into(),
             visibility: ServiceHostScope::Public(categories.clone()),
         };
@@ -884,7 +895,7 @@ mod tests {
     fn test_priv_auth_host_to_host_no_cats() {
         let auth_host = AuthorizedServiceHost {
             url: "http://localhost:8000".into(),
-            id: "SomeTrustedHost".into(),
+            id: api::ServiceID::new("SomeTrustedHost"),
             secret: "SomeSecret".into(),
             visibility: ServiceHostScope::Private,
         };

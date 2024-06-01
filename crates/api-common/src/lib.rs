@@ -273,6 +273,40 @@ impl Validate for EmailValidator {
     }
 }
 
+#[derive(Serialize, Clone, Debug, PartialEq, Eq, TS)]
+#[ts(export)]
+pub struct ServiceIDValidator;
+pub type ServiceID = Name<ServiceIDValidator>;
+
+impl Validate for ServiceIDValidator {
+    fn validate<E>(str: impl Into<String>) -> Result<String, E>
+    where
+        E: de::Error,
+    {
+        let id: String = str.into();
+        let max_len = 25;
+        let min_len = 3;
+        let char_count = id.chars().count();
+        lazy_static! {
+            static ref SERVICE_ID_REGEX: Regex = Regex::new(r"^[A-z][A-z0-9_\-]+$").unwrap();
+        }
+
+        if char_count <= min_len || char_count >= max_len {
+            Err(E::invalid_value(
+                de::Unexpected::Other("invalid service ID length"),
+                &"a service id with at least {min_len} characters and at most {max_len} characters",
+            ))
+        } else if !SERVICE_ID_REGEX.is_match(&id) {
+            Err(E::invalid_value(
+                de::Unexpected::Other("invalid service ID characters"),
+                &r#"a service id that matches the regex: ^[A-z][A-z0-9_-]+$""#,
+            ))
+        } else {
+            Ok(id)
+        }
+    }
+}
+
 #[derive(Serialize, Deserialize, Clone, Debug, TS)]
 #[serde(rename_all = "camelCase")]
 #[ts(export)]
@@ -907,7 +941,7 @@ pub struct OccupantInviteData {
 #[ts(export)]
 pub struct AuthorizedServiceHost {
     pub url: String,
-    pub id: String,
+    pub id: ServiceID,
     pub visibility: ServiceHostScope,
 }
 
