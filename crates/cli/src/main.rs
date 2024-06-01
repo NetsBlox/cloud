@@ -723,7 +723,7 @@ async fn main() {
         std::process::exit(code);
     }
 }
-
+#[allow(clippy::too_many_lines)]
 async fn do_command(mut cfg: Config, args: Cli) -> Result<(), error::Error> {
     let is_logged_in = !(cfg.host().token.is_none() || cfg.host().username.is_none());
     let login_required = match &args.cmd {
