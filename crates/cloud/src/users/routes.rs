@@ -1188,19 +1188,18 @@ mod tests {
             })
             .await;
     }
+    // #[actix_web::test]
+    // async fn test_link_account() {
+    //     todo!();
+    // }
 
-    //     #[actix_web::test]
-    //     async fn test_link_account() {
-    //         todo!();
-    //     }
+    // #[actix_web::test]
+    // async fn test_link_account_403() {
+    //     todo!();
+    // }
 
-    //     #[actix_web::test]
-    //     async fn test_link_account_403() {
-    //         todo!();
-    //     }
-
-    //     #[actix_web::test]
-    //     async fn test_link_account_duplicate() {
-    //         todo!();
-    //     }
+    // #[actix_web::test]
+    // async fn test_link_account_duplicate() {
+    //     todo!();
+    // }
 }
