@@ -188,8 +188,8 @@ mod test {
     #[actix_web::test]
     async fn test_set_user_hosts() {
         let user: User = api::NewUser {
-            username: "user".into(),
-            email: "user@netsblox.org".into(),
+            username: api::Username::new("user"),
+            email: api::Email::new("user@netsblox.org"),
             password: None,
             group_id: None,
             role: None,
@@ -250,8 +250,8 @@ mod test {
     #[actix_web::test]
     async fn test_set_group_hosts() {
         let user: User = api::NewUser {
-            username: "user".into(),
-            email: "user@netsblox.org".into(),
+            username: api::Username::new("user"),
+            email: api::Email::new("user@netsblox.org"),
             password: None,
             group_id: None,
             role: None,

@@ -273,8 +273,8 @@ mod tests {
     #[actix_web::test]
     async fn test_try_send_msg_self() {
         let user: User = api::NewUser {
-            username: "user".into(),
-            email: "user@netsblox.org".into(),
+            username: api::Username::new("user"),
+            email: api::Email::new("user@netsblox.org"),
             password: None,
             group_id: None,
             role: None,
@@ -315,8 +315,8 @@ mod tests {
     #[actix_web::test]
     async fn test_try_send_msg_self_client_id() {
         let user: User = api::NewUser {
-            username: "user".into(),
-            email: "user@netsblox.org".into(),
+            username: api::Username::new("user"),
+            email: api::Email::new("user@netsblox.org"),
             password: None,
             group_id: None,
             role: None,
@@ -367,16 +367,16 @@ mod tests {
             content: json!({"test": "hello!"}),
         };
         let admin: User = api::NewUser {
-            username: "admin".into(),
-            email: "admin@netsblox.org".into(),
+            username: api::Username::new("admin"),
+            email: api::Email::new("admin@netsblox.org"),
             password: None,
             group_id: None,
             role: Some(api::UserRole::Admin),
         }
         .into();
         let user: User = api::NewUser {
-            username: "user".into(),
-            email: "user@netsblox.org".into(),
+            username: api::Username::new("user"),
+            email: api::Email::new("user@netsblox.org"),
             password: None,
             group_id: None,
             role: None,
@@ -417,16 +417,16 @@ mod tests {
             content: json!({"test": "hello!"}),
         };
         let moderator: User = api::NewUser {
-            username: "moderator".into(),
-            email: "moderator@netsblox.org".into(),
+            username: api::Username::new("moderator"),
+            email: api::Email::new("moderator@netsblox.org"),
             password: None,
             group_id: None,
             role: Some(api::UserRole::Moderator),
         }
         .into();
         let user: User = api::NewUser {
-            username: "user".into(),
-            email: "user@netsblox.org".into(),
+            username: api::Username::new("user"),
+            email: api::Email::new("user@netsblox.org"),
             password: None,
             group_id: None,
             role: None,
@@ -459,16 +459,16 @@ mod tests {
     #[actix_web::test]
     async fn test_try_send_msg_other_user() {
         let user: User = api::NewUser {
-            username: "user".into(),
-            email: "user@netsblox.org".into(),
+            username: api::Username::new("user"),
+            email: api::Email::new("user@netsblox.org"),
             password: None,
             group_id: None,
             role: None,
         }
         .into();
         let other_user: User = api::NewUser {
-            username: "other_user".into(),
-            email: "other_user@netsblox.org".into(),
+            username: api::Username::new("other_user"),
+            email: api::Email::new("other_user@netsblox.org"),
             password: None,
             group_id: None,
             role: None,
@@ -509,8 +509,8 @@ mod tests {
     #[actix_web::test]
     async fn test_try_send_msg_other_user_no_sender() {
         let user: User = api::NewUser {
-            username: "user".into(),
-            email: "user@netsblox.org".into(),
+            username: api::Username::new("user"),
+            email: api::Email::new("user@netsblox.org"),
             password: None,
             group_id: None,
             role: None,

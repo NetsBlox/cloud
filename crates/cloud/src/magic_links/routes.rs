@@ -62,8 +62,8 @@ mod tests {
     #[actix_web::test]
     async fn test_login() {
         let user: User = api::NewUser {
-            username: "user".into(),
-            email: "user@netsblox.org".into(),
+            username: api::Username::new("user"),
+            email: api::Email::new("user@netsblox.org"),
             password: None,
             group_id: None,
             role: None,
@@ -102,8 +102,8 @@ mod tests {
     #[actix_web::test]
     async fn test_login_banned() {
         let user: User = api::NewUser {
-            username: "user".into(),
-            email: "user@netsblox.org".into(),
+            username: api::Username::new("user"),
+            email: api::Email::new("user@netsblox.org"),
             password: None,
             group_id: None,
             role: None,
@@ -137,8 +137,8 @@ mod tests {
     #[actix_web::test]
     async fn test_login_bad_id() {
         let user: User = api::NewUser {
-            username: "user".into(),
-            email: "user@netsblox.org".into(),
+            username: api::Username::new("user"),
+            email: api::Email::new("user@netsblox.org"),
             password: None,
             group_id: None,
             role: None,
@@ -169,8 +169,8 @@ mod tests {
     #[actix_web::test]
     async fn test_login_missing_id_400() {
         let user: User = api::NewUser {
-            username: "user".into(),
-            email: "user@netsblox.org".into(),
+            username: api::Username::new("user"),
+            email: api::Email::new("user@netsblox.org"),
             password: None,
             group_id: None,
             role: None,

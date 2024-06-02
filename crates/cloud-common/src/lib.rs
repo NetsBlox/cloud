@@ -85,10 +85,10 @@ impl From<NewUser> for User {
         };
 
         User {
-            username: user_data.username,
+            username: user_data.username.to_string(),
             hash,
             salt: Some(salt),
-            email: user_data.email,
+            email: user_data.email.to_string(),
             group_id: user_data.group_id,
             created_at: DateTime::from_system_time(SystemTime::now()),
             linked_accounts: std::vec::Vec::new(),

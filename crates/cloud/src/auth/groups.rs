@@ -101,8 +101,8 @@ mod tests {
     #[actix_web::test]
     async fn test_try_edit_group_owner() {
         let owner: User = api::NewUser {
-            username: "owner".into(),
-            email: "owner@netsblox.org".into(),
+            username: api::Username::new("owner"),
+            email: api::Email::new("owner@netsblox.org"),
             password: None,
             group_id: None,
             role: None,
@@ -136,16 +136,16 @@ mod tests {
     #[actix_web::test]
     async fn test_try_edit_group_other() {
         let other: User = api::NewUser {
-            username: "other".into(),
-            email: "other@netsblox.org".into(),
+            username: api::Username::new("other"),
+            email: api::Email::new("other@netsblox.org"),
             password: None,
             group_id: None,
             role: None,
         }
         .into();
         let owner: User = api::NewUser {
-            username: "owner".into(),
-            email: "owner@netsblox.org".into(),
+            username: api::Username::new("owner"),
+            email: api::Email::new("owner@netsblox.org"),
             password: None,
             group_id: None,
             role: None,
@@ -179,16 +179,16 @@ mod tests {
     #[actix_web::test]
     async fn test_try_edit_group_admin() {
         let admin: User = api::NewUser {
-            username: "admin".into(),
-            email: "admin@netsblox.org".into(),
+            username: api::Username::new("admin"),
+            email: api::Email::new("admin@netsblox.org"),
             password: None,
             group_id: None,
             role: Some(UserRole::Admin),
         }
         .into();
         let owner: User = api::NewUser {
-            username: "owner".into(),
-            email: "owner@netsblox.org".into(),
+            username: api::Username::new("owner"),
+            email: api::Email::new("owner@netsblox.org"),
             password: None,
             group_id: None,
             role: None,

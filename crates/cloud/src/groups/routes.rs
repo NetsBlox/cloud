@@ -170,8 +170,8 @@ mod tests {
     #[actix_web::test]
     async fn test_create_group() {
         let user: User = api::NewUser {
-            username: "user".into(),
-            email: "user@netsblox.org".into(),
+            username: api::Username::new("user"),
+            email: api::Email::new("user@netsblox.org"),
             password: None,
             group_id: None,
             role: None,
@@ -227,8 +227,8 @@ mod tests {
     #[actix_web::test]
     async fn test_create_group_bad_name_403() {
         let user: User = api::NewUser {
-            username: "user".into(),
-            email: "user@netsblox.org".into(),
+            username: api::Username::new("user"),
+            email: api::Email::new("user@netsblox.org"),
             password: None,
             group_id: None,
             role: None,
@@ -284,8 +284,8 @@ mod tests {
     #[actix_web::test]
     async fn test_update_group() {
         let user: User = api::NewUser {
-            username: "user".into(),
-            email: "user@netsblox.org".into(),
+            username: api::Username::new("user"),
+            email: api::Email::new("user@netsblox.org"),
             password: None,
             group_id: None,
             role: None,
@@ -341,8 +341,8 @@ mod tests {
     #[actix_web::test]
     async fn test_update_group_no_perms() {
         let user: User = api::NewUser {
-            username: "user".into(),
-            email: "user@netsblox.org".into(),
+            username: api::Username::new("user"),
+            email: api::Email::new("user@netsblox.org"),
             password: None,
             group_id: None,
             role: None,
@@ -386,8 +386,8 @@ mod tests {
     #[actix_web::test]
     async fn test_delete_group() {
         let user: User = api::NewUser {
-            username: "user".into(),
-            email: "user@netsblox.org".into(),
+            username: api::Username::new("user"),
+            email: api::Email::new("user@netsblox.org"),
             password: None,
             group_id: None,
             role: None,
@@ -420,8 +420,8 @@ mod tests {
     #[actix_web::test]
     async fn test_delete_group_403() {
         let user: User = api::NewUser {
-            username: "user".into(),
-            email: "user@netsblox.org".into(),
+            username: api::Username::new("user"),
+            email: api::Email::new("user@netsblox.org"),
             password: None,
             group_id: None,
             role: None,
@@ -459,8 +459,8 @@ mod tests {
     #[actix_web::test]
     async fn test_delete_group_404() {
         let user: User = api::NewUser {
-            username: "user".into(),
-            email: "user@netsblox.org".into(),
+            username: api::Username::new("user"),
+            email: api::Email::new("user@netsblox.org"),
             password: None,
             group_id: None,
             role: None,

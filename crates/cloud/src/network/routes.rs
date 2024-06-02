@@ -469,16 +469,16 @@ mod tests {
     #[actix_web::test]
     async fn test_invite_occupant() {
         let sender: User = api::NewUser {
-            username: "sender".to_string(),
-            email: "sender@netsblox.org".into(),
+            username: api::Username::new("sender"),
+            email: api::Email::new("sender@netsblox.org"),
             password: None,
             group_id: None,
             role: None,
         }
         .into();
         let rcvr: User = api::NewUser {
-            username: "rcvr".to_string(),
-            email: "rcvr@netsblox.org".into(),
+            username: api::Username::new("rcvr"),
+            email: api::Email::new("rcvr@netsblox.org"),
             password: None,
             group_id: None,
             role: None,
@@ -523,8 +523,8 @@ mod tests {
     #[actix_web::test]
     async fn test_network_trace_metadata() {
         let owner: User = api::NewUser {
-            username: "owner".to_string(),
-            email: "owner@netsblox.org".into(),
+            username: api::Username::new("owner"),
+            email: api::Email::new("owner@netsblox.org"),
             password: None,
             group_id: None,
             role: None,
@@ -565,8 +565,8 @@ mod tests {
     #[actix_web::test]
     async fn test_network_trace_msgs() {
         let owner: User = api::NewUser {
-            username: "owner".to_string(),
-            email: "owner@netsblox.org".into(),
+            username: api::Username::new("owner"),
+            email: api::Email::new("owner@netsblox.org"),
             password: None,
             group_id: None,
             role: None,
@@ -705,8 +705,8 @@ mod tests {
     #[actix_web::test]
     async fn test_stop_network_trace() {
         let owner: User = api::NewUser {
-            username: "owner".to_string(),
-            email: "owner@netsblox.org".into(),
+            username: api::Username::new("owner"),
+            email: api::Email::new("owner@netsblox.org"),
             password: None,
             group_id: None,
             role: None,
@@ -849,8 +849,8 @@ mod tests {
     #[actix_web::test]
     async fn test_stop_network_trace_404() {
         let owner: User = api::NewUser {
-            username: "owner".to_string(),
-            email: "owner@netsblox.org".into(),
+            username: api::Username::new("owner"),
+            email: api::Email::new("owner@netsblox.org"),
             password: None,
             group_id: None,
             role: None,
@@ -914,8 +914,8 @@ mod tests {
     #[actix_web::test]
     async fn test_delete_network_trace() {
         let owner: User = api::NewUser {
-            username: "owner".to_string(),
-            email: "owner@netsblox.org".into(),
+            username: api::Username::new("owner"),
+            email: api::Email::new("owner@netsblox.org"),
             password: None,
             group_id: None,
             role: None,

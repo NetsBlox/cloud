@@ -301,9 +301,9 @@ impl AppData {
 
         if let Some(admin) = self.settings.admin.as_ref() {
             let user: User = NewUser {
-                username: admin.username.to_owned(),
+                username: api::Username::new(&admin.username),
+                email: api::Email::new(&admin.email),
                 password: Some(admin.password.to_owned()),
-                email: admin.email.to_owned(),
                 group_id: None,
                 role: Some(UserRole::Admin),
             }

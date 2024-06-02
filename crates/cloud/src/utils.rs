@@ -425,16 +425,16 @@ mod tests {
     #[actix_web::test]
     async fn test_find_usernames() {
         let user: User = api::NewUser {
-            username: "user".into(),
-            email: "user@netsblox.org".into(),
+            username: api::Username::new("user"),
+            email: api::Email::new("user@netsblox.org"),
             password: None,
             group_id: None,
             role: None,
         }
         .into();
         let other: User = api::NewUser {
-            username: "other".into(),
-            email: "other@netsblox.org".into(),
+            username: api::Username::new("other"),
+            email: api::Email::new("other@netsblox.org"),
             password: None,
             group_id: None,
             role: None,
@@ -454,24 +454,24 @@ mod tests {
     #[actix_web::test]
     async fn test_find_usernames_multi() {
         let user: User = api::NewUser {
-            username: "user".into(),
-            email: "user@netsblox.org".into(),
+            username: api::Username::new("user"),
+            email: api::Email::new("user@netsblox.org"),
             password: None,
             group_id: None,
             role: None,
         }
         .into();
         let u2: User = api::NewUser {
-            username: "u2".into(),
-            email: "user@netsblox.org".into(),
+            username: api::Username::new("u2"),
+            email: api::Email::new("user@netsblox.org"),
             password: None,
             group_id: None,
             role: None,
         }
         .into();
         let other: User = api::NewUser {
-            username: "other".into(),
-            email: "other@netsblox.org".into(),
+            username: api::Username::new("other"),
+            email: api::Email::new("other@netsblox.org"),
             password: None,
             group_id: None,
             role: None,

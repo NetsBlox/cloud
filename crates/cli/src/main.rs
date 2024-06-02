@@ -11,7 +11,7 @@ use inquire::{Confirm, Password, PasswordDisplayMode};
 use netsblox_api::common::{
     oauth, ClientId, CreateMagicLinkData, CreateProjectData, Credentials, FriendLinkState,
     InvitationState, LinkedAccount, ProjectId, ProjectName, PublishState, RoleData, RoleName,
-    SaveState, ServiceHost, ServiceHostScope, UserRole,
+    SaveState, ServiceHost, ServiceHostScope, UserRole, Username,
 };
 use netsblox_api::{self, serde_json, Client};
 use std::path::Path;
@@ -745,7 +745,10 @@ async fn do_command(mut cfg: Config, args: Cli) -> Result<(), error::Error> {
         let credentials = if use_snap {
             Credentials::Snap { username, password }
         } else {
-            Credentials::NetsBlox { username, password }
+            Credentials::NetsBlox {
+                username: Username::new(username),
+                password,
+            }
         };
         let request = netsblox_api::common::LoginRequest {
             credentials,

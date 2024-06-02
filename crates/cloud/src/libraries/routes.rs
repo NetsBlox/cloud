@@ -158,8 +158,8 @@ mod tests {
     #[actix_web::test]
     async fn test_list_user_libraries() {
         let user: User = api::NewUser {
-            username: "user".into(),
-            email: "user@netsblox.org".into(),
+            username: api::Username::new("user"),
+            email: api::Email::new("user@netsblox.org"),
             password: None,
             group_id: None,
             role: None,
@@ -214,8 +214,8 @@ mod tests {
     #[actix_web::test]
     async fn test_save_public_library_with_approval() {
         let user: User = api::NewUser {
-            username: "user".into(),
-            email: "user@netsblox.org".into(),
+            username: api::Username::new("user"),
+            email: api::Email::new("user@netsblox.org"),
             password: None,
             group_id: None,
             role: None,

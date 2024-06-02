@@ -4,7 +4,8 @@ pub mod error;
 use crate::common::*;
 use futures_util::SinkExt;
 use netsblox_api_common::{
-    CreateGroupData, CreateMagicLinkData, GroupName, ProjectName, ServiceHostScope, UpdateGroupData,
+    CreateGroupData, CreateMagicLinkData, Email, GroupName, ProjectName, ServiceHostScope,
+    UpdateGroupData, Username,
 };
 use reqwest::{self, Method, RequestBuilder, Response};
 use serde::{Deserialize, Serialize};
@@ -115,8 +116,8 @@ impl Client {
         role: UserRole,
     ) -> Result<(), error::Error> {
         let user_data = NewUser {
-            username: name.to_owned(),
-            email: email.to_owned(),
+            username: Username::new(name),
+            email: Email::new(email),
             role: Some(role),
             group_id: group_id.map(|id| id.to_owned()),
             password: password.map(|pwd| pwd.to_owned()),

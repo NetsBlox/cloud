@@ -202,9 +202,10 @@ impl Validate for UsernameValidator {
         }
 
         lazy_static! {
-            static ref USERNAME_REGEX: Regex = Regex::new(r"^[A-z][A-Z0-9_\-]+$").unwrap();
+            static ref USERNAME_REGEX: Regex = Regex::new(r"^[a-zA-Z][a-zA-Z0-9_\-]+$").unwrap();
         }
 
+        dbg!(USERNAME_REGEX.is_match(&string));
         if !USERNAME_REGEX.is_match(&string) {
             Err(E::invalid_value(
                 de::Unexpected::Other("invalid characters"),
@@ -327,8 +328,8 @@ pub struct User {
 #[serde(rename_all = "camelCase")]
 #[ts(export)]
 pub struct NewUser {
-    pub username: String,
-    pub email: String,
+    pub username: Username,
+    pub email: Email,
     #[ts(optional)]
     pub password: Option<String>,
     #[ts(optional)]
@@ -439,8 +440,14 @@ pub struct LoginRequest {
 #[derive(Deserialize, Serialize, Debug, Clone, TS)]
 #[ts(export)]
 pub enum Credentials {
-    Snap { username: String, password: String },
-    NetsBlox { username: String, password: String },
+    Snap {
+        username: String,
+        password: String,
+    },
+    NetsBlox {
+        username: Username,
+        password: String,
+    },
 }
 
 impl From<Credentials> for LinkedAccount {
@@ -452,7 +459,7 @@ impl From<Credentials> for LinkedAccount {
             },
             Credentials::NetsBlox { username, .. } => LinkedAccount {
                 // TODO: should this panic?
-                username,
+                username: username.to_string(),
                 strategy: "netsblox".to_owned(),
             },
         }
@@ -1247,6 +1254,70 @@ mod tests {
         let name_str = String::from("\"<hola fucker>\"");
         let name: Result<LibraryName, serde_json::Error> = serde_json::from_str(&name_str);
         assert!(name.is_err());
+    }
+
+    #[test]
+    fn deserialize_is_valid_username_caps() {
+        let name_str = String::from("\"HelloWorld\"");
+        let name: Result<Username, serde_json::Error> = serde_json::from_str(&name_str);
+        assert!(name.is_ok());
+    }
+
+    #[test]
+    fn deserialize_is_valid_username() {
+        let name_str = String::from("\"hello\"");
+        let name: Result<Username, serde_json::Error> = serde_json::from_str(&name_str);
+        assert!(name.is_ok());
+    }
+
+    #[test]
+    fn deserialize_is_valid_username_leading_underscore() {
+        let name_str = String::from("\"_hello\"");
+        let name: Result<Username, serde_json::Error> = serde_json::from_str(&name_str);
+        assert!(name.is_err());
+    }
+
+    #[test]
+    fn deserialize_is_valid_username_leading_dash() {
+        let name_str = String::from("\"-hello\"");
+        let name: Result<Username, serde_json::Error> = serde_json::from_str(&name_str);
+        assert!(name.is_err());
+    }
+
+    #[test]
+    fn deserialize_is_valid_username_at_symbol() {
+        let name_str = String::from("\"hello@gmail.com\"");
+        let name: Result<Username, serde_json::Error> = serde_json::from_str(&name_str);
+        assert!(name.is_err());
+    }
+
+    #[test]
+    fn deserialize_is_valid_username_length() {
+        let name_str = String::from("\"testCreateUser1701709207213testCreateUser1701709207213\"");
+        let name: Result<Username, serde_json::Error> = serde_json::from_str(&name_str);
+        assert!(name.is_err());
+    }
+
+    #[test]
+    fn deserialize_is_valid_username_vulgar() {
+        let name_str = String::from("\"shit\"");
+        let name: Result<Username, serde_json::Error> = serde_json::from_str(&name_str);
+        assert!(name.is_err());
+    }
+
+    #[test]
+    fn deserialize_ensure_valid_email() {
+        let name_str = String::from("\"noreply@netsblox.org\"");
+        let name: Result<Email, serde_json::Error> = serde_json::from_str(&name_str);
+        assert!(name.is_ok());
+    }
+
+    #[test]
+    fn deserialize_is_valid_username_yed() {
+        // https://github.com/NetsBlox/NetsBlox/issues/3378
+        let name_str = String::from("\"yedina\"");
+        let name: Result<Username, serde_json::Error> = serde_json::from_str(&name_str);
+        assert!(name.is_ok());
     }
 
     #[test]

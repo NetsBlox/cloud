@@ -105,10 +105,10 @@ async fn whoami(req: HttpRequest) -> Result<HttpResponse, UserError> {
 #[post("/forgot-username")]
 async fn forgot_username(
     app: web::Data<AppData>,
-    email: web::Json<String>,
+    email: web::Json<api::Email>,
 ) -> Result<HttpResponse, UserError> {
     let actions: UserActions = app.as_user_actions();
-    actions.forgot_username(&email.into_inner()).await?;
+    actions.forgot_username(email.as_str()).await?;
 
     Ok(HttpResponse::Ok().finish())
 }
@@ -305,8 +305,8 @@ mod tests {
                 .await;
 
                 let user_data = api::NewUser {
-                    username: "test".into(),
-                    email: "test@gmail.com".into(),
+                    username: api::Username::new("test"),
+                    email: api::Email::new("test@gmail.com"),
                     password: Some("pwd".into()),
                     group_id: None,
                     role: Some(UserRole::User),
@@ -343,8 +343,8 @@ mod tests {
                 .await;
 
                 let user_data = api::NewUser {
-                    username: "damn".into(),
-                    email: "test@gmail.com".into(),
+                    username: api::Username::new("damn"),
+                    email: api::Email::new("test@gmail.com"),
                     password: Some("pwd".into()),
                     group_id: None,
                     role: Some(UserRole::User),
@@ -371,16 +371,16 @@ mod tests {
 
     #[actix_web::test]
     async fn test_create_member_unauth() {
-        let owner_name = String::from("admin");
+        let owner_name = api::Username::new("admin");
         let owner: User = api::NewUser {
             username: owner_name.clone(),
-            email: "owner@netsblox.org".into(),
+            email: api::Email::new("owner@netsblox.org"),
             password: None,
             group_id: None,
             role: None,
         }
         .into();
-        let group = Group::new(owner_name, "some_group".into());
+        let group = Group::new(owner_name.to_string(), "some_group".into());
         test_utils::setup()
             .with_users(&[owner])
             .with_groups(&[group.clone()])
@@ -392,8 +392,8 @@ mod tests {
                 )
                 .await;
                 let user_data = api::NewUser {
-                    username: "someMember".into(),
-                    email: "test@gmail.com".into(),
+                    username: api::Username::new("someMember"),
+                    email: api::Email::new("test@gmail.com"),
                     password: Some("pwd".into()),
                     group_id: Some(group.id),
                     role: Some(UserRole::User),
@@ -412,16 +412,16 @@ mod tests {
     #[actix_web::test]
     async fn test_create_member_nonowner() {
         let owner: User = api::NewUser {
-            username: "owner".into(),
-            email: "owner@netsblox.org".into(),
+            username: api::Username::new("owner"),
+            email: api::Email::new("owner@netsblox.org"),
             password: None,
             group_id: None,
             role: None,
         }
         .into();
         let other_user: User = api::NewUser {
-            username: "otherUser".into(),
-            email: "someUser@netsblox.org".into(),
+            username: api::Username::new("otherUser"),
+            email: api::Email::new("someUser@netsblox.org"),
             password: None,
             group_id: None,
             role: None,
@@ -441,8 +441,8 @@ mod tests {
                 .await;
 
                 let user_data = api::NewUser {
-                    username: "someMember".into(),
-                    email: "test@gmail.com".into(),
+                    username: api::Username::new("someMember"),
+                    email: api::Email::new("test@gmail.com"),
                     password: Some("pwd".into()),
                     group_id: Some(group.id),
                     role: Some(UserRole::User),
@@ -462,8 +462,8 @@ mod tests {
     #[actix_web::test]
     async fn test_create_member_owner() {
         let owner: User = api::NewUser {
-            username: "owner".into(),
-            email: "owner@netsblox.org".into(),
+            username: api::Username::new("owner"),
+            email: api::Email::new("owner@netsblox.org"),
             password: None,
             group_id: None,
             role: None,
@@ -483,8 +483,8 @@ mod tests {
                 .await;
 
                 let user_data = api::NewUser {
-                    username: "someMember".into(),
-                    email: "test@gmail.com".into(),
+                    username: api::Username::new("someMember"),
+                    email: api::Email::new("test@gmail.com"),
                     password: Some("pwd".into()),
                     group_id: Some(group.id),
                     role: Some(UserRole::User),
@@ -503,11 +503,11 @@ mod tests {
 
     #[actix_web::test]
     async fn test_login() {
-        let username: String = "user".into();
+        let username = api::Username::new("user");
         let password: String = "password".into();
         let user: User = api::NewUser {
             username: username.clone(),
-            email: "user@netsblox.org".into(),
+            email: api::Email::new("user@netsblox.org"),
             password: Some(password.clone()),
             group_id: None,
             role: None,
@@ -547,11 +547,11 @@ mod tests {
 
     #[actix_web::test]
     async fn test_login_user_json() {
-        let username: String = "user".into();
+        let username = api::Username::new("user");
         let password: String = "password".into();
         let user: User = api::NewUser {
             username: username.clone(),
-            email: "user@netsblox.org".into(),
+            email: api::Email::new("user@netsblox.org"),
             password: Some(password.clone()),
             group_id: None,
             role: None,
@@ -581,18 +581,18 @@ mod tests {
                     .to_request();
 
                 let user: api::User = test::call_and_read_body_json(&app, req).await;
-                assert_eq!(user.username, username);
+                assert_eq!(user.username, username.to_string());
             })
             .await;
     }
 
     #[actix_web::test]
     async fn test_login_bad_pwd() {
-        let username: String = "user".into();
+        let username = api::Username::new("user");
         let password: String = "password".into();
         let user: User = api::NewUser {
             username: username.clone(),
-            email: "user@netsblox.org".into(),
+            email: api::Email::new("user@netsblox.org"),
             password: Some(password.clone()),
             group_id: None,
             role: None,
@@ -631,7 +631,7 @@ mod tests {
 
     #[actix_web::test]
     async fn test_login_invalid_user() {
-        let username: String = "user".into();
+        let username = api::Username::new("user");
         let password: String = "password".into();
 
         test_utils::setup()
@@ -662,11 +662,11 @@ mod tests {
 
     #[actix_web::test]
     async fn test_login_set_client_username() {
-        let username: String = "user".into();
+        let username = api::Username::new("user");
         let password: String = "password".into();
         let user: User = api::NewUser {
             username: username.clone(),
-            email: "user@netsblox.org".into(),
+            email: api::Email::new("user@netsblox.org"),
             password: Some(password.clone()),
             group_id: None,
             role: None,
@@ -712,18 +712,18 @@ mod tests {
                     .unwrap();
                 let online_friends = task.run().await;
                 assert_eq!(online_friends.len(), 1);
-                assert!(online_friends.contains(&username));
+                assert!(online_friends.contains(&username.to_string()));
             })
             .await;
     }
 
     #[actix_web::test]
     async fn test_login_banned() {
-        let username: String = "user".into();
+        let username = api::Username::new("user");
         let password: String = "password".into();
         let user: User = api::NewUser {
             username: username.clone(),
-            email: "user@netsblox.org".into(),
+            email: api::Email::new("user@netsblox.org"),
             password: Some(password.clone()),
             group_id: None,
             role: None,
@@ -732,7 +732,7 @@ mod tests {
 
         test_utils::setup()
             .with_users(&[user])
-            .with_banned_users(&[username.clone()])
+            .with_banned_users(&[username.to_string()])
             .run(|app_data| async move {
                 let app = test::init_service(
                     App::new()
@@ -770,11 +770,11 @@ mod tests {
 
     #[actix_web::test]
     async fn test_logout() {
-        let username: String = "user".into();
+        let username = api::Username::new("user");
         let password: String = "password".into();
         let user: User = api::NewUser {
             username: username.clone(),
-            email: "user@netsblox.org".into(),
+            email: api::Email::new("user@netsblox.org"),
             password: Some(password.clone()),
             group_id: None,
             role: None,
@@ -793,7 +793,7 @@ mod tests {
                 .await;
                 let req = test::TestRequest::post()
                     .uri("/logout")
-                    .cookie(test_utils::cookie::new(&username))
+                    .cookie(test_utils::cookie::new(username.as_str()))
                     .to_request();
 
                 let response = test::call_service(&app, req).await;
@@ -808,17 +808,17 @@ mod tests {
 
     #[actix_web::test]
     async fn test_logout_set_client_username() {
-        let username: String = "user".into();
+        let username = api::Username::new("user");
         let password: String = "password".into();
         let user: User = api::NewUser {
             username: username.clone(),
-            email: "user@netsblox.org".into(),
+            email: api::Email::new("user@netsblox.org"),
             password: Some(password.clone()),
             group_id: None,
             role: None,
         }
         .into();
-        let client = test_utils::network::Client::new(Some(username.clone()), None);
+        let client = test_utils::network::Client::new(Some(username.to_string()), None);
 
         test_utils::setup()
             .with_users(&[user.clone()])
@@ -833,7 +833,7 @@ mod tests {
                 .await;
                 let req = test::TestRequest::post()
                     .uri(&format!("/logout?clientId={}", client.id.as_str()))
-                    .cookie(test_utils::cookie::new(&username))
+                    .cookie(test_utils::cookie::new(username.as_str()))
                     .to_request();
 
                 let response = test::call_service(&app, req).await;
@@ -859,8 +859,8 @@ mod tests {
     #[actix_web::test]
     async fn test_delete_user_admin() {
         let admin: User = api::NewUser {
-            username: "admin".into(),
-            email: "admin@netsblox.org".into(),
+            username: api::Username::new("admin"),
+            email: api::Email::new("admin@netsblox.org"),
             password: None,
             group_id: None,
             role: Some(UserRole::Admin),
@@ -868,8 +868,8 @@ mod tests {
         .into();
         let other_username = "other_user";
         let other_user: User = api::NewUser {
-            username: other_username.to_string(),
-            email: "user@netsblox.org".into(),
+            username: api::Username::new(other_username),
+            email: api::Email::new("user@netsblox.org"),
             password: None,
             group_id: None,
             role: None,
@@ -912,8 +912,8 @@ mod tests {
     async fn test_delete_user_unauth() {
         let other_username = "other_user";
         let other_user: User = api::NewUser {
-            username: other_username.to_string(),
-            email: "user@netsblox.org".into(),
+            username: api::Username::new(other_username),
+            email: api::Email::new("user@netsblox.org"),
             password: None,
             group_id: None,
             role: None,
@@ -953,18 +953,18 @@ mod tests {
     async fn test_delete_user_group_owner() {
         let owner_name = "owner".to_string();
         let owner: User = api::NewUser {
-            username: owner_name.clone(),
-            email: "owner@netsblox.org".into(),
+            username: api::Username::new(&owner_name),
+            email: api::Email::new("owner@netsblox.org"),
             password: None,
             group_id: None,
             role: None,
         }
         .into();
         let group = Group::new(owner_name.clone(), "some_group".into());
-        let other_username = "other_user";
+        let other_username = api::Username::new("other_user");
         let other_user: User = api::NewUser {
-            username: other_username.to_string(),
-            email: "user@netsblox.org".into(),
+            username: other_username.clone(),
+            email: api::Email::new("user@netsblox.org"),
             password: None,
             group_id: Some(group.id.clone()),
             role: None,
@@ -1006,8 +1006,8 @@ mod tests {
     #[actix_web::test]
     async fn test_delete_user_other_user() {
         let user1: User = api::NewUser {
-            username: "user1".to_string(),
-            email: "user1@netsblox.org".into(),
+            username: api::Username::new("user1"),
+            email: api::Email::new("user1@netsblox.org"),
             password: None,
             group_id: None,
             role: None,
@@ -1015,8 +1015,8 @@ mod tests {
         .into();
         let user1_name = user1.username.clone();
         let user2: User = api::NewUser {
-            username: "user2".to_string(),
-            email: "user@netsblox.org".into(),
+            username: api::Username::new("user2"),
+            email: api::Email::new("user@netsblox.org"),
             password: None,
             group_id: None,
             role: None,
@@ -1057,8 +1057,8 @@ mod tests {
     #[actix_web::test]
     async fn test_ban_user() {
         let admin: User = api::NewUser {
-            username: "admin".to_string(),
-            email: "admin@netsblox.org".into(),
+            username: api::Username::new("admin"),
+            email: api::Email::new("admin@netsblox.org"),
             password: None,
             group_id: None,
             role: Some(UserRole::Admin),
@@ -1066,8 +1066,8 @@ mod tests {
         .into();
         let admin_name = admin.username.clone();
         let some_user: User = api::NewUser {
-            username: "some_user".to_string(),
-            email: "user@netsblox.org".into(),
+            username: api::Username::new("some_user"),
+            email: api::Email::new("user@netsblox.org"),
             password: None,
             group_id: None,
             role: None,
@@ -1108,8 +1108,8 @@ mod tests {
     #[actix_web::test]
     async fn test_ban_user_403() {
         let user: User = api::NewUser {
-            username: "user".to_string(),
-            email: "user@netsblox.org".into(),
+            username: api::Username::new("user"),
+            email: api::Email::new("user@netsblox.org"),
             password: None,
             group_id: None,
             role: None,
@@ -1117,8 +1117,8 @@ mod tests {
         .into();
         let user_name = user.username.clone();
         let some_user: User = api::NewUser {
-            username: "some_user".to_string(),
-            email: "user@netsblox.org".into(),
+            username: api::Username::new("some_user"),
+            email: api::Email::new("user@netsblox.org"),
             password: None,
             group_id: None,
             role: None,
@@ -1160,8 +1160,8 @@ mod tests {
     #[ignore] // ignore until we can test fns using the mailer
     async fn test_reset_password() {
         let user: User = api::NewUser {
-            username: "user".to_string(),
-            email: "user@netsblox.org".into(),
+            username: api::Username::new("user"),
+            email: api::Email::new("user@netsblox.org"),
             password: None,
             group_id: None,
             role: None,

@@ -6,7 +6,6 @@ use std::{
 use crate::auth;
 use actix::Addr;
 use futures::TryStreamExt;
-use lazy_static::lazy_static;
 use lettre::{
     message::{Mailbox, MultiPart},
     Address, Message, SmtpTransport,
@@ -19,8 +18,6 @@ use mongodb::{
 };
 use netsblox_cloud_common::{api, BannedAccount, SetPasswordToken, User};
 use nonempty::NonEmpty;
-use regex::Regex;
-use rustrict::CensorStr;
 
 use crate::{
     app_data::metrics,
@@ -83,9 +80,7 @@ impl<'a> UserActions<'a> {
     }
 
     pub(crate) async fn create_user(&self, cu: auth::CreateUser) -> Result<api::User, UserError> {
-        ensure_valid_email(&cu.data.email)?;
         let user: User = cu.data.into();
-        ensure_valid_username(&user.username)?;
 
         let query = doc! {"email": &user.email};
         if let Some(_account) = self
@@ -433,35 +428,6 @@ impl<'a> UserActions<'a> {
     }
 }
 
-fn ensure_valid_email(email: &str) -> Result<(), UserError> {
-    email
-        .parse::<Address>()
-        .map_err(|_err| UserError::InvalidEmailAddress)?;
-
-    Ok(())
-}
-fn ensure_valid_username(name: &str) -> Result<(), UserError> {
-    if !is_valid_username(name) {
-        Err(UserError::InvalidUsername)
-    } else {
-        Ok(())
-    }
-}
-
-fn is_valid_username(name: &str) -> bool {
-    let max_len = 25;
-    let min_len = 3;
-    let char_count = name.chars().count();
-    lazy_static! {
-        static ref USERNAME_REGEX: Regex = Regex::new(r"^[a-zA-Z][a-zA-Z0-9_\-]+$").unwrap();
-    }
-
-    char_count > min_len
-        && char_count < max_len
-        && USERNAME_REGEX.is_match(name)
-        && !name.is_inappropriate()
-}
-
 struct SetPasswordEmail {
     sender: Mailbox,
     user: User,
@@ -550,8 +516,8 @@ mod tests {
     #[actix_web::test]
     async fn test_create_member() {
         let owner: User = api::NewUser {
-            username: "owner".into(),
-            email: "owner@netsblox.org".into(),
+            username: api::Username::new("owner"),
+            email: api::Email::new("owner@netsblox.org"),
             password: None,
             group_id: None,
             role: None,
@@ -566,8 +532,8 @@ mod tests {
                 let actions = app_data.as_user_actions();
 
                 let new_user = api::NewUser {
-                    username: "member".into(),
-                    email: "member@netsblox.org".into(),
+                    username: api::Username::new("member"),
+                    email: api::Email::new("member@netsblox.org"),
                     password: None,
                     group_id: Some(group.id.to_owned()),
                     role: None,
@@ -587,16 +553,16 @@ mod tests {
     #[actix_web::test]
     async fn test_ban_idempotent() {
         let user: User = api::NewUser {
-            username: "user".into(),
-            email: "user@netsblox.org".into(),
+            username: api::Username::new("user"),
+            email: api::Email::new("user@netsblox.org"),
             password: None,
             group_id: None,
             role: None,
         }
         .into();
         let other: User = api::NewUser {
-            username: "other".into(),
-            email: "other@netsblox.org".into(),
+            username: api::Username::new("other"),
+            email: api::Email::new("other@netsblox.org"),
             password: None,
             group_id: None,
             role: None,
@@ -634,54 +600,5 @@ mod tests {
                 assert!(matches!(result, Err(UserError::UserNotFoundError)));
             })
             .await;
-    }
-
-    #[actix_web::test]
-    async fn test_is_valid_username_caps() {
-        assert!(is_valid_username("HelloWorld"));
-    }
-
-    #[actix_web::test]
-    async fn test_is_valid_username() {
-        assert!(is_valid_username("hello"));
-    }
-
-    #[actix_web::test]
-    async fn test_is_valid_username_leading_underscore() {
-        assert!(!is_valid_username("_hello"));
-    }
-
-    #[actix_web::test]
-    async fn test_is_valid_username_leading_dash() {
-        assert!(!is_valid_username("-hello"));
-    }
-
-    #[actix_web::test]
-    async fn test_is_valid_username_at_symbol() {
-        assert!(!is_valid_username("hello@gmail.com"));
-    }
-
-    #[actix_web::test]
-    async fn test_is_valid_username_length() {
-        assert!(!is_valid_username(
-            "testCreateUser1701709207213testCreateUser1701709207213"
-        ));
-    }
-
-    #[actix_web::test]
-    async fn test_is_valid_username_vulgar() {
-        assert!(!is_valid_username("shit"));
-    }
-
-    #[actix_web::test]
-    async fn test_ensure_valid_email() {
-        let result = ensure_valid_email("noreply@netsblox.org");
-        assert!(result.is_ok());
-    }
-
-    #[actix_web::test]
-    async fn test_is_valid_username_yed() {
-        // https://github.com/NetsBlox/NetsBlox/issues/3378
-        assert!(is_valid_username("yedina"));
     }
 }

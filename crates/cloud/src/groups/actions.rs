@@ -229,16 +229,16 @@ mod tests {
     #[actix_web::test]
     async fn test_create_group_with_hosts() {
         let user: User = api::NewUser {
-            username: "user".into(),
-            email: "user@netsblox.org".into(),
+            username: api::Username::new("user"),
+            email: api::Email::new("user@netsblox.org"),
             password: None,
             group_id: None,
             role: None,
         }
         .into();
         let other: User = api::NewUser {
-            username: "other".into(),
-            email: "other@netsblox.org".into(),
+            username: api::Username::new("other"),
+            email: api::Email::new("other@netsblox.org"),
             password: None,
             group_id: None,
             role: None,

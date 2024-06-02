@@ -71,8 +71,8 @@ mod tests {
     #[actix_web::test]
     async fn test_list_invites() {
         let rcvr: User = api::NewUser {
-            username: "rcvr".to_string(),
-            email: "rcvr@netsblox.org".into(),
+            username: api::Username::new("rcvr"),
+            email: api::Email::new("rcvr@netsblox.org"),
             password: None,
             group_id: None,
             role: None,
@@ -119,8 +119,8 @@ mod tests {
     #[actix_web::test]
     async fn test_list_invites_403() {
         let rcvr: User = api::NewUser {
-            username: "rcvr".to_string(),
-            email: "rcvr@netsblox.org".into(),
+            username: api::Username::new("rcvr"),
+            email: api::Email::new("rcvr@netsblox.org"),
             password: None,
             group_id: None,
             role: None,
@@ -128,8 +128,8 @@ mod tests {
         .into();
 
         let other_user: User = api::NewUser {
-            username: "other_user".to_string(),
-            email: "other_user@netsblox.org".into(),
+            username: api::Username::new("other_user"),
+            email: api::Email::new("other_user@netsblox.org"),
             password: None,
             group_id: None,
             role: None,
@@ -161,8 +161,8 @@ mod tests {
     #[actix_web::test]
     async fn test_list_invites_admin() {
         let rcvr: User = api::NewUser {
-            username: "rcvr".to_string(),
-            email: "rcvr@netsblox.org".into(),
+            username: api::Username::new("rcvr"),
+            email: api::Email::new("rcvr@netsblox.org"),
             password: None,
             group_id: None,
             role: None,
@@ -170,8 +170,8 @@ mod tests {
         .into();
 
         let admin: User = api::NewUser {
-            username: "admin".to_string(),
-            email: "admin@netsblox.org".into(),
+            username: api::Username::new("admin"),
+            email: api::Email::new("admin@netsblox.org"),
             password: None,
             group_id: None,
             role: Some(api::UserRole::Admin),
@@ -218,16 +218,16 @@ mod tests {
     #[actix_web::test]
     async fn test_send_invite() {
         let sender: User = api::NewUser {
-            username: "sender".to_string(),
-            email: "sender@netsblox.org".into(),
+            username: api::Username::new("sender"),
+            email: api::Email::new("sender@netsblox.org"),
             password: None,
             group_id: None,
             role: None,
         }
         .into();
         let rcvr: User = api::NewUser {
-            username: "rcvr".to_string(),
-            email: "rcvr@netsblox.org".into(),
+            username: api::Username::new("rcvr"),
+            email: api::Email::new("rcvr@netsblox.org"),
             password: None,
             group_id: None,
             role: None,
@@ -266,8 +266,8 @@ mod tests {
     #[actix_web::test]
     async fn test_send_invite_403() {
         let other_user: User = api::NewUser {
-            username: "other_user".to_string(),
-            email: "other_user@netsblox.org".into(),
+            username: api::Username::new("other_user"),
+            email: api::Email::new("other_user@netsblox.org"),
             password: None,
             group_id: None,
             role: None,
@@ -275,16 +275,16 @@ mod tests {
         .into();
 
         let sender: User = api::NewUser {
-            username: "sender".to_string(),
-            email: "sender@netsblox.org".into(),
+            username: api::Username::new("sender"),
+            email: api::Email::new("sender@netsblox.org"),
             password: None,
             group_id: None,
             role: None,
         }
         .into();
         let rcvr: User = api::NewUser {
-            username: "rcvr".to_string(),
-            email: "rcvr@netsblox.org".into(),
+            username: api::Username::new("rcvr"),
+            email: api::Email::new("rcvr@netsblox.org"),
             password: None,
             group_id: None,
             role: None,
@@ -321,16 +321,16 @@ mod tests {
     #[actix_web::test]
     async fn test_send_invite_exists() {
         let sender: User = api::NewUser {
-            username: "sender".to_string(),
-            email: "sender@netsblox.org".into(),
+            username: api::Username::new("sender"),
+            email: api::Email::new("sender@netsblox.org"),
             password: None,
             group_id: None,
             role: None,
         }
         .into();
         let rcvr: User = api::NewUser {
-            username: "rcvr".to_string(),
-            email: "rcvr@netsblox.org".into(),
+            username: api::Username::new("rcvr"),
+            email: api::Email::new("rcvr@netsblox.org"),
             password: None,
             group_id: None,
             role: None,
