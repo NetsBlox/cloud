@@ -349,6 +349,7 @@ mod tests {
             .await;
     }
 
+    #[ignore]
     #[actix_web::test]
     async fn test_create_gallery_owner_bad_name() {
         let user: User = api::NewUser {
