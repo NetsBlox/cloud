@@ -383,4 +383,29 @@ mod tests {
 
         assert!(matches!(name_res, Err(UserError::UsernameExists)));
     }
+
+    // We have a snap account that we can use
+    // for snapci testing:
+    // username: netsblox_test
+    // password: NetsBloxRules!
+    // email: netsbloxapi+snapci@gmail.com
+    #[actix_web::test]
+    async fn test_snap_ci_authenticate() {
+        let creds = api::Credentials::Snap {
+            username: "netsblox_test".into(),
+            password: "NetsBloxRules!".into(),
+        };
+        let res = authenticate(&creds).await;
+        assert!(res.is_ok());
+    }
+
+    #[actix_web::test]
+    async fn test_snap_ci_login_authenticate() {
+        let creds = api::Credentials::Snap {
+            username: "netsblox_test".into(),
+            password: "wrongPassword".into(),
+        };
+        let res = authenticate(&creds).await;
+        assert!(res.is_err());
+    }
 }
