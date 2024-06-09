@@ -92,6 +92,7 @@ pub async fn login(users: &Collection<User>, credentials: Credentials) -> Result
                     .await
                     .map_err(|_err| UserError::SnapConnectionError)?;
 
+                // FIX: snap route is not available anymore, snap does not provide email addresses
                 // TODO: ensure email isn't banned?
 
                 create_account(users, user_data.email, &account).await?
