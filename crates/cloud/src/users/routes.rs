@@ -1188,6 +1188,7 @@ mod tests {
             })
             .await;
     }
+<<<<<<< Updated upstream
 
     //     #[actix_web::test]
     //     async fn test_link_account() {
@@ -1203,4 +1204,61 @@ mod tests {
     //     async fn test_link_account_duplicate() {
     //         todo!();
     //     }
+=======
+    // #[actix_web::test]
+    // async fn test_link_account() {
+    //     todo!();
+    // }
+
+    // #[actix_web::test]
+    // async fn test_link_account_403() {
+    //     todo!();
+    // }
+
+    // #[actix_web::test]
+    // async fn test_link_account_duplicate() {
+    //     todo!();
+    // }
+
+    // NOTE: add linkedaccounts to NewUser
+    #[actix_web::test]
+    async fn test_unlink_account() {
+        let linked_account = api::LinkedAccount {
+            username: "user".to_string(),
+            strategy: "snap".to_string(),
+        };
+        let mut user: User = api::NewUser {
+            username: api::Username::new("user"),
+            email: api::Email::new("user@netsblox.org"),
+            password: None,
+            group_id: None,
+            role: None,
+        }
+        .into();
+        user.linked_accounts.push(linked_account.clone());
+
+        test_utils::setup()
+            .with_users(&[user.clone()])
+            .run(|app_data| async move {
+                let app = test::init_service(
+                    App::new()
+                        .wrap(test_utils::cookie::middleware())
+                        .app_data(web::Data::new(app_data.clone()))
+                        .configure(config),
+                )
+                .await;
+
+                let req = test::TestRequest::post()
+                    .uri(&format!("/{}/unlink", &user.username))
+                    .cookie(test_utils::cookie::new(&user.username))
+                    .set_json(&linked_account)
+                    .to_request();
+
+                let user: api::User = test::call_and_read_body_json(&app, req).await;
+                dbg!(&user);
+                assert!(user.linked_accounts.is_empty());
+            })
+            .await;
+    }
+>>>>>>> Stashed changes
 }
