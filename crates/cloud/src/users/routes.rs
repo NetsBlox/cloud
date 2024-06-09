@@ -1188,7 +1188,6 @@ mod tests {
             })
             .await;
     }
-<<<<<<< Updated upstream
 
     //     #[actix_web::test]
     //     async fn test_link_account() {
@@ -1204,21 +1203,6 @@ mod tests {
     //     async fn test_link_account_duplicate() {
     //         todo!();
     //     }
-=======
-    // #[actix_web::test]
-    // async fn test_link_account() {
-    //     todo!();
-    // }
-
-    // #[actix_web::test]
-    // async fn test_link_account_403() {
-    //     todo!();
-    // }
-
-    // #[actix_web::test]
-    // async fn test_link_account_duplicate() {
-    //     todo!();
-    // }
 
     // NOTE: add linkedaccounts to NewUser
     #[actix_web::test]
@@ -1228,8 +1212,8 @@ mod tests {
             strategy: "snap".to_string(),
         };
         let mut user: User = api::NewUser {
-            username: api::Username::new("user"),
-            email: api::Email::new("user@netsblox.org"),
+            username: "user".into(),
+            email: "user@netsblox.org".into(),
             password: None,
             group_id: None,
             role: None,
@@ -1260,5 +1244,4 @@ mod tests {
             })
             .await;
     }
->>>>>>> Stashed changes
 }
