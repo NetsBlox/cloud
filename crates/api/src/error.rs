@@ -4,6 +4,8 @@ use derive_more::Display;
 pub enum Error {
     #[display(fmt = "{}", _0)]
     BadRequestError(String),
+    #[display(fmt = "{}", _0)]
+    ParseResponseFailedError(String),
     #[display(fmt = "Login required.")]
     LoginRequiredError,
     #[display(fmt = "Unauthorized: {}", _0)]
