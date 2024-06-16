@@ -116,7 +116,7 @@ pub async fn login(users: &Collection<User>, credentials: Credentials) -> Result
 
             // Ensure they have a salt (empty until first login for migrated accounts)
             let user = if needs_update {
-                update_salt(users, &username, password).await?
+                update_salt(users, username.as_str(), password).await?
             } else {
                 user
             };
@@ -255,8 +255,8 @@ mod tests {
     async fn test_login_update_salt() {
         let password: String = "somePassword...".into();
         let mut user: User = api::NewUser {
-            username: "user".to_string(),
-            email: "user@netsblox.org".into(),
+            username: api::Username::new("user"),
+            email: api::Email::new("user@netsblox.org"),
             password: Some(password.clone()),
             group_id: None,
             role: None,
@@ -270,7 +270,7 @@ mod tests {
             .run(|app_data| async move {
                 // check initial login
                 let credentials = Credentials::NetsBlox {
-                    username: user.username.clone(),
+                    username: api::Username::new(&user.username),
                     password,
                 };
                 login(&app_data.users, credentials.clone()).await.unwrap();
@@ -290,8 +290,8 @@ mod tests {
     async fn test_login_dont_update_salt_failed_login() {
         let password: String = "somePassword...".into();
         let mut user: User = api::NewUser {
-            username: "user".to_string(),
-            email: "user@netsblox.org".into(),
+            username: api::Username::new("user"),
+            email: api::Email::new("user@netsblox.org"),
             password: Some(password.clone()),
             group_id: None,
             role: None,
@@ -305,7 +305,7 @@ mod tests {
             .run(|app_data| async move {
                 // check initial login
                 let credentials = Credentials::NetsBlox {
-                    username: user.username.clone(),
+                    username: api::Username::new(user.username),
                     password: "badPassword".into(),
                 };
                 let result = login(&app_data.users, credentials.clone()).await;
@@ -321,8 +321,8 @@ mod tests {
     async fn test_login_dont_update_existing_salt() {
         let password: String = "somePassword...".into();
         let user: User = api::NewUser {
-            username: "user".to_string(),
-            email: "user@netsblox.org".into(),
+            username: api::Username::new("user"),
+            email: api::Email::new("user@netsblox.org"),
             password: Some(password.clone()),
             group_id: None,
             role: None,
@@ -334,7 +334,7 @@ mod tests {
             .run(|app_data| async move {
                 // check initial login
                 let credentials = Credentials::NetsBlox {
-                    username: user.username.clone(),
+                    username: api::Username::new(&user.username),
                     password,
                 };
                 login(&app_data.users, credentials.clone()).await.unwrap();

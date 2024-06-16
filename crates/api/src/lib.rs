@@ -4,7 +4,8 @@ pub mod error;
 use crate::common::*;
 use futures_util::SinkExt;
 use netsblox_api_common::{
-    CreateGroupData, CreateMagicLinkData, ServiceHostScope, UpdateGroupData,
+    CreateGroupData, CreateMagicLinkData, Email, GroupName, ProjectName, ServiceHostScope,
+    UpdateGroupData, Username,
 };
 use reqwest::{self, Method, RequestBuilder, Response};
 use serde::{Deserialize, Serialize};
@@ -115,8 +116,8 @@ impl Client {
         role: UserRole,
     ) -> Result<(), error::Error> {
         let user_data = NewUser {
-            username: name.to_owned(),
-            email: email.to_owned(),
+            username: Username::new(name),
+            email: Email::new(email),
             role: Some(role),
             group_id: group_id.map(|id| id.to_owned()),
             password: password.map(|pwd| pwd.to_owned()),
@@ -332,7 +333,7 @@ impl Client {
         let response = self
             .request(Method::PATCH, &format!("/projects/id/{}", &id))
             .json(&UpdateProjectData {
-                name: name.to_owned(),
+                name: ProjectName::new(name),
                 client_id: None,
             })
             .send()
@@ -353,7 +354,7 @@ impl Client {
         let response = self
             .request(Method::PATCH, &format!("/projects/id/{}/{}", &id, &role_id))
             .json(&UpdateRoleData {
-                name: name.to_owned(),
+                name: RoleName::new(name),
                 client_id: None,
             })
             .send()
@@ -715,7 +716,7 @@ impl Client {
         let response = self
             .request(Method::POST, &path)
             .json(&CreateLibraryData {
-                name: name.to_owned(),
+                name: LibraryName::new(name),
                 blocks: blocks.to_owned(),
                 notes: notes.to_owned(),
             })
@@ -802,7 +803,7 @@ impl Client {
     pub async fn create_group(&self, owner: &str, name: &str) -> Result<(), error::Error> {
         let path = format!("/groups/user/{}/", owner);
         let group = CreateGroupData {
-            name: name.to_owned(),
+            name: GroupName::new(name),
             services_hosts: None,
         };
         let response = self
@@ -845,7 +846,7 @@ impl Client {
         let response = self
             .request(Method::PATCH, &path)
             .json(&UpdateGroupData {
-                name: name.to_owned(),
+                name: GroupName::new(name),
             })
             .send()
             .await
@@ -948,7 +949,7 @@ impl Client {
     ) -> Result<String, error::Error> {
         let host = AuthorizedServiceHost {
             url: url.to_owned(),
-            id: id.to_owned(),
+            id: netsblox_api_common::ServiceID::new(id),
             visibility,
         };
         let response = self

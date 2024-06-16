@@ -129,7 +129,7 @@ impl ProjectNetwork {
         RoomState {
             id: self.id.to_owned(),
             owner: project.owner,
-            name: project.name,
+            name: api::RoleName::new(project.name.as_str()),
             roles,
             collaborators: project.collaborators,
             version,
@@ -271,14 +271,14 @@ impl Topology {
                     metadata
                         .roles
                         .values()
-                        .map(|role| role.name.to_owned())
+                        .map(|role| role.name.to_string())
                         .collect()
                 });
 
                 let name2id = metadata
                     .roles
                     .into_iter()
-                    .map(|(k, v)| (v.name, k))
+                    .map(|(k, v)| (v.name.to_string(), k))
                     .collect::<HashMap<_, _>>();
 
                 role_names
@@ -973,8 +973,8 @@ mod tests {
     #[ignore]
     async fn test_allowed_recipients_for_member() {
         let outsider: User = api::NewUser {
-            username: "outsider".to_string(),
-            email: "outsider@netsblox.org".into(),
+            username: api::Username::new("outsider"),
+            email: api::Email::new("outsider@netsblox.org"),
             password: None,
             group_id: None,
             role: None,
@@ -988,8 +988,8 @@ mod tests {
         });
 
         let owner: User = api::NewUser {
-            username: "owner".to_string(),
-            email: "owner@netsblox.org".into(),
+            username: api::Username::new("owner"),
+            email: api::Email::new("owner@netsblox.org"),
             password: None,
             group_id: None,
             role: None,
@@ -998,8 +998,8 @@ mod tests {
         let owner_id = ClientId::new("_owner".into());
         let group = Group::new(owner.username.clone(), "some_group".into());
         let member: User = api::NewUser {
-            username: "member".to_string(),
-            email: "member@netsblox.org".into(),
+            username: api::Username::new("member"),
+            email: api::Email::new("member@netsblox.org"),
             password: None,
             group_id: Some(group.id),
             role: None,

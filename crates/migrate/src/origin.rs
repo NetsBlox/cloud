@@ -112,7 +112,7 @@ impl From<Library> for cloud::Library {
         };
 
         cloud::Library {
-            name: lib.name,
+            name: cloud::api::LibraryName::new(lib.name),
             owner: lib.owner,
             blocks: lib.blocks,
             notes: lib.notes,

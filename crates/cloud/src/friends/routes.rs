@@ -170,24 +170,24 @@ mod tests {
     async fn test_list_friends() {
         // Define users
         let user: User = api::NewUser {
-            username: "user".into(),
-            email: "user@netsblox.org".into(),
+            username: api::Username::new("user"),
+            email: api::Email::new("user@netsblox.org"),
             password: None,
             group_id: None,
             role: Some(UserRole::User),
         }
         .into();
         let f1: User = api::NewUser {
-            username: "f1".into(),
-            email: "user@netsblox.org".into(),
+            username: api::Username::new("f1"),
+            email: api::Email::new("user@netsblox.org"),
             password: None,
             group_id: None,
             role: Some(UserRole::User),
         }
         .into();
         let nonfriend: User = api::NewUser {
-            username: "nonfriend".into(),
-            email: "user@netsblox.org".into(),
+            username: api::Username::new("nonfriend"),
+            email: api::Email::new("user@netsblox.org"),
             password: None,
             group_id: None,
             role: Some(UserRole::User),
@@ -229,16 +229,16 @@ mod tests {
     #[actix_web::test]
     async fn test_list_friends_403() {
         let user: User = api::NewUser {
-            username: "user".into(),
-            email: "user@netsblox.org".into(),
+            username: api::Username::new("user"),
+            email: api::Email::new("user@netsblox.org"),
             password: None,
             group_id: None,
             role: Some(UserRole::User),
         }
         .into();
         let other: User = api::NewUser {
-            username: "other".into(),
-            email: "user@netsblox.org".into(),
+            username: api::Username::new("other"),
+            email: api::Email::new("user@netsblox.org"),
             password: None,
             group_id: None,
             role: Some(UserRole::User),
@@ -272,32 +272,32 @@ mod tests {
     async fn test_list_online_friends() {
         // Define users
         let user: User = api::NewUser {
-            username: "user".into(),
-            email: "user@netsblox.org".into(),
+            username: api::Username::new("user"),
+            email: api::Email::new("user@netsblox.org"),
             password: None,
             group_id: None,
             role: Some(UserRole::User),
         }
         .into();
         let f1: User = api::NewUser {
-            username: "f1".into(),
-            email: "user@netsblox.org".into(),
+            username: api::Username::new("f1"),
+            email: api::Email::new("user@netsblox.org"),
             password: None,
             group_id: None,
             role: Some(UserRole::User),
         }
         .into();
         let f2: User = api::NewUser {
-            username: "f2".into(),
-            email: "user@netsblox.org".into(),
+            username: api::Username::new("f2"),
+            email: api::Email::new("user@netsblox.org"),
             password: None,
             group_id: None,
             role: Some(UserRole::User),
         }
         .into();
         let nonfriend: User = api::NewUser {
-            username: "nonfriend".into(),
-            email: "user@netsblox.org".into(),
+            username: api::Username::new("nonfriend"),
+            email: api::Email::new("user@netsblox.org"),
             password: None,
             group_id: None,
             role: Some(UserRole::User),
@@ -349,16 +349,16 @@ mod tests {
     async fn test_list_online_friends_403() {
         // Define users
         let user: User = api::NewUser {
-            username: "user".into(),
-            email: "user@netsblox.org".into(),
+            username: api::Username::new("user"),
+            email: api::Email::new("user@netsblox.org"),
             password: None,
             group_id: None,
             role: Some(UserRole::User),
         }
         .into();
         let other: User = api::NewUser {
-            username: "other".into(),
-            email: "user@netsblox.org".into(),
+            username: api::Username::new("other"),
+            email: api::Email::new("user@netsblox.org"),
             password: None,
             group_id: None,
             role: Some(UserRole::User),
@@ -392,16 +392,16 @@ mod tests {
     #[actix_web::test]
     async fn test_unfriend() {
         let user: User = api::NewUser {
-            username: "user".into(),
-            email: "user@netsblox.org".into(),
+            username: api::Username::new("user"),
+            email: api::Email::new("user@netsblox.org"),
             password: None,
             group_id: None,
             role: Some(UserRole::User),
         }
         .into();
         let f1: User = api::NewUser {
-            username: "f1".into(),
-            email: "user@netsblox.org".into(),
+            username: api::Username::new("f1"),
+            email: api::Email::new("user@netsblox.org"),
             password: None,
             group_id: None,
             role: Some(UserRole::User),
@@ -443,24 +443,24 @@ mod tests {
     #[actix_web::test]
     async fn test_unfriend_403() {
         let user: User = api::NewUser {
-            username: "user".into(),
-            email: "user@netsblox.org".into(),
+            username: api::Username::new("user"),
+            email: api::Email::new("user@netsblox.org"),
             password: None,
             group_id: None,
             role: Some(UserRole::User),
         }
         .into();
         let other_user: User = api::NewUser {
-            username: "other_user".into(),
-            email: "other_user@netsblox.org".into(),
+            username: api::Username::new("other_user"),
+            email: api::Email::new("other_user@netsblox.org"),
             password: None,
             group_id: None,
             role: Some(UserRole::User),
         }
         .into();
         let f1: User = api::NewUser {
-            username: "f1".into(),
-            email: "user@netsblox.org".into(),
+            username: api::Username::new("f1"),
+            email: api::Email::new("user@netsblox.org"),
             password: None,
             group_id: None,
             role: Some(UserRole::User),
@@ -502,24 +502,24 @@ mod tests {
     #[actix_web::test]
     async fn test_unfriend_admin() {
         let user: User = api::NewUser {
-            username: "user".into(),
-            email: "user@netsblox.org".into(),
+            username: api::Username::new("user"),
+            email: api::Email::new("user@netsblox.org"),
             password: None,
             group_id: None,
             role: Some(UserRole::User),
         }
         .into();
         let admin: User = api::NewUser {
-            username: "admin".into(),
-            email: "admin@netsblox.org".into(),
+            username: api::Username::new("admin"),
+            email: api::Email::new("admin@netsblox.org"),
             password: None,
             group_id: None,
             role: Some(UserRole::Admin),
         }
         .into();
         let f1: User = api::NewUser {
-            username: "f1".into(),
-            email: "user@netsblox.org".into(),
+            username: api::Username::new("f1"),
+            email: api::Email::new("user@netsblox.org"),
             password: None,
             group_id: None,
             role: Some(UserRole::User),
@@ -561,16 +561,16 @@ mod tests {
     #[actix_web::test]
     async fn test_block_user() {
         let user: User = api::NewUser {
-            username: "user".into(),
-            email: "user@netsblox.org".into(),
+            username: api::Username::new("user"),
+            email: api::Email::new("user@netsblox.org"),
             password: None,
             group_id: None,
             role: Some(UserRole::User),
         }
         .into();
         let other_user: User = api::NewUser {
-            username: "other_user".into(),
-            email: "user@netsblox.org".into(),
+            username: api::Username::new("other_user"),
+            email: api::Email::new("user@netsblox.org"),
             password: None,
             group_id: None,
             role: Some(UserRole::User),
@@ -606,16 +606,16 @@ mod tests {
     #[actix_web::test]
     async fn test_block_user_existing() {
         let user: User = api::NewUser {
-            username: "user".into(),
-            email: "user@netsblox.org".into(),
+            username: api::Username::new("user"),
+            email: api::Email::new("user@netsblox.org"),
             password: None,
             group_id: None,
             role: Some(UserRole::User),
         }
         .into();
         let f1: User = api::NewUser {
-            username: "f1".into(),
-            email: "user@netsblox.org".into(),
+            username: api::Username::new("f1"),
+            email: api::Email::new("user@netsblox.org"),
             password: None,
             group_id: None,
             role: Some(UserRole::User),
@@ -658,24 +658,24 @@ mod tests {
     #[actix_web::test]
     async fn test_block_user_403() {
         let user: User = api::NewUser {
-            username: "user".into(),
-            email: "user@netsblox.org".into(),
+            username: api::Username::new("user"),
+            email: api::Email::new("user@netsblox.org"),
             password: None,
             group_id: None,
             role: Some(UserRole::User),
         }
         .into();
         let other: User = api::NewUser {
-            username: "other".into(),
-            email: "other@netsblox.org".into(),
+            username: api::Username::new("other"),
+            email: api::Email::new("other@netsblox.org"),
             password: None,
             group_id: None,
             role: Some(UserRole::User),
         }
         .into();
         let f1: User = api::NewUser {
-            username: "f1".into(),
-            email: "user@netsblox.org".into(),
+            username: api::Username::new("f1"),
+            email: api::Email::new("user@netsblox.org"),
             password: None,
             group_id: None,
             role: Some(UserRole::User),
@@ -717,16 +717,16 @@ mod tests {
     #[actix_web::test]
     async fn test_unblock_user() {
         let user: User = api::NewUser {
-            username: "user".into(),
-            email: "user@netsblox.org".into(),
+            username: api::Username::new("user"),
+            email: api::Email::new("user@netsblox.org"),
             password: None,
             group_id: None,
             role: Some(UserRole::User),
         }
         .into();
         let f1: User = api::NewUser {
-            username: "f1".into(),
-            email: "user@netsblox.org".into(),
+            username: api::Username::new("f1"),
+            email: api::Email::new("user@netsblox.org"),
             password: None,
             group_id: None,
             role: Some(UserRole::User),
@@ -765,16 +765,16 @@ mod tests {
     #[actix_web::test]
     async fn test_invite_user() {
         let user: User = api::NewUser {
-            username: "someUser".into(),
-            email: "someUser@netsblox.org".into(),
+            username: api::Username::new("someUser"),
+            email: api::Email::new("someUser@netsblox.org"),
             password: None,
             group_id: None,
             role: None,
         }
         .into();
         let other_user: User = api::NewUser {
-            username: "otherUser".into(),
-            email: "otherUser@netsblox.org".into(),
+            username: api::Username::new("otherUser"),
+            email: api::Email::new("otherUser@netsblox.org"),
             password: None,
             group_id: None,
             role: None,
@@ -810,8 +810,8 @@ mod tests {
     #[actix_web::test]
     async fn test_invite_nonexistent_user() {
         let user: User = api::NewUser {
-            username: "someUser".into(),
-            email: "someUser@netsblox.org".into(),
+            username: api::Username::new("someUser"),
+            email: api::Email::new("someUser@netsblox.org"),
             password: None,
             group_id: None,
             role: None,
@@ -843,8 +843,8 @@ mod tests {
     #[actix_web::test]
     async fn test_invite_user_member() {
         let user: User = api::NewUser {
-            username: "someUser".into(),
-            email: "someUser@netsblox.org".into(),
+            username: api::Username::new("someUser"),
+            email: api::Email::new("someUser@netsblox.org"),
             password: None,
             group_id: None,
             role: None,
@@ -852,8 +852,8 @@ mod tests {
         .into();
         let group = Group::new(user.username.clone(), "some_group".into());
         let member: User = api::NewUser {
-            username: "someMember".into(),
-            email: "someMember@netsblox.org".into(),
+            username: api::Username::new("someMember"),
+            email: api::Email::new("someMember@netsblox.org"),
             password: None,
             group_id: Some(group.id.clone()),
             role: None,
@@ -886,16 +886,16 @@ mod tests {
     #[actix_web::test]
     async fn test_invite_user_unauth() {
         let user: User = api::NewUser {
-            username: "someUser".into(),
-            email: "someUser@netsblox.org".into(),
+            username: api::Username::new("someUser"),
+            email: api::Email::new("someUser@netsblox.org"),
             password: None,
             group_id: None,
             role: None,
         }
         .into();
         let other_user: User = api::NewUser {
-            username: "otherUser".into(),
-            email: "otherUser@netsblox.org".into(),
+            username: api::Username::new("otherUser"),
+            email: api::Email::new("otherUser@netsblox.org"),
             password: None,
             group_id: None,
             role: None,
@@ -926,24 +926,24 @@ mod tests {
     #[actix_web::test]
     async fn test_invite_user_403() {
         let user: User = api::NewUser {
-            username: "someUser".into(),
-            email: "someUser@netsblox.org".into(),
+            username: api::Username::new("someUser"),
+            email: api::Email::new("someUser@netsblox.org"),
             password: None,
             group_id: None,
             role: None,
         }
         .into();
         let other_user: User = api::NewUser {
-            username: "otherUser".into(),
-            email: "otherUser@netsblox.org".into(),
+            username: api::Username::new("otherUser"),
+            email: api::Email::new("otherUser@netsblox.org"),
             password: None,
             group_id: None,
             role: None,
         }
         .into();
         let target: User = api::NewUser {
-            username: "target".into(),
-            email: "target@netsblox.org".into(),
+            username: api::Username::new("target"),
+            email: api::Email::new("target@netsblox.org"),
             password: None,
             group_id: None,
             role: None,

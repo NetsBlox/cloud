@@ -10,8 +10,8 @@ use futures_util::StreamExt;
 use inquire::{Confirm, Password, PasswordDisplayMode};
 use netsblox_api::common::{
     oauth, ClientId, CreateMagicLinkData, CreateProjectData, Credentials, FriendLinkState,
-    InvitationState, LinkedAccount, ProjectId, PublishState, RoleData, SaveState, ServiceHost,
-    ServiceHostScope, UserRole,
+    InvitationState, LinkedAccount, ProjectId, ProjectName, PublishState, RoleData, RoleName,
+    SaveState, ServiceHost, ServiceHostScope, UserRole, Username,
 };
 use netsblox_api::{self, serde_json, Client};
 use std::path::Path;
@@ -723,7 +723,7 @@ async fn main() {
         std::process::exit(code);
     }
 }
-
+#[allow(clippy::too_many_lines)]
 async fn do_command(mut cfg: Config, args: Cli) -> Result<(), error::Error> {
     let is_logged_in = !(cfg.host().token.is_none() || cfg.host().username.is_none());
     let login_required = match &args.cmd {
@@ -745,7 +745,10 @@ async fn do_command(mut cfg: Config, args: Cli) -> Result<(), error::Error> {
         let credentials = if use_snap {
             Credentials::Snap { username, password }
         } else {
-            Credentials::NetsBlox { username, password }
+            Credentials::NetsBlox {
+                username: Username::new(username),
+                password,
+            }
         };
         let request = netsblox_api::common::LoginRequest {
             credentials,
@@ -784,7 +787,7 @@ async fn do_command(mut cfg: Config, args: Cli) -> Result<(), error::Error> {
                     let groups = client.list_groups(&username).await?;
                     groups
                         .into_iter()
-                        .find(|g| g.name == *group_name)
+                        .find(|g| g.name.as_str() == *group_name)
                         .map(|group| group.id)
                 } else {
                     None
@@ -928,16 +931,17 @@ async fn do_command(mut cfg: Config, args: Cli) -> Result<(), error::Error> {
                     .map(|rspan| rspan.into_role(&project_xml))
                     .collect();
 
+                let name: ProjectName = ProjectName::new(name.as_deref().unwrap_or_else(|| {
+                    Path::new(filename)
+                        .file_stem()
+                        .expect("Could not determine default name. Try passing --name")
+                        .to_str()
+                        .unwrap()
+                }));
+
                 let project_data = CreateProjectData {
                     owner: Some(username),
-                    name: name.to_owned().unwrap_or_else(|| {
-                        Path::new(filename)
-                            .file_stem()
-                            .expect("Could not determine default name. Try passing --name")
-                            .to_str()
-                            .unwrap()
-                            .to_owned()
-                    }),
+                    name,
                     roles: Some(roles),
                     save_state: Some(SaveState::Saved),
                     client_id: None,
@@ -957,7 +961,7 @@ async fn do_command(mut cfg: Config, args: Cli) -> Result<(), error::Error> {
                     let role_id = metadata
                         .roles
                         .into_iter()
-                        .find(|(_id, role_md)| role_md.name == *role)
+                        .find(|(_id, role_md)| role_md.name.to_string() == *role)
                         .map(|(id, _role_md)| id)
                         .expect("Role not found");
 
@@ -1068,7 +1072,7 @@ async fn do_command(mut cfg: Config, args: Cli) -> Result<(), error::Error> {
                     let role_id = metadata
                         .roles
                         .into_iter()
-                        .find(|(_id, role)| role.name == *role_name)
+                        .find(|(_id, role)| role.name.to_string() == *role_name)
                         .map(|(id, _role)| id)
                         .expect("Role not found.");
 
@@ -1089,7 +1093,7 @@ async fn do_command(mut cfg: Config, args: Cli) -> Result<(), error::Error> {
                     let role_id = metadata
                         .roles
                         .into_iter()
-                        .find(|(_id, role)| role.name == *role_name)
+                        .find(|(_id, role)| role.name.to_string() == *role_name)
                         .map(|(id, _role)| id)
                         .expect("Role not found.");
 
@@ -1233,7 +1237,7 @@ async fn do_command(mut cfg: Config, args: Cli) -> Result<(), error::Error> {
                         let groups = client.list_groups(&username).await?;
                         let group_id = groups
                             .into_iter()
-                            .find(|g| g.name == *group_name)
+                            .find(|g| g.name.as_str() == *group_name)
                             .map(|group| group.id)
                             .unwrap();
                         client.list_group_hosts(&group_id).await?
@@ -1257,7 +1261,7 @@ async fn do_command(mut cfg: Config, args: Cli) -> Result<(), error::Error> {
                     let groups = client.list_groups(&username).await?;
                     groups
                         .into_iter()
-                        .find(|g| g.name == *group_name)
+                        .find(|g| g.name.as_str() == *group_name)
                         .map(|group| group.id)
                 } else {
                     None
@@ -1285,7 +1289,7 @@ async fn do_command(mut cfg: Config, args: Cli) -> Result<(), error::Error> {
                     let groups = client.list_groups(&username).await?;
                     groups
                         .into_iter()
-                        .find(|g| g.name == *group_name)
+                        .find(|g| g.name.as_str() == *group_name)
                         .map(|group| group.id)
                 } else {
                     None
@@ -1337,7 +1341,7 @@ async fn do_command(mut cfg: Config, args: Cli) -> Result<(), error::Error> {
                             "Authorized host not found.".to_string(),
                         )
                     })?;
-                client.unauthorize_host(&host.id).await?;
+                client.unauthorize_host(host.id.as_str()).await?;
             }
         },
         Command::ServiceSettings(cmd) => match &cmd.subcmd {
@@ -1347,7 +1351,7 @@ async fn do_command(mut cfg: Config, args: Cli) -> Result<(), error::Error> {
                     let groups = client.list_groups(&username).await?;
                     let group_id = groups
                         .into_iter()
-                        .find(|g| g.name == *group_name)
+                        .find(|g| g.name.as_str() == *group_name)
                         .map(|group| group.id)
                         .expect("Could not find group with the given name");
                     client.list_group_settings(&group_id).await?
@@ -1375,7 +1379,7 @@ async fn do_command(mut cfg: Config, args: Cli) -> Result<(), error::Error> {
                         let groups = client.list_groups(&username).await?;
                         groups
                             .into_iter()
-                            .find(|g| g.name == *group_name)
+                            .find(|g| g.name.as_str() == *group_name)
                             .map(|group| group.id)
                     } else {
                         None
@@ -1400,7 +1404,7 @@ async fn do_command(mut cfg: Config, args: Cli) -> Result<(), error::Error> {
                     let groups = client.list_groups(&username).await?;
                     groups
                         .into_iter()
-                        .find(|g| g.name == *group_name)
+                        .find(|g| g.name.as_str() == *group_name)
                         .map(|group| group.id)
                 } else {
                     None
@@ -1423,7 +1427,7 @@ async fn do_command(mut cfg: Config, args: Cli) -> Result<(), error::Error> {
                     let groups = client.list_groups(&username).await?;
                     groups
                         .into_iter()
-                        .find(|g| g.name == *group_name)
+                        .find(|g| g.name.as_str() == *group_name)
                         .map(|group| group.id)
                 } else {
                     None
@@ -1510,7 +1514,7 @@ async fn do_command(mut cfg: Config, args: Cli) -> Result<(), error::Error> {
                 let username = user.clone().unwrap_or_else(|| get_current_user(cfg.host()));
                 let groups = client.list_groups(&username).await?;
                 for group in groups {
-                    println!("{}", group.name);
+                    println!("{}", group.name.as_str());
                 }
             }
             Groups::Create { name, user } => {
@@ -1522,7 +1526,7 @@ async fn do_command(mut cfg: Config, args: Cli) -> Result<(), error::Error> {
                 let groups = client.list_groups(&username).await?;
                 let group_id = groups
                     .into_iter()
-                    .find(|g| g.name == *group)
+                    .find(|g| g.name.as_str() == *group)
                     .map(|group| group.id)
                     .unwrap();
 
@@ -1533,7 +1537,7 @@ async fn do_command(mut cfg: Config, args: Cli) -> Result<(), error::Error> {
                 let groups = client.list_groups(&username).await?;
                 let group_id = groups
                     .into_iter()
-                    .find(|g| g.name == *group)
+                    .find(|g| g.name.as_str() == *group)
                     .map(|group| group.id)
                     .unwrap(); // FIXME
 
@@ -1550,7 +1554,7 @@ async fn do_command(mut cfg: Config, args: Cli) -> Result<(), error::Error> {
                 let groups = client.list_groups(&username).await?;
                 let group_id = groups
                     .into_iter()
-                    .find(|g| g.name == *group)
+                    .find(|g| g.name.as_str() == *group)
                     .map(|group| group.id)
                     .unwrap();
 
@@ -1561,7 +1565,7 @@ async fn do_command(mut cfg: Config, args: Cli) -> Result<(), error::Error> {
                 let groups = client.list_groups(&username).await?;
                 let group_id = groups
                     .into_iter()
-                    .find(|g| g.name == *group)
+                    .find(|g| g.name.as_str() == *group)
                     .map(|group| group.id)
                     .unwrap();
 
@@ -1662,7 +1666,7 @@ impl RoleSpan {
         let media = &xml[self.media_start..self.end];
 
         RoleData {
-            name: self.name,
+            name: RoleName::new(self.name),
             code: code.to_owned(),
             media: media.to_owned(),
         }

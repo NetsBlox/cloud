@@ -393,7 +393,7 @@ mod tests {
         let roles: HashMap<_, _> = [(
             role_id.clone(),
             api::RoleData {
-                name: "some role".into(),
+                name: api::RoleName::new("some role"),
                 code: "<code/>".into(),
                 media: "<media/>".into(),
             },

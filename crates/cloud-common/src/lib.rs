@@ -31,6 +31,7 @@ pub struct User {
 }
 
 impl User {
+    #[must_use]
     pub fn is_member(&self) -> bool {
         self.group_id.is_some()
     }
@@ -84,10 +85,10 @@ impl From<NewUser> for User {
         };
 
         User {
-            username: user_data.username,
+            username: user_data.username.to_string(),
             hash,
             salt: Some(salt),
-            email: user_data.email,
+            email: user_data.email.to_string(),
             group_id: user_data.group_id,
             created_at: DateTime::from_system_time(SystemTime::now()),
             linked_accounts: std::vec::Vec::new(),
@@ -107,6 +108,7 @@ pub struct BannedAccount {
 }
 
 impl BannedAccount {
+    #[must_use]
     pub fn new(username: String, email: String) -> BannedAccount {
         let banned_at = DateTime::now();
         BannedAccount {
@@ -148,6 +150,7 @@ pub struct Group {
 }
 
 impl Group {
+    #[must_use]
     pub fn new(owner: String, name: String) -> Self {
         Self {
             id: api::GroupId::new(Uuid::new_v4().to_string()),
@@ -158,11 +161,12 @@ impl Group {
         }
     }
 
+    #[must_use]
     pub fn from_data(owner: String, data: api::CreateGroupData) -> Self {
         Self {
             id: api::GroupId::new(Uuid::new_v4().to_string()),
             owner,
-            name: data.name,
+            name: data.name.as_str().to_owned(),
             service_settings: HashMap::new(),
             services_hosts: data.services_hosts,
         }
@@ -209,6 +213,7 @@ pub struct CollaborationInvite {
 }
 
 impl CollaborationInvite {
+    #[must_use]
     pub fn new(sender: String, receiver: String, project_id: ProjectId) -> Self {
         CollaborationInvite {
             id: Uuid::new_v4().to_string(),
@@ -259,6 +264,7 @@ pub struct FriendLink {
 }
 
 impl FriendLink {
+    #[must_use]
     pub fn new(sender: String, recipient: String, state: Option<FriendLinkState>) -> FriendLink {
         let created_at = DateTime::from_system_time(SystemTime::now());
         FriendLink {
@@ -318,6 +324,7 @@ pub struct NetworkTraceMetadata {
 }
 
 impl NetworkTraceMetadata {
+    #[must_use]
     pub fn new() -> Self {
         Self {
             id: Uuid::new_v4().to_string(),
@@ -352,7 +359,7 @@ impl From<NetworkTraceMetadata> for netsblox_api_common::NetworkTraceMetadata {
 pub struct ProjectMetadata {
     pub id: ProjectId,
     pub owner: String,
-    pub name: String,
+    pub name: api::ProjectName,
     pub updated: DateTime,
     pub state: PublishState,
     pub collaborators: std::vec::Vec<String>,
@@ -364,9 +371,10 @@ pub struct ProjectMetadata {
 }
 
 impl ProjectMetadata {
+    #[must_use]
     pub fn new(
         owner: &str,
-        name: &str,
+        name: &api::ProjectName,
         roles: HashMap<RoleId, RoleMetadata>,
         save_state: SaveState,
     ) -> ProjectMetadata {
@@ -385,7 +393,7 @@ impl ProjectMetadata {
         ProjectMetadata {
             id: ProjectId::new(Uuid::new_v4().to_string()),
             owner: owner.to_owned(),
-            name: name.to_owned(),
+            name: name.clone(),
             updated: origin_time,
             origin_time,
             state: PublishState::Private,
@@ -451,7 +459,7 @@ impl From<ProjectMetadata> for netsblox_api_common::ProjectMetadata {
 pub struct Project {
     pub id: ProjectId,
     pub owner: String,
-    pub name: String,
+    pub name: api::ProjectName,
     pub updated: DateTime,
     pub state: PublishState,
     pub collaborators: std::vec::Vec<String>,
@@ -479,7 +487,7 @@ impl From<Project> for netsblox_api_common::Project {
 #[derive(Deserialize, Serialize, Clone, Debug)]
 #[serde(rename_all = "camelCase")]
 pub struct RoleMetadata {
-    pub name: String,
+    pub name: api::RoleName,
     pub code: String,
     pub media: String,
     pub updated: DateTime,
@@ -613,24 +621,26 @@ impl From<SetPasswordToken> for Bson {
 #[serde(rename_all = "camelCase")]
 pub struct AuthorizedServiceHost {
     pub url: String,
-    pub id: String,
+    pub id: api::ServiceID,
     pub visibility: ServiceHostScope,
     pub secret: String,
 }
 
 impl AuthorizedServiceHost {
-    pub fn new(url: String, id: String, visibility: ServiceHostScope) -> Self {
+    #[must_use]
+    pub fn new(url: String, id: api::ServiceID, visibility: ServiceHostScope) -> Self {
         let secret = Uuid::new_v4().to_string();
         AuthorizedServiceHost {
             url,
             id,
-            secret,
             visibility,
+            secret,
         }
     }
 
+    #[must_use]
     pub fn auth_header(&self) -> (&'static str, String) {
-        let token = self.id.clone() + ":" + &self.secret;
+        let token = self.id.to_string() + ":" + &self.secret;
         ("X-Authorization", token)
     }
 }
@@ -680,7 +690,7 @@ impl From<AuthorizedServiceHost> for netsblox_api_common::ServiceHost {
 #[serde(rename_all = "camelCase")]
 pub struct Library {
     pub owner: String,
-    pub name: String,
+    pub name: api::LibraryName,
     pub notes: String,
     pub blocks: String,
     pub state: PublishState,
@@ -720,6 +730,7 @@ pub struct OAuthClient {
 }
 
 impl OAuthClient {
+    #[must_use]
     pub fn new(name: String, password: String) -> Self {
         let salt = passwords::PasswordGenerator::new()
             .length(8)
@@ -771,6 +782,7 @@ pub struct OAuthToken {
 }
 
 impl OAuthToken {
+    #[must_use]
     pub fn new(client_id: oauth::ClientId, username: String) -> Self {
         let id = oauth::TokenId::new(Uuid::new_v4().to_string());
         let created_at = DateTime::from_system_time(SystemTime::now());
@@ -825,6 +837,7 @@ pub struct MagicLink {
 }
 
 impl MagicLink {
+    #[must_use]
     pub fn new(email: String) -> Self {
         Self {
             id: api::MagicLinkId::new(Uuid::new_v4().to_string()),
@@ -850,16 +863,16 @@ mod tests {
 
     #[test]
     fn test_dont_schedule_deletion_for_saved_projects() {
-        let metadata =
-            ProjectMetadata::new("owner", "someProject", HashMap::new(), SaveState::Saved);
+        let name = api::ProjectName::new("someProject");
+        let metadata = ProjectMetadata::new("owner", &name, HashMap::new(), SaveState::Saved);
         assert!(metadata.delete_at.is_none());
     }
 
     #[test]
     fn test_schedule_deletion_for_created_projects() {
         // This gives them 10 minutes to be occupied before deletion
-        let metadata =
-            ProjectMetadata::new("owner", "someProject", HashMap::new(), SaveState::Created);
+        let name = api::ProjectName::new("someProject");
+        let metadata = ProjectMetadata::new("owner", &name, HashMap::new(), SaveState::Created);
         assert!(metadata.delete_at.is_some());
     }
 
@@ -868,7 +881,7 @@ mod tests {
         let categories = vec!["cat1".into()];
         let auth_host = AuthorizedServiceHost {
             url: "http://localhost:8000".into(),
-            id: "SomeTrustedHost".into(),
+            id: api::ServiceID::new("SomeTrustedHost"),
             secret: "SomeSecret".into(),
             visibility: ServiceHostScope::Public(categories.clone()),
         };
@@ -882,7 +895,7 @@ mod tests {
     fn test_priv_auth_host_to_host_no_cats() {
         let auth_host = AuthorizedServiceHost {
             url: "http://localhost:8000".into(),
-            id: "SomeTrustedHost".into(),
+            id: api::ServiceID::new("SomeTrustedHost"),
             secret: "SomeSecret".into(),
             visibility: ServiceHostScope::Private,
         };

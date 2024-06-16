@@ -2,7 +2,6 @@ use actix::Addr;
 use actix_session::SessionExt;
 use actix_web::HttpRequest;
 use futures::TryStreamExt;
-use lazy_static::lazy_static;
 use lettre::{Message, SmtpTransport, Transport};
 use log::error;
 use lru::LruCache;
@@ -12,7 +11,6 @@ use netsblox_cloud_common::{
     AuthorizedServiceHost, FriendLink, Group, ProjectMetadata, User,
 };
 use nonempty::NonEmpty;
-use regex::Regex;
 use rustrict::CensorStr;
 use sha2::{Digest, Sha512};
 use std::{
@@ -64,9 +62,7 @@ pub(crate) async fn get_valid_project_name(
     project_metadata: &Collection<ProjectMetadata>,
     owner: &str,
     basename: &str,
-) -> Result<String, UserError> {
-    ensure_valid_name(basename)?;
-
+) -> Result<api::ProjectName, UserError> {
     let query = doc! {"owner": &owner};
     let cursor = project_metadata
         .find(query, None)
@@ -80,30 +76,8 @@ pub(crate) async fn get_valid_project_name(
         .map(|md| md.name)
         .collect();
 
-    get_unique_name(project_names.iter().map(|n| n.as_str()), basename)
-}
-
-// FIXME: Can this be rolled into the data type itself?
-pub(crate) fn ensure_valid_name(name: &str) -> Result<(), UserError> {
-    if !is_valid_name(name) {
-        Err(UserError::InvalidRoleOrProjectName)
-    } else {
-        Ok(())
-    }
-}
-
-fn is_valid_name(name: &str) -> bool {
-    let max_len = 50;
-    let min_len = 1;
-    let char_count = name.chars().count();
-    lazy_static! {
-        static ref NAME_REGEX: Regex = Regex::new(r"^[\w\d_][\w\d_ \(\)\.,'\-!]*$").unwrap();
-    }
-
-    char_count >= min_len
-        && char_count <= max_len
-        && NAME_REGEX.is_match(name)
-        && !name.is_inappropriate()
+    let name_str = get_unique_name(project_names.iter().map(|n| n.as_str()), basename)?;
+    Ok(api::ProjectName::new(name_str))
 }
 
 pub(crate) fn get_unique_name<'a>(
@@ -310,12 +284,11 @@ pub(crate) async fn get_authorized_host(
         })
         .map(|(id, secret)| doc! {"id": id, "secret": secret});
 
-    let host = authorized_services
-        .find_one(query, None)
-        .await
-        .map_err(InternalError::DatabaseConnectionError)?;
+    let host = authorized_services.find_one(query, None).await;
+    //.map_err(InternalError::DatabaseConnectionError)?;
+    dbg!(&host);
 
-    Ok(host)
+    Ok(host.unwrap())
 }
 
 pub(crate) fn send_email(
@@ -385,10 +358,11 @@ mod tests {
         //   - add update time and use this when updating the cache?
         // - update cache with metadata2
         // - update cache with metadata1
-        let original = ProjectMetadata::new("owner", "name", HashMap::new(), api::SaveState::Saved);
+        let name = api::ProjectName::new("name");
+        let original = ProjectMetadata::new("owner", &name, HashMap::new(), api::SaveState::Saved);
         let id = original.id.clone();
         let mut new_project = original.clone();
-        new_project.name = "new name".into();
+        new_project.name = api::ProjectName::new("new name");
         new_project.updated =
             DateTime::from_system_time(SystemTime::now() + Duration::from_secs(10));
 
@@ -401,15 +375,16 @@ mod tests {
         // check that it still has the latest
         let mut cache = project_cache.write().unwrap();
         let metadata = cache.get(&id).unwrap();
-        assert_eq!(&metadata.name, "new name");
+        assert_eq!(metadata.name.as_str(), "new name");
     }
 
     #[actix_web::test]
     async fn test_update_project_cache_tie_goes_to_update() {
-        let original = ProjectMetadata::new("owner", "name", HashMap::new(), api::SaveState::Saved);
+        let name = api::ProjectName::new("name");
+        let original = ProjectMetadata::new("owner", &name, HashMap::new(), api::SaveState::Saved);
         let id = original.id.clone();
         let mut new_project = original.clone();
-        new_project.name = "new name".into();
+        new_project.name = api::ProjectName::new("new name");
 
         let project_cache = Arc::new(RwLock::new(LruCache::new(NonZeroUsize::new(2).unwrap())));
 
@@ -420,65 +395,7 @@ mod tests {
         // check that it still has the latest
         let mut cache = project_cache.write().unwrap();
         let metadata = cache.get(&id).unwrap();
-        assert_eq!(&metadata.name, "new name");
-    }
-
-    #[actix_web::test]
-    async fn test_x_is_valid_name() {
-        assert!(is_valid_name("X"));
-    }
-
-    #[actix_web::test]
-    async fn test_is_valid_name_spaces() {
-        assert!(is_valid_name("Player 1"));
-    }
-
-    #[actix_web::test]
-    async fn test_is_valid_name_leading_nums() {
-        assert!(is_valid_name("2048 Game"));
-    }
-
-    #[actix_web::test]
-    async fn test_is_valid_name_dashes() {
-        assert!(is_valid_name("Player-i"));
-    }
-
-    #[actix_web::test]
-    async fn test_is_valid_name_long_name() {
-        assert!(is_valid_name("RENAMED-rename-test-1696865702584"));
-    }
-
-    #[actix_web::test]
-    async fn test_is_valid_name_parens() {
-        assert!(is_valid_name("untitled (20)"));
-    }
-
-    #[actix_web::test]
-    async fn test_is_valid_name_dots() {
-        assert!(is_valid_name("untitled v1.2"));
-    }
-
-    #[actix_web::test]
-    async fn test_is_valid_name_comma() {
-        assert!(is_valid_name("Lab2, SomeName"));
-    }
-
-    #[actix_web::test]
-    async fn test_is_valid_name_apostrophe() {
-        assert!(is_valid_name("Brian's project"));
-    }
-
-    #[actix_web::test]
-    async fn test_is_valid_name_profanity() {
-        assert!(!is_valid_name("shit"));
-        assert!(!is_valid_name("fuck"));
-        assert!(!is_valid_name("damn"));
-        assert!(!is_valid_name("hell"));
-    }
-
-    #[actix_web::test]
-    async fn test_is_valid_name_bang() {
-        assert!(is_valid_name("hello!"));
+        assert_eq!(metadata.name.as_str(), "new name");
     }
 
     #[actix_web::test]
@@ -508,16 +425,16 @@ mod tests {
     #[actix_web::test]
     async fn test_find_usernames() {
         let user: User = api::NewUser {
-            username: "user".into(),
-            email: "user@netsblox.org".into(),
+            username: api::Username::new("user"),
+            email: api::Email::new("user@netsblox.org"),
             password: None,
             group_id: None,
             role: None,
         }
         .into();
         let other: User = api::NewUser {
-            username: "other".into(),
-            email: "other@netsblox.org".into(),
+            username: api::Username::new("other"),
+            email: api::Email::new("other@netsblox.org"),
             password: None,
             group_id: None,
             role: None,
@@ -537,24 +454,24 @@ mod tests {
     #[actix_web::test]
     async fn test_find_usernames_multi() {
         let user: User = api::NewUser {
-            username: "user".into(),
-            email: "user@netsblox.org".into(),
+            username: api::Username::new("user"),
+            email: api::Email::new("user@netsblox.org"),
             password: None,
             group_id: None,
             role: None,
         }
         .into();
         let u2: User = api::NewUser {
-            username: "u2".into(),
-            email: "user@netsblox.org".into(),
+            username: api::Username::new("u2"),
+            email: api::Email::new("user@netsblox.org"),
             password: None,
             group_id: None,
             role: None,
         }
         .into();
         let other: User = api::NewUser {
-            username: "other".into(),
-            email: "other@netsblox.org".into(),
+            username: api::Username::new("other"),
+            email: api::Email::new("other@netsblox.org"),
             password: None,
             group_id: None,
             role: None,

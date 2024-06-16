@@ -141,7 +141,7 @@ async fn download(
     cloud::Project {
         id: project_id,
         owner,
-        name,
+        name: cloud::api::ProjectName::new(name),
         collaborators,
         updated,
         state,
@@ -155,16 +155,18 @@ async fn download_role(
     client: &s3::Client,
     bucket: &str,
     id: String,
-    role_md: origin::RoleMetadata,
+    role_metadata: origin::RoleMetadata,
 ) -> Option<(cloud::api::RoleId, cloud::api::RoleData)> {
-    if let (Some(code), Some(media), Some(name)) =
-        (role_md.source_code, role_md.media, role_md.project_name)
-    {
+    if let (Some(code), Some(media), Some(name)) = (
+        role_metadata.source_code,
+        role_metadata.media,
+        role_metadata.project_name,
+    ) {
         let code = download_s3(client, bucket, &code).await;
         let media = download_s3(client, bucket, &media).await;
 
         let role = cloud::api::RoleData {
-            name: name.to_owned(),
+            name: cloud::api::RoleName::new(name),
             code,
             media,
         };
@@ -185,10 +187,11 @@ async fn upload(
     let owner = project.owner;
     let name = project.name;
     let role_ids = role_iter.clone().map(|(k, _value)| k.to_owned());
-    let role_data =
-        join_all(role_iter.map(|(_id, data)| upload_role(client, bucket, &owner, &name, data)))
-            .await
-            .into_iter();
+    let role_data = join_all(
+        role_iter.map(|(_id, data)| upload_role(client, bucket, &owner, name.as_str(), data)),
+    )
+    .await
+    .into_iter();
     let roles: HashMap<_, _> = role_ids.zip(role_data).collect();
 
     cloud::ProjectMetadata {

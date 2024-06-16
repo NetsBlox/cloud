@@ -22,7 +22,7 @@ impl<'a> GroupActions<'a> {
         eu: &auth::EditUser,
         data: api::CreateGroupData,
     ) -> Result<api::Group, UserError> {
-        let group = Group::from_data(eu.username.to_owned(), data);
+        let group = Group::from_data(eu.username.clone(), data);
         let query = doc! {
             "name": &group.name,
             "owner": &group.owner,
@@ -85,7 +85,7 @@ impl<'a> GroupActions<'a> {
     pub(crate) async fn rename_group(
         &self,
         eg: &auth::groups::EditGroup,
-        name: &str,
+        name: &api::GroupName,
     ) -> Result<api::Group, UserError> {
         let query = doc! {"id": &eg.id};
         let update = doc! {"$set": {"name": &name}};
@@ -229,16 +229,16 @@ mod tests {
     #[actix_web::test]
     async fn test_create_group_with_hosts() {
         let user: User = api::NewUser {
-            username: "user".into(),
-            email: "user@netsblox.org".into(),
+            username: api::Username::new("user"),
+            email: api::Email::new("user@netsblox.org"),
             password: None,
             group_id: None,
             role: None,
         }
         .into();
         let other: User = api::NewUser {
-            username: "other".into(),
-            email: "other@netsblox.org".into(),
+            username: api::Username::new("other"),
+            email: api::Email::new("other@netsblox.org"),
             password: None,
             group_id: None,
             role: None,
@@ -258,7 +258,7 @@ mod tests {
                     categories: vec!["someCategory".into()],
                 }];
                 let data = api::CreateGroupData {
-                    name: "someGroup".into(),
+                    name: api::GroupName::new("someGroup"),
                     services_hosts: Some(hosts),
                 };
                 let group = actions.create_group(&auth_eu, data).await.unwrap();

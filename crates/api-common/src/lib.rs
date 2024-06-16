@@ -4,15 +4,19 @@ pub mod oauth;
 
 use core::fmt;
 use derive_more::{Display, Error, FromStr};
+use lazy_static::lazy_static;
+use lettre::Address;
+use regex::Regex;
+use rustrict::CensorStr;
 use serde::{
     de::{self, Visitor},
-    Deserialize, Deserializer, Serialize,
+    Deserialize, Deserializer, Serialize, Serializer,
 };
+
 use serde_json::Value;
-use std::{collections::HashMap, str::FromStr, time::SystemTime};
+use std::{collections::HashMap, marker::PhantomData, str::FromStr, time::SystemTime};
 use ts_rs::TS;
 use uuid::Uuid;
-
 const APP_NAME: &str = "NetsBlox";
 
 #[derive(Deserialize, Serialize, TS)]
@@ -30,6 +34,278 @@ pub struct ClientConfig {
 #[ts(export)]
 pub struct InvitationResponse {
     pub response: FriendLinkState,
+}
+
+pub trait Validate {
+    fn validate<E: de::Error>(str: impl Into<String>) -> Result<String, E>;
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, TS)]
+pub struct Name<T: Validate>(String, std::marker::PhantomData<T>);
+
+impl<T: Validate> Name<T> {
+    #[must_use]
+    pub fn new(name: impl Into<String>) -> Self {
+        Name::<T>(name.into(), std::marker::PhantomData::<T>)
+    }
+
+    #[must_use]
+    pub fn as_str(&self) -> &str {
+        &self.0
+    }
+}
+
+impl<T: Validate> fmt::Display for Name<T> {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write! {f, "{}", self.0}
+    }
+}
+
+impl<T: Validate> From<Name<T>> for String {
+    fn from(value: Name<T>) -> Self {
+        value.to_string()
+    }
+}
+
+impl<T: Validate> From<String> for Name<T> {
+    fn from(value: String) -> Self {
+        Name::<T>::new(value)
+    }
+}
+
+struct NameVisitor<T: Validate>(PhantomData<T>);
+
+// //TODO: FUTURE: look for modern alternative to lazy_static
+// //TODO: FUTURE: Look for a crate that would do this cleanly
+// //TODO: FUTURE: It may be harder for Name, due to the
+// //TODO: FUTURE: Setup custom errors in src/error.rs
+impl<'de, T: Validate> Visitor<'de> for NameVisitor<T> {
+    type Value = Name<T>;
+
+    fn expecting(&self, formatter: &mut fmt::Formatter) -> fmt::Result {
+        formatter.write_str(r"a string that matches the regex: ^[\w\d_][\w\d_ \(\)\.,'\-!]*$")
+    }
+
+    fn visit_str<E: de::Error>(self, value: &str) -> Result<Self::Value, E> {
+        let name: String = T::validate(value.to_owned())?;
+        Ok(Name(name, PhantomData::<T>))
+    }
+}
+impl<'de, T: Validate> Deserialize<'de> for Name<T> {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: Deserializer<'de>,
+    {
+        deserializer.deserialize_str(NameVisitor::<T>(PhantomData::<T>))
+    }
+}
+impl<T: Validate> Serialize for Name<T> {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: Serializer,
+    {
+        serializer.serialize_str(&self.0)
+    }
+}
+
+#[derive(Serialize, Clone, Debug, PartialEq, Eq, TS)]
+#[ts(export)]
+pub struct ProjectNameValidator;
+pub type ProjectName = Name<ProjectNameValidator>;
+
+impl Validate for ProjectNameValidator {
+    fn validate<E: de::Error>(str: impl Into<String>) -> Result<String, E> {
+        let string: String = str.into();
+        let max_len = 50;
+        let min_len = 1;
+        let char_count = string.chars().count();
+
+        lazy_static! {
+            static ref PROJECTNAME_REGEX: Regex =
+                Regex::new(r"^[\w\d_][\w\d_ \(\)\.,'\-!]*$").unwrap();
+        }
+
+        if char_count < min_len || char_count > max_len {
+            let exp = format!("Name must be between {min_len} and {max_len} characters");
+            Err(E::invalid_length(char_count, &exp.as_str()))
+        } else if !PROJECTNAME_REGEX.is_match(&string) {
+            let exp = r#"a name without certain special characters. 
+                "(", ")", "!", ",", ".", "'", and "-" are allowed, but not as the first character. 
+                Regex: "^[\w\d_][\w\d_ \(\)\.,'!-]*$""#;
+            Err(E::invalid_value(
+                de::Unexpected::Other("invalid characters"),
+                &exp,
+            ))
+        } else if string.is_inappropriate() {
+            Err(E::invalid_value(
+                de::Unexpected::Other("profanity"),
+                &"a name without profanity",
+            ))
+        } else {
+            Ok(string)
+        }
+    }
+}
+
+#[derive(Serialize, Clone, Debug, PartialEq, Eq, TS)]
+#[ts(export)]
+pub struct LibraryNameValidator;
+pub type LibraryName = Name<LibraryNameValidator>;
+
+impl Validate for LibraryNameValidator {
+    fn validate<E>(str: impl Into<String>) -> Result<String, E>
+    where
+        E: de::Error,
+    {
+        let string: String = str.into();
+
+        lazy_static! {
+            static ref LIBRARYNAME_REGEX: Regex = Regex::new(r"^[A-zÀ-ÿ0-9 \(\)_-]+$").unwrap();
+        }
+
+        if !LIBRARYNAME_REGEX.is_match(&string) {
+            Err(E::invalid_value(
+                de::Unexpected::Other("invalid characters"),
+                &r#"a name without certain special characters. 
+                "(", ")", "_", and "-" are allowed. 
+                Regex: "^[A-zÀ-ÿ0-9 \(\)_-]+$""#,
+            ))
+        } else if string.is_inappropriate() {
+            Err(E::invalid_value(
+                de::Unexpected::Other("profanity"),
+                &"a name without profanity",
+            ))
+        } else {
+            Ok(string)
+        }
+    }
+}
+
+#[derive(Serialize, Clone, Debug, PartialEq, Eq, TS)]
+#[ts(export)]
+pub struct UsernameValidator;
+pub type Username = Name<UsernameValidator>;
+
+impl Validate for UsernameValidator {
+    fn validate<E>(str: impl Into<String>) -> Result<String, E>
+    where
+        E: de::Error,
+    {
+        let string: String = str.into();
+        let max_len = 25;
+        let min_len = 3;
+        let char_count = string.chars().count();
+
+        if char_count < min_len || char_count > max_len {
+            let exp = format!("Name must be between {min_len} and {max_len} characters");
+            return Err(E::invalid_length(char_count, &exp.as_str()));
+        }
+
+        lazy_static! {
+            static ref USERNAME_REGEX: Regex = Regex::new(r"^[a-zA-Z][a-zA-Z0-9_\-]+$").unwrap();
+        }
+
+        dbg!(USERNAME_REGEX.is_match(&string));
+        if !USERNAME_REGEX.is_match(&string) {
+            Err(E::invalid_value(
+                de::Unexpected::Other("invalid characters"),
+                &r#"a name without special characters. 
+                [0-9], "-", and "_" are allowed, but not for the first character. 
+                Regex: "^[A-z][A-z0-9_\\-]""#,
+            ))
+        } else if string.is_inappropriate() {
+            Err(E::invalid_value(
+                de::Unexpected::Other("profanity"),
+                &"a name without profanity",
+            ))
+        } else {
+            Ok(string)
+        }
+    }
+}
+
+#[derive(Serialize, Clone, Debug, PartialEq, Eq, TS)]
+#[ts(export)]
+pub struct GroupNameValidator;
+pub type GroupName = Name<GroupNameValidator>;
+
+impl Validate for GroupNameValidator {
+    fn validate<E>(str: impl Into<String>) -> Result<String, E>
+    where
+        E: de::Error,
+    {
+        ProjectNameValidator::validate(str)
+    }
+}
+
+#[derive(Serialize, Clone, Debug, PartialEq, Eq, TS)]
+#[ts(export)]
+pub struct RoleNameValidator;
+pub type RoleName = Name<RoleNameValidator>;
+
+impl Validate for RoleNameValidator {
+    fn validate<E>(str: impl Into<String>) -> Result<String, E>
+    where
+        E: de::Error,
+    {
+        ProjectNameValidator::validate(str)
+    }
+}
+
+#[derive(Serialize, Clone, Debug, PartialEq, Eq, TS)]
+#[ts(export)]
+pub struct EmailValidator;
+pub type Email = Name<EmailValidator>;
+
+impl Validate for EmailValidator {
+    fn validate<E>(str: impl Into<String>) -> Result<String, E>
+    where
+        E: de::Error,
+    {
+        let email: String = str.into();
+        email.parse::<Address>().map_err(|_err| {
+            E::invalid_value(
+                de::Unexpected::Other("invalid email"),
+                &"a valid email address",
+            )
+        })?;
+
+        Ok(email)
+    }
+}
+
+#[derive(Serialize, Clone, Debug, PartialEq, Eq, TS)]
+#[ts(export)]
+pub struct ServiceIDValidator;
+pub type ServiceID = Name<ServiceIDValidator>;
+
+impl Validate for ServiceIDValidator {
+    fn validate<E>(str: impl Into<String>) -> Result<String, E>
+    where
+        E: de::Error,
+    {
+        let id: String = str.into();
+        let max_len = 25;
+        let min_len = 3;
+        let char_count = id.chars().count();
+        lazy_static! {
+            static ref SERVICE_ID_REGEX: Regex = Regex::new(r"^[A-z][A-z0-9_\-]+$").unwrap();
+        }
+
+        if char_count <= min_len || char_count >= max_len {
+            Err(E::invalid_value(
+                de::Unexpected::Other("invalid service ID length"),
+                &"a service id with at least {min_len} characters and at most {max_len} characters",
+            ))
+        } else if !SERVICE_ID_REGEX.is_match(&id) {
+            Err(E::invalid_value(
+                de::Unexpected::Other("invalid service ID characters"),
+                &r#"a service id that matches the regex: ^[A-z][A-z0-9_-]+$""#,
+            ))
+        } else {
+            Ok(id)
+        }
+    }
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug, TS)]
@@ -52,8 +328,8 @@ pub struct User {
 #[serde(rename_all = "camelCase")]
 #[ts(export)]
 pub struct NewUser {
-    pub username: String,
-    pub email: String,
+    pub username: Username,
+    pub email: Email,
     #[ts(optional)]
     pub password: Option<String>,
     #[ts(optional)]
@@ -164,8 +440,14 @@ pub struct LoginRequest {
 #[derive(Deserialize, Serialize, Debug, Clone, TS)]
 #[ts(export)]
 pub enum Credentials {
-    Snap { username: String, password: String },
-    NetsBlox { username: String, password: String },
+    Snap {
+        username: String,
+        password: String,
+    },
+    NetsBlox {
+        username: Username,
+        password: String,
+    },
 }
 
 impl From<Credentials> for LinkedAccount {
@@ -177,7 +459,7 @@ impl From<Credentials> for LinkedAccount {
             },
             Credentials::NetsBlox { username, .. } => LinkedAccount {
                 // TODO: should this panic?
-                username,
+                username: username.to_string(),
                 strategy: "netsblox".to_owned(),
             },
         }
@@ -272,7 +554,7 @@ impl RoleId {
 pub struct ProjectMetadata {
     pub id: ProjectId,
     pub owner: String,
-    pub name: String,
+    pub name: ProjectName,
     #[ts(type = "any")] // FIXME
     pub updated: SystemTime,
     pub state: PublishState,
@@ -296,7 +578,7 @@ pub enum SaveState {
 #[derive(Deserialize, Serialize, Clone, Debug, TS)]
 #[ts(export)]
 pub struct RoleMetadata {
-    pub name: String,
+    pub name: RoleName,
     pub code: String,
     pub media: String,
 }
@@ -307,7 +589,7 @@ pub struct RoleMetadata {
 pub struct Project {
     pub id: ProjectId,
     pub owner: String,
-    pub name: String,
+    pub name: ProjectName,
     #[ts(type = "any")] // FIXME
     pub updated: SystemTime,
     pub state: PublishState,
@@ -344,14 +626,14 @@ pub struct RoleDataResponse {
 #[derive(Deserialize, Serialize, Debug, Clone, TS)]
 #[ts(export)]
 pub struct RoleData {
-    pub name: String,
+    pub name: RoleName,
     pub code: String,
     pub media: String,
 }
 
 impl RoleData {
     pub fn to_xml(&self) -> String {
-        let name = self.name.replace('\"', "\\\"");
+        let name = self.name.to_string().replace('\"', "\\\"");
         format!("<role name=\"{}\">{}{}</role>", name, self.code, self.media)
     }
 }
@@ -437,7 +719,7 @@ pub struct ExternalClientState {
 #[derive(Serialize, Deserialize, TS)]
 #[ts(export)]
 pub struct CreateLibraryData {
-    pub name: String,
+    pub name: LibraryName,
     pub notes: String,
     pub blocks: String,
 }
@@ -455,7 +737,7 @@ pub enum PublishState {
 #[ts(export)]
 pub struct LibraryMetadata {
     pub owner: String,
-    pub name: String,
+    pub name: LibraryName,
     pub notes: String,
     pub state: PublishState,
 }
@@ -463,7 +745,7 @@ pub struct LibraryMetadata {
 impl LibraryMetadata {
     pub fn new(
         owner: String,
-        name: String,
+        name: LibraryName,
         state: PublishState,
         notes: Option<String>,
     ) -> LibraryMetadata {
@@ -480,7 +762,7 @@ impl LibraryMetadata {
 #[serde(rename_all = "camelCase")]
 #[ts(export)]
 pub struct CreateGroupData {
-    pub name: String,
+    pub name: GroupName,
     #[ts(optional)]
     pub services_hosts: Option<Vec<ServiceHost>>,
 }
@@ -513,7 +795,7 @@ pub struct Group {
 #[derive(Serialize, Deserialize, TS)]
 #[ts(export)]
 pub struct UpdateGroupData {
-    pub name: String,
+    pub name: GroupName,
 }
 
 #[derive(Deserialize, Serialize, Clone, Debug, TS)]
@@ -556,7 +838,7 @@ impl CollaborationInvite {
 #[serde(rename_all = "camelCase")]
 #[ts(export)]
 pub struct UpdateProjectData {
-    pub name: String,
+    pub name: ProjectName,
     #[ts(optional)]
     pub client_id: Option<ClientId>,
 }
@@ -565,7 +847,7 @@ pub struct UpdateProjectData {
 #[serde(rename_all = "camelCase")]
 #[ts(export)]
 pub struct UpdateRoleData {
-    pub name: String,
+    pub name: RoleName,
     #[ts(optional)]
     pub client_id: Option<ClientId>,
 }
@@ -576,7 +858,7 @@ pub struct UpdateRoleData {
 pub struct CreateProjectData {
     #[ts(optional)]
     pub owner: Option<String>,
-    pub name: String,
+    pub name: ProjectName,
     #[ts(optional)]
     pub roles: Option<Vec<RoleData>>,
     #[ts(optional)]
@@ -631,7 +913,7 @@ pub struct ExternalClient {
 pub struct RoomState {
     pub id: ProjectId,
     pub owner: String,
-    pub name: String,
+    pub name: RoleName,
     pub roles: HashMap<RoleId, RoleState>,
     pub collaborators: Vec<String>,
     pub version: u64,
@@ -640,7 +922,7 @@ pub struct RoomState {
 #[derive(Deserialize, Serialize, Clone, Debug, TS)]
 #[ts(export)]
 pub struct RoleState {
-    pub name: String,
+    pub name: RoleName,
     pub occupants: Vec<OccupantState>,
 }
 
@@ -666,7 +948,7 @@ pub struct OccupantInviteData {
 #[ts(export)]
 pub struct AuthorizedServiceHost {
     pub url: String,
-    pub id: String,
+    pub id: ServiceID,
     pub visibility: ServiceHostScope,
 }
 
@@ -821,6 +1103,221 @@ mod tests {
     fn serialize_userroles_as_strings() {
         let role_str = serde_json::to_string(&UserRole::User).unwrap();
         assert_eq!(&role_str, "\"user\"");
+    }
+
+    #[test]
+    fn deserialize_shortprojectname_error() {
+        let name_str = String::from("\"\"");
+        let name: Result<ProjectName, serde_json::Error> = serde_json::from_str(&name_str);
+        assert!(name.is_err());
+    }
+
+    #[test]
+    fn deserialize_profanity_projectname_error() {
+        let name_str_1 = String::from("\"FUCK\"");
+        let name_str_2 = String::from("\"DICK\"");
+        let name_str_3 = String::from("\"hell\"");
+        let name_str_4 = String::from("\"shitter\"");
+        let name_str_5 = String::from("\"fukker\"");
+        let name_str_6 = String::from("\"f@g\"");
+        let name_1: Result<ProjectName, serde_json::Error> = serde_json::from_str(&name_str_1);
+        let name_2: Result<ProjectName, serde_json::Error> = serde_json::from_str(&name_str_2);
+        let name_3: Result<ProjectName, serde_json::Error> = serde_json::from_str(&name_str_3);
+        let name_4: Result<ProjectName, serde_json::Error> = serde_json::from_str(&name_str_4);
+        let name_5: Result<ProjectName, serde_json::Error> = serde_json::from_str(&name_str_5);
+        let name_6: Result<ProjectName, serde_json::Error> = serde_json::from_str(&name_str_6);
+        assert!(name_1.is_err());
+        assert!(name_2.is_err());
+        assert!(name_3.is_err());
+        assert!(name_4.is_err());
+        assert!(name_5.is_err());
+        assert!(name_6.is_err());
+    }
+
+    #[test]
+    fn deserialize_leading_dash_projectname_error() {
+        let name_str = String::from("\"-name\"");
+        let name: Result<ProjectName, serde_json::Error> = serde_json::from_str(&name_str);
+        assert!(name.is_err());
+    }
+
+    #[test]
+    fn deserialize_leading_parentheses_projectname_error() {
+        let name_str = String::from("\"(name\"");
+        let name: Result<ProjectName, serde_json::Error> = serde_json::from_str(&name_str);
+        assert!(name.is_err());
+    }
+
+    #[test]
+    fn deserialize_leading_period_projectname_error() {
+        let name_str = String::from("\".name\"");
+        let name: Result<ProjectName, serde_json::Error> = serde_json::from_str(&name_str);
+        assert!(name.is_err());
+    }
+
+    #[test]
+    fn deserialize_x_is_valid_projectname() {
+        let name_str = String::from("\"X\"");
+        let name: Result<ProjectName, serde_json::Error> = serde_json::from_str(&name_str);
+        assert!(name.is_ok());
+    }
+
+    #[test]
+    fn deserialize_is_valid_projectname_spaces() {
+        let name_str = String::from("\"Player 1\"");
+        let name: Result<ProjectName, serde_json::Error> = serde_json::from_str(&name_str);
+        assert!(name.is_ok());
+    }
+
+    #[test]
+    fn deserialize_is_valid_projectname_leading_nums() {
+        let name_str = String::from("\"2048 Game\"");
+        let name: Result<ProjectName, serde_json::Error> = serde_json::from_str(&name_str);
+        assert!(name.is_ok());
+    }
+
+    #[test]
+    fn deserialize_is_valid_projectname_dashes() {
+        let name_str = String::from("\"player-i\"");
+        let name: Result<ProjectName, serde_json::Error> = serde_json::from_str(&name_str);
+        assert!(name.is_ok());
+    }
+
+    #[test]
+    fn deserialize_is_valid_projectname_long_name() {
+        let name_str = String::from("\"RENAMED-rename-test-1696865702584\"");
+        let name: Result<ProjectName, serde_json::Error> = serde_json::from_str(&name_str);
+        assert!(name.is_ok());
+    }
+
+    #[test]
+    fn deserialize_is_valid_projectname_parens() {
+        let name_str = String::from("\"untitled (20)\"");
+        let name: Result<ProjectName, serde_json::Error> = serde_json::from_str(&name_str);
+        assert!(name.is_ok());
+    }
+
+    #[test]
+    fn deserialize_is_valid_projectname_dots() {
+        let name_str = String::from("\"untitled v1.2\"");
+        let name: Result<ProjectName, serde_json::Error> = serde_json::from_str(&name_str);
+        assert!(name.is_ok());
+    }
+
+    #[test]
+    fn deserialize_is_valid_projectname_comma() {
+        let name_str = String::from("\"Lab2, SomeName\"");
+        let name: Result<ProjectName, serde_json::Error> = serde_json::from_str(&name_str);
+        assert!(name.is_ok());
+    }
+
+    #[test]
+    fn deserialize_is_valid_projectname_apostrophe() {
+        let name_str = String::from("\"Brian's project\"");
+        let name: Result<ProjectName, serde_json::Error> = serde_json::from_str(&name_str);
+        assert!(name.is_ok());
+    }
+
+    #[test]
+    fn deserialize_is_valid_projectname_bang() {
+        let name_str = String::from("\"Hello!\"");
+        let name: Result<ProjectName, serde_json::Error> = serde_json::from_str(&name_str);
+        assert!(name.is_ok());
+    }
+
+    #[test]
+    fn deserialize_is_valid_libraryname() {
+        let name_str = String::from("\"hello library\"");
+        let name: Result<LibraryName, serde_json::Error> = serde_json::from_str(&name_str);
+        assert!(name.is_ok());
+    }
+
+    #[test]
+    fn deserialize_is_valid_libraryname_diacritic() {
+        let name_str = String::from("\"hola libré\"");
+        let name: Result<LibraryName, serde_json::Error> = serde_json::from_str(&name_str);
+        assert!(name.is_ok());
+    }
+
+    #[test]
+    fn deserialize_is_valid_libraryname_weird_symbol() {
+        let name_str = String::from("\"<hola libré>\"");
+        let name: Result<LibraryName, serde_json::Error> = serde_json::from_str(&name_str);
+        assert!(name.is_err());
+    }
+
+    #[test]
+    fn deserialize_is_valid_libraryname_profanity() {
+        let name_str = String::from("\"<hola pendejo>\"");
+        let name: Result<LibraryName, serde_json::Error> = serde_json::from_str(&name_str);
+        assert!(name.is_err());
+        let name_str = String::from("\"<hola fucker>\"");
+        let name: Result<LibraryName, serde_json::Error> = serde_json::from_str(&name_str);
+        assert!(name.is_err());
+    }
+
+    #[test]
+    fn deserialize_is_valid_username_caps() {
+        let name_str = String::from("\"HelloWorld\"");
+        let name: Result<Username, serde_json::Error> = serde_json::from_str(&name_str);
+        assert!(name.is_ok());
+    }
+
+    #[test]
+    fn deserialize_is_valid_username() {
+        let name_str = String::from("\"hello\"");
+        let name: Result<Username, serde_json::Error> = serde_json::from_str(&name_str);
+        assert!(name.is_ok());
+    }
+
+    #[test]
+    fn deserialize_is_valid_username_leading_underscore() {
+        let name_str = String::from("\"_hello\"");
+        let name: Result<Username, serde_json::Error> = serde_json::from_str(&name_str);
+        assert!(name.is_err());
+    }
+
+    #[test]
+    fn deserialize_is_valid_username_leading_dash() {
+        let name_str = String::from("\"-hello\"");
+        let name: Result<Username, serde_json::Error> = serde_json::from_str(&name_str);
+        assert!(name.is_err());
+    }
+
+    #[test]
+    fn deserialize_is_valid_username_at_symbol() {
+        let name_str = String::from("\"hello@gmail.com\"");
+        let name: Result<Username, serde_json::Error> = serde_json::from_str(&name_str);
+        assert!(name.is_err());
+    }
+
+    #[test]
+    fn deserialize_is_valid_username_length() {
+        let name_str = String::from("\"testCreateUser1701709207213testCreateUser1701709207213\"");
+        let name: Result<Username, serde_json::Error> = serde_json::from_str(&name_str);
+        assert!(name.is_err());
+    }
+
+    #[test]
+    fn deserialize_is_valid_username_vulgar() {
+        let name_str = String::from("\"shit\"");
+        let name: Result<Username, serde_json::Error> = serde_json::from_str(&name_str);
+        assert!(name.is_err());
+    }
+
+    #[test]
+    fn deserialize_ensure_valid_email() {
+        let name_str = String::from("\"noreply@netsblox.org\"");
+        let name: Result<Email, serde_json::Error> = serde_json::from_str(&name_str);
+        assert!(name.is_ok());
+    }
+
+    #[test]
+    fn deserialize_is_valid_username_yed() {
+        // https://github.com/NetsBlox/NetsBlox/issues/3378
+        let name_str = String::from("\"yedina\"");
+        let name: Result<Username, serde_json::Error> = serde_json::from_str(&name_str);
+        assert!(name.is_ok());
     }
 
     #[test]

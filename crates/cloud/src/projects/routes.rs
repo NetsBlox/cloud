@@ -390,7 +390,7 @@ async fn get_thumbnail(
 
 #[derive(Deserialize)]
 struct CreateRoleData {
-    name: String,
+    name: api::RoleName,
     code: Option<String>,
     media: Option<String>,
 }
@@ -483,7 +483,7 @@ async fn rename_role(
     let auth_ep = auth::try_edit_project(&app, &req, body.client_id, &project_id).await?;
 
     let actions: ProjectActions = app.as_project_actions();
-    let metadata = actions.rename_role(&auth_ep, role_id, &body.name).await?;
+    let metadata = actions.rename_role(&auth_ep, role_id, body.name).await?;
     Ok(HttpResponse::Ok().json(metadata))
 }
 
@@ -524,9 +524,7 @@ async fn report_latest_role(
     let auth_ep = auth::try_edit_project(&app, &req, client_id, &project_id).await?;
     let actions: ProjectActions = app.as_project_actions();
     let resp = body.into_inner();
-    actions
-        .set_latest_role(&auth_ep, &role_id, &resp.id, resp.data)
-        .await?;
+    actions.set_latest_role(&auth_ep, &role_id, &resp.id, resp.data)?;
 
     Ok(HttpResponse::Ok().finish())
 }
@@ -620,8 +618,8 @@ mod tests {
     #[actix_web::test]
     async fn test_get_project() {
         let user: User = api::NewUser {
-            username: "user".into(),
-            email: "admin@netsblox.org".into(),
+            username: api::Username::new("user"),
+            email: api::Email::new("admin@netsblox.org"),
             password: None,
             group_id: None,
             role: Some(UserRole::User),
@@ -660,16 +658,16 @@ mod tests {
     #[actix_web::test]
     async fn test_get_project_403() {
         let user: User = api::NewUser {
-            username: "user".into(),
-            email: "admin@netsblox.org".into(),
+            username: api::Username::new("user"),
+            email: api::Email::new("admin@netsblox.org"),
             password: None,
             group_id: None,
             role: Some(UserRole::User),
         }
         .into();
         let other: User = api::NewUser {
-            username: "other".into(),
-            email: "admin@netsblox.org".into(),
+            username: api::Username::new("other"),
+            email: api::Email::new("admin@netsblox.org"),
             password: None,
             group_id: None,
             role: Some(UserRole::User),
@@ -707,16 +705,16 @@ mod tests {
     #[actix_web::test]
     async fn test_get_project_admin() {
         let user: User = api::NewUser {
-            username: "user".into(),
-            email: "admin@netsblox.org".into(),
+            username: api::Username::new("user"),
+            email: api::Email::new("admin@netsblox.org"),
             password: None,
             group_id: None,
             role: Some(UserRole::User),
         }
         .into();
         let admin: User = api::NewUser {
-            username: "admin".into(),
-            email: "other@netsblox.org".into(),
+            username: api::Username::new("admin"),
+            email: api::Email::new("other@netsblox.org"),
             password: None,
             group_id: None,
             role: Some(UserRole::Admin),
@@ -754,8 +752,8 @@ mod tests {
     #[actix_web::test]
     async fn test_get_project_xml() {
         let user: User = api::NewUser {
-            username: "user".into(),
-            email: "admin@netsblox.org".into(),
+            username: api::Username::new("user"),
+            email: api::Email::new("admin@netsblox.org"),
             password: None,
             group_id: None,
             role: Some(UserRole::User),
@@ -795,8 +793,8 @@ mod tests {
     #[actix_web::test]
     async fn test_get_project_named() {
         let user: User = api::NewUser {
-            username: "user".into(),
-            email: "admin@netsblox.org".into(),
+            username: api::Username::new("user"),
+            email: api::Email::new("admin@netsblox.org"),
             password: None,
             group_id: None,
             role: Some(UserRole::User),
@@ -847,8 +845,8 @@ mod tests {
     #[actix_web::test]
     async fn test_get_project_named_xml() {
         let user: User = api::NewUser {
-            username: "user".into(),
-            email: "admin@netsblox.org".into(),
+            username: api::Username::new("user"),
+            email: api::Email::new("admin@netsblox.org"),
             password: None,
             group_id: None,
             role: Some(UserRole::User),
@@ -925,8 +923,8 @@ mod tests {
     #[actix_web::test]
     async fn test_update_project() {
         let admin: User = api::NewUser {
-            username: "admin".into(),
-            email: "admin@netsblox.org".into(),
+            username: api::Username::new("admin"),
+            email: api::Email::new("admin@netsblox.org"),
             password: None,
             group_id: None,
             role: Some(UserRole::Admin),
@@ -934,8 +932,8 @@ mod tests {
         .into();
 
         let owner: User = api::NewUser {
-            username: "owner".into(),
-            email: "admin@netsblox.org".into(),
+            username: api::Username::new("owner"),
+            email: api::Email::new("admin@netsblox.org"),
             password: None,
             group_id: None,
             role: Some(UserRole::Admin),
@@ -963,7 +961,7 @@ mod tests {
                 .await;
 
                 let update_data = api::UpdateProjectData {
-                    name: "new name".into(),
+                    name: api::ProjectName::new("new name"),
                     client_id: None,
                 };
                 let req = test::TestRequest::patch()
@@ -983,8 +981,8 @@ mod tests {
     #[actix_web::test]
     async fn test_update_project_collision() {
         let admin: User = api::NewUser {
-            username: "admin".into(),
-            email: "admin@netsblox.org".into(),
+            username: api::Username::new("admin"),
+            email: api::Email::new("admin@netsblox.org"),
             password: None,
             group_id: None,
             role: Some(UserRole::Admin),
@@ -992,8 +990,8 @@ mod tests {
         .into();
 
         let owner: User = api::NewUser {
-            username: "owner".into(),
-            email: "admin@netsblox.org".into(),
+            username: api::Username::new("owner"),
+            email: api::Email::new("admin@netsblox.org"),
             password: None,
             group_id: None,
             role: Some(UserRole::Admin),
@@ -1033,7 +1031,10 @@ mod tests {
 
                 let metadata: api::ProjectMetadata = test::call_and_read_body_json(&app, req).await;
                 assert_ne!(metadata.name, existing.name);
-                assert!(metadata.name.starts_with(&update_data.name));
+                assert!(metadata
+                    .name
+                    .as_str()
+                    .starts_with(&update_data.name.as_str()));
 
                 // TODO: check the database is updated, too
             })
@@ -1091,16 +1092,16 @@ mod tests {
     #[actix_web::test]
     async fn test_list_pending() {
         let user: User = api::NewUser {
-            username: "user".to_string(),
-            email: "user@netsblox.org".into(),
+            username: api::Username::new("user"),
+            email: api::Email::new("user@netsblox.org"),
             password: None,
             group_id: None,
             role: Some(UserRole::Moderator),
         }
         .into();
         let u2: User = api::NewUser {
-            username: "u2".to_string(),
-            email: "u2@netsblox.org".into(),
+            username: api::Username::new("u2"),
+            email: api::Email::new("u2@netsblox.org"),
             password: None,
             group_id: None,
             role: None,
@@ -1149,7 +1150,7 @@ mod tests {
                 assert_eq!(projects.len(), 2);
                 projects.into_iter().for_each(|project| {
                     assert!(matches!(project.state, api::PublishState::PendingApproval));
-                    assert!(project.name.starts_with("pending"));
+                    assert!(project.name.as_str().starts_with("pending"));
                 })
             })
             .await;
@@ -1158,8 +1159,8 @@ mod tests {
     #[actix_web::test]
     async fn test_list_pending_403() {
         let user: User = api::NewUser {
-            username: "user".to_string(),
-            email: "user@netsblox.org".into(),
+            username: api::Username::new("user"),
+            email: api::Email::new("user@netsblox.org"),
             password: None,
             group_id: None,
             role: None,
@@ -1217,7 +1218,7 @@ mod tests {
         let id = project.id.clone();
         let new_name = "new project";
         let project_update = UpdateProjectData {
-            name: new_name.into(),
+            name: api::ProjectName::new(new_name),
             client_id: None,
         };
 
@@ -1249,7 +1250,7 @@ mod tests {
                     .unwrap()
                     .unwrap();
 
-                assert_eq!(project.name, new_name);
+                assert_eq!(project.name.as_str(), new_name);
             })
             .await;
     }
@@ -1264,7 +1265,7 @@ mod tests {
         let id = project.id.clone();
         let new_name = "shit";
         let project_update = UpdateProjectData {
-            name: new_name.into(),
+            name: api::ProjectName::new(new_name),
             client_id: None,
         };
 
@@ -1296,7 +1297,7 @@ mod tests {
                     .unwrap()
                     .unwrap();
 
-                assert_eq!(project.name, "old name".to_string());
+                assert_eq!(project.name.as_str(), "old name");
             })
             .await;
     }
@@ -1305,7 +1306,7 @@ mod tests {
     async fn test_rename_project_401() {
         let new_name = "some new name";
         let project_update = UpdateProjectData {
-            name: new_name.into(),
+            name: api::ProjectName::new(new_name),
             client_id: None,
         };
         let id = "abc123";
@@ -1338,16 +1339,16 @@ mod tests {
     #[actix_web::test]
     async fn test_rename_project_admin() {
         let owner: User = api::NewUser {
-            username: "owner".to_string(),
-            email: "owner@netsblox.org".into(),
+            username: api::Username::new("owner"),
+            email: api::Email::new("owner@netsblox.org"),
             password: None,
             group_id: None,
             role: None,
         }
         .into();
         let admin: User = api::NewUser {
-            username: "admin".to_string(),
-            email: "admin@netsblox.org".into(),
+            username: api::Username::new("admin"),
+            email: api::Email::new("admin@netsblox.org"),
             password: None,
             group_id: None,
             role: Some(UserRole::Admin),
@@ -1360,7 +1361,7 @@ mod tests {
         let id = project.id.clone();
         let new_name = "new project";
         let project_update = UpdateProjectData {
-            name: new_name.into(),
+            name: api::ProjectName::new(new_name),
             client_id: None,
         };
 
@@ -1487,8 +1488,8 @@ mod tests {
     #[actix_web::test]
     async fn test_rename_role() {
         let user: User = api::NewUser {
-            username: "owner".to_string(),
-            email: "owner@netsblox.org".into(),
+            username: api::Username::new("owner"),
+            email: api::Email::new("owner@netsblox.org"),
             password: None,
             group_id: None,
             role: None,
@@ -1496,7 +1497,7 @@ mod tests {
         .into();
         let role_id = api::RoleId::new("someRole".into());
         let role_data = api::RoleData {
-            name: "role".into(),
+            name: api::RoleName::new("role"),
             code: "<code/>".into(),
             media: "<media/>".into(),
         };
@@ -1518,7 +1519,7 @@ mod tests {
                 .await;
 
                 let data = UpdateRoleData {
-                    name: "new_name".into(),
+                    name: api::RoleName::new("new_name"),
                     client_id: None,
                 };
                 let req = test::TestRequest::patch()
@@ -1543,7 +1544,7 @@ mod tests {
         let username = "user1";
         let role_id = api::RoleId::new("someRole".into());
         let role_data = api::RoleData {
-            name: "role".into(),
+            name: api::RoleName::new("role"),
             code: "<code/>".into(),
             media: "<media/>".into(),
         };
@@ -1565,7 +1566,7 @@ mod tests {
                 .await;
 
                 let data = UpdateRoleData {
-                    name: "$ .1 damn".into(),
+                    name: api::RoleName::new("$ .1 damn"),
                     client_id: None,
                 };
                 let req = test::TestRequest::patch()
@@ -1579,7 +1580,7 @@ mod tests {
 
                 let project = app_data.get_project_metadatum(&project.id).await.unwrap();
                 let role = project.roles.get(&role_id).unwrap();
-                assert_eq!(role.name, "role".to_string());
+                assert_eq!(role.name.as_str(), "role");
             })
             .await;
     }
@@ -1589,7 +1590,7 @@ mod tests {
         let username = "user1";
         let role_id = api::RoleId::new("someRole".into());
         let role_data = api::RoleData {
-            name: "role".into(),
+            name: api::RoleName::new("role"),
             code: "<code/>".into(),
             media: "<media/>".into(),
         };
@@ -1611,7 +1612,7 @@ mod tests {
                 .await;
 
                 let data = UpdateRoleData {
-                    name: "X".into(),
+                    name: api::RoleName::new("X"),
                     client_id: None,
                 };
                 let req = test::TestRequest::patch()
@@ -1625,7 +1626,7 @@ mod tests {
 
                 let project = app_data.get_project_metadatum(&project.id).await.unwrap();
                 let role = project.roles.get(&role_id).unwrap();
-                assert_eq!(role.name, "role".to_string());
+                assert_eq!(role.name.as_str(), "role");
             })
             .await;
     }
@@ -1633,8 +1634,8 @@ mod tests {
     #[actix_web::test]
     async fn test_rename_role_admin() {
         let admin: User = api::NewUser {
-            username: "admin".to_string(),
-            email: "admin@netsblox.org".into(),
+            username: api::Username::new("admin"),
+            email: api::Email::new("admin@netsblox.org"),
             password: None,
             group_id: None,
             role: Some(UserRole::Admin),
@@ -1643,7 +1644,7 @@ mod tests {
 
         let role_id = api::RoleId::new("someRole".into());
         let role_data = api::RoleData {
-            name: "role".into(),
+            name: api::RoleName::new("role"),
             code: "<code/>".into(),
             media: "<media/>".into(),
         };
@@ -1665,7 +1666,7 @@ mod tests {
                 .await;
 
                 let data = UpdateRoleData {
-                    name: "new_name".into(),
+                    name: api::RoleName::new("new_name"),
                     client_id: None,
                 };
                 let req = test::TestRequest::patch()
@@ -1680,7 +1681,7 @@ mod tests {
 
                 let project = app_data.get_project_metadatum(&project.id).await.unwrap();
                 let role = project.roles.get(&role_id).unwrap();
-                assert_eq!(role.name, "new_name".to_string());
+                assert_eq!(role.name.as_str(), "new_name");
             })
             .await;
     }
@@ -1688,8 +1689,8 @@ mod tests {
     #[actix_web::test]
     async fn test_save_role() {
         let user: User = api::NewUser {
-            username: "owner".to_string(),
-            email: "owner@netsblox.org".into(),
+            username: api::Username::new("owner"),
+            email: api::Email::new("owner@netsblox.org"),
             password: None,
             group_id: None,
             role: None,
@@ -1697,7 +1698,7 @@ mod tests {
         .into();
         let role_id = api::RoleId::new("someRole".into());
         let role_data = api::RoleData {
-            name: "role".into(),
+            name: api::RoleName::new("role"),
             code: "<code/>".into(),
             media: "<media/>".into(),
         };
@@ -1719,7 +1720,7 @@ mod tests {
                 .await;
 
                 let data = api::RoleData {
-                    name: "new name".into(),
+                    name: api::RoleName::new("new name"),
                     code: "<new code/>".into(),
                     media: "<new media/>".into(),
                 };
@@ -1737,7 +1738,7 @@ mod tests {
                     .uri(&format!("/id/{}/{}", &project.id, &role_id))
                     .to_request();
                 let role: api::RoleData = test::call_and_read_body_json(&app, req).await;
-                assert_eq!(&role.name, "new name");
+                assert_eq!(role.name.as_str(), "new name");
                 assert_eq!(&role.code, "<new code/>");
                 assert_eq!(&role.media, "<new media/>");
             })
@@ -1747,16 +1748,16 @@ mod tests {
     #[actix_web::test]
     async fn test_save_role_403() {
         let user: User = api::NewUser {
-            username: "owner".to_string(),
-            email: "owner@netsblox.org".into(),
+            username: api::Username::new("owner"),
+            email: api::Email::new("owner@netsblox.org"),
             password: None,
             group_id: None,
             role: None,
         }
         .into();
         let other: User = api::NewUser {
-            username: "other".to_string(),
-            email: "other@netsblox.org".into(),
+            username: api::Username::new("other"),
+            email: api::Email::new("other@netsblox.org"),
             password: None,
             group_id: None,
             role: None,
@@ -1764,7 +1765,7 @@ mod tests {
         .into();
         let role_id = api::RoleId::new("someRole".into());
         let role_data = api::RoleData {
-            name: "role".into(),
+            name: api::RoleName::new("role"),
             code: "<code/>".into(),
             media: "<media/>".into(),
         };
@@ -1786,7 +1787,7 @@ mod tests {
                 .await;
 
                 let data = api::RoleData {
-                    name: "new name".into(),
+                    name: api::RoleName::new("new name"),
                     code: "<new code/>".into(),
                     media: "<new media/>".into(),
                 };
@@ -1805,16 +1806,16 @@ mod tests {
     #[actix_web::test]
     async fn test_save_role_admin() {
         let user: User = api::NewUser {
-            username: "owner".to_string(),
-            email: "owner@netsblox.org".into(),
+            username: api::Username::new("owner"),
+            email: api::Email::new("owner@netsblox.org"),
             password: None,
             group_id: None,
             role: None,
         }
         .into();
         let admin: User = api::NewUser {
-            username: "admin".to_string(),
-            email: "admin@netsblox.org".into(),
+            username: api::Username::new("admin"),
+            email: api::Email::new("admin@netsblox.org"),
             password: None,
             group_id: None,
             role: Some(UserRole::Admin),
@@ -1822,7 +1823,7 @@ mod tests {
         .into();
         let role_id = api::RoleId::new("someRole".into());
         let role_data = api::RoleData {
-            name: "role".into(),
+            name: api::RoleName::new("role"),
             code: "<code/>".into(),
             media: "<media/>".into(),
         };
@@ -1844,7 +1845,7 @@ mod tests {
                 .await;
 
                 let data = api::RoleData {
-                    name: "new name".into(),
+                    name: api::RoleName::new("new name"),
                     code: "<new code/>".into(),
                     media: "<new media/>".into(),
                 };
@@ -1863,8 +1864,8 @@ mod tests {
     #[actix_web::test]
     async fn test_delete_role() {
         let user: User = api::NewUser {
-            username: "owner".to_string(),
-            email: "owner@netsblox.org".into(),
+            username: api::Username::new("owner"),
+            email: api::Email::new("owner@netsblox.org"),
             password: None,
             group_id: None,
             role: None,
@@ -1872,13 +1873,13 @@ mod tests {
         .into();
         let role_id = api::RoleId::new("someRole".into());
         let role_data = api::RoleData {
-            name: "role".into(),
+            name: api::RoleName::new("role"),
             code: "<code/>".into(),
             media: "<media/>".into(),
         };
         let role2_id = api::RoleId::new("role2Id".into());
         let role2_data = api::RoleData {
-            name: "role2".into(),
+            name: api::RoleName::new("role2"),
             code: "<code/>".into(),
             media: "<media/>".into(),
         };
@@ -1975,8 +1976,8 @@ mod tests {
     #[ignore]
     async fn test_remove_collaborator_invalid_name() {
         let owner: User = api::NewUser {
-            username: "owner".to_string(),
-            email: "owner@netsblox.org".into(),
+            username: api::Username::new("owner"),
+            email: api::Email::new("owner@netsblox.org"),
             password: None,
             group_id: None,
             role: None,
@@ -2020,16 +2021,16 @@ mod tests {
     #[actix_web::test]
     async fn test_remove_collaborator_403() {
         let owner: User = api::NewUser {
-            username: "owner".to_string(),
-            email: "owner@netsblox.org".into(),
+            username: api::Username::new("owner"),
+            email: api::Email::new("owner@netsblox.org"),
             password: None,
             group_id: None,
             role: None,
         }
         .into();
         let other: User = api::NewUser {
-            username: "other".to_string(),
-            email: "other@netsblox.org".into(),
+            username: api::Username::new("other"),
+            email: api::Email::new("other@netsblox.org"),
             password: None,
             group_id: None,
             role: None,
@@ -2067,16 +2068,16 @@ mod tests {
     #[actix_web::test]
     async fn test_remove_collaborator_admin() {
         let owner: User = api::NewUser {
-            username: "owner".to_string(),
-            email: "owner@netsblox.org".into(),
+            username: api::Username::new("owner"),
+            email: api::Email::new("owner@netsblox.org"),
             password: None,
             group_id: None,
             role: None,
         }
         .into();
         let admin: User = api::NewUser {
-            username: "admin".to_string(),
-            email: "admin@netsblox.org".into(),
+            username: api::Username::new("admin"),
+            email: api::Email::new("admin@netsblox.org"),
             password: None,
             group_id: None,
             role: Some(UserRole::Admin),
@@ -2186,8 +2187,8 @@ mod tests {
     #[actix_web::test]
     async fn test_list_collaborators_admin() {
         let admin: User = api::NewUser {
-            username: "admin".into(),
-            email: "admin@netsblox.org".into(),
+            username: api::Username::new("admin"),
+            email: api::Email::new("admin@netsblox.org"),
             password: None,
             group_id: None,
             role: Some(UserRole::Admin),
@@ -2195,8 +2196,8 @@ mod tests {
         .into();
 
         let owner: User = api::NewUser {
-            username: "owner".into(),
-            email: "admin@netsblox.org".into(),
+            username: api::Username::new("owner"),
+            email: api::Email::new("admin@netsblox.org"),
             password: None,
             group_id: None,
             role: Some(UserRole::Admin),
