@@ -2570,6 +2570,7 @@ dependencies = [
 name = "netsblox-api"
 version = "1.6.0"
 dependencies = [
+ "bytes",
  "derive_more",
  "futures-util",
  "netsblox-api-common",
