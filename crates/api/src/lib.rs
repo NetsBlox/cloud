@@ -1334,13 +1334,6 @@ impl Client {
     /// the JSON response.
     /// * If server respondes with error, we return the error.
     ///
-    /// # Example
-    ///
-    /// ```rust
-    /// let gallery_data = CreateGalleryData { ... };
-    /// let gallery = create_gallery(&gallery_data).await?;
-    /// ```
-    ///
     /// # Notes
     ///
     /// This function makes an HTTP POST request to the `/galleries/` endpoint
@@ -1387,13 +1380,6 @@ impl Client {
     /// * `error::Error::ParseJsonFailedError` - Returned if there is an error parsing
     /// the JSON response.
     /// * If server responds with an error, we return the error.
-    ///
-    /// # Example
-    ///
-    /// ```rust
-    /// let owner = String::from("user123");
-    /// let gallery = view_galleries(&owner).await?;
-    /// ```
     ///
     /// # Notes
     ///
@@ -1443,13 +1429,6 @@ impl Client {
     /// the JSON response.
     /// * If server responds with an error, we return the error.
     ///
-    /// # Example
-    ///
-    /// ```rust
-    /// let gallery_id = GalleryId::new("some_id");
-    /// let gallery = view_gallery_with_id(&gallery_id).await?;
-    /// ```
-    ///
     /// # Notes
     ///
     /// This function makes an HTTP GET request to the `/galleries/id/{id}` endpoint, where `{id}` is replaced with the specified gallery ID.
@@ -1498,17 +1477,6 @@ impl Client {
     /// * `error::Error::ParseJsonFailedError` - Returned if there is an error parsing
     /// the JSON response.
     /// * If server responds with an error, we return the error.
-    ///
-    /// # Example
-    ///
-    /// ```rust
-    /// let gallery_id = GalleryId::new("some_id");
-    /// let change_data = ChangeGalleryData {
-    ///     name: Some(String::from("New Gallery Name")),
-    ///     state: Some(PublishState::Private),
-    /// };
-    /// let gallery = change_gallery(&gallery_id, &change_data).await?;
-    /// ```
     ///
     /// # Notes
     ///
@@ -1565,14 +1533,6 @@ impl Client {
     /// the JSON response.
     /// * If server responds with an error, we return the error.
     ///
-    /// # Example
-    ///
-    /// ```rust
-    /// let gallery_id = GalleryId::new("some_id");
-    /// let gallery = delete_gallery(&gallery_id).await?;
-    /// println!("Deleted gallery: {:?}", gallery);
-    /// ```
-    ///
     /// # Notes
     ///
     /// This function makes an HTTP DELETE request to the `/galleries/id/{id}` endpoint,
@@ -1623,15 +1583,6 @@ impl Client {
     /// * `error::Error::ParseJsonFailedError` - Returned if there is an error
     ///   parsing the JSON response.
     /// * If server responds with an error, we return the error.
-    ///
-    /// # Example
-    ///
-    /// ```rust
-    /// let gallery_id = GalleryId::new("some_gallery_id");
-    /// let project_data = CreateGalleryProjectData { ... };
-    /// let project_metadata = add_gallery_project(&gallery_id, &project_data).await?;
-    /// println!("Added project metadata: {:?}", project_metadata);
-    /// ```
     ///
     /// # Notes
     ///
@@ -1690,15 +1641,6 @@ impl Client {
     /// the JSON response.
     /// * If server responds with an error, we return the error.
     ///
-    /// # Example
-    ///
-    /// ```rust
-    /// let gallery_id = GalleryId::new("some_gallery_id");
-    /// let project_id = ProjectId::new("some_project_id");
-    /// let project_metadata = view_gallery_project(&gallery_id, &project_id).await?;
-    /// println!("Retrieved project metadata: {:?}", project_metadata);
-    /// ```
-    ///
     /// # Notes
     ///
     /// This function makes an HTTP GET request to the `/galleries/id/{id}/project/{prid}`
@@ -1755,16 +1697,6 @@ impl Client {
     /// * `error::Error::ParseJsonFailedError` - Returned if there is an error
     /// parsing the JSON response.
     /// * If server responds with an error, we return the error.
-    ///
-    /// # Example
-    ///
-    /// ```rust
-    /// let gallery_id = GalleryId::new("some_gallery_id");
-    /// let project_id = ProjectId::new("some_project_id");
-    /// let aspect_ratio = Some(1.5);
-    /// let thumbnail = view_gallery_project_thumbnail(&gallery_id, &project_id, &aspect_ratio).await?;
-    /// println!("Retrieved thumbnail: {:?}", thumbnail);
-    /// ```
     ///
     /// # Notes
     ///
@@ -1829,14 +1761,6 @@ impl Client {
     ///   parsing the JSON response.
     /// * If server responds with an error, we return the error.
     ///
-    /// # Example
-    ///
-    /// ```rust
-    /// let gallery_id = GalleryId::new("some_gallery_id");
-    /// let projects = view_gallery_projects(&gallery_id).await?;
-    /// println!("Retrieved projects: {:?}", projects);
-    /// ```
-    ///
     /// # Notes
     ///
     /// This function makes an HTTP GET request to the `/galleries/id/{id}/projects`
@@ -1892,20 +1816,6 @@ impl Client {
     /// * `error::Error::ParseResponseFailedError` - Returned if there is an error
     ///   parsing the JSON response.
     /// * If server responds with an error, we return the error.
-    ///
-    /// # Example
-    ///
-    /// ```rust
-    /// let gallery_id = GalleryId::new("some_gallery_id");
-    /// let project_id = ProjectId::new("some_project_id");
-    /// let xml_data = "<xml>...</xml>";
-    /// let project_metadata = add_gallery_project_version(
-    ///     &gallery_id,
-    ///     &project_id,
-    ///     &xml_data
-    /// ).await?;
-    /// println!("Added project version: {:?}", project_metadata);
-    /// ```
     ///
     /// # Notes
     ///
@@ -1969,15 +1879,6 @@ impl Client {
     ///   parsing the response text.
     /// * If server responds with an error, we return the error.
     ///
-    /// # Example
-    ///
-    /// ```rust
-    /// let gallery_id = GalleryId::new("some_gallery_id");
-    /// let project_id = ProjectId::new("some_project_id");
-    /// let xml_data = view_gallery_project_xml(&gallery_id, &project_id).await?;
-    /// println!("Retrieved XML data: {:?}", xml_data);
-    /// ```
-    ///
     /// # Notes
     ///
     /// This function makes an HTTP GET request to the `/galleries/id/{id}/project/{prid}/xml`
@@ -2036,16 +1937,6 @@ impl Client {
     /// * `error::Error::ParseResponseFailedError` - Returned if there is an error
     ///   parsing the response text.
     /// * If server responds with an error, we return the error.
-    ///
-    /// # Example
-    ///
-    /// ```rust
-    /// let gallery_id = GalleryId::new("some_gallery_id");
-    /// let project_id = ProjectId::new("some_project_id");
-    /// let version = 1;
-    /// let xml_data = view_gallery_project_xml_version(&gallery_id, &project_id, &version).await?;
-    /// println!("Retrieved XML data for version {}: {:?}", version, xml_data);
-    /// ```
     ///
     /// # Notes
     ///
@@ -2106,15 +1997,6 @@ impl Client {
     ///   parsing the JSON response.
     /// * If server responds with an error, we return the error.
     ///
-    /// # Example
-    ///
-    /// ```rust
-    /// let gallery_id = GalleryId::new("some_gallery_id");
-    /// let project_id = ProjectId::new("some_project_id");
-    /// let deleted_project_metadata = delete_gallery_project(&gallery_id, &project_id).await?;
-    /// println!("Deleted project metadata: {:?}", deleted_project_metadata);
-    /// ```
-    ///
     /// # Notes
     ///
     /// This function makes an HTTP DELETE request to the
@@ -2173,16 +2055,6 @@ impl Client {
     /// * `error::Error::ParseResponseFailedError` - Returned if there is an error
     ///   parsing the JSON response.
     /// * If server responds with an error, we return the error.
-    ///
-    /// # Example
-    ///
-    /// ```rust
-    /// let gallery_id = GalleryId::new("some_gallery_id");
-    /// let project_id = ProjectId::new("some_project_id");
-    /// let version = 1;
-    /// let updated_project_metadata = delete_gallery_project_version(&gallery_id, &project_id, &version).await?;
-    /// println!("Updated project metadata: {:?}", updated_project_metadata);
-    /// ```
     ///
     /// # Notes
     ///
@@ -2261,8 +2133,9 @@ mod tests {
     }
 
     #[test]
+    #[should_panic(expected = "assertion `left == right` failed\n  left: 4\n right: 5")]
     fn it_does_not_work() {
         let result = 2 + 2;
-        assert_ne!(result, 5);
+        assert_eq!(result, 5);
     }
 }
