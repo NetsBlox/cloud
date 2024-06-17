@@ -67,36 +67,11 @@ pub async fn login(users: &Collection<User>, credentials: Credentials) -> Result
             };
 
             let query = doc! {"linkedAccounts": {"$elemMatch": &account}};
-            let user_opt = users
+            let user = users
                 .find_one(query, None)
                 .await
-                .map_err(InternalError::DatabaseConnectionError)?;
-
-            let user = if let Some(user) = user_opt {
-                user
-            } else {
-                let cookie = response
-                    .cookies()
-                    .next()
-                    .ok_or(UserError::SnapConnectionError)?;
-                let url = &format!("https://snap.berkeley.edu/api/v1/users/{}", username);
-
-                let client = reqwest::Client::new();
-                let user_data = client
-                    .request(Method::GET, url)
-                    .header("Cookie", format!("{}={}", cookie.name(), cookie.value()))
-                    .send()
-                    .await
-                    .map_err(|_err| UserError::SnapConnectionError)?
-                    .json::<SnapUser>()
-                    .await
-                    .map_err(|_err| UserError::SnapConnectionError)?;
-
-                // FIX: snap route is not available anymore, snap does not provide email addresses
-                // TODO: ensure email isn't banned?
-
-                create_account(users, user_data.email, &account).await?
-            };
+                .map_err(InternalError::DatabaseConnectionError)?
+                .ok_or(UserError::LinkedAccountNotFoundError)?;
 
             Ok(user)
         }

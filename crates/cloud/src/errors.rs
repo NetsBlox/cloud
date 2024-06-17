@@ -99,6 +99,8 @@ pub enum UserError {
     SnapConnectionError,
     #[display(fmt = "Account already linked to NetsBlox user.")]
     AccountAlreadyLinkedError,
+    #[display(fmt = "Account not linked to NetsBlox user. Please link account to NetsBlox user.")]
+    LinkedAccountNotFoundError,
     #[display(fmt = "Invalid account type.")]
     InvalidAccountTypeError,
     #[display(fmt = "Login from Tor not allowed.")]
@@ -189,6 +191,7 @@ impl error::ResponseError for UserError {
             | Self::InviteNotFoundError
             | Self::MagicLinkNotFoundError
             | Self::UserNotFoundError
+            | Self::LinkedAccountNotFoundError
             | Self::FriendNotFoundError
             | Self::OAuthClientNotFoundError
             | Self::OAuthTokenNotFoundError
