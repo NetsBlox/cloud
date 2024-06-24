@@ -1,5 +1,5 @@
 use actix_web::web::Bytes;
-use futures::TryStreamExt;
+use futures::{StreamExt, TryStreamExt};
 use mongodb::bson::doc;
 use mongodb::options::ReturnDocument;
 use mongodb::{Collection, Cursor};
@@ -43,7 +43,7 @@ impl<'a> GalleryActions<'a> {
         &self,
         _eu: &auth::EditUser,
         data: api::CreateGalleryData,
-    ) -> Result<Gallery, UserError> {
+    ) -> Result<api::Gallery, UserError> {
         // create gallery
         let gallery: Gallery = data.into();
         // create mongodb formatted gallery
@@ -66,23 +66,24 @@ impl<'a> GalleryActions<'a> {
         if result.matched_count == 1 {
             Err(UserError::GalleryExistsError)
         } else {
-            Ok(gallery)
+            Ok(gallery.into())
         }
     }
 
     pub(crate) async fn view_galleries(
         &self,
         eu: &auth::EditUser,
-    ) -> Result<Vec<Gallery>, UserError> {
+    ) -> Result<Vec<api::Gallery>, UserError> {
         let query = doc! {
           "owner": &eu.username,
         };
 
-        let result = self
+        let result: Vec<api::Gallery> = self
             .galleries
             .find(query, None)
             .await
             .map_err(InternalError::DatabaseConnectionError)?
+            .map_ok(|g| g.into())
             .try_collect()
             .await
             .map_err(InternalError::DatabaseConnectionError)?;
@@ -94,7 +95,7 @@ impl<'a> GalleryActions<'a> {
         &self,
         egal: &EditGallery,
         change: api::ChangeGalleryData,
-    ) -> Result<Gallery, UserError> {
+    ) -> Result<api::Gallery, UserError> {
         let query = doc! {"id": &egal.metadata.id};
 
         let mut update = doc! {"$set": {}};
@@ -111,18 +112,22 @@ impl<'a> GalleryActions<'a> {
             .return_document(ReturnDocument::After)
             .build();
 
-        let gallery = self
+        let gallery: api::Gallery = self
             .galleries
             .find_one_and_update(query, update, options)
             .await
             .map_err(InternalError::DatabaseConnectionError)?
-            .ok_or(UserError::GalleryNotFoundError)?;
+            .ok_or(UserError::GalleryNotFoundError)?
+            .into();
 
         Ok(gallery)
     }
 
     /// delete a gallery
-    pub(crate) async fn delete_gallery(&self, dgal: &DeleteGallery) -> Result<Gallery, UserError> {
+    pub(crate) async fn delete_gallery(
+        &self,
+        dgal: &DeleteGallery,
+    ) -> Result<api::Gallery, UserError> {
         // create mongodb query
         let query = doc! {
           "id": &dgal.metadata.id
@@ -133,7 +138,8 @@ impl<'a> GalleryActions<'a> {
             .find_one_and_delete(query, None)
             .await
             .map_err(InternalError::DatabaseConnectionError)?
-            .ok_or(UserError::GalleryNotFoundError)?;
+            .ok_or(UserError::GalleryNotFoundError)?
+            .into();
 
         Ok(gallery)
     }
@@ -142,7 +148,7 @@ impl<'a> GalleryActions<'a> {
         &self,
         ap: &AddGalleryProject,
         project: api::CreateGalleryProjectData,
-    ) -> Result<GalleryProjectMetadata, UserError> {
+    ) -> Result<api::GalleryProjectMetadata, UserError> {
         let gal_project = GalleryProjectMetadata::new(
             &ap.metadata,
             project.owner.as_str(),
@@ -185,10 +191,10 @@ impl<'a> GalleryActions<'a> {
                 .delete_one(query, None)
                 .await
                 .map_err(InternalError::DatabaseConnectionError)?;
-            return Err(e.into());
+            Err(e.into())
+        } else {
+            Ok(gal_project.into())
         }
-
-        Ok(gal_project.clone())
     }
 
     /// returns project in gallery
@@ -196,7 +202,7 @@ impl<'a> GalleryActions<'a> {
         &self,
         vgal: &ViewGallery,
         project_id: &ProjectId,
-    ) -> Result<GalleryProjectMetadata, UserError> {
+    ) -> Result<api::GalleryProjectMetadata, UserError> {
         let query = doc! {"galleryId": &vgal.metadata.id, "id": project_id};
 
         let project = self
@@ -206,7 +212,7 @@ impl<'a> GalleryActions<'a> {
             .map_err(InternalError::DatabaseConnectionError)?
             .ok_or(UserError::GalleryNotFoundError)?;
 
-        Ok(project)
+        Ok(project.into())
     }
 
     /// returns project in gallery
@@ -241,16 +247,15 @@ impl<'a> GalleryActions<'a> {
     pub(crate) async fn get_all_gallery_projects(
         &self,
         vgal: &ViewGallery,
-    ) -> Result<Vec<GalleryProjectMetadata>, UserError> {
+    ) -> Result<Vec<api::GalleryProjectMetadata>, UserError> {
         let query = doc! {"galleryId": &vgal.metadata.id};
 
-        let cursor: Cursor<GalleryProjectMetadata> = self
+        let projects: Vec<api::GalleryProjectMetadata> = self
             .gallery_projects
             .find(query, None)
             .await
-            .map_err(InternalError::DatabaseConnectionError)?;
-
-        let projects: Vec<GalleryProjectMetadata> = cursor
+            .map_err(InternalError::DatabaseConnectionError)?
+            .map_ok(|md| md.into())
             .try_collect()
             .await
             .map_err(InternalError::DatabaseConnectionError)?;
@@ -262,7 +267,7 @@ impl<'a> GalleryActions<'a> {
         &self,
         ap: &EditGalleryProject,
         xml: String,
-    ) -> Result<GalleryProjectMetadata, UserError> {
+    ) -> Result<api::GalleryProjectMetadata, UserError> {
         let index: usize = ap.project.versions.len();
 
         let version: Version = Version::new(&ap.project.gallery_id, &ap.project.id, index);
@@ -298,7 +303,7 @@ impl<'a> GalleryActions<'a> {
             return Err(e.into());
         }
 
-        Ok(result)
+        Ok(result.into())
     }
 
     pub(crate) async fn get_gallery_project_xml(
@@ -341,7 +346,7 @@ impl<'a> GalleryActions<'a> {
     pub(crate) async fn remove_project_in_gallery(
         &self,
         dp: &DeleteGalleryProject,
-    ) -> Result<GalleryProjectMetadata, UserError> {
+    ) -> Result<api::GalleryProjectMetadata, UserError> {
         let keys: Vec<api::S3Key> = dp
             .project
             .versions
@@ -362,14 +367,14 @@ impl<'a> GalleryActions<'a> {
             .map_err(InternalError::DatabaseConnectionError)?
             .ok_or(UserError::GalleryNotFoundError)?;
 
-        Ok(project)
+        Ok(project.into())
     }
 
     pub(crate) async fn remove_project_version_in_gallery(
         &self,
         dgalp: &DeleteGalleryProject,
         index: usize,
-    ) -> Result<GalleryProjectMetadata, UserError> {
+    ) -> Result<api::GalleryProjectMetadata, UserError> {
         let query = doc! {
           "id": dgalp.project.id.clone()
         };
@@ -391,7 +396,7 @@ impl<'a> GalleryActions<'a> {
             .map_err(InternalError::DatabaseConnectionError)?
             .ok_or(UserError::GalleryProjectVersionNotFoundError)?;
 
-        Ok(result)
+        Ok(result.into())
     }
 }
 

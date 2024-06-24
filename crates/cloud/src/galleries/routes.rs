@@ -298,7 +298,7 @@ mod tests {
                     .set_json(&data)
                     .to_request();
 
-                let _gallery: Gallery = test::call_and_read_body_json(&app, req).await;
+                let _gallery: api::Gallery = test::call_and_read_body_json(&app, req).await;
             })
             .await;
     }
@@ -478,7 +478,7 @@ mod tests {
                     .set_json(&data)
                     .to_request();
 
-                let _gallery: Gallery = test::call_and_read_body_json(&app, req).await;
+                let _gallery: api::Gallery = test::call_and_read_body_json(&app, req).await;
             })
             .await;
     }
@@ -523,7 +523,7 @@ mod tests {
                     .cookie(test_utils::cookie::new(&user.username))
                     .to_request();
 
-                let _galleries: Vec<Gallery> = test::call_and_read_body_json(&app, req).await;
+                let _galleries: Vec<api::Gallery> = test::call_and_read_body_json(&app, req).await;
             })
             .await;
     }
@@ -632,7 +632,7 @@ mod tests {
                     .cookie(test_utils::cookie::new(&admin.username))
                     .to_request();
 
-                let _galleries: Vec<Gallery> = test::call_and_read_body_json(&app, req).await;
+                let _galleries: Vec<api::Gallery> = test::call_and_read_body_json(&app, req).await;
             })
             .await;
     }
@@ -670,7 +670,7 @@ mod tests {
                     .cookie(test_utils::cookie::new(&user.username))
                     .to_request();
 
-                let _gallery: Gallery = test::call_and_read_body_json(&app, req).await;
+                let _gallery: api::Gallery = test::call_and_read_body_json(&app, req).await;
             })
             .await;
     }
@@ -763,7 +763,7 @@ mod tests {
                     .cookie(test_utils::cookie::new(&other.username))
                     .to_request();
 
-                let _gallery: Gallery = test::call_and_read_body_json(&app, req).await;
+                let _gallery: api::Gallery = test::call_and_read_body_json(&app, req).await;
             })
             .await;
     }
@@ -802,7 +802,7 @@ mod tests {
                     .cookie(test_utils::cookie::new(&admin.username))
                     .to_request();
 
-                let _gallery: Gallery = test::call_and_read_body_json(&app, req).await;
+                let _gallery: api::Gallery = test::call_and_read_body_json(&app, req).await;
             })
             .await;
     }
@@ -845,7 +845,7 @@ mod tests {
                     .set_json(&data)
                     .to_request();
 
-                let gallery: Gallery = test::call_and_read_body_json(&app, req).await;
+                let gallery: api::Gallery = test::call_and_read_body_json(&app, req).await;
                 assert_eq!(gallery.name, data.name.unwrap());
                 assert_eq!(gallery.state, data.state.unwrap());
             })
@@ -935,7 +935,7 @@ mod tests {
                     .set_json(&data)
                     .to_request();
 
-                let gallery: Gallery = test::call_and_read_body_json(&app, req).await;
+                let gallery: api::Gallery = test::call_and_read_body_json(&app, req).await;
                 assert_eq!(gallery.name, data.name.unwrap());
                 assert_eq!(gallery.state, data.state.unwrap());
             })
@@ -975,7 +975,7 @@ mod tests {
                     .cookie(test_utils::cookie::new(&user.username))
                     .to_request();
 
-                let _gallery: Gallery = test::call_and_read_body_json(&app, req).await;
+                let _gallery: api::Gallery = test::call_and_read_body_json(&app, req).await;
             })
             .await;
     }
@@ -1051,7 +1051,7 @@ mod tests {
                     .cookie(test_utils::cookie::new(&admin.username))
                     .to_request();
 
-                let _gallery: Gallery = test::call_and_read_body_json(&app, req).await;
+                let _gallery: api::Gallery = test::call_and_read_body_json(&app, req).await;
             })
             .await;
     }
@@ -1095,7 +1095,7 @@ mod tests {
                     .set_json(&data)
                     .to_request();
 
-                let project: GalleryProjectMetadata =
+                let project: api::GalleryProjectMetadata =
                     test::call_and_read_body_json(&app, req).await;
                 assert_eq!(data.name, project.name);
             })
@@ -1232,7 +1232,7 @@ mod tests {
                     .set_json(&data)
                     .to_request();
 
-                let project: GalleryProjectMetadata =
+                let project: api::GalleryProjectMetadata =
                     test::call_and_read_body_json(&app, req).await;
                 assert_eq!(data.name, project.name);
             })
@@ -1278,7 +1278,7 @@ mod tests {
                     .cookie(test_utils::cookie::new(&user.username))
                     .to_request();
 
-                let response: GalleryProjectMetadata =
+                let response: api::GalleryProjectMetadata =
                     test::call_and_read_body_json(&app, req).await;
                 assert_eq!(project.versions.len(), 3);
                 assert_eq!(response.id, project.id);
@@ -1371,7 +1371,7 @@ mod tests {
                     .cookie(test_utils::cookie::new(&other.username))
                     .to_request();
 
-                let response: GalleryProjectMetadata =
+                let response: api::GalleryProjectMetadata =
                     test::call_and_read_body_json(&app, req).await;
                 assert_eq!(project.versions.len(), 3);
                 assert_eq!(response.id, project.id);
@@ -1418,7 +1418,7 @@ mod tests {
                     .cookie(test_utils::cookie::new(&admin.username))
                     .to_request();
 
-                let response: GalleryProjectMetadata =
+                let response: api::GalleryProjectMetadata =
                     test::call_and_read_body_json(&app, req).await;
                 assert_eq!(project.versions.len(), 3);
                 assert_eq!(response.id, project.id);
@@ -1737,7 +1737,7 @@ mod tests {
                     .cookie(test_utils::cookie::new(&user.username))
                     .to_request();
 
-                let projects: Vec<GalleryProjectMetadata> =
+                let projects: Vec<api::GalleryProjectMetadata> =
                     test::call_and_read_body_json(&app, req).await;
 
                 for project in projects {
@@ -1831,7 +1831,7 @@ mod tests {
                     .cookie(test_utils::cookie::new(&other.username))
                     .to_request();
 
-                let projects: Vec<GalleryProjectMetadata> =
+                let projects: Vec<api::GalleryProjectMetadata> =
                     test::call_and_read_body_json(&app, req).await;
 
                 for project in projects {
@@ -1880,7 +1880,7 @@ mod tests {
                     .cookie(test_utils::cookie::new(&admin.username))
                     .to_request();
 
-                let projects: Vec<GalleryProjectMetadata> =
+                let projects: Vec<api::GalleryProjectMetadata> =
                     test::call_and_read_body_json(&app, req).await;
 
                 for project in projects {
@@ -1933,7 +1933,7 @@ mod tests {
                     .set_json(xml)
                     .to_request();
 
-                let project: GalleryProjectMetadata =
+                let project: api::GalleryProjectMetadata =
                     test::call_and_read_body_json(&app, req).await;
                 assert_eq!(project.versions.len(), 2);
             })
@@ -2082,7 +2082,7 @@ mod tests {
                     .set_json(xml)
                     .to_request();
 
-                let project: GalleryProjectMetadata =
+                let project: api::GalleryProjectMetadata =
                     test::call_and_read_body_json(&app, req).await;
                 assert_eq!(project.versions.len(), 2);
             })
@@ -2671,7 +2671,7 @@ mod tests {
                     .cookie(test_utils::cookie::new(&user.username))
                     .to_request();
 
-                let deleted_project: GalleryProjectMetadata =
+                let deleted_project: api::GalleryProjectMetadata =
                     test::call_and_read_body_json(&app, req).await;
                 assert_eq!(deleted_project.id, project.id);
             })
@@ -2760,7 +2760,7 @@ mod tests {
                     .cookie(test_utils::cookie::new(&admin.username))
                     .to_request();
 
-                let deleted_project: GalleryProjectMetadata =
+                let deleted_project: api::GalleryProjectMetadata =
                     test::call_and_read_body_json(&app, req).await;
                 assert_eq!(deleted_project.id, project.id);
             })
@@ -2811,7 +2811,7 @@ mod tests {
                     .cookie(test_utils::cookie::new(&user.username))
                     .to_request();
 
-                let response_project: GalleryProjectMetadata =
+                let response_project: api::GalleryProjectMetadata =
                     test::call_and_read_body_json(&app, req).await;
                 for (index, version) in response_project.versions.iter().enumerate() {
                     if index == delete_index {
@@ -2917,7 +2917,7 @@ mod tests {
                     .cookie(test_utils::cookie::new(&admin.username))
                     .to_request();
 
-                let response_project: GalleryProjectMetadata =
+                let response_project: api::GalleryProjectMetadata =
                     test::call_and_read_body_json(&app, req).await;
                 for (index, version) in response_project.versions.iter().enumerate() {
                     if index == delete_index {
