@@ -1,16 +1,14 @@
 pub mod common;
 pub mod error;
 
+pub use serde_json;
+
 use crate::common::*;
 use bytes::Bytes;
 
 use futures_util::SinkExt;
-use netsblox_api_common::{
-    CreateGroupData, CreateMagicLinkData, ServiceHostScope, UpdateGroupData,
-};
 use reqwest::{self, Method, RequestBuilder, Response};
 use serde::{Deserialize, Serialize};
-pub use serde_json;
 use serde_json::{json, Value};
 use tokio::net::TcpStream;
 use tokio_tungstenite::tungstenite::Message;
@@ -19,9 +17,9 @@ use tokio_tungstenite::{connect_async, MaybeTlsStream, WebSocketStream};
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct Config {
     pub app_id: Option<AppId>,
-    pub url: String,
-    pub token: Option<String>,
     pub username: Option<String>,
+    pub token: Option<String>,
+    pub url: String,
 }
 
 impl Default for Config {
@@ -54,7 +52,6 @@ async fn check_response(response: Response) -> Result<Response, error::Error> {
     }
 }
 
-pub type Token = String;
 pub async fn login(mut cfg: Config, credentials: &LoginRequest) -> Result<Config, error::Error> {
     let client = reqwest::Client::new();
     let response = client
@@ -77,15 +74,6 @@ pub async fn login(mut cfg: Config, credentials: &LoginRequest) -> Result<Config
     cfg.username = Some(user.username);
     cfg.token = Some(token);
     Ok(cfg)
-}
-
-#[derive(Serialize)]
-struct UserData<'a> {
-    username: &'a str,
-    email: &'a str,
-    role: &'a UserRole,
-    group_id: Option<&'a GroupId>,
-    password: Option<&'a str>,
 }
 
 #[derive(Clone)]
