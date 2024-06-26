@@ -21,7 +21,8 @@ ts-rs = { version = "7.0", features = ["uuid-impl", "serde-compat"] }
 wasm-bindgen = { version = "0.2.92", optional = true }
 serde-wasm-bindgen = { version = "0.6.5", optional = true }
 into-jsvalue-derive = { version = "0.1.0", optional = true }
+tsify = { version = "0.4.5", optional = true }
 
 [features]
 to_bson = ["bson"]
-to_wasm = ["dep:wasm-bindgen", "dep:serde-wasm-bindgen", "dep:into-jsvalue-derive"]
+to_wasm = ["dep:wasm-bindgen", "dep:serde-wasm-bindgen", "dep:into-jsvalue-derive", "dep:tsify"]
