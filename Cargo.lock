@@ -2640,10 +2640,13 @@ version = "1.6.0"
 dependencies = [
  "bson",
  "derive_more",
+ "into-jsvalue-derive",
  "serde 1.0.203",
+ "serde-wasm-bindgen",
  "serde_json",
  "ts-rs",
  "uuid",
+ "wasm-bindgen",
 ]
 
 [[package]]
