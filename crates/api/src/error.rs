@@ -1,6 +1,8 @@
 use derive_more::Display;
+use into_jsvalue_derive::IntoJsValue;
+use serde::{Deserialize, Serialize};
 
-#[derive(Debug, Display)]
+#[derive(Serialize, Deserialize, Debug, Display, IntoJsValue)]
 pub enum Error {
     #[display(fmt = "{}", _0)]
     BadRequestError(String),
