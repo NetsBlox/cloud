@@ -14,6 +14,8 @@ pub enum Error {
     NotFoundError(String),
     #[display(fmt = "Internal server error occurred")]
     InternalServerError,
-    RequestError(reqwest::Error),
-    WebSocketSendError(tokio_tungstenite::tungstenite::Error),
+    #[display(fmt = "Request Error: {}", _0)]
+    RequestError(String),
+    #[display(fmt = "WebSocketError: {}", _0)]
+    WebSocketError(String),
 }

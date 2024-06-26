@@ -37,7 +37,10 @@ async fn check_response(response: Response) -> Result<Response, error::Error> {
     let status_code = response.status().as_u16();
     let is_error = status_code > 399;
     if is_error {
-        let msg = response.text().await.map_err(error::Error::RequestError)?;
+        let msg = response
+            .text()
+            .await
+            .map_err(|e| error::Error::RequestError(e.to_string()))?;
 
         match status_code {
             400 => Err(error::Error::BadRequestError(msg)),
@@ -59,7 +62,7 @@ pub async fn login(mut cfg: Config, credentials: &LoginRequest) -> Result<Config
         .json(&credentials)
         .send()
         .await
-        .map_err(error::Error::RequestError)?;
+        .map_err(|e| error::Error::RequestError(e.to_string()))?;
 
     let response = check_response(response).await?;
     let cookie = response
@@ -117,7 +120,7 @@ impl Client {
             .json(&user_data)
             .send()
             .await
-            .map_err(error::Error::RequestError)?;
+            .map_err(|e| error::Error::RequestError(e.to_string()))?;
 
         println!(
             "status {} {}",
@@ -132,7 +135,7 @@ impl Client {
             .request(Method::GET, "/users/")
             .send()
             .await
-            .map_err(error::Error::RequestError)?;
+            .map_err(|e| error::Error::RequestError(e.to_string()))?;
 
         let response = check_response(response).await?;
         Ok(response.json::<Vec<User>>().await.unwrap())
@@ -146,7 +149,7 @@ impl Client {
             .json(&email)
             .send()
             .await
-            .map_err(error::Error::RequestError)?;
+            .map_err(|e| error::Error::RequestError(e.to_string()))?;
 
         check_response(response).await?;
         Ok(())
@@ -157,7 +160,7 @@ impl Client {
             .request(Method::POST, &format!("/users/{}/delete", username))
             .send()
             .await
-            .map_err(error::Error::RequestError)?;
+            .map_err(|e| error::Error::RequestError(e.to_string()))?;
 
         check_response(response).await?;
         Ok(())
@@ -168,7 +171,7 @@ impl Client {
             .request(Method::GET, &format!("/users/{}", username))
             .send()
             .await
-            .map_err(error::Error::RequestError)?;
+            .map_err(|e| error::Error::RequestError(e.to_string()))?;
 
         let response = check_response(response).await?;
         Ok(response.json::<User>().await.unwrap())
@@ -181,7 +184,7 @@ impl Client {
             .json(&password)
             .send()
             .await
-            .map_err(error::Error::RequestError)?;
+            .map_err(|e| error::Error::RequestError(e.to_string()))?;
 
         check_response(response).await?;
         Ok(())
@@ -197,7 +200,7 @@ impl Client {
             .json(&credentials)
             .send()
             .await
-            .map_err(error::Error::RequestError)?;
+            .map_err(|e| error::Error::RequestError(e.to_string()))?;
 
         check_response(response).await?;
         Ok(())
@@ -213,7 +216,7 @@ impl Client {
             .json(&account)
             .send()
             .await
-            .map_err(error::Error::RequestError)?;
+            .map_err(|e| error::Error::RequestError(e.to_string()))?;
 
         check_response(response).await?;
         Ok(())
@@ -224,7 +227,7 @@ impl Client {
             .request(Method::POST, &format!("/users/{}/ban", username))
             .send()
             .await
-            .map_err(error::Error::RequestError)?;
+            .map_err(|e| error::Error::RequestError(e.to_string()))?;
 
         let response = check_response(response).await?;
         Ok(response.json::<BannedAccount>().await.unwrap())
@@ -235,7 +238,7 @@ impl Client {
             .request(Method::POST, &format!("/users/{}/unban", username))
             .send()
             .await
-            .map_err(error::Error::RequestError)?;
+            .map_err(|e| error::Error::RequestError(e.to_string()))?;
 
         let response = check_response(response).await?;
         Ok(response.json::<BannedAccount>().await.unwrap())
@@ -249,7 +252,7 @@ impl Client {
             .json(data)
             .send()
             .await
-            .map_err(error::Error::RequestError)?;
+            .map_err(|e| error::Error::RequestError(e.to_string()))?;
 
         check_response(response).await?;
         Ok(())
@@ -266,7 +269,7 @@ impl Client {
             .json(data)
             .send()
             .await
-            .map_err(error::Error::RequestError)?;
+            .map_err(|e| error::Error::RequestError(e.to_string()))?;
 
         let response = check_response(response).await?;
         Ok(response.json::<ProjectMetadata>().await.unwrap())
@@ -277,7 +280,7 @@ impl Client {
             .request(Method::GET, &format!("/projects/user/{}", &owner))
             .send()
             .await
-            .map_err(error::Error::RequestError)?;
+            .map_err(|e| error::Error::RequestError(e.to_string()))?;
 
         let response = check_response(response).await?;
 
@@ -292,7 +295,7 @@ impl Client {
             .request(Method::GET, &format!("/projects/shared/{}", &owner))
             .send()
             .await
-            .map_err(error::Error::RequestError)?;
+            .map_err(|e| error::Error::RequestError(e.to_string()))?;
 
         let response = check_response(response).await?;
 
@@ -311,7 +314,7 @@ impl Client {
             )
             .send()
             .await
-            .map_err(error::Error::RequestError)?;
+            .map_err(|e| error::Error::RequestError(e.to_string()))?;
 
         let response = check_response(response).await?;
 
@@ -327,7 +330,7 @@ impl Client {
             })
             .send()
             .await
-            .map_err(error::Error::RequestError)?;
+            .map_err(|e| error::Error::RequestError(e.to_string()))?;
 
         check_response(response).await?;
 
@@ -348,7 +351,7 @@ impl Client {
             })
             .send()
             .await
-            .map_err(error::Error::RequestError)?;
+            .map_err(|e| error::Error::RequestError(e.to_string()))?;
 
         check_response(response).await?;
 
@@ -360,7 +363,7 @@ impl Client {
             .request(Method::DELETE, &format!("/projects/id/{}", id))
             .send()
             .await
-            .map_err(error::Error::RequestError)?;
+            .map_err(|e| error::Error::RequestError(e.to_string()))?;
 
         check_response(response).await?;
 
@@ -372,7 +375,7 @@ impl Client {
             .request(Method::DELETE, &format!("/projects/id/{}/{}", id, role_id))
             .send()
             .await
-            .map_err(error::Error::RequestError)?;
+            .map_err(|e| error::Error::RequestError(e.to_string()))?;
 
         check_response(response).await?;
 
@@ -384,7 +387,7 @@ impl Client {
             .request(Method::POST, &format!("/projects/id/{}/publish", id))
             .send()
             .await
-            .map_err(error::Error::RequestError)?;
+            .map_err(|e| error::Error::RequestError(e.to_string()))?;
 
         let response = check_response(response).await?;
 
@@ -396,7 +399,7 @@ impl Client {
             .request(Method::POST, &format!("/projects/id/{}/unpublish", id))
             .send()
             .await
-            .map_err(error::Error::RequestError)?;
+            .map_err(|e| error::Error::RequestError(e.to_string()))?;
 
         check_response(response).await?;
 
@@ -417,7 +420,7 @@ impl Client {
             .request(Method::GET, &path)
             .send()
             .await
-            .map_err(error::Error::RequestError)?;
+            .map_err(|e| error::Error::RequestError(e.to_string()))?;
 
         let response = check_response(response).await?;
 
@@ -439,7 +442,7 @@ impl Client {
             .request(Method::GET, &path)
             .send()
             .await
-            .map_err(error::Error::RequestError)?;
+            .map_err(|e| error::Error::RequestError(e.to_string()))?;
 
         let response = check_response(response).await?;
 
@@ -452,7 +455,7 @@ impl Client {
             .request(Method::GET, &format!("/id/{}/collaborators/", project_id))
             .send()
             .await
-            .map_err(error::Error::RequestError)?;
+            .map_err(|e| error::Error::RequestError(e.to_string()))?;
 
         let response = check_response(response).await?;
 
@@ -471,7 +474,7 @@ impl Client {
             )
             .send()
             .await
-            .map_err(error::Error::RequestError)?;
+            .map_err(|e| error::Error::RequestError(e.to_string()))?;
 
         check_response(response).await?;
 
@@ -489,7 +492,7 @@ impl Client {
             )
             .send()
             .await
-            .map_err(error::Error::RequestError)?;
+            .map_err(|e| error::Error::RequestError(e.to_string()))?;
 
         let response = check_response(response).await?;
 
@@ -508,7 +511,7 @@ impl Client {
             )
             .send()
             .await
-            .map_err(error::Error::RequestError)?;
+            .map_err(|e| error::Error::RequestError(e.to_string()))?;
 
         check_response(response).await?;
         Ok(())
@@ -524,7 +527,7 @@ impl Client {
             .json(state)
             .send()
             .await
-            .map_err(error::Error::RequestError)?;
+            .map_err(|e| error::Error::RequestError(e.to_string()))?;
 
         check_response(response).await?;
         Ok(())
@@ -537,7 +540,7 @@ impl Client {
             .request(Method::GET, path)
             .send()
             .await
-            .map_err(error::Error::RequestError)?;
+            .map_err(|e| error::Error::RequestError(e.to_string()))?;
 
         let response = check_response(response).await?;
         Ok(response.json::<Vec<String>>().await.unwrap())
@@ -549,7 +552,7 @@ impl Client {
             .request(Method::GET, path)
             .send()
             .await
-            .map_err(error::Error::RequestError)?;
+            .map_err(|e| error::Error::RequestError(e.to_string()))?;
 
         let response = check_response(response).await?;
         Ok(response.json::<Vec<String>>().await.unwrap())
@@ -564,7 +567,7 @@ impl Client {
             .request(Method::GET, path)
             .send()
             .await
-            .map_err(error::Error::RequestError)?;
+            .map_err(|e| error::Error::RequestError(e.to_string()))?;
 
         let response = check_response(response).await?;
         Ok(response.json::<Vec<FriendInvite>>().await.unwrap())
@@ -581,7 +584,7 @@ impl Client {
             .json(recipient)
             .send()
             .await
-            .map_err(error::Error::RequestError)?;
+            .map_err(|e| error::Error::RequestError(e.to_string()))?;
 
         check_response(response).await?;
         Ok(())
@@ -599,7 +602,7 @@ impl Client {
             .json(&state)
             .send()
             .await
-            .map_err(error::Error::RequestError)?;
+            .map_err(|e| error::Error::RequestError(e.to_string()))?;
 
         check_response(response).await?;
         Ok(())
@@ -611,7 +614,7 @@ impl Client {
             .request(Method::POST, &path)
             .send()
             .await
-            .map_err(error::Error::RequestError)?;
+            .map_err(|e| error::Error::RequestError(e.to_string()))?;
 
         check_response(response).await?;
         Ok(())
@@ -623,7 +626,7 @@ impl Client {
             .request(Method::POST, &path)
             .send()
             .await
-            .map_err(error::Error::RequestError)?;
+            .map_err(|e| error::Error::RequestError(e.to_string()))?;
 
         check_response(response).await?;
         Ok(())
@@ -635,7 +638,7 @@ impl Client {
             .request(Method::POST, &path)
             .send()
             .await
-            .map_err(error::Error::RequestError)?;
+            .map_err(|e| error::Error::RequestError(e.to_string()))?;
 
         check_response(response).await?;
         Ok(())
@@ -651,7 +654,7 @@ impl Client {
             .request(Method::GET, &path)
             .send()
             .await
-            .map_err(error::Error::RequestError)?;
+            .map_err(|e| error::Error::RequestError(e.to_string()))?;
 
         let response = check_response(response).await?;
         Ok(response.json::<Vec<LibraryMetadata>>().await.unwrap())
@@ -662,7 +665,7 @@ impl Client {
             .request(Method::GET, "/libraries/mod/pending")
             .send()
             .await
-            .map_err(error::Error::RequestError)?;
+            .map_err(|e| error::Error::RequestError(e.to_string()))?;
 
         let response = check_response(response).await?;
 
@@ -674,7 +677,7 @@ impl Client {
             .request(Method::GET, "/libraries/community/")
             .send()
             .await
-            .map_err(error::Error::RequestError)?;
+            .map_err(|e| error::Error::RequestError(e.to_string()))?;
 
         let response = check_response(response).await?;
 
@@ -687,7 +690,7 @@ impl Client {
             .request(Method::GET, &path)
             .send()
             .await
-            .map_err(error::Error::RequestError)?;
+            .map_err(|e| error::Error::RequestError(e.to_string()))?;
 
         let response = check_response(response).await?;
 
@@ -711,7 +714,7 @@ impl Client {
             })
             .send()
             .await
-            .map_err(error::Error::RequestError)?;
+            .map_err(|e| error::Error::RequestError(e.to_string()))?;
 
         check_response(response).await?;
         Ok(())
@@ -723,7 +726,7 @@ impl Client {
             .request(Method::DELETE, &path)
             .send()
             .await
-            .map_err(error::Error::RequestError)?;
+            .map_err(|e| error::Error::RequestError(e.to_string()))?;
 
         check_response(response).await?;
         Ok(())
@@ -735,7 +738,7 @@ impl Client {
             .request(Method::POST, &path)
             .send()
             .await
-            .map_err(error::Error::RequestError)?;
+            .map_err(|e| error::Error::RequestError(e.to_string()))?;
 
         check_response(response).await?;
         Ok(())
@@ -751,7 +754,7 @@ impl Client {
             .request(Method::POST, &path)
             .send()
             .await
-            .map_err(error::Error::RequestError)?;
+            .map_err(|e| error::Error::RequestError(e.to_string()))?;
 
         check_response(response).await?;
         Ok(())
@@ -769,7 +772,7 @@ impl Client {
             .json(&state)
             .send()
             .await
-            .map_err(error::Error::RequestError)?;
+            .map_err(|e| error::Error::RequestError(e.to_string()))?;
 
         check_response(response).await?;
         Ok(())
@@ -782,7 +785,7 @@ impl Client {
             .request(Method::GET, &path)
             .send()
             .await
-            .map_err(error::Error::RequestError)?;
+            .map_err(|e| error::Error::RequestError(e.to_string()))?;
 
         let response = check_response(response).await?;
 
@@ -800,7 +803,7 @@ impl Client {
             .json(&group)
             .send()
             .await
-            .map_err(error::Error::RequestError)?;
+            .map_err(|e| error::Error::RequestError(e.to_string()))?;
 
         check_response(response).await?;
         Ok(())
@@ -812,7 +815,7 @@ impl Client {
             .request(Method::DELETE, &path)
             .send()
             .await
-            .map_err(error::Error::RequestError)?;
+            .map_err(|e| error::Error::RequestError(e.to_string()))?;
 
         check_response(response).await?;
         Ok(())
@@ -824,7 +827,7 @@ impl Client {
             .request(Method::GET, &path)
             .send()
             .await
-            .map_err(error::Error::RequestError)?;
+            .map_err(|e| error::Error::RequestError(e.to_string()))?;
 
         let response = check_response(response).await?;
         Ok(response.json::<Vec<User>>().await.unwrap())
@@ -839,7 +842,7 @@ impl Client {
             })
             .send()
             .await
-            .map_err(error::Error::RequestError)?;
+            .map_err(|e| error::Error::RequestError(e.to_string()))?;
 
         check_response(response).await?;
         Ok(())
@@ -851,7 +854,7 @@ impl Client {
             .request(Method::GET, &path)
             .send()
             .await
-            .map_err(error::Error::RequestError)?;
+            .map_err(|e| error::Error::RequestError(e.to_string()))?;
 
         let response = check_response(response).await?;
 
@@ -864,7 +867,7 @@ impl Client {
             .request(Method::GET, &format!("/services/hosts/user/{}", username))
             .send()
             .await
-            .map_err(error::Error::RequestError)?;
+            .map_err(|e| error::Error::RequestError(e.to_string()))?;
 
         let response = check_response(response).await?;
 
@@ -879,7 +882,7 @@ impl Client {
             .request(Method::GET, &format!("/services/hosts/group/{}", group_id))
             .send()
             .await
-            .map_err(error::Error::RequestError)?;
+            .map_err(|e| error::Error::RequestError(e.to_string()))?;
 
         let response = check_response(response).await?;
 
@@ -891,7 +894,7 @@ impl Client {
             .request(Method::GET, &format!("/services/hosts/all/{}", username))
             .send()
             .await
-            .map_err(error::Error::RequestError)?;
+            .map_err(|e| error::Error::RequestError(e.to_string()))?;
 
         let response = check_response(response).await?;
 
@@ -908,7 +911,7 @@ impl Client {
             .json(&hosts)
             .send()
             .await
-            .map_err(error::Error::RequestError)?;
+            .map_err(|e| error::Error::RequestError(e.to_string()))?;
 
         check_response(response).await?;
         Ok(())
@@ -924,7 +927,7 @@ impl Client {
             .json(&hosts)
             .send()
             .await
-            .map_err(error::Error::RequestError)?;
+            .map_err(|e| error::Error::RequestError(e.to_string()))?;
 
         check_response(response).await?;
         Ok(())
@@ -946,7 +949,7 @@ impl Client {
             .json(&host)
             .send()
             .await
-            .map_err(error::Error::RequestError)?;
+            .map_err(|e| error::Error::RequestError(e.to_string()))?;
 
         let response = check_response(response).await?;
         Ok(response.json::<String>().await.unwrap())
@@ -960,7 +963,7 @@ impl Client {
             )
             .send()
             .await
-            .map_err(error::Error::RequestError)?;
+            .map_err(|e| error::Error::RequestError(e.to_string()))?;
 
         check_response(response).await?;
         Ok(())
@@ -971,7 +974,7 @@ impl Client {
             .request(Method::GET, "/services/hosts/authorized/")
             .send()
             .await
-            .map_err(error::Error::RequestError)?;
+            .map_err(|e| error::Error::RequestError(e.to_string()))?;
 
         let response = check_response(response).await?;
         Ok(response.json::<Vec<AuthorizedServiceHost>>().await.unwrap())
@@ -989,7 +992,7 @@ impl Client {
             )
             .send()
             .await
-            .map_err(error::Error::RequestError)?;
+            .map_err(|e| error::Error::RequestError(e.to_string()))?;
 
         let response = check_response(response).await?;
         Ok(response.json::<Vec<String>>().await.unwrap())
@@ -1003,7 +1006,7 @@ impl Client {
             )
             .send()
             .await
-            .map_err(error::Error::RequestError)?;
+            .map_err(|e| error::Error::RequestError(e.to_string()))?;
 
         let response = check_response(response).await?;
         Ok(response.json::<Vec<String>>().await.unwrap())
@@ -1021,7 +1024,7 @@ impl Client {
             )
             .send()
             .await
-            .map_err(error::Error::RequestError)?;
+            .map_err(|e| error::Error::RequestError(e.to_string()))?;
 
         let response = check_response(response).await?;
         Ok(response.json::<ServiceSettings>().await.unwrap())
@@ -1039,7 +1042,7 @@ impl Client {
             )
             .send()
             .await
-            .map_err(error::Error::RequestError)?;
+            .map_err(|e| error::Error::RequestError(e.to_string()))?;
 
         let response = check_response(response).await?;
         Ok(response.text().await.unwrap())
@@ -1057,7 +1060,7 @@ impl Client {
             )
             .send()
             .await
-            .map_err(error::Error::RequestError)?;
+            .map_err(|e| error::Error::RequestError(e.to_string()))?;
 
         let response = check_response(response).await?;
         Ok(response.text().await.unwrap())
@@ -1077,7 +1080,7 @@ impl Client {
             .body(settings)
             .send()
             .await
-            .map_err(error::Error::RequestError)?;
+            .map_err(|e| error::Error::RequestError(e.to_string()))?;
 
         let response = check_response(response).await?;
         Ok(response.text().await.unwrap())
@@ -1097,7 +1100,7 @@ impl Client {
             .body(settings)
             .send()
             .await
-            .map_err(error::Error::RequestError)?;
+            .map_err(|e| error::Error::RequestError(e.to_string()))?;
 
         let response = check_response(response).await?;
         Ok(response.text().await.unwrap())
@@ -1115,7 +1118,7 @@ impl Client {
             )
             .send()
             .await
-            .map_err(error::Error::RequestError)?;
+            .map_err(|e| error::Error::RequestError(e.to_string()))?;
 
         let response = check_response(response).await?;
         Ok(response.text().await.unwrap())
@@ -1133,7 +1136,7 @@ impl Client {
             )
             .send()
             .await
-            .map_err(error::Error::RequestError)?;
+            .map_err(|e| error::Error::RequestError(e.to_string()))?;
 
         let response = check_response(response).await?;
         Ok(response.text().await.unwrap())
@@ -1144,7 +1147,7 @@ impl Client {
             .request(Method::GET, "/network/external")
             .send()
             .await
-            .map_err(error::Error::RequestError)?;
+            .map_err(|e| error::Error::RequestError(e.to_string()))?;
 
         let response = check_response(response).await?;
 
@@ -1156,7 +1159,7 @@ impl Client {
             .request(Method::GET, "/network/")
             .send()
             .await
-            .map_err(error::Error::RequestError)?;
+            .map_err(|e| error::Error::RequestError(e.to_string()))?;
 
         let response = check_response(response).await?;
 
@@ -1168,7 +1171,7 @@ impl Client {
             .request(Method::GET, &format!("/network/id/{}", id))
             .send()
             .await
-            .map_err(error::Error::RequestError)?;
+            .map_err(|e| error::Error::RequestError(e.to_string()))?;
 
         let response = check_response(response).await?;
 
@@ -1183,7 +1186,7 @@ impl Client {
             )
             .send()
             .await
-            .map_err(error::Error::RequestError)?;
+            .map_err(|e| error::Error::RequestError(e.to_string()))?;
 
         let response = check_response(response).await?;
 
@@ -1198,7 +1201,7 @@ impl Client {
             )
             .send()
             .await
-            .map_err(error::Error::RequestError)?;
+            .map_err(|e| error::Error::RequestError(e.to_string()))?;
 
         check_response(response).await?;
         Ok(())
@@ -1209,7 +1212,7 @@ impl Client {
             .request(Method::GET, "/configuration")
             .send()
             .await
-            .map_err(error::Error::RequestError)?;
+            .map_err(|e| error::Error::RequestError(e.to_string()))?;
 
         let response = check_response(response).await?;
 
@@ -1237,7 +1240,7 @@ impl Client {
             .json(&state)
             .send()
             .await
-            .map_err(error::Error::RequestError)?;
+            .map_err(|e| error::Error::RequestError(e.to_string()))?;
 
         check_response(response).await?;
 
@@ -1257,7 +1260,7 @@ impl Client {
             .json(&client)
             .send()
             .await
-            .map_err(error::Error::RequestError)?;
+            .map_err(|e| error::Error::RequestError(e.to_string()))?;
 
         let response = check_response(response).await?;
 
@@ -1269,7 +1272,7 @@ impl Client {
             .request(Method::DELETE, &format!("/oauth/clients/{}", id))
             .send()
             .await
-            .map_err(error::Error::RequestError)?;
+            .map_err(|e| error::Error::RequestError(e.to_string()))?;
 
         check_response(response).await?;
         Ok(())
@@ -1280,7 +1283,7 @@ impl Client {
             .request(Method::GET, "/oauth/clients/")
             .send()
             .await
-            .map_err(error::Error::RequestError)?;
+            .map_err(|e| error::Error::RequestError(e.to_string()))?;
 
         let response = check_response(response).await?;
 
@@ -1320,7 +1323,7 @@ impl Client {
             .json(&data)
             .send()
             .await
-            .map_err(error::Error::RequestError)?;
+            .map_err(|e| error::Error::RequestError(e.to_string()))?;
 
         let response = check_response(response).await?;
 
@@ -1368,7 +1371,7 @@ impl Client {
             .request(Method::GET, &url)
             .send()
             .await
-            .map_err(error::Error::RequestError)?;
+            .map_err(|e| error::Error::RequestError(e.to_string()))?;
 
         let response = check_response(response).await?;
 
@@ -1415,7 +1418,7 @@ impl Client {
             .request(Method::GET, &url)
             .send()
             .await
-            .map_err(error::Error::RequestError)?;
+            .map_err(|e| error::Error::RequestError(e.to_string()))?;
 
         let response = check_response(response).await?;
 
@@ -1472,7 +1475,7 @@ impl Client {
             .json(&data)
             .send()
             .await
-            .map_err(error::Error::RequestError)?;
+            .map_err(|e| error::Error::RequestError(e.to_string()))?;
 
         let response = check_response(response).await?;
 
@@ -1520,7 +1523,7 @@ impl Client {
             .request(Method::DELETE, &url)
             .send()
             .await
-            .map_err(error::Error::RequestError)?;
+            .map_err(|e| error::Error::RequestError(e.to_string()))?;
 
         let response = check_response(response).await?;
 
@@ -1579,7 +1582,7 @@ impl Client {
             .json(&data)
             .send()
             .await
-            .map_err(error::Error::RequestError)?;
+            .map_err(|e| error::Error::RequestError(e.to_string()))?;
 
         let response = check_response(response).await?;
 
@@ -1634,7 +1637,7 @@ impl Client {
             .request(Method::GET, &url)
             .send()
             .await
-            .map_err(error::Error::RequestError)?;
+            .map_err(|e| error::Error::RequestError(e.to_string()))?;
 
         let response = check_response(response).await?;
 
@@ -1700,7 +1703,7 @@ impl Client {
             .request(Method::GET, &url)
             .send()
             .await
-            .map_err(error::Error::RequestError)?;
+            .map_err(|e| error::Error::RequestError(e.to_string()))?;
 
         let response = check_response(response).await?;
 
@@ -1752,7 +1755,7 @@ impl Client {
             .request(Method::GET, &url)
             .send()
             .await
-            .map_err(error::Error::RequestError)?;
+            .map_err(|e| error::Error::RequestError(e.to_string()))?;
 
         let response = check_response(response).await?;
 
@@ -1815,7 +1818,7 @@ impl Client {
             .json(xml)
             .send()
             .await
-            .map_err(error::Error::RequestError)?;
+            .map_err(|e| error::Error::RequestError(e.to_string()))?;
 
         let response = check_response(response).await?;
 
@@ -1871,7 +1874,7 @@ impl Client {
             .request(Method::GET, &url)
             .send()
             .await
-            .map_err(error::Error::RequestError)?;
+            .map_err(|e| error::Error::RequestError(e.to_string()))?;
 
         let response = check_response(response).await?;
 
@@ -1933,7 +1936,7 @@ impl Client {
             .request(Method::GET, &url)
             .send()
             .await
-            .map_err(error::Error::RequestError)?;
+            .map_err(|e| error::Error::RequestError(e.to_string()))?;
 
         let response = check_response(response).await?;
 
@@ -1990,7 +1993,7 @@ impl Client {
             .request(Method::DELETE, &url)
             .send()
             .await
-            .map_err(error::Error::RequestError)?;
+            .map_err(|e| error::Error::RequestError(e.to_string()))?;
 
         let response = check_response(response).await?;
 
@@ -2051,7 +2054,7 @@ impl Client {
             .request(Method::DELETE, &url)
             .send()
             .await
-            .map_err(error::Error::RequestError)?;
+            .map_err(|e| error::Error::RequestError(e.to_string()))?;
 
         let response = check_response(response).await?;
 
@@ -2088,7 +2091,7 @@ impl MessageChannel {
         self.stream
             .send(Message::Text(msg_text))
             .await
-            .map_err(error::Error::WebSocketSendError)?;
+            .map_err(|e| error::Error::WebSocketError(e.to_string()))?;
 
         Ok(())
     }
