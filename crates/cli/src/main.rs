@@ -10,8 +10,8 @@ use futures_util::StreamExt;
 use inquire::{Confirm, Password, PasswordDisplayMode};
 use netsblox_api::common::{
     oauth, ClientId, CreateMagicLinkData, CreateProjectData, Credentials, FriendLinkState,
-    InvitationState, LinkedAccount, ProjectId, PublishState, RoleData, SaveState, ServiceHost,
-    ServiceHostScope, UserRole,
+    InvitationState, LinkedAccount, NewUser, ProjectId, PublishState, RoleData, SaveState,
+    ServiceHost, ServiceHostScope, UserRole,
 };
 use netsblox_api::{self, serde_json, Client};
 use std::path::Path;
@@ -790,15 +790,15 @@ async fn do_command(mut cfg: Config, args: Cli) -> Result<(), error::Error> {
                     None
                 };
 
-                client
-                    .create_user(
-                        username,
-                        email,
-                        password.as_deref(),
-                        group_id.as_ref(),
-                        role.to_owned(),
-                    )
-                    .await?;
+                let user_data = NewUser {
+                    username: username.to_string(),
+                    email: email.to_string(),
+                    password: password.to_owned(),
+                    group_id,
+                    role: Some(role.to_owned()),
+                };
+
+                client.create_user(&user_data).await?;
             }
             Users::SetPassword { password, user } => {
                 let username = user.clone().unwrap_or_else(|| get_current_user(cfg.host()));
@@ -844,7 +844,7 @@ async fn do_command(mut cfg: Config, args: Cli) -> Result<(), error::Error> {
                     username: username.to_owned(),
                     password: password.to_owned(),
                 };
-                client.link_account(&as_user, &creds).await?;
+                client.link_account(&as_user, creds).await?;
             }
             Users::Unlink { username, user } => {
                 let as_user = user.clone().unwrap_or_else(|| get_current_user(cfg.host()));
@@ -962,11 +962,11 @@ async fn do_command(mut cfg: Config, args: Cli) -> Result<(), error::Error> {
                         .expect("Role not found");
 
                     client
-                        .get_role(&project_id, &role_id, latest)
+                        .get_role(&project_id, &role_id, *latest)
                         .await?
                         .to_xml()
                 } else {
-                    client.get_project(&project_id, latest).await?.to_xml()
+                    client.get_project(&project_id, *latest).await?.to_xml()
                 };
                 println!("{}", xml);
             }
@@ -1038,7 +1038,7 @@ async fn do_command(mut cfg: Config, args: Cli) -> Result<(), error::Error> {
                     InvitationState::Accepted
                 };
                 client
-                    .respond_to_collaboration_invite(&invite.id, &state)
+                    .respond_to_collaboration_invite(invite.id.clone().into(), state)
                     .await?;
             }
             Projects::ListCollaborators { project, user } => {
@@ -1502,7 +1502,7 @@ async fn do_command(mut cfg: Config, args: Cli) -> Result<(), error::Error> {
                 } else {
                     PublishState::Public
                 };
-                client.approve_library(&username, library, &state).await?;
+                client.approve_library(&username, library, state).await?;
             }
         },
         Command::Groups(cmd) => match &cmd.subcmd {

@@ -14,7 +14,10 @@ use tokio::net::TcpStream;
 use tokio_tungstenite::tungstenite::Message;
 use tokio_tungstenite::{connect_async, MaybeTlsStream, WebSocketStream};
 
+use wasm_bindgen::prelude::*;
+
 #[derive(Serialize, Deserialize, Debug, Clone)]
+#[wasm_bindgen(getter_with_clone)]
 pub struct Config {
     pub app_id: Option<AppId>,
     pub username: Option<String>,
@@ -22,8 +25,11 @@ pub struct Config {
     pub url: String,
 }
 
-impl Default for Config {
-    fn default() -> Self {
+#[wasm_bindgen]
+impl Config {
+    #[wasm_bindgen(constructor)]
+    #[must_use]
+    pub fn new() -> Self {
         Self {
             app_id: None,
             username: None,
@@ -55,6 +61,7 @@ async fn check_response(response: Response) -> Result<Response, error::Error> {
     }
 }
 
+#[wasm_bindgen]
 pub async fn login(mut cfg: Config, credentials: &LoginRequest) -> Result<Config, error::Error> {
     let client = reqwest::Client::new();
     let response = client
@@ -80,11 +87,15 @@ pub async fn login(mut cfg: Config, credentials: &LoginRequest) -> Result<Config
 }
 
 #[derive(Clone)]
+#[wasm_bindgen]
 pub struct Client {
     cfg: Config,
 }
 
+#[wasm_bindgen]
 impl Client {
+    #[wasm_bindgen(constructor)]
+    #[must_use]
     pub fn new(cfg: Config) -> Self {
         Client { cfg }
     }
@@ -99,22 +110,7 @@ impl Client {
     }
 
     // User management
-    pub async fn create_user(
-        &self,
-        name: &str,
-        email: &str,
-        password: Option<&str>, // TODO: Make these CreateUserOptions
-        group_id: Option<&GroupId>,
-        role: UserRole,
-    ) -> Result<(), error::Error> {
-        let user_data = NewUser {
-            username: name.to_owned(),
-            email: email.to_owned(),
-            role: Some(role),
-            group_id: group_id.map(|id| id.to_owned()),
-            password: password.map(|pwd| pwd.to_owned()),
-        };
-
+    pub async fn create_user(&self, user_data: &NewUser) -> Result<(), error::Error> {
         let response = self
             .request(Method::POST, "/users/create")
             .json(&user_data)
@@ -193,7 +189,7 @@ impl Client {
     pub async fn link_account(
         &self,
         username: &str,
-        credentials: &Credentials,
+        credentials: Credentials,
     ) -> Result<(), error::Error> {
         let response = self
             .request(Method::POST, &format!("/users/{}/link/", username))
@@ -406,12 +402,8 @@ impl Client {
         Ok(())
     }
 
-    pub async fn get_project(
-        &self,
-        id: &ProjectId,
-        latest: &bool,
-    ) -> Result<Project, error::Error> {
-        let path = if *latest {
+    pub async fn get_project(&self, id: &ProjectId, latest: bool) -> Result<Project, error::Error> {
+        let path = if latest {
             format!("/projects/id/{}/latest", id)
         } else {
             format!("/projects/id/{}", id)
@@ -431,9 +423,9 @@ impl Client {
         &self,
         id: &ProjectId,
         role_id: &RoleId,
-        latest: &bool,
+        latest: bool,
     ) -> Result<RoleData, error::Error> {
-        let path = if *latest {
+        let path = if latest {
             format!("/projects/id/{}/{}/latest", id, role_id)
         } else {
             format!("/projects/id/{}/{}", id, role_id)
@@ -519,12 +511,12 @@ impl Client {
 
     pub async fn respond_to_collaboration_invite(
         &self,
-        id: &InvitationId,
-        state: &InvitationState,
+        id: InvitationId,
+        state: InvitationState,
     ) -> Result<(), error::Error> {
         let response = self
             .request(Method::POST, &format!("/collaboration-invites/id/{}", id))
-            .json(state)
+            .json(&state)
             .send()
             .await
             .map_err(|e| error::Error::RequestError(e.to_string()))?;
@@ -764,7 +756,7 @@ impl Client {
         &self,
         username: &str,
         library: &str,
-        state: &PublishState,
+        state: PublishState,
     ) -> Result<(), error::Error> {
         let path = format!("/libraries/mod/{}/{}", username, library);
         let response = self
@@ -1141,6 +1133,7 @@ impl Client {
         let response = check_response(response).await?;
         Ok(response.text().await.unwrap())
     }
+
     // NetsBlox network capabilities
     pub async fn list_external_clients(&self) -> Result<Vec<ExternalClient>, error::Error> {
         let response = self
@@ -1205,49 +1198,6 @@ impl Client {
 
         check_response(response).await?;
         Ok(())
-    }
-
-    pub async fn connect(&self, address: &str) -> Result<MessageChannel, error::Error> {
-        let response = self
-            .request(Method::GET, "/configuration")
-            .send()
-            .await
-            .map_err(|e| error::Error::RequestError(e.to_string()))?;
-
-        let response = check_response(response).await?;
-
-        let config = response.json::<ClientConfig>().await.unwrap();
-
-        let url = format!(
-            "{}/network/{}/connect",
-            self.cfg.url.replace("http", "ws"),
-            config.client_id
-        );
-        let (ws_stream, _) = connect_async(&url).await.unwrap();
-
-        let state = ClientStateData {
-            state: ClientState::External(ExternalClientState {
-                address: address.to_owned(),
-                app_id: self.cfg.app_id.as_ref().unwrap().clone(),
-            }),
-        };
-
-        let response = self
-            .request(
-                Method::POST,
-                &format!("/network/{}/state", config.client_id),
-            )
-            .json(&state)
-            .send()
-            .await
-            .map_err(|e| error::Error::RequestError(e.to_string()))?;
-
-        check_response(response).await?;
-
-        Ok(MessageChannel {
-            id: config.client_id,
-            stream: ws_stream,
-        })
     }
 
     // NetsBlox OAuth capabilities
@@ -1689,8 +1639,8 @@ impl Client {
         &self,
         id: &GalleryId,
         prid: &ProjectId,
-        aspect_ratio: &Option<f32>,
-    ) -> Result<Bytes, error::Error> {
+        aspect_ratio: Option<f32>,
+    ) -> Result<Vec<u8>, error::Error> {
         let base = format!("/galleries/id/{id}/project/{prid}/thumbnail");
 
         let url = if let Some(ratio) = aspect_ratio {
@@ -1712,8 +1662,9 @@ impl Client {
             .await
             .map_err(|e| error::Error::ParseResponseFailedError(e.to_string()))?;
 
-        Ok(thumbnail)
+        Ok(thumbnail.to_vec())
     }
+
     /// Asynchronously retrieves all projects within a specified gallery.
     ///
     /// # Arguments
@@ -1928,7 +1879,7 @@ impl Client {
         &self,
         id: &GalleryId,
         prid: &ProjectId,
-        version: &usize,
+        version: usize,
     ) -> Result<String, error::Error> {
         let url = format!("/galleries/id/{id}/project/{prid}/version/{version}/xml");
 
@@ -2046,7 +1997,7 @@ impl Client {
         &self,
         id: &GalleryId,
         prid: &ProjectId,
-        version: &usize,
+        version: usize,
     ) -> Result<GalleryProjectMetadata, error::Error> {
         let url = format!("/galleries/id/{id}/project/{prid}/version/{version}");
 
@@ -2064,6 +2015,51 @@ impl Client {
             .map_err(|e| error::Error::ParseResponseFailedError(e.to_string()))?;
 
         Ok(project)
+    }
+}
+
+impl Client {
+    pub async fn connect(&self, address: &str) -> Result<MessageChannel, error::Error> {
+        let response = self
+            .request(Method::GET, "/configuration")
+            .send()
+            .await
+            .map_err(|e| error::Error::RequestError(e.to_string()))?;
+
+        let response = check_response(response).await?;
+
+        let config = response.json::<ClientConfig>().await.unwrap();
+
+        let url = format!(
+            "{}/network/{}/connect",
+            self.cfg.url.replace("http", "ws"),
+            config.client_id
+        );
+        let (ws_stream, _) = connect_async(&url).await.unwrap();
+
+        let state = ClientStateData {
+            state: ClientState::External(ExternalClientState {
+                address: address.to_owned(),
+                app_id: self.cfg.app_id.as_ref().unwrap().clone(),
+            }),
+        };
+
+        let response = self
+            .request(
+                Method::POST,
+                &format!("/network/{}/state", config.client_id),
+            )
+            .json(&state)
+            .send()
+            .await
+            .map_err(|e| error::Error::RequestError(e.to_string()))?;
+
+        check_response(response).await?;
+
+        Ok(MessageChannel {
+            id: config.client_id,
+            stream: ws_stream,
+        })
     }
 }
 
@@ -2094,22 +2090,5 @@ impl MessageChannel {
             .map_err(|e| error::Error::WebSocketError(e.to_string()))?;
 
         Ok(())
-    }
-}
-
-#[cfg(test)]
-mod tests {
-
-    #[test]
-    fn it_works() {
-        let result = 2 + 2;
-        assert_eq!(result, 4);
-    }
-
-    #[test]
-    #[should_panic(expected = "assertion `left == right` failed\n  left: 4\n right: 5")]
-    fn it_does_not_work() {
-        let result = 2 + 2;
-        assert_eq!(result, 5);
     }
 }

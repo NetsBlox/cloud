@@ -3,31 +3,39 @@ use std::time::SystemTime;
 use derive_more::{Display, FromStr};
 use serde::{Deserialize, Serialize};
 
+use wasm_bindgen::prelude::*;
+
 #[derive(Deserialize, Serialize, Clone, Debug, PartialEq, Eq, Display, Hash, FromStr)]
+#[wasm_bindgen(getter_with_clone)]
 pub struct ClientId(String);
 
+#[wasm_bindgen(constructor)]
 impl ClientId {
     pub fn new(name: String) -> Self {
         Self(name)
     }
-
+}
+impl ClientId {
     pub fn as_str(&self) -> &str {
         &self.0
     }
 }
 
 #[derive(Deserialize, Serialize, Clone, Debug, Display)]
+#[wasm_bindgen(getter_with_clone)]
 pub struct CreateClientData {
     pub name: String,
 }
 
 #[derive(Deserialize, Serialize, Clone, Debug)]
+#[wasm_bindgen(getter_with_clone)]
 pub struct CreatedClientData {
     pub id: ClientId,
     pub secret: String,
 }
 
 #[derive(Deserialize, Serialize, Clone, Debug)]
+#[wasm_bindgen(getter_with_clone)]
 pub struct Client {
     pub id: ClientId,
     pub name: String,

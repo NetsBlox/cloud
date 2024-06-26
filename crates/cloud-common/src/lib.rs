@@ -598,11 +598,13 @@ impl From<ProjectMetadata> for netsblox_api_common::ProjectMetadata {
                 .into_iter()
                 .map(|t| t.into())
                 .collect(),
-            roles: metadata
-                .roles
-                .into_iter()
-                .map(|(k, v)| (k, v.into()))
-                .collect(),
+            roles: api::HashMapRoleMetadata(
+                metadata
+                    .roles
+                    .into_iter()
+                    .map(|(k, v)| (k, v.into()))
+                    .collect(),
+            ),
         }
     }
 }
@@ -632,7 +634,7 @@ impl From<Project> for netsblox_api_common::Project {
             state: project.state,
             collaborators: project.collaborators,
             save_state: project.save_state,
-            roles: project.roles,
+            roles: api::HashMapRoleData(project.roles),
         }
     }
 }

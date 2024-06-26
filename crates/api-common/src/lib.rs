@@ -3,7 +3,7 @@ mod bson;
 pub mod oauth;
 
 use core::fmt;
-use derive_more::{Display, Error, FromStr};
+use derive_more::{Deref, Display, Error, From, FromStr, Into, IntoIterator};
 use serde::{
     de::{self, Visitor},
     Deserialize, Deserializer, Serialize,
@@ -12,6 +12,10 @@ use serde_json::Value;
 use std::{collections::HashMap, str::FromStr, time::SystemTime};
 use ts_rs::TS;
 use uuid::Uuid;
+
+use into_jsvalue_derive::IntoJsValue;
+use tsify::Tsify;
+use wasm_bindgen::prelude::*;
 
 const APP_NAME: &str = "NetsBlox";
 
@@ -35,6 +39,7 @@ pub struct InvitationResponse {
 #[derive(Serialize, Deserialize, Clone, Debug, TS)]
 #[serde(rename_all = "camelCase")]
 #[ts(export)]
+#[wasm_bindgen(getter_with_clone)]
 pub struct User {
     pub username: String,
     pub email: String,
@@ -42,6 +47,7 @@ pub struct User {
     pub group_id: Option<GroupId>,
     pub role: UserRole,
     #[ts(skip)]
+    #[wasm_bindgen(skip)]
     pub created_at: SystemTime,
     pub linked_accounts: Vec<LinkedAccount>,
     #[ts(optional)]
@@ -51,6 +57,7 @@ pub struct User {
 #[derive(Serialize, Deserialize, Debug, TS)]
 #[serde(rename_all = "camelCase")]
 #[ts(export)]
+#[wasm_bindgen(getter_with_clone)]
 pub struct NewUser {
     pub username: String,
     pub email: String,
@@ -65,6 +72,7 @@ pub struct NewUser {
 #[derive(Serialize, Deserialize, Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, TS)]
 #[serde(rename_all = "camelCase")]
 #[ts(export)]
+#[wasm_bindgen]
 pub enum UserRole {
     User,
     Teacher,
@@ -75,12 +83,15 @@ pub enum UserRole {
 #[derive(Deserialize, Serialize, Clone, Debug, TS)]
 #[serde(rename_all = "camelCase")]
 #[ts(export)]
+#[wasm_bindgen(getter_with_clone)]
 pub struct NetworkTraceMetadata {
     pub id: String,
     #[ts(type = "any")] // FIXME
+    #[wasm_bindgen(skip)]
     pub start_time: SystemTime,
     #[ts(type = "any | null")] // FIXME
     #[ts(optional)]
+    #[wasm_bindgen(skip)]
     pub end_time: Option<SystemTime>,
 }
 
@@ -130,6 +141,7 @@ impl FromStr for UserRole {
 #[derive(Serialize, Deserialize, Clone, Debug, TS)]
 #[serde(rename_all = "camelCase")]
 #[ts(export)]
+#[wasm_bindgen(getter_with_clone)]
 pub struct ServiceHost {
     pub url: String,
     pub categories: Vec<String>,
@@ -137,14 +149,16 @@ pub struct ServiceHost {
 
 #[derive(Serialize, Deserialize, Clone, Debug, TS)]
 #[ts(export)]
+#[wasm_bindgen(getter_with_clone)]
 pub struct LinkedAccount {
     pub username: String,
     pub strategy: String,
 }
 
-#[derive(TS, Serialize, Deserialize, Clone)]
+#[derive(TS, Serialize, Deserialize, Clone, Tsify, IntoJsValue)]
 #[serde(rename_all = "camelCase")]
 #[ts(export)]
+#[tsify(into_wasm_abi, from_wasm_abi)]
 pub struct BannedAccount {
     pub username: String,
     pub email: String,
@@ -155,14 +169,16 @@ pub struct BannedAccount {
 #[derive(Serialize, Deserialize, Debug, TS)]
 #[serde(rename_all = "camelCase")]
 #[ts(export)]
+#[wasm_bindgen(getter_with_clone)]
 pub struct LoginRequest {
     pub credentials: Credentials,
     #[ts(optional)]
     pub client_id: Option<ClientId>, // TODO: add a secret token for the client?
 }
 
-#[derive(Deserialize, Serialize, Debug, Clone, TS)]
+#[derive(IntoJsValue, Deserialize, Serialize, Debug, Clone, TS, Tsify)]
 #[ts(export)]
+#[tsify(into_wasm_abi, from_wasm_abi)]
 pub enum Credentials {
     Snap { username: String, password: String },
     NetsBlox { username: String, password: String },
@@ -201,6 +217,7 @@ pub struct FriendLink {
 
 #[derive(Deserialize, Serialize, Clone, Debug, TS)]
 #[ts(export)]
+#[wasm_bindgen]
 pub enum FriendLinkState {
     Pending,
     Approved,
@@ -234,11 +251,13 @@ impl FromStr for FriendLinkState {
 #[derive(Serialize, Deserialize, Clone, Debug, TS)]
 #[serde(rename_all = "camelCase")]
 #[ts(export)]
+#[wasm_bindgen(getter_with_clone)]
 pub struct FriendInvite {
     pub id: String,
     pub sender: String,
     pub recipient: String,
     #[ts(type = "any")] // FIXME
+    #[wasm_bindgen(skip)]
     pub created_at: SystemTime,
 }
 
@@ -250,9 +269,12 @@ pub struct ThumbnailParams {
 
 #[derive(Deserialize, Serialize, Clone, Debug, PartialEq, Eq, Display, Hash, TS)]
 #[ts(export)]
+#[wasm_bindgen(getter_with_clone)]
 pub struct ProjectId(String);
 
+#[wasm_bindgen]
 impl ProjectId {
+    #[wasm_bindgen(constructor)]
     pub fn new(id: String) -> Self {
         ProjectId(id)
     }
@@ -260,26 +282,35 @@ impl ProjectId {
 
 #[derive(Deserialize, Serialize, Clone, Debug, PartialEq, Eq, Display, Hash, TS)]
 #[ts(export)]
+#[wasm_bindgen(getter_with_clone)]
 pub struct RoleId(String);
 
+#[wasm_bindgen]
 impl RoleId {
+    #[wasm_bindgen(constructor)]
     pub fn new(id: String) -> Self {
         RoleId(id)
     }
+}
 
+impl RoleId {
     pub fn as_str(&self) -> &str {
         &self.0
     }
 }
 #[derive(Deserialize, Serialize, Clone, Debug, PartialEq, Eq, Display, Hash, TS)]
 #[ts(export)]
+#[wasm_bindgen(getter_with_clone)]
 pub struct S3Key(String);
 
+#[wasm_bindgen]
 impl S3Key {
+    #[wasm_bindgen(constructor)]
     pub fn new(key: String) -> Self {
         S3Key(key)
     }
-
+}
+impl S3Key {
     pub fn as_str(&self) -> &str {
         &self.0
     }
@@ -288,23 +319,31 @@ impl S3Key {
 #[derive(Deserialize, Serialize, Clone, Debug, TS)]
 #[serde(rename_all = "camelCase")]
 #[ts(export)]
+#[wasm_bindgen(getter_with_clone)]
 pub struct ProjectMetadata {
     pub id: ProjectId,
     pub owner: String,
     pub name: String,
     #[ts(type = "any")] // FIXME
+    #[wasm_bindgen(skip)]
     pub updated: SystemTime,
     pub state: PublishState,
     pub collaborators: std::vec::Vec<String>,
     pub network_traces: Vec<NetworkTraceMetadata>,
     #[ts(type = "any")] // FIXME
+    #[wasm_bindgen(skip)]
     pub origin_time: SystemTime,
     pub save_state: SaveState,
-    pub roles: HashMap<RoleId, RoleMetadata>,
+    pub roles: HashMapRoleMetadata,
 }
+
+#[derive(From, Into, Deref, IntoIterator, Deserialize, Serialize, Clone, Debug, TS, Tsify)]
+#[tsify(into_wasm_abi, from_wasm_abi)]
+pub struct HashMapRoleMetadata(pub HashMap<RoleId, RoleMetadata>);
 
 #[derive(Deserialize, Serialize, Clone, Debug, TS)]
 #[ts(export)]
+#[wasm_bindgen]
 pub enum SaveState {
     Created,
     Transient,
@@ -314,6 +353,7 @@ pub enum SaveState {
 
 #[derive(Deserialize, Serialize, Clone, Debug, TS)]
 #[ts(export)]
+#[wasm_bindgen(getter_with_clone)]
 pub struct RoleMetadata {
     pub name: String,
     pub code: S3Key,
@@ -323,19 +363,26 @@ pub struct RoleMetadata {
 #[derive(Deserialize, Serialize, TS)]
 #[serde(rename_all = "camelCase")]
 #[ts(export)]
+#[wasm_bindgen(getter_with_clone)]
 pub struct Project {
     pub id: ProjectId,
     pub owner: String,
     pub name: String,
     #[ts(type = "any")] // FIXME
+    #[wasm_bindgen(skip)]
     pub updated: SystemTime,
     pub state: PublishState,
     pub collaborators: std::vec::Vec<String>,
     #[ts(type = "any")] // FIXME
+    #[wasm_bindgen(skip)]
     pub origin_time: SystemTime,
     pub save_state: SaveState,
-    pub roles: HashMap<RoleId, RoleData>,
+    pub roles: HashMapRoleData,
 }
+
+#[derive(From, Into, Deref, IntoIterator, Deserialize, Serialize, Clone, Debug, TS, Tsify)]
+#[tsify(into_wasm_abi, from_wasm_abi)]
+pub struct HashMapRoleData(pub HashMap<RoleId, RoleData>);
 
 impl Project {
     pub fn to_xml(&self) -> String {
@@ -361,6 +408,7 @@ pub struct RoleDataResponse {
 }
 
 #[derive(Deserialize, Serialize, Debug, Clone, TS)]
+#[wasm_bindgen(getter_with_clone)]
 #[ts(export)]
 pub struct RoleData {
     pub name: String,
@@ -382,9 +430,10 @@ pub struct ClientStateData {
     pub state: ClientState,
 }
 
-#[derive(Debug, Deserialize, Serialize, Clone, PartialEq, Eq, TS)]
+#[derive(Debug, Deserialize, Serialize, Clone, PartialEq, Eq, TS, Tsify, IntoJsValue)]
 #[serde(rename_all = "camelCase")]
 #[ts(export)]
+#[tsify(into_wasm_abi, from_wasm_abi)]
 pub enum ClientState {
     Browser(BrowserClientState),
     External(ExternalClientState),
@@ -400,6 +449,7 @@ pub struct BrowserClientState {
 
 #[derive(Debug, Serialize, Clone, Hash, Eq, PartialEq, TS)]
 #[ts(export)]
+#[wasm_bindgen(getter_with_clone)]
 pub struct AppId(String);
 
 impl AppId {
@@ -463,6 +513,7 @@ pub struct CreateLibraryData {
 
 #[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq, PartialOrd, Ord, TS)]
 #[ts(export)]
+#[wasm_bindgen]
 pub enum PublishState {
     Private,
     ApprovalDenied,
@@ -472,6 +523,7 @@ pub enum PublishState {
 
 #[derive(Serialize, Deserialize, Clone, Debug, TS)]
 #[ts(export)]
+#[wasm_bindgen(getter_with_clone)]
 pub struct LibraryMetadata {
     pub owner: String,
     pub name: String,
@@ -506,6 +558,7 @@ pub struct CreateGroupData {
 
 #[derive(Deserialize, Serialize, Clone, Debug, PartialEq, Eq, Display, Hash, FromStr, TS)]
 #[ts(export)]
+#[wasm_bindgen(getter_with_clone)]
 pub struct GroupId(String);
 
 impl GroupId {
@@ -521,6 +574,7 @@ impl GroupId {
 #[derive(Serialize, Deserialize, Clone, Debug, TS)]
 #[serde(rename_all = "camelCase")]
 #[ts(export)]
+#[wasm_bindgen(getter_with_clone)]
 pub struct Group {
     pub id: GroupId,
     pub owner: String,
@@ -537,6 +591,7 @@ pub struct UpdateGroupData {
 
 #[derive(Deserialize, Serialize, Clone, Debug, PartialEq, Eq, Display, Hash, FromStr, TS)]
 #[ts(export)]
+#[wasm_bindgen(getter_with_clone)]
 pub struct GalleryId(String);
 
 impl GalleryId {
@@ -553,6 +608,7 @@ impl GalleryId {
 #[derive(Serialize, Deserialize, Clone, Debug, TS)]
 #[serde(rename_all = "camelCase")]
 #[ts(export)]
+#[wasm_bindgen(getter_with_clone)]
 pub struct CreateGalleryData {
     pub owner: String,
     pub name: String,
@@ -561,6 +617,7 @@ pub struct CreateGalleryData {
 
 #[derive(Serialize, Deserialize, Clone, Debug, TS)]
 #[serde(rename_all = "camelCase")]
+#[wasm_bindgen(getter_with_clone)]
 #[ts(export)]
 pub struct Gallery {
     pub id: GalleryId,
@@ -572,6 +629,7 @@ pub struct Gallery {
 #[derive(Serialize, Deserialize, Clone, Debug, TS)]
 #[serde(rename_all = "camelCase")]
 #[ts(export)]
+#[wasm_bindgen(getter_with_clone)]
 pub struct ChangeGalleryData {
     #[ts(optional)]
     // TODO: Future, use newtype and add constraints.
@@ -584,10 +642,12 @@ pub struct ChangeGalleryData {
 
 #[derive(Deserialize, Serialize, Clone, Debug, TS)]
 #[serde(rename_all = "camelCase")]
+#[wasm_bindgen(getter_with_clone)]
 #[ts(export)]
 pub struct Version {
     pub key: S3Key,
     #[ts(type = "any")] // FIXME
+    #[wasm_bindgen(skip)]
     pub updated: SystemTime,
     pub deleted: bool,
 }
@@ -595,12 +655,14 @@ pub struct Version {
 #[derive(Deserialize, Serialize, Clone, Debug, TS)]
 #[serde(rename_all = "camelCase")]
 #[ts(export)]
+#[wasm_bindgen(getter_with_clone)]
 pub struct GalleryProjectMetadata {
     pub gallery_id: GalleryId,
     pub id: ProjectId,
     pub owner: String,
     pub name: String,
     #[ts(type = "any")] // FIXME
+    #[wasm_bindgen(skip)]
     pub origin_time: SystemTime,
     pub versions: Vec<Version>,
 }
@@ -608,6 +670,7 @@ pub struct GalleryProjectMetadata {
 #[derive(Deserialize, Serialize, Clone, Debug, TS)]
 #[serde(rename_all = "camelCase")]
 #[ts(export)]
+#[wasm_bindgen(getter_with_clone)]
 pub struct CreateGalleryProjectData {
     pub owner: String,
     pub name: String,
@@ -616,17 +679,21 @@ pub struct CreateGalleryProjectData {
 
 #[derive(Deserialize, Serialize, Clone, Debug, TS)]
 #[ts(export)]
+#[wasm_bindgen]
 pub enum InvitationState {
     Pending,
     Accepted,
     Rejected,
 }
 
-pub type InvitationId = String;
+#[derive(TS, Display, Into, From, Deserialize, Serialize, Clone, Debug)]
+#[wasm_bindgen(getter_with_clone)]
+pub struct InvitationId(pub String);
 
 #[derive(TS, Deserialize, Serialize, Clone, Debug)]
 #[serde(rename_all = "camelCase")]
 #[ts(export)]
+#[wasm_bindgen(getter_with_clone)]
 pub struct CollaborationInvite {
     pub id: String,
     pub sender: String,
@@ -634,6 +701,7 @@ pub struct CollaborationInvite {
     pub project_id: ProjectId,
     pub state: InvitationState,
     #[ts(type = "any")] // FIXME
+    #[wasm_bindgen(skip)]
     pub created_at: SystemTime,
 }
 
@@ -671,6 +739,7 @@ pub struct UpdateRoleData {
 #[derive(Deserialize, Serialize, TS)]
 #[serde(rename_all = "camelCase")]
 #[ts(export)]
+#[wasm_bindgen(getter_with_clone)]
 pub struct CreateProjectData {
     #[ts(optional)]
     pub owner: Option<String>,
@@ -686,6 +755,7 @@ pub struct CreateProjectData {
 // Network debugging data
 #[derive(Deserialize, Serialize, Debug, Clone, PartialEq, Eq, Hash, TS)]
 #[ts(export)]
+#[wasm_bindgen(getter_with_clone)]
 pub struct ClientId(String);
 
 impl ClientId {
@@ -717,6 +787,7 @@ impl FromStr for ClientId {
 #[derive(Deserialize, Serialize, Debug, TS)]
 #[serde(rename_all = "camelCase")]
 #[ts(export)]
+#[wasm_bindgen(getter_with_clone)]
 pub struct ExternalClient {
     #[ts(optional)]
     pub username: Option<String>,
@@ -724,8 +795,9 @@ pub struct ExternalClient {
     pub app_id: AppId,
 }
 
-#[derive(Deserialize, Serialize, Clone, Debug, TS)]
+#[derive(Deserialize, Serialize, Clone, Debug, TS, Tsify, IntoJsValue)]
 #[ts(export)]
+#[tsify(into_wasm_abi, from_wasm_abi)]
 pub struct RoomState {
     pub id: ProjectId,
     pub owner: String,
@@ -762,15 +834,17 @@ pub struct OccupantInviteData {
 #[derive(Deserialize, Serialize, Debug, Clone, TS)]
 #[serde(rename_all = "camelCase")]
 #[ts(export)]
+#[wasm_bindgen(getter_with_clone)]
 pub struct AuthorizedServiceHost {
     pub url: String,
     pub id: String,
     pub visibility: ServiceHostScope,
 }
 
-#[derive(Deserialize, Serialize, Debug, Clone, TS)]
+#[derive(Deserialize, Serialize, Debug, Clone, TS, Tsify, IntoJsValue)]
 #[serde(rename_all = "camelCase")]
 #[ts(export)]
+#[tsify(into_wasm_abi, from_wasm_abi)]
 pub enum ServiceHostScope {
     Public(Vec<String>),
     Private,
@@ -779,6 +853,7 @@ pub enum ServiceHostScope {
 #[derive(Deserialize, Serialize, Debug, Clone, TS)]
 #[serde(rename_all = "camelCase")]
 #[ts(export)]
+#[wasm_bindgen(getter_with_clone)]
 pub struct ClientInfo {
     #[ts(optional)]
     pub username: Option<String>,
@@ -787,8 +862,9 @@ pub struct ClientInfo {
 }
 
 /// Service settings for a given user categorized by origin
-#[derive(Deserialize, Serialize, Debug, Clone, TS)]
+#[derive(Deserialize, Serialize, Debug, Clone, TS, Tsify, IntoJsValue)]
 #[ts(export)]
+#[tsify(into_wasm_abi, from_wasm_abi)]
 pub struct ServiceSettings {
     /// Service settings owned by the user
     #[ts(optional)]
@@ -872,6 +948,7 @@ pub struct MagicLinkLoginData {
 
 #[derive(Serialize, Deserialize, Clone, Debug, TS)]
 #[serde(rename_all = "camelCase")]
+#[wasm_bindgen(getter_with_clone)]
 #[ts(export)]
 pub struct CreateMagicLinkData {
     pub email: String,
