@@ -10,7 +10,7 @@ use aws_config::SdkConfig;
 use aws_credential_types::{provider::SharedCredentialsProvider, Credentials as S3Credentials};
 use aws_sdk_s3::{self as s3, config::Region};
 use clap::Parser;
-use cloud::api::SaveState;
+use cloud::api::{S3Key, SaveState};
 use derive_more::{Display, Error};
 use futures::{future::join_all, stream::StreamExt};
 use indicatif::ProgressBar;
@@ -224,8 +224,8 @@ async fn upload_role(
 
     cloud::RoleMetadata {
         name: role.name.to_owned(),
-        code: src_path,
-        media: media_path,
+        code: S3Key::new(src_path),
+        media: S3Key::new(media_path),
         updated: DateTime::now(),
     }
 }

@@ -3,31 +3,55 @@ use std::time::SystemTime;
 use derive_more::{Display, FromStr};
 use serde::{Deserialize, Serialize};
 
+#[cfg(feature = "wasm")]
+use {into_jsvalue_derive::IntoJsValue, tsify::Tsify};
+
 #[derive(Deserialize, Serialize, Clone, Debug, PartialEq, Eq, Display, Hash, FromStr)]
+#[cfg_attr(
+    feature = "wasm",
+    derive(Tsify, IntoJsValue),
+    tsify(into_wasm_abi, from_wasm_abi)
+)]
 pub struct ClientId(String);
 
 impl ClientId {
     pub fn new(name: String) -> Self {
         Self(name)
     }
-
+}
+impl ClientId {
     pub fn as_str(&self) -> &str {
         &self.0
     }
 }
 
 #[derive(Deserialize, Serialize, Clone, Debug, Display)]
+#[cfg_attr(
+    feature = "wasm",
+    derive(Tsify, IntoJsValue),
+    tsify(into_wasm_abi, from_wasm_abi)
+)]
 pub struct CreateClientData {
     pub name: String,
 }
 
 #[derive(Deserialize, Serialize, Clone, Debug)]
+#[cfg_attr(
+    feature = "wasm",
+    derive(Tsify, IntoJsValue),
+    tsify(into_wasm_abi, from_wasm_abi)
+)]
 pub struct CreatedClientData {
     pub id: ClientId,
     pub secret: String,
 }
 
 #[derive(Deserialize, Serialize, Clone, Debug)]
+#[cfg_attr(
+    feature = "wasm",
+    derive(Tsify, IntoJsValue),
+    tsify(into_wasm_abi, from_wasm_abi)
+)]
 pub struct Client {
     pub id: ClientId,
     pub name: String,

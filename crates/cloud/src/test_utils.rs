@@ -1,11 +1,14 @@
-use std::sync::{Arc, Mutex};
+use std::{
+    any::Any,
+    sync::{Arc, Mutex},
+};
 
 use futures::{future::join_all, Future};
 use lazy_static::lazy_static;
 use mongodb::{bson::doc, Client};
 use netsblox_cloud_common::{
-    api, AuthorizedServiceHost, BannedAccount, CollaborationInvite, FriendLink, Group, Library,
-    MagicLink, User,
+    api, AuthorizedServiceHost, BannedAccount, CollaborationInvite, FriendLink, Gallery,
+    GalleryProjectMetadata, Group, Library, MagicLink, User,
 };
 
 use crate::{
@@ -35,7 +38,9 @@ pub(crate) fn setup() -> TestSetupBuilder {
         magic_links: Vec::new(),
         collab_invites: Vec::new(),
         authorized_services: Vec::new(),
-        // network: None,
+        galleries: Vec::new(),
+        gallery_projects: Vec::new(),
+        with_s3: true, // network: None,
     }
 }
 
@@ -44,6 +49,8 @@ pub(crate) struct TestSetupBuilder {
     users: Vec<User>,
     projects: Vec<project::ProjectFixture>,
     libraries: Vec<Library>,
+    galleries: Vec<Gallery>,
+    gallery_projects: Vec<GalleryProjectMetadata>,
     groups: Vec<Group>,
     clients: Vec<network::Client>,
     friends: Vec<FriendLink>,
@@ -51,7 +58,7 @@ pub(crate) struct TestSetupBuilder {
     banned_users: Vec<String>,
     collab_invites: Vec<CollaborationInvite>,
     authorized_services: Vec<AuthorizedServiceHost>,
-    //network: Option<Addr<TopologyActor>>,
+    with_s3: bool, //network: Option<Addr<TopologyActor>>,
 }
 
 impl TestSetupBuilder {
@@ -72,6 +79,19 @@ impl TestSetupBuilder {
 
     pub(crate) fn with_projects(mut self, projects: &[project::ProjectFixture]) -> Self {
         self.projects.extend_from_slice(projects);
+        self
+    }
+
+    pub(crate) fn with_galleries(mut self, galleries: &[Gallery]) -> Self {
+        self.galleries.extend_from_slice(galleries);
+        self
+    }
+
+    pub(crate) fn with_gallery_projects(
+        mut self,
+        gallery_project: &[GalleryProjectMetadata],
+    ) -> Self {
+        self.gallery_projects.extend_from_slice(gallery_project);
         self
     }
 
@@ -110,10 +130,17 @@ impl TestSetupBuilder {
     //     self
     // }
 
+    pub(crate) fn without_s3(mut self) -> Self {
+        self.with_s3 = false;
+        self
+    }
+
+    #[allow(clippy::too_many_lines)]
     pub(crate) async fn run<Fut>(self, f: impl FnOnce(AppData) -> Fut)
     where
         Fut: Future<Output = ()>,
     {
+        //WARN: Shouldnt this get its value from the settings variable?
         let client = Client::with_uri_str("mongodb://127.0.0.1:27017/")
             .await
             .expect("Unable to connect to database");
@@ -123,7 +150,7 @@ impl TestSetupBuilder {
         settings.database.name = db_name.clone();
         settings.s3.bucket = format!("{}-{}", &self.prefix, settings.s3.bucket);
 
-        let app_data = AppData::new(client.clone(), settings, None, None, None);
+        let mut app_data = AppData::new(client.clone(), settings, None, None, None); //FIXME: how can I drop s3 without this being mutable
 
         // create the test fixtures (users, projects, etc)
         client.database(&db_name).drop(None).await.unwrap();
@@ -205,6 +232,15 @@ impl TestSetupBuilder {
         if !self.friends.is_empty() {
             app_data.insert_friends(&self.friends).await.unwrap();
         }
+        if !self.galleries.is_empty() {
+            app_data.insert_galleries(&self.galleries).await.unwrap();
+        }
+        if !self.gallery_projects.is_empty() {
+            app_data
+                .insert_gallery_projects(&self.gallery_projects)
+                .await
+                .unwrap();
+        }
         if !self.magic_links.is_empty() {
             app_data
                 .insert_magic_links(&self.magic_links)
@@ -232,6 +268,9 @@ impl TestSetupBuilder {
                 .insert_many(self.authorized_services, None)
                 .await
                 .unwrap();
+        }
+        if !self.with_s3 {
+            app_data.drop_s3();
         }
 
         // Connect the clients
@@ -467,6 +506,57 @@ pub(crate) mod network {
         fn handle(&mut self, _msg: ClientCommand, _ctx: &mut Self::Context) {
             // We don't yet have any tests that require us to check received messages
             // but the handlers would go run here
+        }
+    }
+}
+
+#[cfg(test)]
+pub(crate) mod gallery_projects {
+    use netsblox_cloud_common::{Gallery, GalleryProjectMetadata, Version};
+
+    #[must_use]
+    pub fn with_version_count(
+        gallery: &Gallery,
+        owner: &str,
+        name: &str,
+        additional_versions: usize,
+    ) -> GalleryProjectMetadata {
+        let mut project = GalleryProjectMetadata::new(gallery, owner, name);
+        for index in 1..=additional_versions {
+            let version = Version::new(&project.gallery_id, &project.id, index);
+            project.versions.push(version);
+        }
+        project
+    }
+
+    #[must_use]
+    pub fn get_version(xml: &str) -> usize {
+        xml.split("<version>")
+            .nth(1)
+            .and_then(|text| text.split("</version>").next())
+            .unwrap_or(xml)
+            .to_owned()
+            .parse::<usize>()
+            .expect("failed to parse version from xml")
+    }
+
+    pub struct TestThumbnail(String);
+
+    impl TestThumbnail {
+        #[must_use]
+        pub fn new(version_number: usize) -> TestThumbnail {
+            static TEST_THUMBNAILS: [&str; 3] = [
+                "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVQIW2P4z8DwHwAFAAH/F1FwBgAAAABJRU5ErkJggg==",
+                "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVQIW2NgaGD4DwAChAGAZM0bBgAAAABJRU5ErkJggg==",
+                "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVQIW2NgYPj/HwADAgH/eL9GtQAAAABJRU5ErkJggg==",
+        ];
+
+            Self(TEST_THUMBNAILS[version_number % TEST_THUMBNAILS.len()].to_string())
+        }
+
+        #[must_use]
+        pub fn as_str(&self) -> &str {
+            &self.0
         }
     }
 }

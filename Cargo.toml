@@ -1,2 +1,7 @@
 [workspace]
 members = ["crates/cloud", "crates/cli", "crates/api", "crates/api-common", "crates/cloud-common", "crates/migrate"]
+
+# FIXME: this can be removed once a new release of wasm_bindgen is released.
+# This is required for Vec<T> returns from the api
+[patch.crates-io]
+wasm-bindgen = { git = "https://github.com/rustwasm/wasm-bindgen", rev = "88efe46" }

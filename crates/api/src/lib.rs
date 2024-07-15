@@ -1,29 +1,31 @@
 pub mod common;
 pub mod error;
 
+pub use serde_json;
+
+#[allow(clippy::wildcard_imports)]
 use crate::common::*;
-use futures_util::SinkExt;
-use netsblox_api_common::{
-    CreateGroupData, CreateMagicLinkData, ServiceHostScope, UpdateGroupData,
-};
+
 use reqwest::{self, Method, RequestBuilder, Response};
 use serde::{Deserialize, Serialize};
-pub use serde_json;
-use serde_json::{json, Value};
-use tokio::net::TcpStream;
-use tokio_tungstenite::tungstenite::Message;
-use tokio_tungstenite::{connect_async, MaybeTlsStream, WebSocketStream};
+
+#[cfg(target_arch = "wasm32")]
+use wasm_bindgen::prelude::*;
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
+#[cfg_attr(target_arch = "wasm32", wasm_bindgen(getter_with_clone))]
 pub struct Config {
     pub app_id: Option<AppId>,
-    pub url: String,
-    pub token: Option<String>,
     pub username: Option<String>,
+    pub token: Option<String>,
+    pub url: String,
 }
 
-impl Default for Config {
-    fn default() -> Self {
+#[cfg_attr(target_arch = "wasm32", wasm_bindgen)]
+impl Config {
+    #[cfg_attr(target_arch = "wasm32", wasm_bindgen(constructor))]
+    #[must_use]
+    pub fn new() -> Self {
         Self {
             app_id: None,
             username: None,
@@ -37,7 +39,10 @@ async fn check_response(response: Response) -> Result<Response, error::Error> {
     let status_code = response.status().as_u16();
     let is_error = status_code > 399;
     if is_error {
-        let msg = response.text().await.map_err(error::Error::RequestError)?;
+        let msg = response
+            .text()
+            .await
+            .map_err(|e| error::Error::RequestError(e.to_string()))?;
 
         match status_code {
             400 => Err(error::Error::BadRequestError(msg)),
@@ -52,82 +57,47 @@ async fn check_response(response: Response) -> Result<Response, error::Error> {
     }
 }
 
-pub type Token = String;
-pub async fn login(mut cfg: Config, credentials: &LoginRequest) -> Result<Config, error::Error> {
+#[cfg_attr(target_arch = "wasm32", wasm_bindgen)]
+pub async fn login(mut cfg: Config, credentials: LoginRequest) -> Result<Config, error::Error> {
     let client = reqwest::Client::new();
     let response = client
         .post(format!("{}/users/login", cfg.url))
         .json(&credentials)
         .send()
         .await
-        .map_err(error::Error::RequestError)?;
+        .map_err(|e| error::Error::RequestError(e.to_string()))?;
 
     let response = check_response(response).await?;
-    let cookie = response
-        .cookies()
-        .find(|cookie| cookie.name() == "netsblox")
-        .ok_or("No cookie received.")
-        .unwrap();
-
-    let token = cookie.value().to_owned();
+    let token = common::get_token(&response);
 
     let user = response.json::<User>().await.unwrap();
     cfg.username = Some(user.username);
-    cfg.token = Some(token);
+    cfg.token = token;
     Ok(cfg)
 }
 
-#[derive(Serialize)]
-struct UserData<'a> {
-    username: &'a str,
-    email: &'a str,
-    role: &'a UserRole,
-    group_id: Option<&'a GroupId>,
-    password: Option<&'a str>,
-}
-
 #[derive(Clone)]
+#[cfg_attr(target_arch = "wasm32", wasm_bindgen)]
 pub struct Client {
     cfg: Config,
 }
 
+#[cfg_attr(target_arch = "wasm32", wasm_bindgen)]
 impl Client {
+    #[must_use]
+    #[cfg_attr(target_arch = "wasm32", wasm_bindgen(constructor))]
     pub fn new(cfg: Config) -> Self {
         Client { cfg }
     }
 
-    fn request(&self, method: Method, path: &str) -> RequestBuilder {
-        let client = reqwest::Client::new();
-        let empty = "".to_owned();
-        let token = self.cfg.token.as_ref().unwrap_or(&empty);
-        client
-            .request(method, format!("{}{}", self.cfg.url, path))
-            .header("Cookie", format!("netsblox={}", token))
-    }
-
     // User management
-    pub async fn create_user(
-        &self,
-        name: &str,
-        email: &str,
-        password: Option<&str>, // TODO: Make these CreateUserOptions
-        group_id: Option<&GroupId>,
-        role: UserRole,
-    ) -> Result<(), error::Error> {
-        let user_data = NewUser {
-            username: name.to_owned(),
-            email: email.to_owned(),
-            role: Some(role),
-            group_id: group_id.map(|id| id.to_owned()),
-            password: password.map(|pwd| pwd.to_owned()),
-        };
-
+    pub async fn create_user(&self, user_data: NewUser) -> Result<(), error::Error> {
         let response = self
             .request(Method::POST, "/users/create")
             .json(&user_data)
             .send()
             .await
-            .map_err(error::Error::RequestError)?;
+            .map_err(|e| error::Error::RequestError(e.to_string()))?;
 
         println!(
             "status {} {}",
@@ -142,8 +112,7 @@ impl Client {
             .request(Method::GET, "/users/")
             .send()
             .await
-            .map_err(error::Error::RequestError)?;
-
+            .map_err(|e| error::Error::RequestError(e.to_string()))?;
         let response = check_response(response).await?;
         Ok(response.json::<Vec<User>>().await.unwrap())
     }
@@ -156,7 +125,7 @@ impl Client {
             .json(&email)
             .send()
             .await
-            .map_err(error::Error::RequestError)?;
+            .map_err(|e| error::Error::RequestError(e.to_string()))?;
 
         check_response(response).await?;
         Ok(())
@@ -167,7 +136,7 @@ impl Client {
             .request(Method::POST, &format!("/users/{}/delete", username))
             .send()
             .await
-            .map_err(error::Error::RequestError)?;
+            .map_err(|e| error::Error::RequestError(e.to_string()))?;
 
         check_response(response).await?;
         Ok(())
@@ -178,7 +147,7 @@ impl Client {
             .request(Method::GET, &format!("/users/{}", username))
             .send()
             .await
-            .map_err(error::Error::RequestError)?;
+            .map_err(|e| error::Error::RequestError(e.to_string()))?;
 
         let response = check_response(response).await?;
         Ok(response.json::<User>().await.unwrap())
@@ -191,7 +160,7 @@ impl Client {
             .json(&password)
             .send()
             .await
-            .map_err(error::Error::RequestError)?;
+            .map_err(|e| error::Error::RequestError(e.to_string()))?;
 
         check_response(response).await?;
         Ok(())
@@ -200,14 +169,14 @@ impl Client {
     pub async fn link_account(
         &self,
         username: &str,
-        credentials: &Credentials,
+        credentials: Credentials,
     ) -> Result<(), error::Error> {
         let response = self
             .request(Method::POST, &format!("/users/{}/link/", username))
             .json(&credentials)
             .send()
             .await
-            .map_err(error::Error::RequestError)?;
+            .map_err(|e| error::Error::RequestError(e.to_string()))?;
 
         check_response(response).await?;
         Ok(())
@@ -216,14 +185,14 @@ impl Client {
     pub async fn unlink_account(
         &self,
         username: &str,
-        account: &LinkedAccount,
+        account: LinkedAccount,
     ) -> Result<(), error::Error> {
         let response = self
             .request(Method::POST, &format!("/users/{}/unlink", username))
             .json(&account)
             .send()
             .await
-            .map_err(error::Error::RequestError)?;
+            .map_err(|e| error::Error::RequestError(e.to_string()))?;
 
         check_response(response).await?;
         Ok(())
@@ -234,7 +203,7 @@ impl Client {
             .request(Method::POST, &format!("/users/{}/ban", username))
             .send()
             .await
-            .map_err(error::Error::RequestError)?;
+            .map_err(|e| error::Error::RequestError(e.to_string()))?;
 
         let response = check_response(response).await?;
         Ok(response.json::<BannedAccount>().await.unwrap())
@@ -245,7 +214,7 @@ impl Client {
             .request(Method::POST, &format!("/users/{}/unban", username))
             .send()
             .await
-            .map_err(error::Error::RequestError)?;
+            .map_err(|e| error::Error::RequestError(e.to_string()))?;
 
         let response = check_response(response).await?;
         Ok(response.json::<BannedAccount>().await.unwrap())
@@ -253,13 +222,13 @@ impl Client {
 
     /// Send a magic link to the given email address. Usable for any user associated with the
     /// address.
-    pub async fn send_magic_link(&self, data: &CreateMagicLinkData) -> Result<(), error::Error> {
+    pub async fn send_magic_link(&self, data: CreateMagicLinkData) -> Result<(), error::Error> {
         let response = self
             .request(Method::POST, "/magic-links/")
-            .json(data)
+            .json(&data)
             .send()
             .await
-            .map_err(error::Error::RequestError)?;
+            .map_err(|e| error::Error::RequestError(e.to_string()))?;
 
         check_response(response).await?;
         Ok(())
@@ -268,15 +237,15 @@ impl Client {
     // Project management
     pub async fn create_project(
         &self,
-        data: &CreateProjectData,
+        data: CreateProjectData,
     ) -> Result<ProjectMetadata, error::Error> {
         // TODO: what should the method signature look like for this? Probably should accept CreateProjectData
         let response = self
             .request(Method::POST, "/projects/")
-            .json(data)
+            .json(&data)
             .send()
             .await
-            .map_err(error::Error::RequestError)?;
+            .map_err(|e| error::Error::RequestError(e.to_string()))?;
 
         let response = check_response(response).await?;
         Ok(response.json::<ProjectMetadata>().await.unwrap())
@@ -287,7 +256,7 @@ impl Client {
             .request(Method::GET, &format!("/projects/user/{}", &owner))
             .send()
             .await
-            .map_err(error::Error::RequestError)?;
+            .map_err(|e| error::Error::RequestError(e.to_string()))?;
 
         let response = check_response(response).await?;
 
@@ -302,7 +271,7 @@ impl Client {
             .request(Method::GET, &format!("/projects/shared/{}", &owner))
             .send()
             .await
-            .map_err(error::Error::RequestError)?;
+            .map_err(|e| error::Error::RequestError(e.to_string()))?;
 
         let response = check_response(response).await?;
 
@@ -321,14 +290,14 @@ impl Client {
             )
             .send()
             .await
-            .map_err(error::Error::RequestError)?;
+            .map_err(|e| error::Error::RequestError(e.to_string()))?;
 
         let response = check_response(response).await?;
 
         Ok(response.json::<ProjectMetadata>().await.unwrap())
     }
 
-    pub async fn rename_project(&self, id: &ProjectId, name: &str) -> Result<(), error::Error> {
+    pub async fn rename_project(&self, id: ProjectId, name: &str) -> Result<(), error::Error> {
         let response = self
             .request(Method::PATCH, &format!("/projects/id/{}", &id))
             .json(&UpdateProjectData {
@@ -337,7 +306,7 @@ impl Client {
             })
             .send()
             .await
-            .map_err(error::Error::RequestError)?;
+            .map_err(|e| error::Error::RequestError(e.to_string()))?;
 
         check_response(response).await?;
 
@@ -346,8 +315,8 @@ impl Client {
 
     pub async fn rename_role(
         &self,
-        id: &ProjectId,
-        role_id: &RoleId,
+        id: ProjectId,
+        role_id: RoleId,
         name: &str,
     ) -> Result<(), error::Error> {
         let response = self
@@ -358,67 +327,63 @@ impl Client {
             })
             .send()
             .await
-            .map_err(error::Error::RequestError)?;
+            .map_err(|e| error::Error::RequestError(e.to_string()))?;
 
         check_response(response).await?;
 
         Ok(())
     }
 
-    pub async fn delete_project(&self, id: &ProjectId) -> Result<(), error::Error> {
+    pub async fn delete_project(&self, id: ProjectId) -> Result<(), error::Error> {
         let response = self
             .request(Method::DELETE, &format!("/projects/id/{}", id))
             .send()
             .await
-            .map_err(error::Error::RequestError)?;
+            .map_err(|e| error::Error::RequestError(e.to_string()))?;
 
         check_response(response).await?;
 
         Ok(())
     }
 
-    pub async fn delete_role(&self, id: &ProjectId, role_id: &RoleId) -> Result<(), error::Error> {
+    pub async fn delete_role(&self, id: ProjectId, role_id: RoleId) -> Result<(), error::Error> {
         let response = self
             .request(Method::DELETE, &format!("/projects/id/{}/{}", id, role_id))
             .send()
             .await
-            .map_err(error::Error::RequestError)?;
+            .map_err(|e| error::Error::RequestError(e.to_string()))?;
 
         check_response(response).await?;
 
         Ok(())
     }
 
-    pub async fn publish_project(&self, id: &ProjectId) -> Result<PublishState, error::Error> {
+    pub async fn publish_project(&self, id: ProjectId) -> Result<PublishState, error::Error> {
         let response = self
             .request(Method::POST, &format!("/projects/id/{}/publish", id))
             .send()
             .await
-            .map_err(error::Error::RequestError)?;
+            .map_err(|e| error::Error::RequestError(e.to_string()))?;
 
         let response = check_response(response).await?;
 
         Ok(response.json::<PublishState>().await.unwrap())
     }
 
-    pub async fn unpublish_project(&self, id: &ProjectId) -> Result<(), error::Error> {
+    pub async fn unpublish_project(&self, id: ProjectId) -> Result<(), error::Error> {
         let response = self
             .request(Method::POST, &format!("/projects/id/{}/unpublish", id))
             .send()
             .await
-            .map_err(error::Error::RequestError)?;
+            .map_err(|e| error::Error::RequestError(e.to_string()))?;
 
         check_response(response).await?;
 
         Ok(())
     }
 
-    pub async fn get_project(
-        &self,
-        id: &ProjectId,
-        latest: &bool,
-    ) -> Result<Project, error::Error> {
-        let path = if *latest {
+    pub async fn get_project(&self, id: ProjectId, latest: bool) -> Result<Project, error::Error> {
+        let path = if latest {
             format!("/projects/id/{}/latest", id)
         } else {
             format!("/projects/id/{}", id)
@@ -427,7 +392,7 @@ impl Client {
             .request(Method::GET, &path)
             .send()
             .await
-            .map_err(error::Error::RequestError)?;
+            .map_err(|e| error::Error::RequestError(e.to_string()))?;
 
         let response = check_response(response).await?;
 
@@ -436,11 +401,11 @@ impl Client {
 
     pub async fn get_role(
         &self,
-        id: &ProjectId,
-        role_id: &RoleId,
-        latest: &bool,
+        id: ProjectId,
+        role_id: RoleId,
+        latest: bool,
     ) -> Result<RoleData, error::Error> {
-        let path = if *latest {
+        let path = if latest {
             format!("/projects/id/{}/{}/latest", id, role_id)
         } else {
             format!("/projects/id/{}/{}", id, role_id)
@@ -449,7 +414,7 @@ impl Client {
             .request(Method::GET, &path)
             .send()
             .await
-            .map_err(error::Error::RequestError)?;
+            .map_err(|e| error::Error::RequestError(e.to_string()))?;
 
         let response = check_response(response).await?;
 
@@ -462,7 +427,7 @@ impl Client {
             .request(Method::GET, &format!("/id/{}/collaborators/", project_id))
             .send()
             .await
-            .map_err(error::Error::RequestError)?;
+            .map_err(|e| error::Error::RequestError(e.to_string()))?;
 
         let response = check_response(response).await?;
 
@@ -471,7 +436,7 @@ impl Client {
 
     pub async fn remove_collaborator(
         &self,
-        project_id: &ProjectId,
+        project_id: ProjectId,
         username: &str,
     ) -> Result<(), error::Error> {
         let response = self
@@ -481,7 +446,7 @@ impl Client {
             )
             .send()
             .await
-            .map_err(error::Error::RequestError)?;
+            .map_err(|e| error::Error::RequestError(e.to_string()))?;
 
         check_response(response).await?;
 
@@ -499,7 +464,7 @@ impl Client {
             )
             .send()
             .await
-            .map_err(error::Error::RequestError)?;
+            .map_err(|e| error::Error::RequestError(e.to_string()))?;
 
         let response = check_response(response).await?;
 
@@ -508,7 +473,7 @@ impl Client {
 
     pub async fn invite_collaborator(
         &self,
-        id: &ProjectId,
+        id: ProjectId,
         username: &str,
     ) -> Result<(), error::Error> {
         let response = self
@@ -518,7 +483,7 @@ impl Client {
             )
             .send()
             .await
-            .map_err(error::Error::RequestError)?;
+            .map_err(|e| error::Error::RequestError(e.to_string()))?;
 
         check_response(response).await?;
         Ok(())
@@ -526,15 +491,15 @@ impl Client {
 
     pub async fn respond_to_collaboration_invite(
         &self,
-        id: &InvitationId,
-        state: &InvitationState,
+        id: InvitationId,
+        state: InvitationState,
     ) -> Result<(), error::Error> {
         let response = self
             .request(Method::POST, &format!("/collaboration-invites/id/{}", id))
-            .json(state)
+            .json(&state)
             .send()
             .await
-            .map_err(error::Error::RequestError)?;
+            .map_err(|e| error::Error::RequestError(e.to_string()))?;
 
         check_response(response).await?;
         Ok(())
@@ -547,7 +512,7 @@ impl Client {
             .request(Method::GET, path)
             .send()
             .await
-            .map_err(error::Error::RequestError)?;
+            .map_err(|e| error::Error::RequestError(e.to_string()))?;
 
         let response = check_response(response).await?;
         Ok(response.json::<Vec<String>>().await.unwrap())
@@ -559,7 +524,7 @@ impl Client {
             .request(Method::GET, path)
             .send()
             .await
-            .map_err(error::Error::RequestError)?;
+            .map_err(|e| error::Error::RequestError(e.to_string()))?;
 
         let response = check_response(response).await?;
         Ok(response.json::<Vec<String>>().await.unwrap())
@@ -574,7 +539,7 @@ impl Client {
             .request(Method::GET, path)
             .send()
             .await
-            .map_err(error::Error::RequestError)?;
+            .map_err(|e| error::Error::RequestError(e.to_string()))?;
 
         let response = check_response(response).await?;
         Ok(response.json::<Vec<FriendInvite>>().await.unwrap())
@@ -591,7 +556,7 @@ impl Client {
             .json(recipient)
             .send()
             .await
-            .map_err(error::Error::RequestError)?;
+            .map_err(|e| error::Error::RequestError(e.to_string()))?;
 
         check_response(response).await?;
         Ok(())
@@ -609,7 +574,7 @@ impl Client {
             .json(&state)
             .send()
             .await
-            .map_err(error::Error::RequestError)?;
+            .map_err(|e| error::Error::RequestError(e.to_string()))?;
 
         check_response(response).await?;
         Ok(())
@@ -621,7 +586,7 @@ impl Client {
             .request(Method::POST, &path)
             .send()
             .await
-            .map_err(error::Error::RequestError)?;
+            .map_err(|e| error::Error::RequestError(e.to_string()))?;
 
         check_response(response).await?;
         Ok(())
@@ -633,7 +598,7 @@ impl Client {
             .request(Method::POST, &path)
             .send()
             .await
-            .map_err(error::Error::RequestError)?;
+            .map_err(|e| error::Error::RequestError(e.to_string()))?;
 
         check_response(response).await?;
         Ok(())
@@ -645,7 +610,7 @@ impl Client {
             .request(Method::POST, &path)
             .send()
             .await
-            .map_err(error::Error::RequestError)?;
+            .map_err(|e| error::Error::RequestError(e.to_string()))?;
 
         check_response(response).await?;
         Ok(())
@@ -661,7 +626,7 @@ impl Client {
             .request(Method::GET, &path)
             .send()
             .await
-            .map_err(error::Error::RequestError)?;
+            .map_err(|e| error::Error::RequestError(e.to_string()))?;
 
         let response = check_response(response).await?;
         Ok(response.json::<Vec<LibraryMetadata>>().await.unwrap())
@@ -672,7 +637,7 @@ impl Client {
             .request(Method::GET, "/libraries/mod/pending")
             .send()
             .await
-            .map_err(error::Error::RequestError)?;
+            .map_err(|e| error::Error::RequestError(e.to_string()))?;
 
         let response = check_response(response).await?;
 
@@ -684,7 +649,7 @@ impl Client {
             .request(Method::GET, "/libraries/community/")
             .send()
             .await
-            .map_err(error::Error::RequestError)?;
+            .map_err(|e| error::Error::RequestError(e.to_string()))?;
 
         let response = check_response(response).await?;
 
@@ -697,7 +662,7 @@ impl Client {
             .request(Method::GET, &path)
             .send()
             .await
-            .map_err(error::Error::RequestError)?;
+            .map_err(|e| error::Error::RequestError(e.to_string()))?;
 
         let response = check_response(response).await?;
 
@@ -721,7 +686,7 @@ impl Client {
             })
             .send()
             .await
-            .map_err(error::Error::RequestError)?;
+            .map_err(|e| error::Error::RequestError(e.to_string()))?;
 
         check_response(response).await?;
         Ok(())
@@ -733,7 +698,7 @@ impl Client {
             .request(Method::DELETE, &path)
             .send()
             .await
-            .map_err(error::Error::RequestError)?;
+            .map_err(|e| error::Error::RequestError(e.to_string()))?;
 
         check_response(response).await?;
         Ok(())
@@ -745,7 +710,7 @@ impl Client {
             .request(Method::POST, &path)
             .send()
             .await
-            .map_err(error::Error::RequestError)?;
+            .map_err(|e| error::Error::RequestError(e.to_string()))?;
 
         check_response(response).await?;
         Ok(())
@@ -761,7 +726,7 @@ impl Client {
             .request(Method::POST, &path)
             .send()
             .await
-            .map_err(error::Error::RequestError)?;
+            .map_err(|e| error::Error::RequestError(e.to_string()))?;
 
         check_response(response).await?;
         Ok(())
@@ -771,7 +736,7 @@ impl Client {
         &self,
         username: &str,
         library: &str,
-        state: &PublishState,
+        state: PublishState,
     ) -> Result<(), error::Error> {
         let path = format!("/libraries/mod/{}/{}", username, library);
         let response = self
@@ -779,7 +744,7 @@ impl Client {
             .json(&state)
             .send()
             .await
-            .map_err(error::Error::RequestError)?;
+            .map_err(|e| error::Error::RequestError(e.to_string()))?;
 
         check_response(response).await?;
         Ok(())
@@ -792,7 +757,7 @@ impl Client {
             .request(Method::GET, &path)
             .send()
             .await
-            .map_err(error::Error::RequestError)?;
+            .map_err(|e| error::Error::RequestError(e.to_string()))?;
 
         let response = check_response(response).await?;
 
@@ -810,37 +775,37 @@ impl Client {
             .json(&group)
             .send()
             .await
-            .map_err(error::Error::RequestError)?;
+            .map_err(|e| error::Error::RequestError(e.to_string()))?;
 
         check_response(response).await?;
         Ok(())
     }
 
-    pub async fn delete_group(&self, id: &GroupId) -> Result<(), error::Error> {
+    pub async fn delete_group(&self, id: GroupId) -> Result<(), error::Error> {
         let path = format!("/groups/id/{}", id);
         let response = self
             .request(Method::DELETE, &path)
             .send()
             .await
-            .map_err(error::Error::RequestError)?;
+            .map_err(|e| error::Error::RequestError(e.to_string()))?;
 
         check_response(response).await?;
         Ok(())
     }
 
-    pub async fn list_members(&self, id: &GroupId) -> Result<Vec<User>, error::Error> {
+    pub async fn list_members(&self, id: GroupId) -> Result<Vec<User>, error::Error> {
         let path = format!("/groups/id/{}/members", id);
         let response = self
             .request(Method::GET, &path)
             .send()
             .await
-            .map_err(error::Error::RequestError)?;
+            .map_err(|e| error::Error::RequestError(e.to_string()))?;
 
         let response = check_response(response).await?;
         Ok(response.json::<Vec<User>>().await.unwrap())
     }
 
-    pub async fn rename_group(&self, id: &GroupId, name: &str) -> Result<(), error::Error> {
+    pub async fn rename_group(&self, id: GroupId, name: &str) -> Result<(), error::Error> {
         let path = format!("/groups/id/{}", id);
         let response = self
             .request(Method::PATCH, &path)
@@ -849,19 +814,19 @@ impl Client {
             })
             .send()
             .await
-            .map_err(error::Error::RequestError)?;
+            .map_err(|e| error::Error::RequestError(e.to_string()))?;
 
         check_response(response).await?;
         Ok(())
     }
 
-    pub async fn view_group(&self, id: &GroupId) -> Result<Group, error::Error> {
+    pub async fn view_group(&self, id: GroupId) -> Result<Group, error::Error> {
         let path = format!("/groups/id/{}", id);
         let response = self
             .request(Method::GET, &path)
             .send()
             .await
-            .map_err(error::Error::RequestError)?;
+            .map_err(|e| error::Error::RequestError(e.to_string()))?;
 
         let response = check_response(response).await?;
 
@@ -874,7 +839,7 @@ impl Client {
             .request(Method::GET, &format!("/services/hosts/user/{}", username))
             .send()
             .await
-            .map_err(error::Error::RequestError)?;
+            .map_err(|e| error::Error::RequestError(e.to_string()))?;
 
         let response = check_response(response).await?;
 
@@ -883,13 +848,13 @@ impl Client {
 
     pub async fn list_group_hosts(
         &self,
-        group_id: &GroupId,
+        group_id: GroupId,
     ) -> Result<Vec<ServiceHost>, error::Error> {
         let response = self
             .request(Method::GET, &format!("/services/hosts/group/{}", group_id))
             .send()
             .await
-            .map_err(error::Error::RequestError)?;
+            .map_err(|e| error::Error::RequestError(e.to_string()))?;
 
         let response = check_response(response).await?;
 
@@ -901,7 +866,7 @@ impl Client {
             .request(Method::GET, &format!("/services/hosts/all/{}", username))
             .send()
             .await
-            .map_err(error::Error::RequestError)?;
+            .map_err(|e| error::Error::RequestError(e.to_string()))?;
 
         let response = check_response(response).await?;
 
@@ -918,7 +883,7 @@ impl Client {
             .json(&hosts)
             .send()
             .await
-            .map_err(error::Error::RequestError)?;
+            .map_err(|e| error::Error::RequestError(e.to_string()))?;
 
         check_response(response).await?;
         Ok(())
@@ -926,7 +891,7 @@ impl Client {
 
     pub async fn set_group_hosts(
         &self,
-        group_id: &GroupId,
+        group_id: GroupId,
         hosts: Vec<ServiceHost>,
     ) -> Result<(), error::Error> {
         let response = self
@@ -934,7 +899,7 @@ impl Client {
             .json(&hosts)
             .send()
             .await
-            .map_err(error::Error::RequestError)?;
+            .map_err(|e| error::Error::RequestError(e.to_string()))?;
 
         check_response(response).await?;
         Ok(())
@@ -956,7 +921,7 @@ impl Client {
             .json(&host)
             .send()
             .await
-            .map_err(error::Error::RequestError)?;
+            .map_err(|e| error::Error::RequestError(e.to_string()))?;
 
         let response = check_response(response).await?;
         Ok(response.json::<String>().await.unwrap())
@@ -970,7 +935,7 @@ impl Client {
             )
             .send()
             .await
-            .map_err(error::Error::RequestError)?;
+            .map_err(|e| error::Error::RequestError(e.to_string()))?;
 
         check_response(response).await?;
         Ok(())
@@ -981,7 +946,7 @@ impl Client {
             .request(Method::GET, "/services/hosts/authorized/")
             .send()
             .await
-            .map_err(error::Error::RequestError)?;
+            .map_err(|e| error::Error::RequestError(e.to_string()))?;
 
         let response = check_response(response).await?;
         Ok(response.json::<Vec<AuthorizedServiceHost>>().await.unwrap())
@@ -990,7 +955,7 @@ impl Client {
     // Service settings management
     pub async fn list_group_settings(
         &self,
-        group_id: &GroupId,
+        group_id: GroupId,
     ) -> Result<Vec<String>, error::Error> {
         let response = self
             .request(
@@ -999,7 +964,7 @@ impl Client {
             )
             .send()
             .await
-            .map_err(error::Error::RequestError)?;
+            .map_err(|e| error::Error::RequestError(e.to_string()))?;
 
         let response = check_response(response).await?;
         Ok(response.json::<Vec<String>>().await.unwrap())
@@ -1013,7 +978,7 @@ impl Client {
             )
             .send()
             .await
-            .map_err(error::Error::RequestError)?;
+            .map_err(|e| error::Error::RequestError(e.to_string()))?;
 
         let response = check_response(response).await?;
         Ok(response.json::<Vec<String>>().await.unwrap())
@@ -1031,7 +996,7 @@ impl Client {
             )
             .send()
             .await
-            .map_err(error::Error::RequestError)?;
+            .map_err(|e| error::Error::RequestError(e.to_string()))?;
 
         let response = check_response(response).await?;
         Ok(response.json::<ServiceSettings>().await.unwrap())
@@ -1039,7 +1004,7 @@ impl Client {
 
     pub async fn get_group_settings(
         &self,
-        group_id: &GroupId,
+        group_id: GroupId,
         service_id: &str,
     ) -> Result<String, error::Error> {
         let response = self
@@ -1049,7 +1014,7 @@ impl Client {
             )
             .send()
             .await
-            .map_err(error::Error::RequestError)?;
+            .map_err(|e| error::Error::RequestError(e.to_string()))?;
 
         let response = check_response(response).await?;
         Ok(response.text().await.unwrap())
@@ -1067,7 +1032,7 @@ impl Client {
             )
             .send()
             .await
-            .map_err(error::Error::RequestError)?;
+            .map_err(|e| error::Error::RequestError(e.to_string()))?;
 
         let response = check_response(response).await?;
         Ok(response.text().await.unwrap())
@@ -1087,7 +1052,7 @@ impl Client {
             .body(settings)
             .send()
             .await
-            .map_err(error::Error::RequestError)?;
+            .map_err(|e| error::Error::RequestError(e.to_string()))?;
 
         let response = check_response(response).await?;
         Ok(response.text().await.unwrap())
@@ -1095,7 +1060,7 @@ impl Client {
 
     pub async fn set_group_settings(
         &self,
-        group_id: &GroupId,
+        group_id: GroupId,
         service_id: &str,
         settings: String,
     ) -> Result<String, error::Error> {
@@ -1107,7 +1072,7 @@ impl Client {
             .body(settings)
             .send()
             .await
-            .map_err(error::Error::RequestError)?;
+            .map_err(|e| error::Error::RequestError(e.to_string()))?;
 
         let response = check_response(response).await?;
         Ok(response.text().await.unwrap())
@@ -1125,7 +1090,7 @@ impl Client {
             )
             .send()
             .await
-            .map_err(error::Error::RequestError)?;
+            .map_err(|e| error::Error::RequestError(e.to_string()))?;
 
         let response = check_response(response).await?;
         Ok(response.text().await.unwrap())
@@ -1133,7 +1098,7 @@ impl Client {
 
     pub async fn delete_group_settings(
         &self,
-        group_id: &GroupId,
+        group_id: GroupId,
         service_id: &str,
     ) -> Result<String, error::Error> {
         let response = self
@@ -1143,18 +1108,19 @@ impl Client {
             )
             .send()
             .await
-            .map_err(error::Error::RequestError)?;
+            .map_err(|e| error::Error::RequestError(e.to_string()))?;
 
         let response = check_response(response).await?;
         Ok(response.text().await.unwrap())
     }
+
     // NetsBlox network capabilities
     pub async fn list_external_clients(&self) -> Result<Vec<ExternalClient>, error::Error> {
         let response = self
             .request(Method::GET, "/network/external")
             .send()
             .await
-            .map_err(error::Error::RequestError)?;
+            .map_err(|e| error::Error::RequestError(e.to_string()))?;
 
         let response = check_response(response).await?;
 
@@ -1166,26 +1132,26 @@ impl Client {
             .request(Method::GET, "/network/")
             .send()
             .await
-            .map_err(error::Error::RequestError)?;
+            .map_err(|e| error::Error::RequestError(e.to_string()))?;
 
         let response = check_response(response).await?;
 
         Ok(response.json::<Vec<ProjectId>>().await.unwrap())
     }
 
-    pub async fn get_room_state(&self, id: &ProjectId) -> Result<RoomState, error::Error> {
+    pub async fn get_room_state(&self, id: ProjectId) -> Result<RoomState, error::Error> {
         let response = self
             .request(Method::GET, &format!("/network/id/{}", id))
             .send()
             .await
-            .map_err(error::Error::RequestError)?;
+            .map_err(|e| error::Error::RequestError(e.to_string()))?;
 
         let response = check_response(response).await?;
 
         Ok(response.json::<RoomState>().await.unwrap())
     }
 
-    pub async fn get_client_state(&self, client_id: &ClientId) -> Result<ClientInfo, error::Error> {
+    pub async fn get_client_state(&self, client_id: ClientId) -> Result<ClientInfo, error::Error> {
         let response = self
             .request(
                 Method::GET,
@@ -1193,14 +1159,14 @@ impl Client {
             )
             .send()
             .await
-            .map_err(error::Error::RequestError)?;
+            .map_err(|e| error::Error::RequestError(e.to_string()))?;
 
         let response = check_response(response).await?;
 
         Ok(response.json::<ClientInfo>().await.unwrap())
     }
 
-    pub async fn evict_occupant(&self, client_id: &ClientId) -> Result<(), error::Error> {
+    pub async fn evict_occupant(&self, client_id: ClientId) -> Result<(), error::Error> {
         let response = self
             .request(
                 Method::POST,
@@ -1208,10 +1174,827 @@ impl Client {
             )
             .send()
             .await
-            .map_err(error::Error::RequestError)?;
+            .map_err(|e| error::Error::RequestError(e.to_string()))?;
 
         check_response(response).await?;
         Ok(())
+    }
+
+    // NetsBlox OAuth capabilities
+    pub async fn add_oauth_client(
+        &self,
+        client: oauth::CreateClientData,
+    ) -> Result<oauth::CreatedClientData, error::Error> {
+        let response = self
+            .request(Method::POST, "/oauth/clients/")
+            .json(&client)
+            .send()
+            .await
+            .map_err(|e| error::Error::RequestError(e.to_string()))?;
+
+        let response = check_response(response).await?;
+
+        Ok(response.json::<oauth::CreatedClientData>().await.unwrap())
+    }
+
+    pub async fn remove_oauth_client(&self, id: oauth::ClientId) -> Result<(), error::Error> {
+        let response = self
+            .request(Method::DELETE, &format!("/oauth/clients/{}", id))
+            .send()
+            .await
+            .map_err(|e| error::Error::RequestError(e.to_string()))?;
+
+        check_response(response).await?;
+        Ok(())
+    }
+
+    pub async fn list_oauth_clients(&self) -> Result<Vec<oauth::Client>, error::Error> {
+        let response = self
+            .request(Method::GET, "/oauth/clients/")
+            .send()
+            .await
+            .map_err(|e| error::Error::RequestError(e.to_string()))?;
+
+        let response = check_response(response).await?;
+
+        Ok(response.json::<Vec<oauth::Client>>().await.unwrap())
+    }
+
+    /// Asynchronously creates a new gallery.
+    ///
+    /// # Arguments
+    ///
+    /// * `data` - A reference to the `CreateGalleryData` struct.
+    ///
+    /// # Returns
+    /// * `Result<common::Gallery, error::Error>` -
+    /// * On success, returns an instance of the created `Gallery`.
+    /// * On failure, returns an `error::Error`.
+    ///
+    /// # Errors
+    ///
+    /// * `error::Error::RequestError` - Returned if there is an error sending the request.
+    /// * `error::Error::ParseJsonFailedError` - Returned if there is an error parsing
+    /// the JSON response.
+    /// * If server respondes with error, we return the error.
+    ///
+    /// # Notes
+    ///
+    /// This function makes an HTTP POST request to the `/galleries/` endpoint
+    /// with the provided `data`.
+    /// It then checks the response for any errors and attempts to parse the
+    /// response body as JSON into a `Gallery` struct.
+    ///
+    /// The `check_response` function is called to handle potential HTTP errors.
+    /// If the response is successful, it is parsed into a `Gallery` object and returned.
+    pub async fn create_gallery(&self, data: CreateGalleryData) -> Result<Gallery, error::Error> {
+        let response = self
+            .request(Method::POST, "/galleries/")
+            .json(&data)
+            .send()
+            .await
+            .map_err(|e| error::Error::RequestError(e.to_string()))?;
+
+        let response = check_response(response).await?;
+
+        let gallery = response
+            .json::<Gallery>()
+            .await
+            .map_err(|e| error::Error::ParseResponseFailedError(e.to_string()))?;
+
+        Ok(gallery)
+    }
+
+    /// Asynchronously retrieves the galleries of a specified user.
+    ///
+    /// # Arguments
+    ///
+    /// * `owner` - A reference to a `String` containing the username or identifier
+    /// of the gallery owner.
+    ///
+    /// # Returns
+    ///
+    /// * `Result<common::Gallery, error::Error>` -
+    ///   * On success, returns an instance of the retrieved `Gallery`.
+    ///   * On failure, returns an `error::Error`.
+    ///
+    /// # Errors
+    ///
+    /// * `error::Error::RequestError` - Returned if there is an error sending the request.
+    /// * `error::Error::ParseJsonFailedError` - Returned if there is an error parsing
+    /// the JSON response.
+    /// * If server responds with an error, we return the error.
+    ///
+    /// # Notes
+    ///
+    /// This function makes an HTTP GET request to the `/galleries/user/{owner}` endpoint,
+    /// where `{owner}` is replaced with the specified owner identifier.
+    /// It then checks the response for any errors and attempts to parse the response body
+    /// as JSON into a `Gallery` struct.
+    ///
+    /// The `check_response` function is called to handle potential HTTP errors.
+    /// If the response is successful, it is parsed into a `Gallery` object and returned.
+    pub async fn view_galleries_with_name(&self, owner: &str) -> Result<Gallery, error::Error> {
+        let url = format!("/galleries/user/{owner}");
+
+        let response = self
+            .request(Method::GET, &url)
+            .send()
+            .await
+            .map_err(|e| error::Error::RequestError(e.to_string()))?;
+
+        let response = check_response(response).await?;
+
+        let gallery = response
+            .json::<Gallery>()
+            .await
+            .map_err(|e| error::Error::ParseResponseFailedError(e.to_string()))?;
+
+        Ok(gallery)
+    }
+
+    /// Asynchronously retrieves a gallery by its ID.
+    ///
+    /// # Arguments
+    ///
+    /// * `id` - A reference to a `GalleryId` struct representing the ID of the gallery
+    /// to retrieve.
+    ///
+    /// # Returns
+    ///
+    /// * `Result<common::Gallery, error::Error>` -
+    ///   * On success, returns an instance of the retrieved `Gallery`.
+    ///   * On failure, returns an `error::Error`.
+    ///
+    /// # Errors
+    ///
+    /// * `error::Error::RequestError` - Returned if there is an error sending the request.
+    /// * `error::Error::ParseJsonFailedError` - Returned if there is an error parsing
+    /// the JSON response.
+    /// * If server responds with an error, we return the error.
+    ///
+    /// # Notes
+    ///
+    /// This function makes an HTTP GET request to the `/galleries/id/{id}` endpoint, where `{id}` is replaced with the specified gallery ID.
+    /// It then checks the response for any errors and attempts to parse the response
+    /// body as JSON into a `Gallery` struct.
+    ///
+    /// The `check_response` function is called to handle potential HTTP errors.
+    /// If the response is successful, it is parsed into a `Gallery` object and returned.
+    pub async fn view_gallery_with_id(&self, id: GalleryId) -> Result<Gallery, error::Error> {
+        let url = format!("/galleries/id/{id}");
+
+        let response = self
+            .request(Method::GET, &url)
+            .send()
+            .await
+            .map_err(|e| error::Error::RequestError(e.to_string()))?;
+
+        let response = check_response(response).await?;
+
+        let gallery = response
+            .json::<Gallery>()
+            .await
+            .map_err(|e| error::Error::ParseResponseFailedError(e.to_string()))?;
+
+        Ok(gallery)
+    }
+
+    /// Asynchronously updates an existing gallery.
+    ///
+    /// # Arguments
+    ///
+    /// * `id` - A reference to a `GalleryId` struct representing the ID of the gallery
+    /// to update.
+    /// * `data` - A reference to the `ChangeGalleryData` struct containing the new data
+    /// for the gallery.
+    ///
+    /// # Returns
+    ///
+    /// * `Result<Gallery, error::Error>` -
+    ///   * On success, returns an instance of the updated `Gallery`.
+    ///   * On failure, returns an `error::Error`.
+    ///
+    /// # Errors
+    ///
+    /// * `error::Error::RequestError` - Returned if there is an error sending the request.
+    /// * `error::Error::ParseJsonFailedError` - Returned if there is an error parsing
+    /// the JSON response.
+    /// * If server responds with an error, we return the error.
+    ///
+    /// # Notes
+    ///
+    /// This function makes an HTTP PATCH request to the `/galleries/id/{id}` endpoint,
+    /// where `{id}` is replaced with the specified gallery ID.
+    /// It sends the `data` as JSON in the request body to update the gallery with
+    /// the new information provided.
+    /// It then checks the response for any errors and attempts to parse the response body
+    /// as JSON into a `Gallery` struct.
+    ///
+    /// The `check_response` function is called to handle potential HTTP errors.
+    /// If the response is successful, it is parsed into a `Gallery` object and returned.
+    pub async fn change_gallery(
+        &self,
+        id: GalleryId,
+        data: ChangeGalleryData,
+    ) -> Result<Gallery, error::Error> {
+        let url = format!("/galleries/id/{id}");
+
+        let response = self
+            .request(Method::PATCH, &url)
+            .json(&data)
+            .send()
+            .await
+            .map_err(|e| error::Error::RequestError(e.to_string()))?;
+
+        let response = check_response(response).await?;
+
+        let gallery = response
+            .json::<Gallery>()
+            .await
+            .map_err(|e| error::Error::ParseResponseFailedError(e.to_string()))?;
+
+        Ok(gallery)
+    }
+
+    /// Asynchronously deletes an existing gallery by its ID.
+    ///
+    /// # Arguments
+    ///
+    /// * `id` - A reference to a `GalleryId` struct representing the ID of the
+    /// gallery to delete.
+    ///
+    /// # Returns
+    ///
+    /// * `Result<Gallery, error::Error>` -
+    ///   * On success, returns an instance of the deleted `Gallery`.
+    ///   * On failure, returns an `error::Error`.
+    ///
+    /// # Errors
+    ///
+    /// * `error::Error::RequestError` - Returned if there is an error sending the request.
+    /// * `error::Error::ParseJsonFailedError` - Returned if there is an error parsing \
+    /// the JSON response.
+    /// * If server responds with an error, we return the error.
+    ///
+    /// # Notes
+    ///
+    /// This function makes an HTTP DELETE request to the `/galleries/id/{id}` endpoint,
+    /// where `{id}` is replaced with the specified gallery ID.
+    /// It then checks the response for any errors and attempts to parse the response body
+    /// as JSON into a `Gallery` struct.
+    ///
+    /// The `check_response` function is called to handle potential HTTP errors.
+    /// If the response is successful, it is parsed into a `Gallery` object and returned.
+    pub async fn delete_gallery(&self, id: GalleryId) -> Result<Gallery, error::Error> {
+        let url = format!("/galleries/id/{id}");
+
+        let response = self
+            .request(Method::DELETE, &url)
+            .send()
+            .await
+            .map_err(|e| error::Error::RequestError(e.to_string()))?;
+
+        let response = check_response(response).await?;
+
+        let gallery = response
+            .json::<Gallery>()
+            .await
+            .map_err(|e| error::Error::ParseResponseFailedError(e.to_string()))?;
+
+        Ok(gallery)
+    }
+
+    /// Asynchronously adds a new project to an existing gallery.
+    ///
+    /// # Arguments
+    ///
+    /// * `id` - A reference to a `GalleryId` struct representing the ID of the
+    ///   gallery to add the project to.
+    /// * `data` - A reference to the `CreateGalleryProjectData` struct containing
+    ///   the data for the new project.
+    ///
+    /// # Returns
+    ///
+    /// * `Result<GalleryProjectMetadata, error::Error>` -
+    ///   * On success, returns an instance of the created `GalleryProjectMetadata`.
+    ///   * On failure, returns an `error::Error`.
+    ///
+    /// # Errors
+    ///
+    /// * `error::Error::RequestError` - Returned if there is an error sending the
+    ///   request.
+    /// * `error::Error::ParseJsonFailedError` - Returned if there is an error
+    ///   parsing the JSON response.
+    /// * If server responds with an error, we return the error.
+    ///
+    /// # Notes
+    ///
+    /// This function makes an HTTP POST request to the `/galleries/id/{id}`
+    /// endpoint, where `{id}` is replaced with the specified gallery ID.
+    /// It sends the `data` as JSON in the request body to add the new project to
+    /// the gallery.
+    /// It then checks the response for any errors and attempts to parse the
+    /// response body as JSON into a `GalleryProjectMetadata` struct.
+    ///
+    /// The `check_response` function is called to handle potential HTTP errors.
+    /// If the response is successful, it is parsed into a `GalleryProjectMetadata`
+    /// object and returned.
+    pub async fn add_gallery_project(
+        &self,
+        id: GalleryId,
+        data: CreateGalleryProjectData,
+    ) -> Result<GalleryProjectMetadata, error::Error> {
+        let url = format!("/galleries/id/{id}");
+
+        let response = self
+            .request(Method::POST, &url)
+            .json(&data)
+            .send()
+            .await
+            .map_err(|e| error::Error::RequestError(e.to_string()))?;
+
+        let response = check_response(response).await?;
+
+        let project = response
+            .json::<GalleryProjectMetadata>()
+            .await
+            .map_err(|e| error::Error::ParseResponseFailedError(e.to_string()))?;
+
+        Ok(project)
+    }
+
+    /// Asynchronously retrieves metadata for a specific project within a gallery.
+    ///
+    /// # Arguments
+    ///
+    /// * `id` - A reference to a `GalleryId` struct representing the ID of the gallery.
+    /// * `prid` - A reference to a `ProjectId` struct representing the ID of the project
+    /// within the gallery.
+    ///
+    /// # Returns
+    ///
+    /// * `Result<GalleryProjectMetadata, error::Error>` -
+    ///   * On success, returns an instance of the retrieved `GalleryProjectMetadata`.
+    ///   * On failure, returns an `error::Error`.
+    ///
+    /// # Errors
+    ///
+    /// * `error::Error::RequestError` - Returned if there is an error sending the request.
+    /// * `error::Error::ParseJsonFailedError` - Returned if there is an error parsing
+    /// the JSON response.
+    /// * If server responds with an error, we return the error.
+    ///
+    /// # Notes
+    ///
+    /// This function makes an HTTP GET request to the `/galleries/id/{id}/project/{prid}`
+    /// endpoint, where `{id}` and `{prid}` are replaced with the specified gallery ID
+    /// and project ID respectively.
+    /// It then checks the response for any errors and attempts to parse the response body
+    /// as JSON into a `GalleryProjectMetadata` struct.
+    ///
+    /// The `check_response` function is called to handle potential HTTP errors.
+    /// If the response is successful, it is parsed into a `GalleryProjectMetadata` object
+    /// and returned.
+    pub async fn view_gallery_project(
+        &self,
+        id: GalleryId,
+        prid: ProjectId,
+    ) -> Result<GalleryProjectMetadata, error::Error> {
+        let url = format!("/galleries/id/{id}/project/{prid}");
+
+        let response = self
+            .request(Method::GET, &url)
+            .send()
+            .await
+            .map_err(|e| error::Error::RequestError(e.to_string()))?;
+
+        let response = check_response(response).await?;
+
+        let project = response
+            .json::<GalleryProjectMetadata>()
+            .await
+            .map_err(|e| error::Error::ParseResponseFailedError(e.to_string()))?;
+
+        Ok(project)
+    }
+
+    /// Asynchronously retrieves the thumbnail of a specific project within a gallery.
+    ///
+    /// # Arguments
+    ///
+    /// * `id` - A reference to a `GalleryId` struct representing the ID of the gallery.
+    /// * `prid` - A reference to a `ProjectId` struct representing the ID of
+    /// the project within the gallery.
+    /// * `aspect_ratio` - An optional reference to an `f32` representing the desired
+    /// aspect ratio of the thumbnail.
+    ///
+    /// # Returns
+    ///
+    /// * `Result<Bytes, error::Error>` -
+    ///   * On success, returns the thumbnail as `Bytes`.
+    ///   * On failure, returns an `error::Error`.
+    ///
+    /// # Errors
+    ///
+    /// * `error::Error::RequestError` - Returned if there is an error sending the request.
+    /// * `error::Error::ParseJsonFailedError` - Returned if there is an error
+    /// parsing the JSON response.
+    /// * If server responds with an error, we return the error.
+    ///
+    /// # Notes
+    ///
+    /// This function makes an HTTP GET request to the
+    /// `/galleries/id/{id}/project/{prid}/thumbnail`
+    /// endpoint, where `{id}` and `{prid}` are replaced with the specified gallery ID
+    /// and project ID
+    /// respectively. If an `aspect_ratio` is provided, it is appended as a query parameter.
+    ///
+    /// It then checks the response for any errors and attempts to retrieve the response
+    /// body as `Bytes`.
+    ///
+    /// The `check_response` function is called to handle potential HTTP errors.
+    /// If the response is successful, the thumbnail is returned as `Bytes`.
+    pub async fn view_gallery_project_thumbnail(
+        &self,
+        id: GalleryId,
+        prid: ProjectId,
+        aspect_ratio: Option<f32>,
+    ) -> Result<Vec<u8>, error::Error> {
+        let base = format!("/galleries/id/{id}/project/{prid}/thumbnail");
+
+        let url = if let Some(ratio) = aspect_ratio {
+            format!("{base}?aspect_ratio={ratio}")
+        } else {
+            base
+        };
+
+        let response = self
+            .request(Method::GET, &url)
+            .send()
+            .await
+            .map_err(|e| error::Error::RequestError(e.to_string()))?;
+
+        let response = check_response(response).await?;
+
+        let thumbnail = response
+            .bytes()
+            .await
+            .map_err(|e| error::Error::ParseResponseFailedError(e.to_string()))?;
+
+        Ok(thumbnail.to_vec().into())
+    }
+
+    /// Asynchronously retrieves all projects within a specified gallery.
+    ///
+    /// # Arguments
+    ///
+    /// * `id` - A reference to a `GalleryId` struct representing the ID of the
+    ///   gallery.
+    ///
+    /// # Returns
+    ///
+    /// * `Result<Vec<GalleryProjectMetadata>, error::Error>` -
+    ///   * On success, returns a vector of `GalleryProjectMetadata`.
+    ///   * On failure, returns an `error::Error`.
+    ///
+    /// # Errors
+    ///
+    /// * `error::Error::RequestError` - Returned if there is an error sending the
+    ///   request.
+    /// * `error::Error::ParseResponseFailedError` - Returned if there is an error
+    ///   parsing the JSON response.
+    /// * If server responds with an error, we return the error.
+    ///
+    /// # Notes
+    ///
+    /// This function makes an HTTP GET request to the `/galleries/id/{id}/projects`
+    /// endpoint, where `{id}` is replaced with the specified gallery ID.
+    /// It then checks the response for any errors and attempts to parse the
+    /// response body as JSON into a vector of `GalleryProjectMetadata`.
+    ///
+    /// The `check_response` function is called to handle potential HTTP errors.
+    /// If the response is successful, it is parsed into a vector of
+    /// `GalleryProjectMetadata` and returned.
+    pub async fn view_gallery_projects(
+        &self,
+        id: GalleryId,
+    ) -> Result<Vec<GalleryProjectMetadata>, error::Error> {
+        let url = format!("/galleries/id/{id}/projects");
+
+        let response = self
+            .request(Method::GET, &url)
+            .send()
+            .await
+            .map_err(|e| error::Error::RequestError(e.to_string()))?;
+
+        let response = check_response(response).await?;
+
+        let projects = response
+            .json::<Vec<GalleryProjectMetadata>>()
+            .await
+            .map_err(|e| error::Error::ParseResponseFailedError(e.to_string()))?;
+
+        Ok(projects)
+    }
+
+    /// Asynchronously adds a new version to a project within a gallery.
+    ///
+    /// # Arguments
+    ///
+    /// * `id` - A reference to a `GalleryId` struct representing the ID of the
+    ///   gallery.
+    /// * `prid` - A reference to a `ProjectId` struct representing the ID of the
+    ///   project within the gallery.
+    /// * `xml` - A string slice containing the XML data for the new version.
+    ///
+    /// # Returns
+    ///
+    /// * `Result<GalleryProjectMetadata, error::Error>` -
+    ///   * On success, returns an instance of the updated `GalleryProjectMetadata`.
+    ///   * On failure, returns an `error::Error`.
+    ///
+    /// # Errors
+    ///
+    /// * `error::Error::RequestError` - Returned if there is an error sending the
+    ///   request.
+    /// * `error::Error::ParseResponseFailedError` - Returned if there is an error
+    ///   parsing the JSON response.
+    /// * If server responds with an error, we return the error.
+    ///
+    /// # Notes
+    ///
+    /// This function makes an HTTP POST request to the `/galleries/id/{id}/project/{prid}`
+    /// endpoint, where `{id}` and `{prid}` are replaced with the specified gallery ID
+    /// and project ID respectively.
+    /// It sends the `xml` data as JSON in the request body to add the new version
+    /// to the project.
+    ///
+    /// It then checks the response for any errors and attempts to parse the
+    /// response body as JSON into a `GalleryProjectMetadata` struct.
+    ///
+    /// The `check_response` function is called to handle potential HTTP errors.
+    /// If the response is successful, it is parsed into a `GalleryProjectMetadata`
+    /// object and returned.
+    pub async fn add_gallery_project_version(
+        &self,
+        id: GalleryId,
+        prid: ProjectId,
+        xml: &str,
+    ) -> Result<GalleryProjectMetadata, error::Error> {
+        let url = format!("/galleries/id/{id}/project/{prid}");
+
+        let response = self
+            .request(Method::POST, &url)
+            .json(xml)
+            .send()
+            .await
+            .map_err(|e| error::Error::RequestError(e.to_string()))?;
+
+        let response = check_response(response).await?;
+
+        let project = response
+            .json::<GalleryProjectMetadata>()
+            .await
+            .map_err(|e| error::Error::ParseResponseFailedError(e.to_string()))?;
+
+        Ok(project)
+    }
+
+    /// Asynchronously retrieves the XML data for a specific project within a gallery.
+    ///
+    /// # Arguments
+    ///
+    /// * `id` - A reference to a `GalleryId` struct representing the ID of the
+    ///   gallery.
+    /// * `prid` - A reference to a `ProjectId` struct representing the ID of the
+    ///   project within the gallery.
+    ///
+    /// # Returns
+    ///
+    /// * `Result<String, error::Error>` -
+    ///   * On success, returns the XML data as a `String`.
+    ///   * On failure, returns an `error::Error`.
+    ///
+    /// # Errors
+    ///
+    /// * `error::Error::RequestError` - Returned if there is an error sending the
+    ///   request.
+    /// * `error::Error::ParseResponseFailedError` - Returned if there is an error
+    ///   parsing the response text.
+    /// * If server responds with an error, we return the error.
+    ///
+    /// # Notes
+    ///
+    /// This function makes an HTTP GET request to the `/galleries/id/{id}/project/{prid}/xml`
+    /// endpoint, where `{id}` and `{prid}` are replaced with the specified gallery ID
+    /// and project ID respectively.
+    /// It then checks the response for any errors and attempts to retrieve the
+    /// response body as text.
+    ///
+    /// The `check_response` function is called to handle potential HTTP errors.
+    /// If the response is successful, the XML data is returned as a `String`.
+    pub async fn view_gallery_project_xml(
+        &self,
+        id: GalleryId,
+        prid: ProjectId,
+    ) -> Result<String, error::Error> {
+        let url = format!("/galleries/id/{id}/project/{prid}/xml");
+
+        let response = self
+            .request(Method::GET, &url)
+            .send()
+            .await
+            .map_err(|e| error::Error::RequestError(e.to_string()))?;
+
+        let response = check_response(response).await?;
+
+        let xml = response
+            .text()
+            .await
+            .map_err(|e| error::Error::ParseResponseFailedError(e.to_string()))?;
+
+        Ok(xml)
+    }
+
+    /// Asynchronously retrieves the XML data for a specific version of a project
+    /// within a gallery.
+    ///
+    /// # Arguments
+    ///
+    /// * `id` - A reference to a `GalleryId` struct representing the ID of the
+    ///   gallery.
+    /// * `prid` - A reference to a `ProjectId` struct representing the ID of the
+    ///   project within the gallery.
+    /// * `version` - A reference to a `usize` representing the version number of
+    ///   the project.
+    ///
+    /// # Returns
+    ///
+    /// * `Result<String, error::Error>` -
+    ///   * On success, returns the XML data as a `String`.
+    ///   * On failure, returns an `error::Error`.
+    ///
+    /// # Errors
+    ///
+    /// * `error::Error::RequestError` - Returned if there is an error sending the
+    ///   request.
+    /// * `error::Error::ParseResponseFailedError` - Returned if there is an error
+    ///   parsing the response text.
+    /// * If server responds with an error, we return the error.
+    ///
+    /// # Notes
+    ///
+    /// This function makes an HTTP GET request to the
+    /// `/galleries/id/{id}/project/{prid}/version/{version}/xml` endpoint, where
+    /// `{id}`, `{prid}`, and `{version}` are replaced with the specified gallery
+    /// ID, project ID, and version number respectively.
+    /// It then checks the response for any errors and attempts to retrieve the
+    /// response body as text.
+    ///
+    /// The `check_response` function is called to handle potential HTTP errors.
+    /// If the response is successful, the XML data for the specified version is
+    /// returned as a `String`.
+    pub async fn view_gallery_project_xml_version(
+        &self,
+        id: GalleryId,
+        prid: ProjectId,
+        version: usize,
+    ) -> Result<String, error::Error> {
+        let url = format!("/galleries/id/{id}/project/{prid}/version/{version}/xml");
+
+        let response = self
+            .request(Method::GET, &url)
+            .send()
+            .await
+            .map_err(|e| error::Error::RequestError(e.to_string()))?;
+
+        let response = check_response(response).await?;
+
+        let xml = response
+            .text()
+            .await
+            .map_err(|e| error::Error::ParseResponseFailedError(e.to_string()))?;
+
+        Ok(xml)
+    }
+
+    /// Asynchronously deletes a specific project within a gallery.
+    ///
+    /// # Arguments
+    ///
+    /// * `id` - A reference to a `GalleryId` struct representing the ID of the
+    ///   gallery.
+    /// * `prid` - A reference to a `ProjectId` struct representing the ID of the
+    ///   project within the gallery.
+    ///
+    /// # Returns
+    ///
+    /// * `Result<GalleryProjectMetadata, error::Error>` -
+    ///   * On success, returns the metadata of the deleted `GalleryProjectMetadata`.
+    ///   * On failure, returns an `error::Error`.
+    ///
+    /// # Errors
+    ///
+    /// * `error::Error::RequestError` - Returned if there is an error sending the
+    ///   request.
+    /// * `error::Error::ParseResponseFailedError` - Returned if there is an error
+    ///   parsing the JSON response.
+    /// * If server responds with an error, we return the error.
+    ///
+    /// # Notes
+    ///
+    /// This function makes an HTTP DELETE request to the
+    /// `/galleries/id/{id}/project/{prid}` endpoint, where `{id}` and `{prid}` are
+    /// replaced with the specified gallery ID and project ID respectively.
+    /// It then checks the response for any errors and attempts to parse the
+    /// response body as JSON into a `GalleryProjectMetadata` struct.
+    ///
+    /// The `check_response` function is called to handle potential HTTP errors.
+    /// If the response is successful, it is parsed into a `GalleryProjectMetadata`
+    /// object and returned.
+    pub async fn delete_gallery_project(
+        &self,
+        id: GalleryId,
+        prid: ProjectId,
+    ) -> Result<GalleryProjectMetadata, error::Error> {
+        let url = format!("/galleries/id/{id}/project/{prid}");
+
+        let response = self
+            .request(Method::DELETE, &url)
+            .send()
+            .await
+            .map_err(|e| error::Error::RequestError(e.to_string()))?;
+
+        let response = check_response(response).await?;
+
+        let project = response
+            .json::<GalleryProjectMetadata>()
+            .await
+            .map_err(|e| error::Error::ParseResponseFailedError(e.to_string()))?;
+
+        Ok(project)
+    }
+
+    /// Asynchronously deletes a specific version of a project within a gallery.
+    ///
+    /// # Arguments
+    ///
+    /// * `id` - A reference to a `GalleryId` struct representing the ID of the
+    ///   gallery.
+    /// * `prid` - A reference to a `ProjectId` struct representing the ID of the
+    ///   project within the gallery.
+    /// * `version` - A reference to a `usize` representing the version number of
+    ///   the project to delete.
+    ///
+    /// # Returns
+    ///
+    /// * `Result<GalleryProjectMetadata, error::Error>` -
+    ///   * On success, returns the metadata of the updated `GalleryProjectMetadata`.
+    ///   * On failure, returns an `error::Error`.
+    ///
+    /// # Errors
+    ///
+    /// * `error::Error::RequestError` - Returned if there is an error sending the
+    ///   request.
+    /// * `error::Error::ParseResponseFailedError` - Returned if there is an error
+    ///   parsing the JSON response.
+    /// * If server responds with an error, we return the error.
+    ///
+    /// # Notes
+    ///
+    /// This function makes an HTTP DELETE request to the
+    /// `/galleries/id/{id}/project/{prid}/version/{version}` endpoint, where `{id}`,
+    /// `{prid}`, and `{version}` are replaced with the specified gallery ID, project
+    /// ID, and version number respectively.
+    /// It then checks the response for any errors and attempts to parse the
+    /// response body as JSON into a `GalleryProjectMetadata` struct.
+    ///
+    /// The `check_response` function is called to handle potential HTTP errors.
+    /// If the response is successful, it is parsed into a `GalleryProjectMetadata`
+    /// object and returned.
+    pub async fn delete_gallery_project_version(
+        &self,
+        id: GalleryId,
+        prid: ProjectId,
+        version: usize,
+    ) -> Result<GalleryProjectMetadata, error::Error> {
+        let url = format!("/galleries/id/{id}/project/{prid}/version/{version}");
+
+        let response = self
+            .request(Method::DELETE, &url)
+            .send()
+            .await
+            .map_err(|e| error::Error::RequestError(e.to_string()))?;
+
+        let response = check_response(response).await?;
+
+        let project = response
+            .json::<GalleryProjectMetadata>()
+            .await
+            .map_err(|e| error::Error::ParseResponseFailedError(e.to_string()))?;
+
+        Ok(project)
     }
 
     pub async fn connect(&self, address: &str) -> Result<MessageChannel, error::Error> {
@@ -1219,7 +2002,7 @@ impl Client {
             .request(Method::GET, "/configuration")
             .send()
             .await
-            .map_err(error::Error::RequestError)?;
+            .map_err(|e| error::Error::RequestError(e.to_string()))?;
 
         let response = check_response(response).await?;
 
@@ -1230,7 +2013,7 @@ impl Client {
             self.cfg.url.replace("http", "ws"),
             config.client_id
         );
-        let (ws_stream, _) = connect_async(&url).await.unwrap();
+        let ws_stream = MessageChannel::ws_connect(&url).await?;
 
         let state = ClientStateData {
             state: ClientState::External(ExternalClientState {
@@ -1247,7 +2030,9 @@ impl Client {
             .json(&state)
             .send()
             .await
-            .map_err(error::Error::RequestError)?;
+            .map_err(|e| error::Error::RequestError(e.to_string()))?;
+
+        //NOTE: should the connection be closed before returning with error?
 
         check_response(response).await?;
 
@@ -1255,85 +2040,5 @@ impl Client {
             id: config.client_id,
             stream: ws_stream,
         })
-    }
-
-    // NetsBlox OAuth capabilities
-    pub async fn add_oauth_client(
-        &self,
-        client: &oauth::CreateClientData,
-    ) -> Result<oauth::CreatedClientData, error::Error> {
-        let response = self
-            .request(Method::POST, "/oauth/clients/")
-            .json(&client)
-            .send()
-            .await
-            .map_err(error::Error::RequestError)?;
-
-        let response = check_response(response).await?;
-
-        Ok(response.json::<oauth::CreatedClientData>().await.unwrap())
-    }
-
-    pub async fn remove_oauth_client(&self, id: &oauth::ClientId) -> Result<(), error::Error> {
-        let response = self
-            .request(Method::DELETE, &format!("/oauth/clients/{}", id))
-            .send()
-            .await
-            .map_err(error::Error::RequestError)?;
-
-        check_response(response).await?;
-        Ok(())
-    }
-
-    pub async fn list_oauth_clients(&self) -> Result<Vec<oauth::Client>, error::Error> {
-        let response = self
-            .request(Method::GET, "/oauth/clients/")
-            .send()
-            .await
-            .map_err(error::Error::RequestError)?;
-
-        let response = check_response(response).await?;
-
-        Ok(response.json::<Vec<oauth::Client>>().await.unwrap())
-    }
-}
-
-pub struct MessageChannel {
-    pub id: String,
-    pub stream: WebSocketStream<MaybeTlsStream<TcpStream>>,
-}
-
-impl MessageChannel {
-    // TODO: do we need a method for sending other types?
-    // TODO: sending a generic struct (implementing Deserialize)
-    pub async fn send_json(
-        &mut self,
-        addr: &str,
-        r#type: &str,
-        data: &Value,
-    ) -> Result<(), error::Error> {
-        let msg = json!({
-            "type": "message",
-            "dstId": addr,
-            "msgType": r#type,
-            "content": data
-        });
-        let msg_text = serde_json::to_string(&msg).unwrap();
-        self.stream
-            .send(Message::Text(msg_text))
-            .await
-            .map_err(error::Error::WebSocketSendError)?;
-
-        Ok(())
-    }
-}
-
-#[cfg(test)]
-mod tests {
-
-    #[test]
-    fn it_works() {
-        let result = 2 + 2;
-        assert_eq!(result, 4);
     }
 }
