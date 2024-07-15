@@ -3,21 +3,17 @@ pub mod error;
 
 pub use serde_json;
 
+#[allow(clippy::wildcard_imports)]
 use crate::common::*;
-use bytes::Bytes;
 
-use futures_util::SinkExt;
 use reqwest::{self, Method, RequestBuilder, Response};
 use serde::{Deserialize, Serialize};
-use serde_json::{json, Value};
-use tokio::net::TcpStream;
-use tokio_tungstenite::tungstenite::Message;
-use tokio_tungstenite::{connect_async, MaybeTlsStream, WebSocketStream};
 
+#[cfg(target_arch = "wasm32")]
 use wasm_bindgen::prelude::*;
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
-#[wasm_bindgen(getter_with_clone)]
+#[cfg_attr(target_arch = "wasm32", wasm_bindgen(getter_with_clone))]
 pub struct Config {
     pub app_id: Option<AppId>,
     pub username: Option<String>,
@@ -25,9 +21,9 @@ pub struct Config {
     pub url: String,
 }
 
-#[wasm_bindgen]
+#[cfg_attr(target_arch = "wasm32", wasm_bindgen)]
 impl Config {
-    #[wasm_bindgen(constructor)]
+    #[cfg_attr(target_arch = "wasm32", wasm_bindgen(constructor))]
     #[must_use]
     pub fn new() -> Self {
         Self {
@@ -61,8 +57,8 @@ async fn check_response(response: Response) -> Result<Response, error::Error> {
     }
 }
 
-#[wasm_bindgen]
-pub async fn login(mut cfg: Config, credentials: &LoginRequest) -> Result<Config, error::Error> {
+#[cfg_attr(target_arch = "wasm32", wasm_bindgen)]
+pub async fn login(mut cfg: Config, credentials: LoginRequest) -> Result<Config, error::Error> {
     let client = reqwest::Client::new();
     let response = client
         .post(format!("{}/users/login", cfg.url))
@@ -72,45 +68,30 @@ pub async fn login(mut cfg: Config, credentials: &LoginRequest) -> Result<Config
         .map_err(|e| error::Error::RequestError(e.to_string()))?;
 
     let response = check_response(response).await?;
-    let cookie = response
-        .cookies()
-        .find(|cookie| cookie.name() == "netsblox")
-        .ok_or("No cookie received.")
-        .unwrap();
-
-    let token = cookie.value().to_owned();
+    let token = common::get_token(&response);
 
     let user = response.json::<User>().await.unwrap();
     cfg.username = Some(user.username);
-    cfg.token = Some(token);
+    cfg.token = token;
     Ok(cfg)
 }
 
 #[derive(Clone)]
-#[wasm_bindgen]
+#[cfg_attr(target_arch = "wasm32", wasm_bindgen)]
 pub struct Client {
     cfg: Config,
 }
 
-#[wasm_bindgen]
+#[cfg_attr(target_arch = "wasm32", wasm_bindgen)]
 impl Client {
-    #[wasm_bindgen(constructor)]
     #[must_use]
+    #[cfg_attr(target_arch = "wasm32", wasm_bindgen(constructor))]
     pub fn new(cfg: Config) -> Self {
         Client { cfg }
     }
 
-    fn request(&self, method: Method, path: &str) -> RequestBuilder {
-        let client = reqwest::Client::new();
-        let empty = "".to_owned();
-        let token = self.cfg.token.as_ref().unwrap_or(&empty);
-        client
-            .request(method, format!("{}{}", self.cfg.url, path))
-            .header("Cookie", format!("netsblox={}", token))
-    }
-
     // User management
-    pub async fn create_user(&self, user_data: &NewUser) -> Result<(), error::Error> {
+    pub async fn create_user(&self, user_data: NewUser) -> Result<(), error::Error> {
         let response = self
             .request(Method::POST, "/users/create")
             .json(&user_data)
@@ -132,7 +113,6 @@ impl Client {
             .send()
             .await
             .map_err(|e| error::Error::RequestError(e.to_string()))?;
-
         let response = check_response(response).await?;
         Ok(response.json::<Vec<User>>().await.unwrap())
     }
@@ -205,7 +185,7 @@ impl Client {
     pub async fn unlink_account(
         &self,
         username: &str,
-        account: &LinkedAccount,
+        account: LinkedAccount,
     ) -> Result<(), error::Error> {
         let response = self
             .request(Method::POST, &format!("/users/{}/unlink", username))
@@ -242,10 +222,10 @@ impl Client {
 
     /// Send a magic link to the given email address. Usable for any user associated with the
     /// address.
-    pub async fn send_magic_link(&self, data: &CreateMagicLinkData) -> Result<(), error::Error> {
+    pub async fn send_magic_link(&self, data: CreateMagicLinkData) -> Result<(), error::Error> {
         let response = self
             .request(Method::POST, "/magic-links/")
-            .json(data)
+            .json(&data)
             .send()
             .await
             .map_err(|e| error::Error::RequestError(e.to_string()))?;
@@ -257,12 +237,12 @@ impl Client {
     // Project management
     pub async fn create_project(
         &self,
-        data: &CreateProjectData,
+        data: CreateProjectData,
     ) -> Result<ProjectMetadata, error::Error> {
         // TODO: what should the method signature look like for this? Probably should accept CreateProjectData
         let response = self
             .request(Method::POST, "/projects/")
-            .json(data)
+            .json(&data)
             .send()
             .await
             .map_err(|e| error::Error::RequestError(e.to_string()))?;
@@ -317,7 +297,7 @@ impl Client {
         Ok(response.json::<ProjectMetadata>().await.unwrap())
     }
 
-    pub async fn rename_project(&self, id: &ProjectId, name: &str) -> Result<(), error::Error> {
+    pub async fn rename_project(&self, id: ProjectId, name: &str) -> Result<(), error::Error> {
         let response = self
             .request(Method::PATCH, &format!("/projects/id/{}", &id))
             .json(&UpdateProjectData {
@@ -335,8 +315,8 @@ impl Client {
 
     pub async fn rename_role(
         &self,
-        id: &ProjectId,
-        role_id: &RoleId,
+        id: ProjectId,
+        role_id: RoleId,
         name: &str,
     ) -> Result<(), error::Error> {
         let response = self
@@ -354,7 +334,7 @@ impl Client {
         Ok(())
     }
 
-    pub async fn delete_project(&self, id: &ProjectId) -> Result<(), error::Error> {
+    pub async fn delete_project(&self, id: ProjectId) -> Result<(), error::Error> {
         let response = self
             .request(Method::DELETE, &format!("/projects/id/{}", id))
             .send()
@@ -366,7 +346,7 @@ impl Client {
         Ok(())
     }
 
-    pub async fn delete_role(&self, id: &ProjectId, role_id: &RoleId) -> Result<(), error::Error> {
+    pub async fn delete_role(&self, id: ProjectId, role_id: RoleId) -> Result<(), error::Error> {
         let response = self
             .request(Method::DELETE, &format!("/projects/id/{}/{}", id, role_id))
             .send()
@@ -378,7 +358,7 @@ impl Client {
         Ok(())
     }
 
-    pub async fn publish_project(&self, id: &ProjectId) -> Result<PublishState, error::Error> {
+    pub async fn publish_project(&self, id: ProjectId) -> Result<PublishState, error::Error> {
         let response = self
             .request(Method::POST, &format!("/projects/id/{}/publish", id))
             .send()
@@ -390,7 +370,7 @@ impl Client {
         Ok(response.json::<PublishState>().await.unwrap())
     }
 
-    pub async fn unpublish_project(&self, id: &ProjectId) -> Result<(), error::Error> {
+    pub async fn unpublish_project(&self, id: ProjectId) -> Result<(), error::Error> {
         let response = self
             .request(Method::POST, &format!("/projects/id/{}/unpublish", id))
             .send()
@@ -402,7 +382,7 @@ impl Client {
         Ok(())
     }
 
-    pub async fn get_project(&self, id: &ProjectId, latest: bool) -> Result<Project, error::Error> {
+    pub async fn get_project(&self, id: ProjectId, latest: bool) -> Result<Project, error::Error> {
         let path = if latest {
             format!("/projects/id/{}/latest", id)
         } else {
@@ -421,8 +401,8 @@ impl Client {
 
     pub async fn get_role(
         &self,
-        id: &ProjectId,
-        role_id: &RoleId,
+        id: ProjectId,
+        role_id: RoleId,
         latest: bool,
     ) -> Result<RoleData, error::Error> {
         let path = if latest {
@@ -456,7 +436,7 @@ impl Client {
 
     pub async fn remove_collaborator(
         &self,
-        project_id: &ProjectId,
+        project_id: ProjectId,
         username: &str,
     ) -> Result<(), error::Error> {
         let response = self
@@ -493,7 +473,7 @@ impl Client {
 
     pub async fn invite_collaborator(
         &self,
-        id: &ProjectId,
+        id: ProjectId,
         username: &str,
     ) -> Result<(), error::Error> {
         let response = self
@@ -801,7 +781,7 @@ impl Client {
         Ok(())
     }
 
-    pub async fn delete_group(&self, id: &GroupId) -> Result<(), error::Error> {
+    pub async fn delete_group(&self, id: GroupId) -> Result<(), error::Error> {
         let path = format!("/groups/id/{}", id);
         let response = self
             .request(Method::DELETE, &path)
@@ -813,7 +793,7 @@ impl Client {
         Ok(())
     }
 
-    pub async fn list_members(&self, id: &GroupId) -> Result<Vec<User>, error::Error> {
+    pub async fn list_members(&self, id: GroupId) -> Result<Vec<User>, error::Error> {
         let path = format!("/groups/id/{}/members", id);
         let response = self
             .request(Method::GET, &path)
@@ -825,7 +805,7 @@ impl Client {
         Ok(response.json::<Vec<User>>().await.unwrap())
     }
 
-    pub async fn rename_group(&self, id: &GroupId, name: &str) -> Result<(), error::Error> {
+    pub async fn rename_group(&self, id: GroupId, name: &str) -> Result<(), error::Error> {
         let path = format!("/groups/id/{}", id);
         let response = self
             .request(Method::PATCH, &path)
@@ -840,7 +820,7 @@ impl Client {
         Ok(())
     }
 
-    pub async fn view_group(&self, id: &GroupId) -> Result<Group, error::Error> {
+    pub async fn view_group(&self, id: GroupId) -> Result<Group, error::Error> {
         let path = format!("/groups/id/{}", id);
         let response = self
             .request(Method::GET, &path)
@@ -868,7 +848,7 @@ impl Client {
 
     pub async fn list_group_hosts(
         &self,
-        group_id: &GroupId,
+        group_id: GroupId,
     ) -> Result<Vec<ServiceHost>, error::Error> {
         let response = self
             .request(Method::GET, &format!("/services/hosts/group/{}", group_id))
@@ -911,7 +891,7 @@ impl Client {
 
     pub async fn set_group_hosts(
         &self,
-        group_id: &GroupId,
+        group_id: GroupId,
         hosts: Vec<ServiceHost>,
     ) -> Result<(), error::Error> {
         let response = self
@@ -975,7 +955,7 @@ impl Client {
     // Service settings management
     pub async fn list_group_settings(
         &self,
-        group_id: &GroupId,
+        group_id: GroupId,
     ) -> Result<Vec<String>, error::Error> {
         let response = self
             .request(
@@ -1024,7 +1004,7 @@ impl Client {
 
     pub async fn get_group_settings(
         &self,
-        group_id: &GroupId,
+        group_id: GroupId,
         service_id: &str,
     ) -> Result<String, error::Error> {
         let response = self
@@ -1080,7 +1060,7 @@ impl Client {
 
     pub async fn set_group_settings(
         &self,
-        group_id: &GroupId,
+        group_id: GroupId,
         service_id: &str,
         settings: String,
     ) -> Result<String, error::Error> {
@@ -1118,7 +1098,7 @@ impl Client {
 
     pub async fn delete_group_settings(
         &self,
-        group_id: &GroupId,
+        group_id: GroupId,
         service_id: &str,
     ) -> Result<String, error::Error> {
         let response = self
@@ -1159,7 +1139,7 @@ impl Client {
         Ok(response.json::<Vec<ProjectId>>().await.unwrap())
     }
 
-    pub async fn get_room_state(&self, id: &ProjectId) -> Result<RoomState, error::Error> {
+    pub async fn get_room_state(&self, id: ProjectId) -> Result<RoomState, error::Error> {
         let response = self
             .request(Method::GET, &format!("/network/id/{}", id))
             .send()
@@ -1171,7 +1151,7 @@ impl Client {
         Ok(response.json::<RoomState>().await.unwrap())
     }
 
-    pub async fn get_client_state(&self, client_id: &ClientId) -> Result<ClientInfo, error::Error> {
+    pub async fn get_client_state(&self, client_id: ClientId) -> Result<ClientInfo, error::Error> {
         let response = self
             .request(
                 Method::GET,
@@ -1186,7 +1166,7 @@ impl Client {
         Ok(response.json::<ClientInfo>().await.unwrap())
     }
 
-    pub async fn evict_occupant(&self, client_id: &ClientId) -> Result<(), error::Error> {
+    pub async fn evict_occupant(&self, client_id: ClientId) -> Result<(), error::Error> {
         let response = self
             .request(
                 Method::POST,
@@ -1203,7 +1183,7 @@ impl Client {
     // NetsBlox OAuth capabilities
     pub async fn add_oauth_client(
         &self,
-        client: &oauth::CreateClientData,
+        client: oauth::CreateClientData,
     ) -> Result<oauth::CreatedClientData, error::Error> {
         let response = self
             .request(Method::POST, "/oauth/clients/")
@@ -1217,7 +1197,7 @@ impl Client {
         Ok(response.json::<oauth::CreatedClientData>().await.unwrap())
     }
 
-    pub async fn remove_oauth_client(&self, id: &oauth::ClientId) -> Result<(), error::Error> {
+    pub async fn remove_oauth_client(&self, id: oauth::ClientId) -> Result<(), error::Error> {
         let response = self
             .request(Method::DELETE, &format!("/oauth/clients/{}", id))
             .send()
@@ -1267,7 +1247,7 @@ impl Client {
     ///
     /// The `check_response` function is called to handle potential HTTP errors.
     /// If the response is successful, it is parsed into a `Gallery` object and returned.
-    pub async fn create_gallery(&self, data: &CreateGalleryData) -> Result<Gallery, error::Error> {
+    pub async fn create_gallery(&self, data: CreateGalleryData) -> Result<Gallery, error::Error> {
         let response = self
             .request(Method::POST, "/galleries/")
             .json(&data)
@@ -1361,7 +1341,7 @@ impl Client {
     ///
     /// The `check_response` function is called to handle potential HTTP errors.
     /// If the response is successful, it is parsed into a `Gallery` object and returned.
-    pub async fn view_gallery_with_id(&self, id: &GalleryId) -> Result<Gallery, error::Error> {
+    pub async fn view_gallery_with_id(&self, id: GalleryId) -> Result<Gallery, error::Error> {
         let url = format!("/galleries/id/{id}");
 
         let response = self
@@ -1415,8 +1395,8 @@ impl Client {
     /// If the response is successful, it is parsed into a `Gallery` object and returned.
     pub async fn change_gallery(
         &self,
-        id: &GalleryId,
-        data: &ChangeGalleryData,
+        id: GalleryId,
+        data: ChangeGalleryData,
     ) -> Result<Gallery, error::Error> {
         let url = format!("/galleries/id/{id}");
 
@@ -1466,7 +1446,7 @@ impl Client {
     ///
     /// The `check_response` function is called to handle potential HTTP errors.
     /// If the response is successful, it is parsed into a `Gallery` object and returned.
-    pub async fn delete_gallery(&self, id: &GalleryId) -> Result<Gallery, error::Error> {
+    pub async fn delete_gallery(&self, id: GalleryId) -> Result<Gallery, error::Error> {
         let url = format!("/galleries/id/{id}");
 
         let response = self
@@ -1522,8 +1502,8 @@ impl Client {
     /// object and returned.
     pub async fn add_gallery_project(
         &self,
-        id: &GalleryId,
-        data: &CreateGalleryProjectData,
+        id: GalleryId,
+        data: CreateGalleryProjectData,
     ) -> Result<GalleryProjectMetadata, error::Error> {
         let url = format!("/galleries/id/{id}");
 
@@ -1578,8 +1558,8 @@ impl Client {
     /// and returned.
     pub async fn view_gallery_project(
         &self,
-        id: &GalleryId,
-        prid: &ProjectId,
+        id: GalleryId,
+        prid: ProjectId,
     ) -> Result<GalleryProjectMetadata, error::Error> {
         let url = format!("/galleries/id/{id}/project/{prid}");
 
@@ -1637,8 +1617,8 @@ impl Client {
     /// If the response is successful, the thumbnail is returned as `Bytes`.
     pub async fn view_gallery_project_thumbnail(
         &self,
-        id: &GalleryId,
-        prid: &ProjectId,
+        id: GalleryId,
+        prid: ProjectId,
         aspect_ratio: Option<f32>,
     ) -> Result<Vec<u8>, error::Error> {
         let base = format!("/galleries/id/{id}/project/{prid}/thumbnail");
@@ -1662,7 +1642,7 @@ impl Client {
             .await
             .map_err(|e| error::Error::ParseResponseFailedError(e.to_string()))?;
 
-        Ok(thumbnail.to_vec())
+        Ok(thumbnail.to_vec().into())
     }
 
     /// Asynchronously retrieves all projects within a specified gallery.
@@ -1698,7 +1678,7 @@ impl Client {
     /// `GalleryProjectMetadata` and returned.
     pub async fn view_gallery_projects(
         &self,
-        id: &GalleryId,
+        id: GalleryId,
     ) -> Result<Vec<GalleryProjectMetadata>, error::Error> {
         let url = format!("/galleries/id/{id}/projects");
 
@@ -1758,8 +1738,8 @@ impl Client {
     /// object and returned.
     pub async fn add_gallery_project_version(
         &self,
-        id: &GalleryId,
-        prid: &ProjectId,
+        id: GalleryId,
+        prid: ProjectId,
         xml: &str,
     ) -> Result<GalleryProjectMetadata, error::Error> {
         let url = format!("/galleries/id/{id}/project/{prid}");
@@ -1816,8 +1796,8 @@ impl Client {
     /// If the response is successful, the XML data is returned as a `String`.
     pub async fn view_gallery_project_xml(
         &self,
-        id: &GalleryId,
-        prid: &ProjectId,
+        id: GalleryId,
+        prid: ProjectId,
     ) -> Result<String, error::Error> {
         let url = format!("/galleries/id/{id}/project/{prid}/xml");
 
@@ -1877,8 +1857,8 @@ impl Client {
     /// returned as a `String`.
     pub async fn view_gallery_project_xml_version(
         &self,
-        id: &GalleryId,
-        prid: &ProjectId,
+        id: GalleryId,
+        prid: ProjectId,
         version: usize,
     ) -> Result<String, error::Error> {
         let url = format!("/galleries/id/{id}/project/{prid}/version/{version}/xml");
@@ -1935,8 +1915,8 @@ impl Client {
     /// object and returned.
     pub async fn delete_gallery_project(
         &self,
-        id: &GalleryId,
-        prid: &ProjectId,
+        id: GalleryId,
+        prid: ProjectId,
     ) -> Result<GalleryProjectMetadata, error::Error> {
         let url = format!("/galleries/id/{id}/project/{prid}");
 
@@ -1995,8 +1975,8 @@ impl Client {
     /// object and returned.
     pub async fn delete_gallery_project_version(
         &self,
-        id: &GalleryId,
-        prid: &ProjectId,
+        id: GalleryId,
+        prid: ProjectId,
         version: usize,
     ) -> Result<GalleryProjectMetadata, error::Error> {
         let url = format!("/galleries/id/{id}/project/{prid}/version/{version}");
@@ -2016,9 +1996,7 @@ impl Client {
 
         Ok(project)
     }
-}
 
-impl Client {
     pub async fn connect(&self, address: &str) -> Result<MessageChannel, error::Error> {
         let response = self
             .request(Method::GET, "/configuration")
@@ -2035,7 +2013,7 @@ impl Client {
             self.cfg.url.replace("http", "ws"),
             config.client_id
         );
-        let (ws_stream, _) = connect_async(&url).await.unwrap();
+        let ws_stream = MessageChannel::ws_connect(&url).await?;
 
         let state = ClientStateData {
             state: ClientState::External(ExternalClientState {
@@ -2054,41 +2032,13 @@ impl Client {
             .await
             .map_err(|e| error::Error::RequestError(e.to_string()))?;
 
+        //NOTE: should the connection be closed before returning with error?
+
         check_response(response).await?;
 
         Ok(MessageChannel {
             id: config.client_id,
             stream: ws_stream,
         })
-    }
-}
-
-pub struct MessageChannel {
-    pub id: String,
-    pub stream: WebSocketStream<MaybeTlsStream<TcpStream>>,
-}
-
-impl MessageChannel {
-    // TODO: do we need a method for sending other types?
-    // TODO: sending a generic struct (implementing Deserialize)
-    pub async fn send_json(
-        &mut self,
-        addr: &str,
-        r#type: &str,
-        data: &Value,
-    ) -> Result<(), error::Error> {
-        let msg = json!({
-            "type": "message",
-            "dstId": addr,
-            "msgType": r#type,
-            "content": data
-        });
-        let msg_text = serde_json::to_string(&msg).unwrap();
-        self.stream
-            .send(Message::Text(msg_text))
-            .await
-            .map_err(|e| error::Error::WebSocketError(e.to_string()))?;
-
-        Ok(())
     }
 }

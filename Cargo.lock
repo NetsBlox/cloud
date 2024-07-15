@@ -3,12 +3,6 @@
 version = 3
 
 [[package]]
-name = "Inflector"
-version = "0.11.4"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "fe438c63458706e03479442743baae6c88256498e6431708f6dfc520a26515d3"
-
-[[package]]
 name = "actix"
 version = "0.12.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1834,9 +1828,9 @@ dependencies = [
 
 [[package]]
 name = "getrandom"
-version = "0.2.10"
+version = "0.2.15"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "be4136b2a15dd319360be1c07d9933517ccf0be8f16bf62a3bee4f0d618df427"
+checksum = "c4567c8db10ae91089c99af84c68c38da3ec2f087c3f82960bcdbf3656b6f4d7"
 dependencies = [
  "cfg-if 1.0.0",
  "js-sys",
@@ -2241,9 +2235,9 @@ dependencies = [
 
 [[package]]
 name = "into-jsvalue-derive"
-version = "0.1.0"
+version = "0.2.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "9beb602cf5b369babd3cb5459d31811829df459a36ae64b21c3272fe7f1d687d"
+checksum = "45761a45e112652e5510e7b092a32bd91825e869c24d52a84e377f53314f2030"
 dependencies = [
  "proc-macro2",
  "quote",
@@ -2387,9 +2381,9 @@ dependencies = [
 
 [[package]]
 name = "libc"
-version = "0.2.148"
+version = "0.2.155"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "9cdc71e17332e86d2e1d38c1f99edcb6288ee11b815fb1a4b049eaa2114d369b"
+checksum = "97b3888a4aecf77e811145cadf6eef5901f4782c53886191b2f693f24761847c"
 
 [[package]]
 name = "link-cplusplus"
@@ -2633,6 +2627,7 @@ dependencies = [
  "bytes",
  "derive_more",
  "futures-util",
+ "getrandom",
  "gloo-net",
  "into-jsvalue-derive",
  "netsblox-api-common",
@@ -2646,6 +2641,7 @@ dependencies = [
  "tungstenite",
  "wasm-bindgen",
  "wasm-bindgen-futures",
+ "web-sys",
 ]
 
 [[package]]
@@ -2654,14 +2650,15 @@ version = "1.6.0"
 dependencies = [
  "bson",
  "derive_more",
+ "getrandom",
  "into-jsvalue-derive",
  "serde 1.0.203",
  "serde-wasm-bindgen",
  "serde_json",
- "ts-rs",
  "tsify",
  "uuid",
  "wasm-bindgen",
+ "web-time",
 ]
 
 [[package]]
@@ -4252,30 +4249,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "59547bce71d9c38b83d9c0e92b6066c4253371f15005def0c30d9657f50c7642"
 
 [[package]]
-name = "ts-rs"
-version = "7.0.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "e1ff1f8c90369bc172200013ac17ae86e7b5def580687df4e6127883454ff2b0"
-dependencies = [
- "thiserror",
- "ts-rs-macros",
- "uuid",
-]
-
-[[package]]
-name = "ts-rs-macros"
-version = "7.0.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "a6f41cc0aeb7a4a55730188e147d3795a7349b501f8334697fd37629b896cdc2"
-dependencies = [
- "Inflector",
- "proc-macro2",
- "quote",
- "syn 2.0.68",
- "termcolor",
-]
-
-[[package]]
 name = "tsify"
 version = "0.4.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -4535,11 +4508,22 @@ source = "git+https://github.com/rustwasm/wasm-bindgen?rev=88efe46#88efe468e68cf
 
 [[package]]
 name = "web-sys"
-version = "0.3.56"
+version = "0.3.69"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "c060b319f29dd25724f09a2ba1418f142f539b2be99fbf4d2d5a8f7330afb8eb"
+checksum = "77afa9a11836342370f4817622a2f0f418b134426d91a82dfb48f532d2ec13ef"
 dependencies = [
  "js-sys",
+ "wasm-bindgen",
+]
+
+[[package]]
+name = "web-time"
+version = "1.1.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "5a6580f308b1fad9207618087a65c04e7a10bc77e02c8e84e9b00dd4b12fa0bb"
+dependencies = [
+ "js-sys",
+ "serde 1.0.203",
  "wasm-bindgen",
 ]
 

@@ -8,6 +8,8 @@ A crate containing the types used by the NetsBlox cloud API
 """
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+[lib]
+crate-type = ["cdylib", "rlib"]
 
 [dependencies]
 uuid = { version = "1.0.0-alpha.1", features = ["v4", "fast-rng", "serde"] }
@@ -15,14 +17,15 @@ serde = { version = "1.0.130", features = ["derive"] }
 bson = { version = "2.0.0", optional = true }
 derive_more = "0.99.17"
 serde_json = "1.0.59"
-# TODO: make this a dev dependency or a feature
-ts-rs = { version = "7.0", features = ["uuid-impl", "serde-compat"] }
+web-time = { version = "1.1.0", features = ["serde"] }
 
 wasm-bindgen = { version = "0.2.92", optional = true }
 serde-wasm-bindgen = { version = "0.6.5", optional = true }
-into-jsvalue-derive = { version = "0.1.0", optional = true }
+into-jsvalue-derive = { version = "0.2.0", optional = true }
 tsify = { version = "0.4.5", optional = true }
+getrandom = { version = "0.2.15", features = ["js"], optional = true, default-features = false}
+
 
 [features]
-to_bson = ["bson"]
-to_wasm = ["dep:wasm-bindgen", "dep:serde-wasm-bindgen", "dep:into-jsvalue-derive", "dep:tsify"]
+to_bson = ["dep:bson"]
+wasm = ["dep:wasm-bindgen", "dep:serde-wasm-bindgen", "dep:into-jsvalue-derive", "dep:tsify", "dep:getrandom"]

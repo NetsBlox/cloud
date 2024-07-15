@@ -3,13 +3,17 @@ use std::time::SystemTime;
 use derive_more::{Display, FromStr};
 use serde::{Deserialize, Serialize};
 
-use wasm_bindgen::prelude::*;
+#[cfg(feature = "wasm")]
+use {into_jsvalue_derive::IntoJsValue, tsify::Tsify};
 
 #[derive(Deserialize, Serialize, Clone, Debug, PartialEq, Eq, Display, Hash, FromStr)]
-#[wasm_bindgen(getter_with_clone)]
+#[cfg_attr(
+    feature = "wasm",
+    derive(Tsify, IntoJsValue),
+    tsify(into_wasm_abi, from_wasm_abi)
+)]
 pub struct ClientId(String);
 
-#[wasm_bindgen(constructor)]
 impl ClientId {
     pub fn new(name: String) -> Self {
         Self(name)
@@ -22,20 +26,32 @@ impl ClientId {
 }
 
 #[derive(Deserialize, Serialize, Clone, Debug, Display)]
-#[wasm_bindgen(getter_with_clone)]
+#[cfg_attr(
+    feature = "wasm",
+    derive(Tsify, IntoJsValue),
+    tsify(into_wasm_abi, from_wasm_abi)
+)]
 pub struct CreateClientData {
     pub name: String,
 }
 
 #[derive(Deserialize, Serialize, Clone, Debug)]
-#[wasm_bindgen(getter_with_clone)]
+#[cfg_attr(
+    feature = "wasm",
+    derive(Tsify, IntoJsValue),
+    tsify(into_wasm_abi, from_wasm_abi)
+)]
 pub struct CreatedClientData {
     pub id: ClientId,
     pub secret: String,
 }
 
 #[derive(Deserialize, Serialize, Clone, Debug)]
-#[wasm_bindgen(getter_with_clone)]
+#[cfg_attr(
+    feature = "wasm",
+    derive(Tsify, IntoJsValue),
+    tsify(into_wasm_abi, from_wasm_abi)
+)]
 pub struct Client {
     pub id: ClientId,
     pub name: String,

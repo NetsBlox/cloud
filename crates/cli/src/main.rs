@@ -6,7 +6,7 @@ use std::fs;
 
 use crate::config::{Config, HostConfig};
 use clap::{Parser, Subcommand};
-use futures_util::StreamExt;
+use futures_util::{Stream, StreamExt};
 use inquire::{Confirm, Password, PasswordDisplayMode};
 use netsblox_api::common::{
     oauth, ClientId, CreateMagicLinkData, CreateProjectData, Credentials, FriendLinkState,
@@ -752,7 +752,7 @@ async fn do_command(mut cfg: Config, args: Cli) -> Result<(), error::Error> {
             client_id: None,
         };
         let api_cfg: netsblox_api::Config = cfg.host().clone().into();
-        let api_cfg = netsblox_api::login(api_cfg, &request)
+        let api_cfg = netsblox_api::login(api_cfg, request)
             .await
             .expect("Login failed");
 
@@ -798,7 +798,7 @@ async fn do_command(mut cfg: Config, args: Cli) -> Result<(), error::Error> {
                     role: Some(role.to_owned()),
                 };
 
-                client.create_user(&user_data).await?;
+                client.create_user(user_data).await?;
             }
             Users::SetPassword { password, user } => {
                 let username = user.clone().unwrap_or_else(|| get_current_user(cfg.host()));
@@ -852,7 +852,7 @@ async fn do_command(mut cfg: Config, args: Cli) -> Result<(), error::Error> {
                     username: username.to_owned(),
                     strategy: "snap".to_owned(), // FIXME: add to linked account impl?
                 };
-                client.unlink_account(&as_user, &account).await?;
+                client.unlink_account(&as_user, account).await?;
             }
             Users::Ban { username } => {
                 client.ban_user(username).await?;
@@ -867,7 +867,7 @@ async fn do_command(mut cfg: Config, args: Cli) -> Result<(), error::Error> {
                     email: email.clone(),
                     redirect_uri: url.to_owned(),
                 };
-                client.send_magic_link(&data).await?;
+                client.send_magic_link(data).await?;
                 println!("Magic link sent to {}!", email);
             }
         },
@@ -942,7 +942,7 @@ async fn do_command(mut cfg: Config, args: Cli) -> Result<(), error::Error> {
                     save_state: Some(SaveState::Saved),
                     client_id: None,
                 };
-                client.create_project(&project_data).await?;
+                client.create_project(project_data).await?;
             }
             Projects::Export {
                 project,
@@ -962,11 +962,11 @@ async fn do_command(mut cfg: Config, args: Cli) -> Result<(), error::Error> {
                         .expect("Role not found");
 
                     client
-                        .get_role(&project_id, &role_id, *latest)
+                        .get_role(project_id, role_id, *latest)
                         .await?
                         .to_xml()
                 } else {
-                    client.get_project(&project_id, *latest).await?.to_xml()
+                    client.get_project(project_id, *latest).await?.to_xml()
                 };
                 println!("{}", xml);
             }
@@ -988,7 +988,7 @@ async fn do_command(mut cfg: Config, args: Cli) -> Result<(), error::Error> {
                 let project_id = metadata.id;
 
                 if matches!(
-                    client.publish_project(&project_id).await?,
+                    client.publish_project(project_id).await?,
                     PublishState::PendingApproval
                 ) {
                     println!("Approval is required before the project will be officially public.");
@@ -999,7 +999,7 @@ async fn do_command(mut cfg: Config, args: Cli) -> Result<(), error::Error> {
                 let metadata = client.get_project_metadata(&username, project).await?;
                 let project_id = metadata.id;
 
-                client.unpublish_project(&project_id).await?;
+                client.unpublish_project(project_id).await?;
             }
             Projects::InviteCollaborator {
                 project,
@@ -1009,7 +1009,7 @@ async fn do_command(mut cfg: Config, args: Cli) -> Result<(), error::Error> {
                 let owner = user.clone().unwrap_or_else(|| get_current_user(cfg.host()));
                 let metadata = client.get_project_metadata(&owner, project).await?;
                 let project_id = metadata.id;
-                client.invite_collaborator(&project_id, username).await?;
+                client.invite_collaborator(project_id, username).await?;
             }
             Projects::ListInvites { user } => {
                 let username = user.clone().unwrap_or_else(|| get_current_user(cfg.host()));
@@ -1055,7 +1055,7 @@ async fn do_command(mut cfg: Config, args: Cli) -> Result<(), error::Error> {
             } => {
                 let owner = user.clone().unwrap_or_else(|| get_current_user(cfg.host()));
                 let metadata = client.get_project_metadata(&owner, project).await?;
-                client.remove_collaborator(&metadata.id, username).await?;
+                client.remove_collaborator(metadata.id, username).await?;
             }
             Projects::Delete {
                 project,
@@ -1072,9 +1072,9 @@ async fn do_command(mut cfg: Config, args: Cli) -> Result<(), error::Error> {
                         .map(|(id, _role)| id)
                         .expect("Role not found.");
 
-                    client.delete_role(&metadata.id, &role_id).await?;
+                    client.delete_role(metadata.id, role_id).await?;
                 } else {
-                    client.delete_project(&metadata.id).await?;
+                    client.delete_project(metadata.id).await?;
                 }
             }
             Projects::Rename {
@@ -1093,9 +1093,9 @@ async fn do_command(mut cfg: Config, args: Cli) -> Result<(), error::Error> {
                         .map(|(id, _role)| id)
                         .expect("Role not found.");
 
-                    client.rename_role(&metadata.id, &role_id, new_name).await?;
+                    client.rename_role(metadata.id, role_id, new_name).await?;
                 } else {
-                    client.rename_project(&metadata.id, new_name).await?;
+                    client.rename_project(metadata.id, new_name).await?;
                 }
             }
         },
@@ -1122,11 +1122,11 @@ async fn do_command(mut cfg: Config, args: Cli) -> Result<(), error::Error> {
                     let owner = user.clone().unwrap_or_else(|| get_current_user(cfg.host()));
                     client.get_project_metadata(&owner, project).await?.id
                 };
-                let state = client.get_room_state(&project_id).await?;
+                let state = client.get_room_state(project_id).await?;
                 println!("{}", serde_json::to_string(&state).unwrap());
             }
             Network::ViewClient { client_id } => {
-                let state = client.get_client_state(client_id).await?;
+                let state = client.get_client_state(client_id.clone()).await?;
                 println!("{}", serde_json::to_string(&state).unwrap());
             }
             Network::Connect { address } => {
@@ -1146,7 +1146,7 @@ async fn do_command(mut cfg: Config, args: Cli) -> Result<(), error::Error> {
                     .await;
             }
             Network::Evict { client_id } => {
-                client.evict_occupant(client_id).await?;
+                client.evict_occupant(client_id.clone()).await?;
             }
             Network::Send {
                 address,
@@ -1157,7 +1157,7 @@ async fn do_command(mut cfg: Config, args: Cli) -> Result<(), error::Error> {
                 let value: serde_json::Value =
                     serde_json::from_str(data).expect("Invalid message. Must be valid JSON.");
                 channel
-                    .send_json(address, r#type, &value)
+                    .send_json(address, r#type, value)
                     .await
                     .expect("Unable to send message");
             }
@@ -1236,7 +1236,7 @@ async fn do_command(mut cfg: Config, args: Cli) -> Result<(), error::Error> {
                             .find(|g| g.name == *group_name)
                             .map(|group| group.id)
                             .unwrap();
-                        client.list_group_hosts(&group_id).await?
+                        client.list_group_hosts(group_id).await?
                     } else {
                         client.list_hosts(&username).await?
                     };
@@ -1263,7 +1263,7 @@ async fn do_command(mut cfg: Config, args: Cli) -> Result<(), error::Error> {
                     None
                 };
                 let mut service_hosts = if let Some(group_id) = group_id.clone() {
-                    client.list_group_hosts(&group_id).await?
+                    client.list_group_hosts(group_id).await?
                 } else {
                     client.list_user_hosts(&username).await?
                 };
@@ -1274,7 +1274,7 @@ async fn do_command(mut cfg: Config, args: Cli) -> Result<(), error::Error> {
                 });
 
                 if let Some(group_id) = group_id {
-                    client.set_group_hosts(&group_id, service_hosts).await?;
+                    client.set_group_hosts(group_id, service_hosts).await?;
                 } else {
                     client.set_user_hosts(&username, service_hosts).await?;
                 }
@@ -1291,7 +1291,7 @@ async fn do_command(mut cfg: Config, args: Cli) -> Result<(), error::Error> {
                     None
                 };
                 let mut service_hosts = if let Some(group_id) = group_id.clone() {
-                    client.list_group_hosts(&group_id).await?
+                    client.list_group_hosts(group_id).await?
                 } else {
                     client.list_user_hosts(&username).await?
                 };
@@ -1304,7 +1304,7 @@ async fn do_command(mut cfg: Config, args: Cli) -> Result<(), error::Error> {
                 service_hosts.swap_remove(index);
 
                 if let Some(group_id) = group_id {
-                    client.set_group_hosts(&group_id, service_hosts).await?;
+                    client.set_group_hosts(group_id, service_hosts).await?;
                 } else {
                     client.set_user_hosts(&username, service_hosts).await?;
                 }
@@ -1350,7 +1350,7 @@ async fn do_command(mut cfg: Config, args: Cli) -> Result<(), error::Error> {
                         .find(|g| g.name == *group_name)
                         .map(|group| group.id)
                         .expect("Could not find group with the given name");
-                    client.list_group_settings(&group_id).await?
+                    client.list_group_settings(group_id).await?
                 } else {
                     client.list_user_settings(&username).await?
                 };
@@ -1381,7 +1381,7 @@ async fn do_command(mut cfg: Config, args: Cli) -> Result<(), error::Error> {
                         None
                     };
                     let settings = if let Some(group_id) = group_id.clone() {
-                        client.get_group_settings(&group_id, host).await?
+                        client.get_group_settings(group_id, host).await?
                     } else {
                         client.get_user_settings(&username, host).await?
                     };
@@ -1407,7 +1407,7 @@ async fn do_command(mut cfg: Config, args: Cli) -> Result<(), error::Error> {
                 };
                 let settings = if let Some(group_id) = group_id.clone() {
                     client
-                        .set_group_settings(&group_id, host, settings.to_owned())
+                        .set_group_settings(group_id, host, settings.to_owned())
                         .await?
                 } else {
                     client
@@ -1429,7 +1429,7 @@ async fn do_command(mut cfg: Config, args: Cli) -> Result<(), error::Error> {
                     None
                 };
                 if let Some(group_id) = group_id.clone() {
-                    client.delete_group_settings(&group_id, host).await?;
+                    client.delete_group_settings(group_id, host).await?;
                 } else {
                     client.delete_user_settings(&username, host).await?;
                 };
@@ -1526,7 +1526,7 @@ async fn do_command(mut cfg: Config, args: Cli) -> Result<(), error::Error> {
                     .map(|group| group.id)
                     .unwrap();
 
-                client.delete_group(&group_id).await?;
+                client.delete_group(group_id).await?;
             }
             Groups::Members { group, user } => {
                 let username = user.clone().unwrap_or_else(|| get_current_user(cfg.host()));
@@ -1537,7 +1537,7 @@ async fn do_command(mut cfg: Config, args: Cli) -> Result<(), error::Error> {
                     .map(|group| group.id)
                     .unwrap(); // FIXME
 
-                for member in client.list_members(&group_id).await? {
+                for member in client.list_members(group_id).await? {
                     println!("{:?}", member);
                 }
             }
@@ -1554,7 +1554,7 @@ async fn do_command(mut cfg: Config, args: Cli) -> Result<(), error::Error> {
                     .map(|group| group.id)
                     .unwrap();
 
-                client.rename_group(&group_id, new_name).await?;
+                client.rename_group(group_id, new_name).await?;
             }
             Groups::View { group, user } => {
                 let username = user.clone().unwrap_or_else(|| get_current_user(cfg.host()));
@@ -1565,7 +1565,7 @@ async fn do_command(mut cfg: Config, args: Cli) -> Result<(), error::Error> {
                     .map(|group| group.id)
                     .unwrap();
 
-                let group = client.view_group(&group_id).await?;
+                let group = client.view_group(group_id).await?;
                 println!("{:?}", group);
             }
         },
@@ -1580,11 +1580,11 @@ async fn do_command(mut cfg: Config, args: Cli) -> Result<(), error::Error> {
                 let client_data = oauth::CreateClientData {
                     name: name.to_owned(),
                 };
-                let client_id = client.add_oauth_client(&client_data).await?;
+                let client_id = client.add_oauth_client(client_data).await?;
                 println!("{:?}", client_id);
             }
             Oauth::RemoveClient { id } => {
-                client.remove_oauth_client(id).await?;
+                client.remove_oauth_client(id.clone()).await?;
             }
         },
         Command::Host(cmd) => match &cmd.subcmd {
