@@ -1,7 +1,10 @@
 use std::collections::HashMap;
 
 use lazy_static::lazy_static;
-use netsblox_api::{self, common::AppId};
+use netsblox_api::{
+    self,
+    common::{AppId, Username},
+};
 use serde::{Deserialize, Serialize};
 
 lazy_static! {
@@ -11,7 +14,7 @@ lazy_static! {
 #[derive(Deserialize, Serialize, Clone)]
 pub(crate) struct HostConfig {
     pub(crate) url: String,
-    pub(crate) username: Option<String>,
+    pub(crate) username: Option<Username>,
     pub(crate) token: Option<String>,
 }
 

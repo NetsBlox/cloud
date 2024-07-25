@@ -312,8 +312,8 @@ impl Validate for ServiceIDValidator {
 #[serde(rename_all = "camelCase")]
 #[ts(export)]
 pub struct User {
-    pub username: String,
-    pub email: String,
+    pub username: Username,
+    pub email: Email,
     #[ts(optional)]
     pub group_id: Option<GroupId>,
     pub role: UserRole,
@@ -736,7 +736,7 @@ pub enum PublishState {
 #[derive(Serialize, Deserialize, Clone, Debug, TS)]
 #[ts(export)]
 pub struct LibraryMetadata {
-    pub owner: String,
+    pub owner: String, // TODO: shouldn't this be Username
     pub name: LibraryName,
     pub notes: String,
     pub state: PublishState,
@@ -787,7 +787,7 @@ impl GroupId {
 pub struct Group {
     pub id: GroupId,
     pub owner: String,
-    pub name: String,
+    pub name: GroupName,
     #[ts(optional)]
     pub services_hosts: Option<Vec<ServiceHost>>,
 }
@@ -857,7 +857,7 @@ pub struct UpdateRoleData {
 #[ts(export)]
 pub struct CreateProjectData {
     #[ts(optional)]
-    pub owner: Option<String>,
+    pub owner: Option<Username>,
     pub name: ProjectName,
     #[ts(optional)]
     pub roles: Option<Vec<RoleData>>,
@@ -1058,7 +1058,7 @@ pub struct MagicLinkLoginData {
 #[serde(rename_all = "camelCase")]
 #[ts(export)]
 pub struct CreateMagicLinkData {
-    pub email: String,
+    pub email: Email,
     #[ts(optional)]
     pub redirect_uri: Option<String>,
 }

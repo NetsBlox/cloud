@@ -20,7 +20,7 @@ pub struct Config {
     pub app_id: Option<AppId>,
     pub url: String,
     pub token: Option<String>,
-    pub username: Option<String>,
+    pub username: Option<Username>,
 }
 
 impl Default for Config {
@@ -109,15 +109,15 @@ impl Client {
     // User management
     pub async fn create_user(
         &self,
-        name: &str,
-        email: &str,
+        username: Username,
+        email: Email,
         password: Option<&str>, // TODO: Make these CreateUserOptions
         group_id: Option<&GroupId>,
         role: UserRole,
     ) -> Result<(), error::Error> {
         let user_data = NewUser {
-            username: Username::new(name),
-            email: Email::new(email),
+            username,
+            email,
             role: Some(role),
             group_id: group_id.map(|id| id.to_owned()),
             password: password.map(|pwd| pwd.to_owned()),
@@ -151,7 +151,7 @@ impl Client {
 
     /// Send an email containing all usernames associated with the given
     /// address to the email address.
-    pub async fn forgot_username(&self, email: &str) -> Result<(), error::Error> {
+    pub async fn forgot_username(&self, email: &Email) -> Result<(), error::Error> {
         let response = self
             .request(Method::POST, "/users/forgot-username")
             .json(&email)
@@ -163,7 +163,7 @@ impl Client {
         Ok(())
     }
 
-    pub async fn delete_user(&self, username: &str) -> Result<(), error::Error> {
+    pub async fn delete_user(&self, username: &Username) -> Result<(), error::Error> {
         let response = self
             .request(Method::POST, &format!("/users/{}/delete", username))
             .send()
@@ -174,7 +174,7 @@ impl Client {
         Ok(())
     }
 
-    pub async fn view_user(&self, username: &str) -> Result<User, error::Error> {
+    pub async fn view_user(&self, username: &Username) -> Result<User, error::Error> {
         let response = self
             .request(Method::GET, &format!("/users/{}", username))
             .send()
@@ -185,7 +185,11 @@ impl Client {
         Ok(response.json::<User>().await.unwrap())
     }
 
-    pub async fn set_password(&self, username: &str, password: &str) -> Result<(), error::Error> {
+    pub async fn set_password(
+        &self,
+        username: &Username,
+        password: &str,
+    ) -> Result<(), error::Error> {
         let path = format!("/users/{}/password", username);
         let response = self
             .request(Method::PATCH, &path)
@@ -200,7 +204,7 @@ impl Client {
 
     pub async fn link_account(
         &self,
-        username: &str,
+        username: &Username,
         credentials: &Credentials,
     ) -> Result<(), error::Error> {
         let response = self
@@ -216,7 +220,7 @@ impl Client {
 
     pub async fn unlink_account(
         &self,
-        username: &str,
+        username: &Username,
         account: &LinkedAccount,
     ) -> Result<(), error::Error> {
         let response = self
@@ -230,7 +234,7 @@ impl Client {
         Ok(())
     }
 
-    pub async fn ban_user(&self, username: &str) -> Result<BannedAccount, error::Error> {
+    pub async fn ban_user(&self, username: &Username) -> Result<BannedAccount, error::Error> {
         let response = self
             .request(Method::POST, &format!("/users/{}/ban", username))
             .send()
@@ -241,7 +245,7 @@ impl Client {
         Ok(response.json::<BannedAccount>().await.unwrap())
     }
 
-    pub async fn unban_user(&self, username: &str) -> Result<BannedAccount, error::Error> {
+    pub async fn unban_user(&self, username: &Username) -> Result<BannedAccount, error::Error> {
         let response = self
             .request(Method::POST, &format!("/users/{}/unban", username))
             .send()
@@ -283,7 +287,10 @@ impl Client {
         Ok(response.json::<ProjectMetadata>().await.unwrap())
     }
 
-    pub async fn list_projects(&self, owner: &str) -> Result<Vec<ProjectMetadata>, error::Error> {
+    pub async fn list_projects(
+        &self,
+        owner: &Username,
+    ) -> Result<Vec<ProjectMetadata>, error::Error> {
         let response = self
             .request(Method::GET, &format!("/projects/user/{}", &owner))
             .send()
@@ -297,7 +304,7 @@ impl Client {
 
     pub async fn list_shared_projects(
         &self,
-        owner: &str,
+        owner: &Username,
     ) -> Result<Vec<ProjectMetadata>, error::Error> {
         let response = self
             .request(Method::GET, &format!("/projects/shared/{}", &owner))
@@ -312,8 +319,8 @@ impl Client {
 
     pub async fn get_project_metadata(
         &self,
-        owner: &str,
-        name: &str,
+        owner: &Username,
+        name: &ProjectName,
     ) -> Result<ProjectMetadata, error::Error> {
         let response = self
             .request(
@@ -510,7 +517,7 @@ impl Client {
     pub async fn invite_collaborator(
         &self,
         id: &ProjectId,
-        username: &str,
+        username: &Username,
     ) -> Result<(), error::Error> {
         let response = self
             .request(
@@ -692,7 +699,11 @@ impl Client {
         Ok(response.json::<Vec<LibraryMetadata>>().await.unwrap())
     }
 
-    pub async fn get_library(&self, username: &str, name: &str) -> Result<String, error::Error> {
+    pub async fn get_library(
+        &self,
+        username: &Username,
+        name: &str,
+    ) -> Result<String, error::Error> {
         let path = format!("/libraries/user/{}/{}", username, name); // TODO: URI escape?
         let response = self
             .request(Method::GET, &path)
@@ -707,8 +718,8 @@ impl Client {
 
     pub async fn save_library(
         &self,
-        username: &str,
-        name: &str,
+        username: &Username,
+        name: &LibraryName,
         blocks: &str,
         notes: &str,
     ) -> Result<(), error::Error> {
@@ -716,7 +727,7 @@ impl Client {
         let response = self
             .request(Method::POST, &path)
             .json(&CreateLibraryData {
-                name: LibraryName::new(name),
+                name: name.to_owned(),
                 blocks: blocks.to_owned(),
                 notes: notes.to_owned(),
             })
@@ -728,7 +739,11 @@ impl Client {
         Ok(())
     }
 
-    pub async fn delete_library(&self, username: &str, library: &str) -> Result<(), error::Error> {
+    pub async fn delete_library(
+        &self,
+        username: &Username,
+        library: &str,
+    ) -> Result<(), error::Error> {
         let path = format!("/libraries/user/{}/{}", username, library);
         let response = self
             .request(Method::DELETE, &path)
@@ -740,7 +755,11 @@ impl Client {
         Ok(())
     }
 
-    pub async fn publish_library(&self, username: &str, library: &str) -> Result<(), error::Error> {
+    pub async fn publish_library(
+        &self,
+        username: &Username,
+        library: &str,
+    ) -> Result<(), error::Error> {
         let path = format!("/libraries/user/{}/{}/publish", username, library);
         let response = self
             .request(Method::POST, &path)
@@ -754,7 +773,7 @@ impl Client {
 
     pub async fn unpublish_library(
         &self,
-        username: &str,
+        username: &Username,
         library: &str,
     ) -> Result<(), error::Error> {
         let path = format!("/libraries/user/{}/{}/unpublish", username, library);
@@ -770,7 +789,7 @@ impl Client {
 
     pub async fn approve_library(
         &self,
-        username: &str,
+        username: &Username,
         library: &str,
         state: &PublishState,
     ) -> Result<(), error::Error> {
@@ -787,7 +806,7 @@ impl Client {
     }
 
     // Group management
-    pub async fn list_groups(&self, username: &str) -> Result<Vec<Group>, error::Error> {
+    pub async fn list_groups(&self, username: &Username) -> Result<Vec<Group>, error::Error> {
         let path = format!("/groups/user/{}/", username);
         let response = self
             .request(Method::GET, &path)
@@ -800,10 +819,14 @@ impl Client {
         Ok(response.json::<Vec<Group>>().await.unwrap())
     }
 
-    pub async fn create_group(&self, owner: &str, name: &str) -> Result<(), error::Error> {
+    pub async fn create_group(
+        &self,
+        owner: &Username,
+        name: GroupName,
+    ) -> Result<(), error::Error> {
         let path = format!("/groups/user/{}/", owner);
         let group = CreateGroupData {
-            name: GroupName::new(name),
+            name,
             services_hosts: None,
         };
         let response = self
@@ -841,13 +864,11 @@ impl Client {
         Ok(response.json::<Vec<User>>().await.unwrap())
     }
 
-    pub async fn rename_group(&self, id: &GroupId, name: &str) -> Result<(), error::Error> {
+    pub async fn rename_group(&self, id: &GroupId, name: GroupName) -> Result<(), error::Error> {
         let path = format!("/groups/id/{}", id);
         let response = self
             .request(Method::PATCH, &path)
-            .json(&UpdateGroupData {
-                name: GroupName::new(name),
-            })
+            .json(&UpdateGroupData { name })
             .send()
             .await
             .map_err(error::Error::RequestError)?;
@@ -870,7 +891,10 @@ impl Client {
     }
 
     // Service host management
-    pub async fn list_user_hosts(&self, username: &str) -> Result<Vec<ServiceHost>, error::Error> {
+    pub async fn list_user_hosts(
+        &self,
+        username: &Username,
+    ) -> Result<Vec<ServiceHost>, error::Error> {
         let response = self
             .request(Method::GET, &format!("/services/hosts/user/{}", username))
             .send()
@@ -897,7 +921,7 @@ impl Client {
         Ok(response.json::<Vec<ServiceHost>>().await.unwrap())
     }
 
-    pub async fn list_hosts(&self, username: &str) -> Result<Vec<ServiceHost>, error::Error> {
+    pub async fn list_hosts(&self, username: &Username) -> Result<Vec<ServiceHost>, error::Error> {
         let response = self
             .request(Method::GET, &format!("/services/hosts/all/{}", username))
             .send()
@@ -911,7 +935,7 @@ impl Client {
 
     pub async fn set_user_hosts(
         &self,
-        username: &str,
+        username: &Username,
         hosts: Vec<ServiceHost>,
     ) -> Result<(), error::Error> {
         let response = self
@@ -1006,7 +1030,10 @@ impl Client {
         Ok(response.json::<Vec<String>>().await.unwrap())
     }
 
-    pub async fn list_user_settings(&self, username: &str) -> Result<Vec<String>, error::Error> {
+    pub async fn list_user_settings(
+        &self,
+        username: &Username,
+    ) -> Result<Vec<String>, error::Error> {
         let response = self
             .request(
                 Method::GET,
@@ -1022,7 +1049,7 @@ impl Client {
 
     pub async fn get_all_settings(
         &self,
-        username: &str,
+        username: &Username,
         service_id: &str,
     ) -> Result<ServiceSettings, error::Error> {
         let response = self
@@ -1058,7 +1085,7 @@ impl Client {
 
     pub async fn get_user_settings(
         &self,
-        username: &str,
+        username: &Username,
         service_id: &str,
     ) -> Result<String, error::Error> {
         let response = self
@@ -1076,7 +1103,7 @@ impl Client {
 
     pub async fn set_user_settings(
         &self,
-        username: &str,
+        username: &Username,
         service_id: &str,
         settings: String,
     ) -> Result<String, error::Error> {
@@ -1116,7 +1143,7 @@ impl Client {
 
     pub async fn delete_user_settings(
         &self,
-        username: &str,
+        username: &Username,
         service_id: &str,
     ) -> Result<String, error::Error> {
         let response = self

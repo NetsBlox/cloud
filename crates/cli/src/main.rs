@@ -9,9 +9,9 @@ use clap::{Parser, Subcommand};
 use futures_util::StreamExt;
 use inquire::{Confirm, Password, PasswordDisplayMode};
 use netsblox_api::common::{
-    oauth, ClientId, CreateMagicLinkData, CreateProjectData, Credentials, FriendLinkState,
-    InvitationState, LinkedAccount, ProjectId, ProjectName, PublishState, RoleData, RoleName,
-    SaveState, ServiceHost, ServiceHostScope, UserRole, Username,
+    oauth, ClientId, CreateMagicLinkData, CreateProjectData, Credentials, Email, FriendLinkState,
+    GroupName, InvitationState, LinkedAccount, ProjectId, ProjectName, PublishState, RoleData,
+    RoleName, SaveState, ServiceHost, ServiceHostScope, UserRole, Username,
 };
 use netsblox_api::{self, serde_json, Client};
 use std::path::Path;
@@ -22,24 +22,24 @@ use xmlparser::{Token, Tokenizer};
 enum Users {
     /// Create a new NetsBlox user
     Create {
-        username: String,
-        email: String,
+        username: Username,
+        email: Email,
         /// Password for new user. If unset, user will need to manually reset password before logging in
         #[clap(short, long)]
         password: Option<String>,
         /// Make the new user a member of the given group
         #[clap(short, long)]
-        group: Option<String>,
+        group: Option<GroupName>,
         /// Perform this action on behalf of this user
         #[clap(short, long)]
-        user: Option<String>,
+        user: Option<Username>,
         /// Set the user role (eg, admin, moderator)
         #[clap(short, long, default_value = "user")]
         role: UserRole,
     },
     /// Delete an existing NetsBlox account
     Delete {
-        username: String,
+        username: Username,
         /// Skip confirmation prompts and delete the user
         #[clap(short, long)]
         no_confirm: bool,
@@ -48,52 +48,53 @@ enum Users {
     View {
         /// Perform this action on behalf of this user
         #[clap(short, long)]
-        user: Option<String>,
+        user: Option<Username>,
     },
     /// Change the current user's password
     SetPassword {
         password: String,
         /// Perform this action on behalf of this user
         #[clap(short, long)]
-        user: Option<String>,
+        user: Option<Username>,
     },
     /// List NetsBlox users
     List, // TODO: add verbose option?
     /// Email all associated usernames to a given address
     ForgotUsername {
         /// Email address associated with the username(s)
-        email: String,
+        email: Email,
     },
     /// Ban a given user. Email address will also be blacklisted
     Ban {
         /// NetsBlox user to ban
-        username: String,
+        username: Username,
     },
     Unban {
         /// NetsBlox user to unban
-        username: String,
+        username: Username,
     },
     /// Link an account to a Snap! account (for login)
     Link {
         /// Snap! username to link to NetsBlox account
-        username: String,
+        // This is a string rather than Username bc it isn't a _NetsBlox_ username
+        username: Username,
         /// Snap! password
         password: String,
         // #[clap(short, long, default_value = "Snap")]
         // strategy: String,
         /// Perform this action on behalf of this user
         #[clap(short, long)]
-        user: Option<String>,
+        user: Option<Username>,
     },
     /// Unlink a Snap! account from a NetsBlox account
     Unlink {
         /// Snap! username to unlink from NetsBlox account
-        username: String,
+        username: Username,
         // #[clap(short, long, default_value = "Snap!")]
         // strategy: String,
         /// Perform this action on behalf of this user
         #[clap(short, long)]
-        user: Option<String>,
+        user: Option<Username>,
     },
 }
 
@@ -103,7 +104,7 @@ enum MagicLinks {
     /// Send a magic link to the given email. Allows login by any user associated with the email address.
     Send {
         /// Email to send the magic link to.
-        email: String,
+        email: Email,
         /// Redirect the user to this URL after login
         #[clap(short, long, default_value = "https://editor.netsblox.org")]
         url: String,
@@ -122,7 +123,7 @@ enum Projects {
         name: Option<String>,
         /// Perform this action on behalf of this user
         #[clap(short, long)]
-        user: Option<String>,
+        user: Option<Username>,
     },
     /// Export a project from NetsBlox
     Export {
@@ -130,13 +131,13 @@ enum Projects {
         project: String,
         /// Export a single role from the project instead
         #[clap(short, long)]
-        role: Option<String>,
+        role: Option<RoleName>,
         /// Include unsaved changes (from opened projects)
         #[clap(short, long)]
         latest: bool,
         /// Perform this action on behalf of this user
         #[clap(short, long)]
-        user: Option<String>,
+        user: Option<Username>,
     },
     /// List the user's projects
     List {
@@ -145,7 +146,7 @@ enum Projects {
         shared: bool,
         /// Perform this action on behalf of this user
         #[clap(short, long)]
-        user: Option<String>,
+        user: Option<Username>,
     },
     /// Publish a project
     Publish {
@@ -153,7 +154,7 @@ enum Projects {
         project: String,
         /// Perform this action on behalf of this user
         #[clap(short, long)]
-        user: Option<String>,
+        user: Option<Username>,
     },
     /// Unpublish a project
     Unpublish {
@@ -161,67 +162,67 @@ enum Projects {
         project: String,
         /// Perform this action on behalf of this user
         #[clap(short, long)]
-        user: Option<String>,
+        user: Option<Username>,
     },
     /// Delete a project or role
     Delete {
         project: String,
         #[clap(short, long)]
-        role: Option<String>,
+        role: Option<RoleName>,
         /// Perform this action on behalf of this user
         #[clap(short, long)]
-        user: Option<String>,
+        user: Option<Username>,
     },
     /// Rename a project or role
     Rename {
         project: String,
-        new_name: String,
+        new_name: String, // FIXME: how do we know this is valid?
         #[clap(short, long)]
-        role: Option<String>,
+        role: Option<RoleName>,
         /// Perform this action on behalf of this user
         #[clap(short, long)]
-        user: Option<String>,
+        user: Option<Username>,
     },
     /// Invite a collaborator to share the project
     InviteCollaborator {
         project: String,
-        username: String,
+        username: Username,
         /// Perform this action on behalf of this user
         #[clap(short, long)]
-        user: Option<String>,
+        user: Option<Username>,
     },
     /// List collaboration invitations
     ListInvites {
         /// Perform this action on behalf of this user
         #[clap(short, long)]
-        user: Option<String>,
+        user: Option<Username>,
     },
     /// Accept a collaboration invitation
     AcceptInvite {
         project: String,
-        username: String,
+        username: Username,
 
         #[clap(long)]
         reject: bool,
 
         /// Perform this action on behalf of this user
         #[clap(short, long)]
-        user: Option<String>,
+        user: Option<Username>,
     },
     /// List all collaborators on a given project
     ListCollaborators {
         project: String,
         /// Perform this action on behalf of this user
         #[clap(short, long)]
-        user: Option<String>,
+        user: Option<Username>,
     },
     /// Remove a collaborator from a project
     RemoveCollaborator {
         project: String,
-        username: String,
+        username: Username,
         /// Perform this action on behalf of this user
         #[clap(short, long)]
-        user: Option<String>,
+        user: Option<Username>,
     },
 }
 
@@ -238,10 +239,10 @@ enum ServiceHosts {
         user_only: bool,
         /// List service hosts registered to the given group
         #[clap(short, long)]
-        group: Option<String>,
+        group: Option<GroupName>,
         /// Perform this action on behalf of this user
         #[clap(short, long)]
-        user: Option<String>,
+        user: Option<Username>,
     },
     /// Register a new services host for a given user or group
     Register {
@@ -251,10 +252,10 @@ enum ServiceHosts {
         categories: String, // TODO: Should this be optional?
         /// Register the host for an entire group (eg, class or camp)
         #[clap(short, long)]
-        group: Option<String>,
+        group: Option<GroupName>,
         /// Perform this action on behalf of this user
         #[clap(short, long)]
-        user: Option<String>,
+        user: Option<Username>,
     },
     /// Remove a registered services host from a given user or group
     Unregister {
@@ -265,7 +266,7 @@ enum ServiceHosts {
         group: Option<String>,
         /// Perform this action on behalf of this user
         #[clap(short, long)]
-        user: Option<String>,
+        user: Option<Username>,
     },
     /// Authorize a service host to send messages and query user info from NetsBlox
     Authorize {
@@ -289,7 +290,7 @@ enum ServiceSettings {
         group: Option<String>,
         /// Perform this action on behalf of this user
         #[clap(short, long)]
-        user: Option<String>,
+        user: Option<Username>,
     },
     /// View the service settings for a given host
     View {
@@ -303,7 +304,7 @@ enum ServiceSettings {
         all: bool,
         /// Perform this action on behalf of this user
         #[clap(short, long)]
-        user: Option<String>,
+        user: Option<Username>,
     },
     /// Delete the service settings for a given user/group
     Delete {
@@ -314,7 +315,7 @@ enum ServiceSettings {
         group: Option<String>,
         /// Perform this action on behalf of this user
         #[clap(short, long)]
-        user: Option<String>,
+        user: Option<Username>,
     },
     /// Set the service settings for a given user/group. Overwrites existing settings.
     Set {
@@ -327,7 +328,7 @@ enum ServiceSettings {
         group: Option<String>,
         /// Perform this action on behalf of this user
         #[clap(short, long)]
-        user: Option<String>,
+        user: Option<Username>,
     },
 }
 
@@ -344,7 +345,7 @@ enum Libraries {
         approval_needed: bool,
         /// List libraries owned by the given user
         #[clap(short, long)]
-        user: Option<String>,
+        user: Option<Username>,
     },
     /// Import a file of exported blocks as a library
     Import {
@@ -358,35 +359,35 @@ enum Libraries {
         name: Option<String>,
         /// User to save the library for (logged in user by default)
         #[clap(short, long)]
-        user: Option<String>,
+        user: Option<Username>,
     },
     /// Download a library from the cloud
     Export {
         library: String,
         /// Perform this action on behalf of this user
         #[clap(short, long)]
-        user: Option<String>,
+        user: Option<Username>,
     },
     /// Delete a library from the cloud
     Delete {
         library: String,
         /// Perform this action on behalf of this user
         #[clap(short, long)]
-        user: Option<String>,
+        user: Option<Username>,
     },
     /// Make library publicly available
     Publish {
         library: String,
         /// Perform this action on behalf of this user
         #[clap(short, long)]
-        user: Option<String>,
+        user: Option<Username>,
     },
     /// Make a public library private again
     Unpublish {
         library: String,
         /// Perform this action on behalf of this user
         #[clap(short, long)]
-        user: Option<String>,
+        user: Option<Username>,
     },
     /// Approve libraries with potentially questionable content
     Approve {
@@ -395,7 +396,7 @@ enum Libraries {
         reject: bool,
         /// Perform this action on behalf of this user
         #[clap(short, long)]
-        user: Option<String>,
+        user: Option<Username>,
     },
 }
 
@@ -406,13 +407,13 @@ enum Oauth {
     // Authorize {
     //     client_id: oauth::ClientId,
     //     #[clap(short, long)]
-    //     user: Option<String>,
+    //     user: Option<Username>,
     // },
     // /// Revoke authorization for an OAuth client
     // Revoke {
     //     client: String, // TODO: should we use an ID or name?
     //     #[clap(short, long)]
-    //     user: Option<String>,
+    //     user: Option<Username>,
     // },
     /// List all OAuth clients
     List,
@@ -438,7 +439,7 @@ enum Network {
         as_id: bool,
         /// Perform this action on behalf of this user
         #[clap(short, long)]
-        user: Option<String>,
+        user: Option<Username>,
     },
     /// View the state of a given connected client
     ViewClient { client_id: ClientId },
@@ -470,42 +471,42 @@ enum Groups {
         name: String,
         /// Perform this action on behalf of this user
         #[clap(short, long)]
-        user: Option<String>,
+        user: Option<Username>,
     },
     /// List existing groups
     List {
         /// Perform this action on behalf of this user
         #[clap(short, long)]
-        user: Option<String>,
+        user: Option<Username>,
     },
     /// View a given group
     View {
         group: String,
         /// Perform this action on behalf of this user
         #[clap(short, long)]
-        user: Option<String>,
+        user: Option<Username>,
     },
     /// Delete a given group
     Delete {
         group: String,
         /// Perform this action on behalf of this user
         #[clap(short, long)]
-        user: Option<String>,
+        user: Option<Username>,
     },
     /// View members of a given group
     Members {
         group: String,
         /// Perform this action on behalf of this user
         #[clap(short, long)]
-        user: Option<String>,
+        user: Option<Username>,
     },
     /// Rename an existing group
     Rename {
-        group: String,
-        new_name: String,
+        group: GroupName,
+        new_name: GroupName,
         /// Perform this action on behalf of this user
         #[clap(short, long)]
-        user: Option<String>,
+        user: Option<Username>,
     },
 }
 
@@ -518,41 +519,41 @@ enum Friends {
         online: bool,
         /// Perform this action on behalf of this user
         #[clap(short, long)]
-        user: Option<String>,
+        user: Option<Username>,
     },
     /// Remove user from friends list
     Remove {
-        username: String,
+        username: Username,
         /// Perform this action on behalf of this user
         #[clap(short, long)]
-        user: Option<String>,
+        user: Option<Username>,
     },
     /// Block a user (disallow new friend invites)
     Block {
-        username: String,
+        username: Username,
         /// Perform this action on behalf of this user
         #[clap(short, long)]
-        user: Option<String>,
+        user: Option<Username>,
     },
     /// Unblock a user (re-allow new friend invites)
     Unblock {
-        username: String,
+        username: Username,
         /// Perform this action on behalf of this user
         #[clap(short, long)]
-        user: Option<String>,
+        user: Option<Username>,
     },
     /// List pending friend invites
     ListInvites {
         /// Perform this action on behalf of this user
         #[clap(short, long)]
-        user: Option<String>,
+        user: Option<Username>,
     },
     /// Send friend invite to a given user
     SendInvite {
-        username: String,
+        username: Username,
         /// Perform this action on behalf of this user
         #[clap(short, long)]
-        user: Option<String>,
+        user: Option<Username>,
     },
     /// Respond to a pending friend invite
     AcceptInvite {
@@ -561,7 +562,7 @@ enum Friends {
         reject: bool,
         /// Perform this action on behalf of this user
         #[clap(short, long)]
-        user: Option<String>,
+        user: Option<Username>,
     },
 }
 
@@ -699,7 +700,7 @@ fn prompt_credentials() -> (String, String, bool) {
     (username, password, use_snap)
 }
 
-fn get_current_user(cfg: &HostConfig) -> String {
+fn get_current_user(cfg: &HostConfig) -> Username {
     cfg.username.as_ref().unwrap().clone()
 }
 
@@ -787,7 +788,7 @@ async fn do_command(mut cfg: Config, args: Cli) -> Result<(), error::Error> {
                     let groups = client.list_groups(&username).await?;
                     groups
                         .into_iter()
-                        .find(|g| g.name.as_str() == *group_name)
+                        .find(|g| g.name == *group_name)
                         .map(|group| group.id)
                 } else {
                     None
@@ -795,8 +796,8 @@ async fn do_command(mut cfg: Config, args: Cli) -> Result<(), error::Error> {
 
                 client
                     .create_user(
-                        username,
-                        email,
+                        username.to_owned(),
+                        email.to_owned(),
                         password.as_deref(),
                         group_id.as_ref(),
                         role.to_owned(),
@@ -813,7 +814,7 @@ async fn do_command(mut cfg: Config, args: Cli) -> Result<(), error::Error> {
                 }
             }
             Users::ForgotUsername { email } => {
-                client.forgot_username(&email).await?;
+                client.forgot_username(email).await?;
                 println!("Email sent to {}", email);
             }
             Users::Delete {
@@ -961,7 +962,7 @@ async fn do_command(mut cfg: Config, args: Cli) -> Result<(), error::Error> {
                     let role_id = metadata
                         .roles
                         .into_iter()
-                        .find(|(_id, role_md)| role_md.name.to_string() == *role)
+                        .find(|(_id, role_md)| role_md.name == *role)
                         .map(|(id, _role_md)| id)
                         .expect("Role not found");
 
@@ -1072,7 +1073,7 @@ async fn do_command(mut cfg: Config, args: Cli) -> Result<(), error::Error> {
                     let role_id = metadata
                         .roles
                         .into_iter()
-                        .find(|(_id, role)| role.name.to_string() == *role_name)
+                        .find(|(_id, role)| role.name == *role_name)
                         .map(|(id, _role)| id)
                         .expect("Role not found.");
 
@@ -1093,7 +1094,7 @@ async fn do_command(mut cfg: Config, args: Cli) -> Result<(), error::Error> {
                     let role_id = metadata
                         .roles
                         .into_iter()
-                        .find(|(_id, role)| role.name.to_string() == *role_name)
+                        .find(|(_id, role)| role.name == *role_name)
                         .map(|(id, _role)| id)
                         .expect("Role not found.");
 
@@ -1237,7 +1238,7 @@ async fn do_command(mut cfg: Config, args: Cli) -> Result<(), error::Error> {
                         let groups = client.list_groups(&username).await?;
                         let group_id = groups
                             .into_iter()
-                            .find(|g| g.name.as_str() == *group_name)
+                            .find(|g| g.name == *group_name)
                             .map(|group| group.id)
                             .unwrap();
                         client.list_group_hosts(&group_id).await?
@@ -1261,7 +1262,7 @@ async fn do_command(mut cfg: Config, args: Cli) -> Result<(), error::Error> {
                     let groups = client.list_groups(&username).await?;
                     groups
                         .into_iter()
-                        .find(|g| g.name.as_str() == *group_name)
+                        .find(|g| g.name == *group_name)
                         .map(|group| group.id)
                 } else {
                     None
@@ -1554,7 +1555,7 @@ async fn do_command(mut cfg: Config, args: Cli) -> Result<(), error::Error> {
                 let groups = client.list_groups(&username).await?;
                 let group_id = groups
                     .into_iter()
-                    .find(|g| g.name.as_str() == *group)
+                    .find(|g| g.name == *group)
                     .map(|group| group.id)
                     .unwrap();
 
@@ -1603,14 +1604,14 @@ async fn do_command(mut cfg: Config, args: Cli) -> Result<(), error::Error> {
                             "{}\t{}\t{} (current)",
                             name,
                             config.url,
-                            config.username.unwrap_or_default()
+                            config.username.map(|n| n.to_string()).unwrap_or_default()
                         )
                     } else {
                         format!(
                             "{}\t{}\t{}",
                             name,
                             config.url,
-                            config.username.unwrap_or_default()
+                            config.username.map(|n| n.to_string()).unwrap_or_default()
                         )
                     };
                     println!("{}", line);
