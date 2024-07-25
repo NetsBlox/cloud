@@ -17,6 +17,7 @@ use netsblox_api::{self, serde_json, Client};
 use std::path::Path;
 use xmlparser::{Token, Tokenizer};
 
+type SnapUsername = String;
 /// Manage & moderate user accounts
 #[derive(Subcommand, Debug)]
 enum Users {
@@ -77,7 +78,7 @@ enum Users {
     Link {
         /// Snap! username to link to NetsBlox account
         // This is a string rather than Username bc it isn't a _NetsBlox_ username
-        username: Username,
+        username: SnapUsername,
         /// Snap! password
         password: String,
         // #[clap(short, long, default_value = "Snap")]
@@ -89,7 +90,7 @@ enum Users {
     /// Unlink a Snap! account from a NetsBlox account
     Unlink {
         /// Snap! username to unlink from NetsBlox account
-        username: Username,
+        username: SnapUsername,
         // #[clap(short, long, default_value = "Snap!")]
         // strategy: String,
         /// Perform this action on behalf of this user

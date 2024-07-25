@@ -56,6 +56,8 @@ impl From<User> for Bson {
 
 impl From<User> for netsblox_api_common::User {
     fn from(user: User) -> netsblox_api_common::User {
+        // TODO: should we validate here or use an escape hatch to allow
+        // existing data to be left as-is?
         netsblox_api_common::User {
             username: user.username,
             email: user.email,
