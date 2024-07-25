@@ -35,10 +35,10 @@ pub struct Config {
 
 impl Config {
     pub fn load(config_path: &str) -> Result<Self, ConfigError> {
-        let mut c = config::Config::new();
+        let c = config::Config::builder()
+            .add_source(File::with_name(config_path))
+            .build()?;
 
-        c.merge(File::with_name(config_path))?;
-
-        c.try_into()
+        c.try_deserialize()
     }
 }

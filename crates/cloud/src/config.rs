@@ -103,11 +103,11 @@ pub struct Settings {
 impl Settings {
     pub fn new() -> Result<Self, ConfigError> {
         let run_mode = env::var("RUN_MODE").unwrap_or_else(|_| "development".to_owned());
-        let mut c = Config::new();
+        let c = Config::builder()
+            .add_source(File::with_name("config/default"))
+            .add_source(File::with_name(&format!("config/{}", run_mode)).required(false))
+            .build()?;
 
-        c.merge(File::with_name("config/default"))?;
-        c.merge(File::with_name(&format!("config/{}", run_mode)).required(false))?;
-
-        c.try_into()
+        c.try_deserialize()
     }
 }
