@@ -108,7 +108,7 @@ impl Settings {
         let run_mode = env::var("RUN_MODE").unwrap_or_else(|_| "development".to_owned());
         let c: Settings = Figment::new()
             .merge(Toml::file("config/default.toml"))
-            .merge(Toml::file(format!("config/{}.toml", run_mode))) // FIXME: don't blow up if file doesn't exist
+            .merge(Toml::file(format!("config/{}.toml", run_mode)))
             .extract()?;
 
         Ok(c)
