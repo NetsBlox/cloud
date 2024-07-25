@@ -1,4 +1,7 @@
-use config::{ConfigError, File};
+use figment::{
+    providers::{Format, Toml},
+    Figment,
+};
 use serde::Deserialize;
 
 #[derive(Clone, Deserialize)]
@@ -34,11 +37,9 @@ pub struct Config {
 }
 
 impl Config {
-    pub fn load(config_path: &str) -> Result<Self, ConfigError> {
-        let mut c = config::Config::new();
+    pub fn load(config_path: &str) -> Result<Self, figment::Error> {
+        let c: Config = Figment::new().merge(Toml::file(config_path)).extract()?;
 
-        c.merge(File::with_name(config_path))?;
-
-        c.try_into()
+        Ok(c)
     }
 }
