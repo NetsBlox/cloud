@@ -14,7 +14,7 @@ tokio = { version = "1", features = ["full"] }
 passwords = "3.1.8"
 futures = "0.3.0"
 derive_more = "0.99.17"
-config = "0.14.0"
+figment = { version = "0.10.19", features = ["toml"]}
 indicatif = "0.17"
 clap = { version = "4.4.3", features = ["derive"] }
 aws-sdk-s3 = "0.31.2"
