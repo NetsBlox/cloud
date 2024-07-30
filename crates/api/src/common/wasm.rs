@@ -3,25 +3,19 @@ use super::super::Client;
 use reqwest::{Method, RequestBuilder, Response};
 
 use derive_more::{Deref, From};
-use into_jsvalue_derive::IntoJsValue;
 use serde::{Deserialize, Serialize};
 use serde_json::json;
-use tsify::Tsify;
-use wasm_bindgen::{prelude::*, JsValue};
+use tsify_next::Tsify;
+use wasm_bindgen::prelude::*;
 use web_sys::WebSocket;
 
-#[derive(Serialize, Deserialize, Tsify, IntoJsValue, Deref, From)]
+#[derive(Serialize, Deserialize, Tsify, Deref, From)]
 #[tsify(into_wasm_abi, from_wasm_abi)]
 #[repr(transparent)]
 #[serde(transparent)]
-pub struct Vec<T: Into<JsValue> + Serialize>(std::vec::Vec<T>);
+pub struct Vec<T>(std::vec::Vec<T>);
 
-fn test() {
-    let test: Vec<String> = vec![String::new()].into();
-    for item in test {}
-}
-
-impl<T: Into<JsValue> + Serialize> IntoIterator for Vec<T> {
+impl<T> IntoIterator for Vec<T> {
     type Item = T;
     type IntoIter = std::vec::IntoIter<T>;
 
@@ -30,7 +24,7 @@ impl<T: Into<JsValue> + Serialize> IntoIterator for Vec<T> {
     }
 }
 
-impl<'a, T: Into<JsValue> + Serialize> IntoIterator for &'a Vec<T> {
+impl<'a, T> IntoIterator for &'a Vec<T> {
     type Item = &'a T;
     type IntoIter = std::slice::Iter<'a, T>;
 
@@ -39,7 +33,7 @@ impl<'a, T: Into<JsValue> + Serialize> IntoIterator for &'a Vec<T> {
     }
 }
 
-impl<'a, T: Into<JsValue> + Serialize> IntoIterator for &'a mut Vec<T> {
+impl<'a, T> IntoIterator for &'a mut Vec<T> {
     type Item = &'a mut T;
     type IntoIter = std::slice::IterMut<'a, T>;
 

@@ -4,14 +4,10 @@ use derive_more::{Display, FromStr};
 use serde::{Deserialize, Serialize};
 
 #[cfg(feature = "wasm")]
-use {into_jsvalue_derive::IntoJsValue, tsify::Tsify};
+use tsify_next::Tsify;
 
 #[derive(Deserialize, Serialize, Clone, Debug, PartialEq, Eq, Display, Hash, FromStr)]
-#[cfg_attr(
-    feature = "wasm",
-    derive(Tsify, IntoJsValue),
-    tsify(into_wasm_abi, from_wasm_abi)
-)]
+#[cfg_attr(feature = "wasm", derive(Tsify), tsify(into_wasm_abi, from_wasm_abi))]
 pub struct ClientId(String);
 
 impl ClientId {
@@ -26,32 +22,20 @@ impl ClientId {
 }
 
 #[derive(Deserialize, Serialize, Clone, Debug, Display)]
-#[cfg_attr(
-    feature = "wasm",
-    derive(Tsify, IntoJsValue),
-    tsify(into_wasm_abi, from_wasm_abi)
-)]
+#[cfg_attr(feature = "wasm", derive(Tsify), tsify(into_wasm_abi, from_wasm_abi))]
 pub struct CreateClientData {
     pub name: String,
 }
 
 #[derive(Deserialize, Serialize, Clone, Debug)]
-#[cfg_attr(
-    feature = "wasm",
-    derive(Tsify, IntoJsValue),
-    tsify(into_wasm_abi, from_wasm_abi)
-)]
+#[cfg_attr(feature = "wasm", derive(Tsify), tsify(into_wasm_abi, from_wasm_abi))]
 pub struct CreatedClientData {
     pub id: ClientId,
     pub secret: String,
 }
 
 #[derive(Deserialize, Serialize, Clone, Debug)]
-#[cfg_attr(
-    feature = "wasm",
-    derive(Tsify, IntoJsValue),
-    tsify(into_wasm_abi, from_wasm_abi)
-)]
+#[cfg_attr(feature = "wasm", derive(Tsify), tsify(into_wasm_abi, from_wasm_abi))]
 pub struct Client {
     pub id: ClientId,
     pub name: String,

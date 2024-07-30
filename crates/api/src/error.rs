@@ -4,7 +4,7 @@ use serde::{Deserialize, Serialize};
 #[derive(Serialize, Deserialize, Debug, Display)]
 #[cfg_attr(
     target_arch = "wasm32",
-    derive(into_jsvalue_derive::IntoJsValue, tsify::Tsify),
+    derive(tsify_next::Tsify),
     tsify(into_wasm_abi, from_wasm_abi)
 )]
 pub enum Error {

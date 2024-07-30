@@ -6,7 +6,7 @@ pub use serde_json;
 #[allow(clippy::wildcard_imports)]
 use crate::common::*;
 
-use reqwest::{self, Method, RequestBuilder, Response};
+use reqwest::{self, Method, Response};
 use serde::{Deserialize, Serialize};
 
 #[cfg(target_arch = "wasm32")]

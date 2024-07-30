@@ -14,7 +14,7 @@ use uuid::Uuid;
 use web_time::SystemTime; // This crate handles conditional compilation
 
 #[cfg(feature = "wasm")]
-use {into_jsvalue_derive::IntoJsValue, tsify::Tsify};
+use tsify_next::Tsify;
 
 const APP_NAME: &str = "NetsBlox";
 
@@ -34,11 +34,7 @@ pub struct InvitationResponse {
 
 #[derive(Serialize, Deserialize, Clone, Debug)]
 #[serde(rename_all = "camelCase")]
-#[cfg_attr(
-    feature = "wasm",
-    derive(Tsify, IntoJsValue),
-    tsify(into_wasm_abi, from_wasm_abi)
-)]
+#[cfg_attr(feature = "wasm", derive(Tsify), tsify(into_wasm_abi, from_wasm_abi))]
 pub struct User {
     pub username: String,
     pub email: String,
@@ -51,11 +47,7 @@ pub struct User {
 
 #[derive(Serialize, Deserialize, Debug)]
 #[serde(rename_all = "camelCase")]
-#[cfg_attr(
-    feature = "wasm",
-    derive(Tsify, IntoJsValue),
-    tsify(into_wasm_abi, from_wasm_abi)
-)]
+#[cfg_attr(feature = "wasm", derive(Tsify), tsify(into_wasm_abi, from_wasm_abi))]
 pub struct NewUser {
     pub username: String,
     pub email: String,
@@ -120,22 +112,14 @@ impl FromStr for UserRole {
 
 #[derive(Serialize, Deserialize, Clone, Debug)]
 #[serde(rename_all = "camelCase")]
-#[cfg_attr(
-    feature = "wasm",
-    derive(Tsify, IntoJsValue),
-    tsify(into_wasm_abi, from_wasm_abi)
-)]
+#[cfg_attr(feature = "wasm", derive(Tsify), tsify(into_wasm_abi, from_wasm_abi))]
 pub struct ServiceHost {
     pub url: String,
     pub categories: Vec<String>,
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug)]
-#[cfg_attr(
-    feature = "wasm",
-    derive(Tsify, IntoJsValue),
-    tsify(into_wasm_abi, from_wasm_abi)
-)]
+#[cfg_attr(feature = "wasm", derive(Tsify), tsify(into_wasm_abi, from_wasm_abi))]
 pub struct LinkedAccount {
     pub username: String,
     pub strategy: String,
@@ -143,11 +127,7 @@ pub struct LinkedAccount {
 
 #[derive(Serialize, Deserialize, Clone)]
 #[serde(rename_all = "camelCase")]
-#[cfg_attr(
-    feature = "wasm",
-    derive(Tsify, IntoJsValue),
-    tsify(into_wasm_abi, from_wasm_abi)
-)]
+#[cfg_attr(feature = "wasm", derive(Tsify), tsify(into_wasm_abi, from_wasm_abi))]
 pub struct BannedAccount {
     pub username: String,
     pub email: String,
@@ -156,22 +136,14 @@ pub struct BannedAccount {
 
 #[derive(Serialize, Deserialize, Debug)]
 #[serde(rename_all = "camelCase")]
-#[cfg_attr(
-    feature = "wasm",
-    derive(Tsify, IntoJsValue),
-    tsify(into_wasm_abi, from_wasm_abi)
-)]
+#[cfg_attr(feature = "wasm", derive(Tsify), tsify(into_wasm_abi, from_wasm_abi))]
 pub struct LoginRequest {
     pub credentials: Credentials,
     pub client_id: Option<ClientId>, // TODO: add a secret token for the client?
 }
 
 #[derive(Deserialize, Serialize, Debug, Clone)]
-#[cfg_attr(
-    feature = "wasm",
-    derive(Tsify, IntoJsValue),
-    tsify(into_wasm_abi, from_wasm_abi)
-)]
+#[cfg_attr(feature = "wasm", derive(Tsify), tsify(into_wasm_abi, from_wasm_abi))]
 pub enum Credentials {
     Snap { username: String, password: String },
     NetsBlox { username: String, password: String },
@@ -206,11 +178,7 @@ pub struct FriendLink {
 }
 
 #[derive(Deserialize, Serialize, Clone, Debug)]
-#[cfg_attr(
-    feature = "wasm",
-    derive(Tsify, IntoJsValue),
-    tsify(into_wasm_abi, from_wasm_abi)
-)]
+#[cfg_attr(feature = "wasm", derive(Tsify), tsify(into_wasm_abi, from_wasm_abi))]
 pub enum FriendLinkState {
     Pending,
     Approved,
@@ -243,11 +211,7 @@ impl FromStr for FriendLinkState {
 
 #[derive(Serialize, Deserialize, Clone, Debug)]
 #[serde(rename_all = "camelCase")]
-#[cfg_attr(
-    feature = "wasm",
-    derive(Tsify, IntoJsValue),
-    tsify(into_wasm_abi, from_wasm_abi)
-)]
+#[cfg_attr(feature = "wasm", derive(Tsify), tsify(into_wasm_abi, from_wasm_abi))]
 pub struct FriendInvite {
     pub id: String,
     pub sender: String,
@@ -262,11 +226,7 @@ pub struct ThumbnailParams {
 }
 
 #[derive(Deserialize, Serialize, Clone, Debug, PartialEq, Eq, Display, Hash)]
-#[cfg_attr(
-    feature = "wasm",
-    derive(Tsify, IntoJsValue),
-    tsify(into_wasm_abi, from_wasm_abi)
-)]
+#[cfg_attr(feature = "wasm", derive(Tsify), tsify(into_wasm_abi, from_wasm_abi))]
 pub struct ProjectId(String);
 
 impl ProjectId {
@@ -276,11 +236,7 @@ impl ProjectId {
 }
 
 #[derive(Deserialize, Serialize, Clone, Debug, PartialEq, Eq, Display, Hash)]
-#[cfg_attr(
-    feature = "wasm",
-    derive(Tsify, IntoJsValue),
-    tsify(into_wasm_abi, from_wasm_abi)
-)]
+#[cfg_attr(feature = "wasm", derive(Tsify), tsify(into_wasm_abi, from_wasm_abi))]
 pub struct RoleId(String);
 
 impl RoleId {
@@ -310,11 +266,7 @@ impl S3Key {
 
 #[derive(Deserialize, Serialize, Clone, Debug)]
 #[serde(rename_all = "camelCase")]
-#[cfg_attr(
-    feature = "wasm",
-    derive(Tsify, IntoJsValue),
-    tsify(into_wasm_abi, from_wasm_abi)
-)]
+#[cfg_attr(feature = "wasm", derive(Tsify), tsify(into_wasm_abi, from_wasm_abi))]
 pub struct ProjectMetadata {
     pub id: ProjectId,
     pub owner: String,
@@ -345,11 +297,7 @@ pub struct RoleMetadata {
 
 #[derive(Deserialize, Serialize)]
 #[serde(rename_all = "camelCase")]
-#[cfg_attr(
-    feature = "wasm",
-    derive(Tsify, IntoJsValue),
-    tsify(into_wasm_abi, from_wasm_abi)
-)]
+#[cfg_attr(feature = "wasm", derive(Tsify), tsify(into_wasm_abi, from_wasm_abi))]
 pub struct Project {
     pub id: ProjectId,
     pub owner: String,
@@ -385,11 +333,7 @@ pub struct RoleDataResponse {
 }
 
 #[derive(Deserialize, Serialize, Debug, Clone)]
-#[cfg_attr(
-    feature = "wasm",
-    derive(Tsify, IntoJsValue),
-    tsify(into_wasm_abi, from_wasm_abi)
-)]
+#[cfg_attr(feature = "wasm", derive(Tsify), tsify(into_wasm_abi, from_wasm_abi))]
 pub struct RoleData {
     pub name: String,
     pub code: String,
@@ -424,11 +368,7 @@ pub struct BrowserClientState {
 }
 
 #[derive(Debug, Serialize, Clone, Hash, Eq, PartialEq)]
-#[cfg_attr(
-    feature = "wasm",
-    derive(Tsify, IntoJsValue),
-    tsify(into_wasm_abi, from_wasm_abi)
-)]
+#[cfg_attr(feature = "wasm", derive(Tsify), tsify(into_wasm_abi, from_wasm_abi))]
 pub struct AppId(String);
 
 impl AppId {
@@ -489,11 +429,7 @@ pub struct CreateLibraryData {
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
-#[cfg_attr(
-    feature = "wasm",
-    derive(Tsify, IntoJsValue),
-    tsify(into_wasm_abi, from_wasm_abi)
-)]
+#[cfg_attr(feature = "wasm", derive(Tsify), tsify(into_wasm_abi, from_wasm_abi))]
 pub enum PublishState {
     Private,
     ApprovalDenied,
@@ -502,11 +438,7 @@ pub enum PublishState {
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug)]
-#[cfg_attr(
-    feature = "wasm",
-    derive(Tsify, IntoJsValue),
-    tsify(into_wasm_abi, from_wasm_abi)
-)]
+#[cfg_attr(feature = "wasm", derive(Tsify), tsify(into_wasm_abi, from_wasm_abi))]
 pub struct LibraryMetadata {
     pub owner: String,
     pub name: String,
@@ -538,11 +470,7 @@ pub struct CreateGroupData {
 }
 
 #[derive(Deserialize, Serialize, Clone, Debug, PartialEq, Eq, Display, Hash, FromStr)]
-#[cfg_attr(
-    feature = "wasm",
-    derive(Tsify, IntoJsValue),
-    tsify(into_wasm_abi, from_wasm_abi)
-)]
+#[cfg_attr(feature = "wasm", derive(Tsify), tsify(into_wasm_abi, from_wasm_abi))]
 pub struct GroupId(String);
 
 impl GroupId {
@@ -557,11 +485,7 @@ impl GroupId {
 
 #[derive(Serialize, Deserialize, Clone, Debug)]
 #[serde(rename_all = "camelCase")]
-#[cfg_attr(
-    feature = "wasm",
-    derive(Tsify, IntoJsValue),
-    tsify(into_wasm_abi, from_wasm_abi)
-)]
+#[cfg_attr(feature = "wasm", derive(Tsify), tsify(into_wasm_abi, from_wasm_abi))]
 pub struct Group {
     pub id: GroupId,
     pub owner: String,
@@ -575,11 +499,7 @@ pub struct UpdateGroupData {
 }
 
 #[derive(Deserialize, Serialize, Clone, Debug, PartialEq, Eq, Display, Hash, FromStr)]
-#[cfg_attr(
-    feature = "wasm",
-    derive(Tsify, IntoJsValue),
-    tsify(into_wasm_abi, from_wasm_abi)
-)]
+#[cfg_attr(feature = "wasm", derive(Tsify), tsify(into_wasm_abi, from_wasm_abi))]
 pub struct GalleryId(String);
 
 impl GalleryId {
@@ -595,11 +515,7 @@ impl GalleryId {
 
 #[derive(Serialize, Deserialize, Clone, Debug)]
 #[serde(rename_all = "camelCase")]
-#[cfg_attr(
-    feature = "wasm",
-    derive(Tsify, IntoJsValue),
-    tsify(into_wasm_abi, from_wasm_abi)
-)]
+#[cfg_attr(feature = "wasm", derive(Tsify), tsify(into_wasm_abi, from_wasm_abi))]
 pub struct CreateGalleryData {
     pub owner: String,
     pub name: String,
@@ -608,11 +524,7 @@ pub struct CreateGalleryData {
 
 #[derive(Serialize, Deserialize, Clone, Debug)]
 #[serde(rename_all = "camelCase")]
-#[cfg_attr(
-    feature = "wasm",
-    derive(Tsify, IntoJsValue),
-    tsify(into_wasm_abi, from_wasm_abi)
-)]
+#[cfg_attr(feature = "wasm", derive(Tsify), tsify(into_wasm_abi, from_wasm_abi))]
 pub struct Gallery {
     pub id: GalleryId,
     pub owner: String,
@@ -622,11 +534,7 @@ pub struct Gallery {
 
 #[derive(Serialize, Deserialize, Clone, Debug)]
 #[serde(rename_all = "camelCase")]
-#[cfg_attr(
-    feature = "wasm",
-    derive(Tsify, IntoJsValue),
-    tsify(into_wasm_abi, from_wasm_abi)
-)]
+#[cfg_attr(feature = "wasm", derive(Tsify), tsify(into_wasm_abi, from_wasm_abi))]
 pub struct ChangeGalleryData {
     // TODO: Future, use newtype and add constraints.
     // In general, we need to automate checking for a valid 'name'
@@ -645,11 +553,7 @@ pub struct Version {
 
 #[derive(Deserialize, Serialize, Clone, Debug)]
 #[serde(rename_all = "camelCase")]
-#[cfg_attr(
-    feature = "wasm",
-    derive(Tsify, IntoJsValue),
-    tsify(into_wasm_abi, from_wasm_abi)
-)]
+#[cfg_attr(feature = "wasm", derive(Tsify), tsify(into_wasm_abi, from_wasm_abi))]
 pub struct GalleryProjectMetadata {
     pub gallery_id: GalleryId,
     pub id: ProjectId,
@@ -661,11 +565,7 @@ pub struct GalleryProjectMetadata {
 
 #[derive(Deserialize, Serialize, Clone, Debug)]
 #[serde(rename_all = "camelCase")]
-#[cfg_attr(
-    feature = "wasm",
-    derive(Tsify, IntoJsValue),
-    tsify(into_wasm_abi, from_wasm_abi)
-)]
+#[cfg_attr(feature = "wasm", derive(Tsify), tsify(into_wasm_abi, from_wasm_abi))]
 pub struct CreateGalleryProjectData {
     pub owner: String,
     pub name: String,
@@ -673,11 +573,7 @@ pub struct CreateGalleryProjectData {
 }
 
 #[derive(Deserialize, Serialize, Clone, Debug)]
-#[cfg_attr(
-    feature = "wasm",
-    derive(Tsify, IntoJsValue),
-    tsify(into_wasm_abi, from_wasm_abi)
-)]
+#[cfg_attr(feature = "wasm", derive(Tsify), tsify(into_wasm_abi, from_wasm_abi))]
 pub enum InvitationState {
     Pending,
     Accepted,
@@ -685,20 +581,12 @@ pub enum InvitationState {
 }
 
 #[derive(Display, Into, From, Deserialize, Serialize, Clone, Debug)]
-#[cfg_attr(
-    feature = "wasm",
-    derive(Tsify, IntoJsValue),
-    tsify(into_wasm_abi, from_wasm_abi)
-)]
+#[cfg_attr(feature = "wasm", derive(Tsify), tsify(into_wasm_abi, from_wasm_abi))]
 pub struct InvitationId(pub String);
 
 #[derive(Deserialize, Serialize, Clone, Debug)]
 #[serde(rename_all = "camelCase")]
-#[cfg_attr(
-    feature = "wasm",
-    derive(Tsify, IntoJsValue),
-    tsify(into_wasm_abi, from_wasm_abi)
-)]
+#[cfg_attr(feature = "wasm", derive(Tsify), tsify(into_wasm_abi, from_wasm_abi))]
 pub struct CollaborationInvite {
     pub id: String,
     pub sender: String,
@@ -737,11 +625,7 @@ pub struct UpdateRoleData {
 
 #[derive(Deserialize, Serialize)]
 #[serde(rename_all = "camelCase")]
-#[cfg_attr(
-    feature = "wasm",
-    derive(Tsify, IntoJsValue),
-    tsify(into_wasm_abi, from_wasm_abi)
-)]
+#[cfg_attr(feature = "wasm", derive(Tsify), tsify(into_wasm_abi, from_wasm_abi))]
 pub struct CreateProjectData {
     pub owner: Option<String>,
     pub name: String,
@@ -752,11 +636,7 @@ pub struct CreateProjectData {
 
 // Network debugging data
 #[derive(Deserialize, Serialize, Debug, Clone, PartialEq, Eq, Hash)]
-#[cfg_attr(
-    feature = "wasm",
-    derive(Tsify, IntoJsValue),
-    tsify(into_wasm_abi, from_wasm_abi)
-)]
+#[cfg_attr(feature = "wasm", derive(Tsify), tsify(into_wasm_abi, from_wasm_abi))]
 pub struct ClientId(String);
 
 impl ClientId {
@@ -786,11 +666,7 @@ impl FromStr for ClientId {
 
 #[derive(Deserialize, Serialize, Debug)]
 #[serde(rename_all = "camelCase")]
-#[cfg_attr(
-    feature = "wasm",
-    derive(Tsify, IntoJsValue),
-    tsify(into_wasm_abi, from_wasm_abi)
-)]
+#[cfg_attr(feature = "wasm", derive(Tsify), tsify(into_wasm_abi, from_wasm_abi))]
 pub struct ExternalClient {
     pub username: Option<String>,
     pub address: String,
@@ -798,11 +674,7 @@ pub struct ExternalClient {
 }
 
 #[derive(Deserialize, Serialize, Clone, Debug)]
-#[cfg_attr(
-    feature = "wasm",
-    derive(Tsify, IntoJsValue),
-    tsify(into_wasm_abi, from_wasm_abi)
-)]
+#[cfg_attr(feature = "wasm", derive(Tsify), tsify(into_wasm_abi, from_wasm_abi))]
 pub struct RoomState {
     pub id: ProjectId,
     pub owner: String,
@@ -834,11 +706,7 @@ pub struct OccupantInviteData {
 
 #[derive(Deserialize, Serialize, Debug, Clone)]
 #[serde(rename_all = "camelCase")]
-#[cfg_attr(
-    feature = "wasm",
-    derive(Tsify, IntoJsValue),
-    tsify(into_wasm_abi, from_wasm_abi)
-)]
+#[cfg_attr(feature = "wasm", derive(Tsify), tsify(into_wasm_abi, from_wasm_abi))]
 pub struct AuthorizedServiceHost {
     pub url: String,
     pub id: String,
@@ -847,11 +715,7 @@ pub struct AuthorizedServiceHost {
 
 #[derive(Deserialize, Serialize, Debug, Clone)]
 #[serde(rename_all = "camelCase")]
-#[cfg_attr(
-    feature = "wasm",
-    derive(Tsify, IntoJsValue),
-    tsify(into_wasm_abi, from_wasm_abi)
-)]
+#[cfg_attr(feature = "wasm", derive(Tsify), tsify(into_wasm_abi, from_wasm_abi))]
 pub enum ServiceHostScope {
     Public(Vec<String>),
     Private,
@@ -859,11 +723,7 @@ pub enum ServiceHostScope {
 
 #[derive(Deserialize, Serialize, Debug, Clone)]
 #[serde(rename_all = "camelCase")]
-#[cfg_attr(
-    feature = "wasm",
-    derive(Tsify, IntoJsValue),
-    tsify(into_wasm_abi, from_wasm_abi)
-)]
+#[cfg_attr(feature = "wasm", derive(Tsify), tsify(into_wasm_abi, from_wasm_abi))]
 pub struct ClientInfo {
     pub username: Option<String>,
     pub state: Option<ClientState>,
@@ -871,11 +731,7 @@ pub struct ClientInfo {
 
 /// Service settings for a given user categorized by origin
 #[derive(Deserialize, Serialize, Debug, Clone)]
-#[cfg_attr(
-    feature = "wasm",
-    derive(Tsify, IntoJsValue),
-    tsify(into_wasm_abi, from_wasm_abi)
-)]
+#[cfg_attr(feature = "wasm", derive(Tsify), tsify(into_wasm_abi, from_wasm_abi))]
 pub struct ServiceSettings {
     /// Service settings owned by the user
     pub user: Option<String>,
@@ -948,11 +804,7 @@ pub struct MagicLinkLoginData {
 
 #[derive(Serialize, Deserialize, Clone, Debug)]
 #[serde(rename_all = "camelCase")]
-#[cfg_attr(
-    feature = "wasm",
-    derive(Tsify, IntoJsValue),
-    tsify(into_wasm_abi, from_wasm_abi)
-)]
+#[cfg_attr(feature = "wasm", derive(Tsify), tsify(into_wasm_abi, from_wasm_abi))]
 pub struct CreateMagicLinkData {
     pub email: String,
     pub redirect_uri: Option<String>,
