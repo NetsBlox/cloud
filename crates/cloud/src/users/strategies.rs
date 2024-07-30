@@ -67,35 +67,11 @@ pub async fn login(users: &Collection<User>, credentials: Credentials) -> Result
             };
 
             let query = doc! {"linkedAccounts": {"$elemMatch": &account}};
-            let user_opt = users
+            let user = users
                 .find_one(query, None)
                 .await
-                .map_err(InternalError::DatabaseConnectionError)?;
-
-            let user = if let Some(user) = user_opt {
-                user
-            } else {
-                let cookie = response
-                    .cookies()
-                    .next()
-                    .ok_or(UserError::SnapConnectionError)?;
-                let url = &format!("https://snap.berkeley.edu/api/v1/users/{}", username);
-
-                let client = reqwest::Client::new();
-                let user_data = client
-                    .request(Method::GET, url)
-                    .header("Cookie", format!("{}={}", cookie.name(), cookie.value()))
-                    .send()
-                    .await
-                    .map_err(|_err| UserError::SnapConnectionError)?
-                    .json::<SnapUser>()
-                    .await
-                    .map_err(|_err| UserError::SnapConnectionError)?;
-
-                // TODO: ensure email isn't banned?
-
-                create_account(users, user_data.email, &account).await?
-            };
+                .map_err(InternalError::DatabaseConnectionError)?
+                .ok_or(UserError::LinkedAccountNotFoundError)?;
 
             Ok(user)
         }
@@ -382,5 +358,30 @@ mod tests {
         let name_res = get_unique_username(existing.iter().map(|n| n.as_str()), &creds);
 
         assert!(matches!(name_res, Err(UserError::UsernameExists)));
+    }
+
+    // We have a snap account that we can use
+    // for snapci testing:
+    // username: netsblox_test
+    // password: NetsBloxRules!
+    // email: netsbloxapi+snapci@gmail.com
+    #[actix_web::test]
+    async fn test_snap_ci_authenticate() {
+        let creds = api::Credentials::Snap {
+            username: "netsblox_test".into(),
+            password: "NetsBloxRules!".into(),
+        };
+        let res = authenticate(&creds).await;
+        assert!(res.is_ok());
+    }
+
+    #[actix_web::test]
+    async fn test_snap_ci_login_authenticate() {
+        let creds = api::Credentials::Snap {
+            username: "netsblox_test".into(),
+            password: "wrongPassword".into(),
+        };
+        let res = authenticate(&creds).await;
+        assert!(res.is_err());
     }
 }
