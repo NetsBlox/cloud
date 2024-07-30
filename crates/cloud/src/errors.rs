@@ -49,6 +49,14 @@ pub enum UserError {
     RoleNotFoundError,
     #[display(fmt = "Group not found.")]
     GroupNotFoundError,
+    #[display(fmt = "Gallery not found.")]
+    GalleryNotFoundError,
+    #[display(fmt = "Gallery project not found.")]
+    GalleryProjectNotFoundError,
+    #[display(fmt = "Gallery Project Versions empty.")]
+    GalleryProjectVersionsEmptyError,
+    #[display(fmt = "Gallery Project Versions not found.")]
+    GalleryProjectVersionNotFoundError,
     #[display(fmt = "User not found.")]
     UserNotFoundError,
     #[display(fmt = "Friend not found.")]
@@ -79,6 +87,10 @@ pub enum UserError {
     UsernameExists,
     #[display(fmt = "Group already exists.")]
     GroupExistsError,
+    #[display(fmt = "Gallery already exists.")]
+    GalleryExistsError,
+    #[display(fmt = "Gallery project already exists.")]
+    GalleryProjectExistsError,
     #[display(fmt = "Invalid username.")]
     InvalidUsername,
     #[display(fmt = "Invalid name.")]
@@ -95,6 +107,8 @@ pub enum UserError {
     InvalidAppIdError,
     #[display(fmt = "Invalid service host ID.")]
     InvalidServiceHostIDError,
+    #[display(fmt = "State invalid.")]
+    InvalidStateError,
     #[display(fmt = "Unable to connect to Snap! Please try again later.")]
     SnapConnectionError,
     #[display(fmt = "Account already linked to NetsBlox user.")]
@@ -188,10 +202,14 @@ impl error::ResponseError for UserError {
             | Self::RoleNotFoundError
             | Self::InviteNotFoundError
             | Self::MagicLinkNotFoundError
+            | Self::GalleryProjectNotFoundError
             | Self::UserNotFoundError
             | Self::FriendNotFoundError
             | Self::OAuthClientNotFoundError
             | Self::OAuthTokenNotFoundError
+            | Self::GalleryNotFoundError
+            | Self::GalleryProjectVersionsEmptyError
+            | Self::GalleryProjectVersionNotFoundError
             | Self::GroupNotFoundError => StatusCode::NOT_FOUND,
             Self::InternalError | Self::SnapConnectionError => StatusCode::INTERNAL_SERVER_ERROR,
             Self::InvalidUsername
@@ -202,6 +220,7 @@ impl error::ResponseError for UserError {
             | Self::InvalidLibraryName
             | Self::InvalidAppIdError
             | Self::InvalidServiceHostIDError
+            | Self::InvalidStateError
             | Self::AccountAlreadyLinkedError
             | Self::PasswordResetLinkSentError
             | Self::MagicLinkSentError
@@ -211,6 +230,8 @@ impl error::ResponseError for UserError {
             | Self::UserExistsError
             | Self::UsernameExists
             | Self::OAuthClientAlreadyExistsError
+            | Self::GalleryExistsError
+            | Self::GalleryProjectExistsError
             | Self::GroupExistsError
             | Self::CannotDeleteLastRoleError
             | Self::ServiceHostAlreadyAuthorizedError

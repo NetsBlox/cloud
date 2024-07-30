@@ -1,15 +1,18 @@
 use actix::Addr;
 use actix_session::SessionExt;
 use actix_web::HttpRequest;
+use aws_sdk_s3 as s3;
+use aws_sdk_s3::operation::put_object::PutObjectOutput;
+use aws_sdk_s3::types::{Delete, ObjectIdentifier};
 use futures::TryStreamExt;
 use lazy_static::lazy_static;
 use lettre::{Message, SmtpTransport, Transport};
-use log::error;
+use log::{error, warn};
 use lru::LruCache;
 use mongodb::{bson::doc, Collection};
 use netsblox_cloud_common::{
-    api::{self, GroupId, UserRole},
-    AuthorizedServiceHost, FriendLink, Group, ProjectMetadata, User,
+    api::{self, GroupId, S3Key, UserRole},
+    AuthorizedServiceHost, Bucket, FriendLink, Group, ProjectMetadata, User,
 };
 use nonempty::NonEmpty;
 use regex::Regex;
@@ -20,6 +23,13 @@ use std::{
     collections::HashSet,
     sync::{Arc, RwLock},
 };
+
+use actix_web::web::Bytes;
+use image::{
+    codecs::png::PngEncoder, ColorType, EncodableLayout, GenericImageView, ImageEncoder,
+    ImageFormat, RgbaImage,
+};
+use std::io::BufWriter;
 
 use crate::{
     errors::{InternalError, UserError},
@@ -354,6 +364,144 @@ pub(crate) async fn find_usernames(
         .map_err(InternalError::DatabaseConnectionError)?;
 
     NonEmpty::from_vec(usernames).ok_or(UserError::UserNotFoundError)
+}
+
+pub(crate) async fn download(
+    client: &s3::Client,
+    bucket: &Bucket,
+    key: &S3Key,
+) -> Result<String, InternalError> {
+    let output = client
+        .get_object()
+        .bucket(bucket.as_str())
+        .key(key.as_str())
+        .send()
+        .await
+        .map_err(|_err| InternalError::S3Error)?;
+    let bytes: Vec<u8> = output
+        .body
+        .collect()
+        .await
+        .map(|data| data.to_vec())
+        .map_err(|_err| InternalError::S3ContentError)?;
+
+    String::from_utf8(bytes).map_err(|_err| InternalError::S3ContentError)
+}
+
+pub(crate) async fn upload(
+    client: &s3::Client,
+    bucket: &Bucket,
+    key: &S3Key,
+    body: String,
+) -> Result<PutObjectOutput, InternalError> {
+    client
+        .put_object()
+        .bucket(bucket.as_str())
+        .key(key.as_str())
+        .body(String::into_bytes(body).into())
+        .send()
+        .await
+        .map_err(|err| {
+            warn!("Unable to upload to s3: {}", err);
+            InternalError::S3Error
+        })
+}
+
+pub(crate) async fn delete(
+    client: &s3::Client,
+    bucket: &Bucket,
+    key: S3Key,
+) -> Result<(), UserError> {
+    client
+        .delete_object()
+        .bucket(bucket.as_str().to_owned())
+        .key(key.as_str().to_owned())
+        .send()
+        .await
+        .map_err(|_err| InternalError::S3Error)?;
+
+    Ok(())
+}
+
+pub(crate) async fn delete_multiple(
+    client: &s3::Client,
+    bucket: &Bucket,
+    keys: Vec<S3Key>,
+) -> Result<(), UserError> {
+    let objects = keys
+        .iter()
+        .map(|key| ObjectIdentifier::builder().key(key.as_str()).build())
+        .collect::<Vec<_>>();
+
+    let delete = Delete::builder().set_objects(Some(objects)).build();
+
+    client
+        .delete_objects()
+        .bucket(bucket.as_str().to_owned())
+        .delete(delete)
+        .send()
+        .await
+        .map_err(|_err| InternalError::S3Error)?;
+
+    Ok(())
+}
+
+pub(crate) fn get_thumbnail(xml: &str, aspect_ratio: Option<f32>) -> Result<Bytes, UserError> {
+    let thumbnail_str = get_thumbnail_str(&xml);
+    let thumbnail = base64::decode(thumbnail_str)
+        .map_err(|err| std::convert::Into::<UserError>::into(InternalError::Base64DecodeError(err)))
+        .and_then(|image_data| {
+            image::load_from_memory_with_format(&image_data, ImageFormat::Png)
+                .map_err(|err| InternalError::ThumbnailDecodeError(err).into())
+        })?;
+
+    let image_content = if let Some(aspect_ratio) = aspect_ratio {
+        let (width, height) = thumbnail.dimensions();
+        let current_ratio = (width as f32) / (height as f32);
+        let (resized_width, resized_height) = if current_ratio < aspect_ratio {
+            let new_width = (aspect_ratio * (height as f32)) as u32;
+            (new_width, height)
+        } else {
+            let new_height = ((width as f32) / aspect_ratio) as u32;
+            (width, new_height)
+        };
+
+        let top_offset: u32 = (resized_height - height) / 2;
+        let left_offset: u32 = (resized_width - width) / 2;
+        let mut image = RgbaImage::new(resized_width, resized_height);
+        for x in 0..width {
+            for y in 0..height {
+                let pixel = thumbnail.get_pixel(x, y);
+                image.put_pixel(x + left_offset, y + top_offset, pixel);
+            }
+        }
+        // encode the bytes as a png
+        let mut png_bytes = BufWriter::new(Vec::new());
+        let encoder = PngEncoder::new(&mut png_bytes);
+        let color = ColorType::Rgba8;
+        encoder
+            .write_image(image.as_bytes(), resized_width, resized_height, color)
+            .map_err(InternalError::ThumbnailEncodeError)?;
+        actix_web::web::Bytes::copy_from_slice(&png_bytes.into_inner().unwrap())
+    } else {
+        let (width, height) = thumbnail.dimensions();
+        let mut png_bytes = BufWriter::new(Vec::new());
+        let encoder = PngEncoder::new(&mut png_bytes);
+        let color = ColorType::Rgba8;
+        encoder
+            .write_image(thumbnail.as_bytes(), width, height, color)
+            .map_err(InternalError::ThumbnailEncodeError)?;
+        actix_web::web::Bytes::copy_from_slice(&png_bytes.into_inner().unwrap())
+    };
+
+    Ok(image_content)
+}
+
+fn get_thumbnail_str<'b>(xml: &'b str) -> &'b str {
+    xml.split("<thumbnail>data:image/png;base64,")
+        .nth(1)
+        .and_then(|text| text.split("</thumbnail>").next())
+        .unwrap_or(xml)
 }
 
 // TODO: tests for cache invalidation

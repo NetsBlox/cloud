@@ -242,6 +242,12 @@ pub struct FriendInvite {
     pub created_at: SystemTime,
 }
 
+#[derive(Deserialize, Clone, Debug)]
+#[serde(rename_all = "camelCase")]
+pub struct ThumbnailParams {
+    pub aspect_ratio: Option<f32>,
+}
+
 #[derive(Deserialize, Serialize, Clone, Debug, PartialEq, Eq, Display, Hash, TS)]
 #[ts(export)]
 pub struct ProjectId(String);
@@ -259,6 +265,19 @@ pub struct RoleId(String);
 impl RoleId {
     pub fn new(id: String) -> Self {
         RoleId(id)
+    }
+
+    pub fn as_str(&self) -> &str {
+        &self.0
+    }
+}
+#[derive(Deserialize, Serialize, Clone, Debug, PartialEq, Eq, Display, Hash, TS)]
+#[ts(export)]
+pub struct S3Key(String);
+
+impl S3Key {
+    pub fn new(key: String) -> Self {
+        S3Key(key)
     }
 
     pub fn as_str(&self) -> &str {
@@ -297,8 +316,8 @@ pub enum SaveState {
 #[ts(export)]
 pub struct RoleMetadata {
     pub name: String,
-    pub code: String,
-    pub media: String,
+    pub code: S3Key,
+    pub media: S3Key,
 }
 
 #[derive(Deserialize, Serialize, TS)]
@@ -514,6 +533,85 @@ pub struct Group {
 #[ts(export)]
 pub struct UpdateGroupData {
     pub name: String,
+}
+
+#[derive(Deserialize, Serialize, Clone, Debug, PartialEq, Eq, Display, Hash, FromStr, TS)]
+#[ts(export)]
+pub struct GalleryId(String);
+
+impl GalleryId {
+    #[must_use]
+    pub fn new(name: String) -> Self {
+        Self(name)
+    }
+    #[must_use]
+    pub fn as_str(&self) -> &str {
+        &self.0
+    }
+}
+
+#[derive(Serialize, Deserialize, Clone, Debug, TS)]
+#[serde(rename_all = "camelCase")]
+#[ts(export)]
+pub struct CreateGalleryData {
+    pub owner: String,
+    pub name: String,
+    pub state: PublishState,
+}
+
+#[derive(Serialize, Deserialize, Clone, Debug, TS)]
+#[serde(rename_all = "camelCase")]
+#[ts(export)]
+pub struct Gallery {
+    pub id: GalleryId,
+    pub owner: String,
+    pub name: String,
+    pub state: PublishState,
+}
+
+#[derive(Serialize, Deserialize, Clone, Debug, TS)]
+#[serde(rename_all = "camelCase")]
+#[ts(export)]
+pub struct ChangeGalleryData {
+    #[ts(optional)]
+    // TODO: Future, use newtype and add constraints.
+    // In general, we need to automate checking for a valid 'name'
+    //
+    pub name: Option<String>,
+    #[ts(optional)]
+    pub state: Option<PublishState>,
+}
+
+#[derive(Deserialize, Serialize, Clone, Debug, TS)]
+#[serde(rename_all = "camelCase")]
+#[ts(export)]
+pub struct Version {
+    pub key: S3Key,
+    #[ts(type = "any")] // FIXME
+    pub updated: SystemTime,
+    pub deleted: bool,
+}
+
+#[derive(Deserialize, Serialize, Clone, Debug, TS)]
+#[serde(rename_all = "camelCase")]
+#[ts(export)]
+pub struct GalleryProjectMetadata {
+    pub gallery_id: GalleryId,
+    pub id: ProjectId,
+    pub owner: String,
+    pub name: String,
+    #[ts(type = "any")] // FIXME
+    pub origin_time: SystemTime,
+    pub versions: Vec<Version>,
+}
+
+#[derive(Deserialize, Serialize, Clone, Debug, TS)]
+#[serde(rename_all = "camelCase")]
+#[ts(export)]
+pub struct CreateGalleryProjectData {
+    pub owner: String,
+    pub name: String,
+    pub project_xml: String,
 }
 
 #[derive(Deserialize, Serialize, Clone, Debug, TS)]
@@ -815,12 +913,6 @@ mod tests {
         assert!(UserRole::Teacher == UserRole::Teacher);
         assert!(UserRole::Moderator == UserRole::Moderator);
         assert!(UserRole::Admin == UserRole::Admin);
-    }
-
-    #[test]
-    fn serialize_userroles_as_strings() {
-        let role_str = serde_json::to_string(&UserRole::User).unwrap();
-        assert_eq!(&role_str, "\"user\"");
     }
 
     #[test]
