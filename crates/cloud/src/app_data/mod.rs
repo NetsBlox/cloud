@@ -64,6 +64,7 @@ pub struct AppData {
 
     pub(crate) password_tokens: Collection<SetPasswordToken>,
     pub(crate) recorded_messages: Collection<SentMessage>,
+    pub(crate) logged_messages: Collection<api::SendMessage>,
     pub(crate) collab_invites: Collection<CollaborationInvite>,
     pub(crate) occupant_invites: Collection<OccupantInvite>,
 
@@ -145,6 +146,8 @@ impl AppData {
         let magic_links = db.collection::<MagicLink>(&(prefix.to_owned() + "magicLinks"));
         let recorded_messages =
             db.collection::<SentMessage>(&(prefix.to_owned() + "recordedMessages"));
+        let logged_messages =
+            db.collection::<api::SendMessage>(&(prefix.to_owned() + "loggedMessages"));
         let network = network.unwrap_or_else(|| {
             TopologyActor::new(settings.cache_settings.num_addresses, tx).start()
         });
@@ -196,6 +199,7 @@ impl AppData {
 
             tor_exit_nodes,
             recorded_messages,
+            logged_messages,
             project_cache,
             membership_cache,
             admin_cache,
@@ -613,6 +617,7 @@ impl AppData {
             &self.network,
             &self.occupant_invites,
             &self.recorded_messages,
+            &self.logged_messages,
         )
     }
 

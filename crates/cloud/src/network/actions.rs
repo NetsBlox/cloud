@@ -26,6 +26,7 @@ pub(crate) struct NetworkActions<'a> {
     occupant_invites: &'a Collection<OccupantInvite>,
     project_cache: &'a Arc<RwLock<LruCache<api::ProjectId, ProjectMetadata>>>,
     recorded_messages: &'a Collection<SentMessage>,
+    logged_messages: &'a Collection<api::SendMessage>,
     network: &'a Addr<TopologyActor>,
 }
 
@@ -37,12 +38,14 @@ impl<'a> NetworkActions<'a> {
 
         occupant_invites: &'a Collection<OccupantInvite>,
         recorded_messages: &'a Collection<SentMessage>,
+        logged_messages: &'a Collection<api::SendMessage>,
     ) -> Self {
         Self {
             project_metadata,
             occupant_invites,
             project_cache,
             recorded_messages,
+            logged_messages,
             network,
         }
     }
@@ -375,6 +378,14 @@ impl<'a> NetworkActions<'a> {
         self.network.do_send(topology::SendMessageFromServices {
             message: sm.msg.clone(),
         });
+    }
+
+    pub(crate) async fn log_message(&self, sm: &auth::SendMessage) -> Result<(), UserError> {
+        self.logged_messages
+            .insert_one(&sm.msg, None)
+            .await
+            .map_err(InternalError::DatabaseConnectionError)?;
+        Ok(())
     }
 }
 

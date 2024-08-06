@@ -272,6 +272,22 @@ async fn send_message(
     Ok(HttpResponse::Ok().finish())
 }
 
+// NOTE: Initial message logging fo ROCCEM.
+#[post("/messages/log/")]
+async fn log_message(
+    app: web::Data<AppData>,
+    message: web::Json<api::SendMessage>,
+    req: HttpRequest,
+) -> Result<HttpResponse, UserError> {
+    let message = message.into_inner();
+    let auth_sm = auth::try_send_message(&app, &req, message).await?;
+
+    let actions: NetworkActions = app.as_network_actions();
+    actions.log_message(&auth_sm).await?;
+
+    Ok(HttpResponse::Ok().finish())
+}
+
 #[get("/{client}/state")]
 async fn get_client_state(
     app: web::Data<AppData>,
