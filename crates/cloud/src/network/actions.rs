@@ -10,7 +10,7 @@ use mongodb::{
 };
 use netsblox_cloud_common::{
     api::{self, SaveState},
-    NetworkTraceMetadata, OccupantInvite, ProjectMetadata, SentMessage,
+    LogMessage, NetworkTraceMetadata, OccupantInvite, ProjectMetadata, SentMessage,
 };
 
 use crate::{
@@ -26,7 +26,7 @@ pub(crate) struct NetworkActions<'a> {
     occupant_invites: &'a Collection<OccupantInvite>,
     project_cache: &'a Arc<RwLock<LruCache<api::ProjectId, ProjectMetadata>>>,
     recorded_messages: &'a Collection<SentMessage>,
-    logged_messages: &'a Collection<api::SendMessage>,
+    logged_messages: &'a Collection<LogMessage>,
     network: &'a Addr<TopologyActor>,
 }
 
@@ -38,7 +38,7 @@ impl<'a> NetworkActions<'a> {
 
         occupant_invites: &'a Collection<OccupantInvite>,
         recorded_messages: &'a Collection<SentMessage>,
-        logged_messages: &'a Collection<api::SendMessage>,
+        logged_messages: &'a Collection<LogMessage>,
     ) -> Self {
         Self {
             project_metadata,
@@ -380,17 +380,20 @@ impl<'a> NetworkActions<'a> {
         });
     }
 
-    pub(crate) async fn log_message(&self, sm: &auth::SendMessage) -> Result<(), UserError> {
+    pub(crate) async fn log_message(&self, lm: &auth::LogMessage) -> Result<LogMessage, UserError> {
+        // TImestamped on conversion to cloud::LogMessage
+        let lm: LogMessage = lm.msg.clone().into();
         self.logged_messages
-            .insert_one(&sm.msg, None)
+            .insert_one(&lm, None)
             .await
             .map_err(InternalError::DatabaseConnectionError)?;
-        Ok(())
+        Ok(lm)
     }
 }
 
 #[cfg(test)]
 mod tests {
+    use netsblox_cloud_common::{Group, User};
     use std::collections::HashMap;
 
     use crate::test_utils;
@@ -468,6 +471,75 @@ mod tests {
                 let vc = auth::ViewClient::test(api::ClientId::new("_nonexistentClientId".into()));
                 let state = actions.get_client_info(&vc).await;
                 assert!(matches!(state, Err(UserError::ClientNotFoundError)));
+            })
+            .await;
+    }
+
+    #[actix_web::test]
+    async fn test_log_message() {
+        let group: Group = Group::new(String::from("sender"), String::from("testgroup"));
+
+        let sender: User = api::NewUser {
+            username: "sender".to_string(),
+            email: "sender@netsblox.org".into(),
+            password: None,
+            group_id: Some(group.id.clone()),
+            role: None,
+        }
+        .into();
+
+        let recvr: User = api::NewUser {
+            username: "recvr".to_string(),
+            email: "recvr@netsblox.org".into(),
+            password: None,
+            group_id: Some(group.id.clone()),
+            role: None,
+        }
+        .into();
+
+        let r1_id = api::RoleId::new("r1".to_string());
+        let role = api::RoleData {
+            name: "recvr_role".into(),
+            code: "<code/>".into(),
+            media: "<media/>".into(),
+        };
+
+        let roles: HashMap<_, _> = [(r1_id.clone(), role.clone())].into_iter().collect();
+
+        let project = test_utils::project::builder()
+            .with_name("project")
+            .with_owner(recvr.username.clone())
+            .with_roles(roles)
+            .build();
+
+        let addr = format!("{}@{}@{}", recvr.username, project.name, role.name);
+
+        let message: api::LogMessage = api::LogMessage {
+            sender: Some(api::SendMessageSender::Username(sender.username.clone())),
+            target: api::SendMessageTarget::Address { address: addr },
+            content: serde_json::json!("hello from sender"),
+        };
+
+        let lm = auth::LogMessage::test(message);
+
+        test_utils::setup()
+            .with_users(&[sender.clone(), recvr.clone()])
+            .with_groups(&[group.clone()])
+            .run(|app_data| async move {
+                let actions = app_data.as_network_actions();
+
+                let result = actions.log_message(&lm).await.unwrap();
+
+                let filter = doc! {"sender": result.sender, "target": result.target};
+
+                let result = actions
+                    .logged_messages
+                    .find_one(filter, None)
+                    .await
+                    .unwrap()
+                    .unwrap();
+
+                dbg!(result);
             })
             .await;
     }

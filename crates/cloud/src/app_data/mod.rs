@@ -35,7 +35,7 @@ use crate::common::{
     AuthorizedServiceHost, BannedAccount, CollaborationInvite, FriendLink, Group, Library,
     OAuthClient, OAuthToken, ProjectMetadata, SetPasswordToken, User,
 };
-use crate::common::{OccupantInvite, SentMessage};
+use crate::common::{LogMessage, OccupantInvite, SentMessage};
 use crate::config::Settings;
 use crate::errors::{InternalError, UserError};
 use crate::network::topology::{SetStorage, TopologyActor, TopologyPanic};
@@ -64,7 +64,7 @@ pub struct AppData {
 
     pub(crate) password_tokens: Collection<SetPasswordToken>,
     pub(crate) recorded_messages: Collection<SentMessage>,
-    pub(crate) logged_messages: Collection<api::SendMessage>,
+    pub(crate) logged_messages: Collection<LogMessage>,
     pub(crate) collab_invites: Collection<CollaborationInvite>,
     pub(crate) occupant_invites: Collection<OccupantInvite>,
 
@@ -146,8 +146,7 @@ impl AppData {
         let magic_links = db.collection::<MagicLink>(&(prefix.to_owned() + "magicLinks"));
         let recorded_messages =
             db.collection::<SentMessage>(&(prefix.to_owned() + "recordedMessages"));
-        let logged_messages =
-            db.collection::<api::SendMessage>(&(prefix.to_owned() + "loggedMessages"));
+        let logged_messages = db.collection::<LogMessage>(&(prefix.to_owned() + "loggedMessages"));
         let network = network.unwrap_or_else(|| {
             TopologyActor::new(settings.cache_settings.num_addresses, tx).start()
         });
@@ -220,6 +219,7 @@ impl AppData {
 
         // Add database indexes
         let one_hour = Duration::from_secs(60 * 60);
+
         let index_opts = IndexOptions::builder().expire_after(one_hour).build();
         let occupant_invite_indexes = vec![
             IndexModel::builder()
@@ -280,6 +280,9 @@ impl AppData {
             .await
             .map_err(InternalError::DatabaseConnectionError)?;
 
+        // Initialize Message Logs
+        self.initialize_message_log().await?;
+
         self.tor_exit_nodes
             .create_index(IndexModel::builder().keys(doc! {"addr": 1}).build(), None)
             .await
@@ -335,6 +338,22 @@ impl AppData {
                 .await
                 .map_err(InternalError::DatabaseConnectionError)?;
         }
+
+        Ok(())
+    }
+
+    async fn initialize_message_log(&self) -> Result<(), InternalError> {
+        let six_months = Duration::from_secs(60 * 60 * 24 * 30 * 6);
+        let index_opts = IndexOptions::builder().expire_after(six_months).build();
+
+        let token_index = IndexModel::builder()
+            .keys(doc! {"createdAt": 1})
+            .options(index_opts)
+            .build();
+        self.logged_messages
+            .create_index(token_index, None)
+            .await
+            .map_err(InternalError::DatabaseConnectionError)?;
 
         Ok(())
     }

@@ -272,20 +272,20 @@ async fn send_message(
     Ok(HttpResponse::Ok().finish())
 }
 
-// NOTE: Initial message logging fo ROCCEM.
 #[post("/messages/log/")]
 async fn log_message(
     app: web::Data<AppData>,
-    message: web::Json<api::SendMessage>,
+    message: web::Json<api::LogMessage>,
     req: HttpRequest,
 ) -> Result<HttpResponse, UserError> {
     let message = message.into_inner();
-    let auth_sm = auth::try_send_message(&app, &req, message).await?;
+
+    let auth_sm = auth::try_log_message(&app, &req, message).await?;
 
     let actions: NetworkActions = app.as_network_actions();
-    actions.log_message(&auth_sm).await?;
+    let log: api::LogMessage = actions.log_message(&auth_sm).await?.into();
 
-    Ok(HttpResponse::Ok().finish())
+    Ok(HttpResponse::Ok().json(log))
 }
 
 #[get("/{client}/state")]
@@ -310,6 +310,7 @@ pub fn config(cfg: &mut web::ServiceConfig) {
         .service(get_external_clients)
         .service(get_room_state)
         .service(send_message)
+        .service(log_message)
         .service(get_rooms)
         .service(invite_occupant)
         .service(evict_occupant)
@@ -442,8 +443,8 @@ mod tests {
     use std::{collections::HashMap, time::Duration};
 
     use actix_web::{http, test, App};
-    use netsblox_cloud_common::api::BrowserClientState;
-    use netsblox_cloud_common::{NetworkTraceMetadata, User};
+    use netsblox_cloud_common::api::{BrowserClientState, UserRole};
+    use netsblox_cloud_common::{Group, NetworkTraceMetadata, User};
 
     use super::*;
     use crate::test_utils;
@@ -986,5 +987,75 @@ mod tests {
     #[ignore]
     async fn test_evict_occupant_group_owner() {
         todo!();
+    }
+
+    #[actix_web::test]
+    async fn test_log_message() {
+        let group: Group = Group::new(String::from("sender"), String::from("testgroup"));
+
+        let sender: User = api::NewUser {
+            username: "sender".to_string(),
+            email: "sender@netsblox.org".into(),
+            password: None,
+            group_id: Some(group.id.clone()),
+            role: None,
+        }
+        .into();
+
+        let recvr: User = api::NewUser {
+            username: "recvr".to_string(),
+            email: "recvr@netsblox.org".into(),
+            password: None,
+            group_id: Some(group.id.clone()),
+            role: None,
+        }
+        .into();
+
+        let r1_id = api::RoleId::new("r1".to_string());
+        let role = api::RoleData {
+            name: "recvr_role".into(),
+            code: "<code/>".into(),
+            media: "<media/>".into(),
+        };
+
+        let roles: HashMap<_, _> = [(r1_id.clone(), role.clone())].into_iter().collect();
+
+        let project = test_utils::project::builder()
+            .with_name("project")
+            .with_owner(recvr.username.clone())
+            .with_roles(roles)
+            .build();
+
+        let addr = format!("{}@{}@{}", recvr.username, project.name, role.name);
+
+        let message: api::LogMessage = api::LogMessage {
+            sender: Some(api::SendMessageSender::Username(sender.username.clone())),
+            target: api::SendMessageTarget::Address { address: addr },
+            content: json!("hello from sender"),
+        };
+
+        test_utils::setup()
+            .with_users(&[sender.clone(), recvr.clone()])
+            .with_groups(&[group.clone()])
+            .run(|app_data| async move {
+                let app = test::init_service(
+                    App::new()
+                        .wrap(test_utils::cookie::middleware())
+                        .app_data(web::Data::new(app_data.clone()))
+                        .configure(config),
+                )
+                .await;
+
+                let req = test::TestRequest::post()
+                    .cookie(test_utils::cookie::new(&sender.username))
+                    .uri("/messages/log/")
+                    .set_json(message.clone())
+                    .to_request();
+
+                let logged: api::LogMessage = test::call_and_read_body_json(&app, req).await;
+                dbg!(logged);
+                panic!();
+            })
+            .await;
     }
 }

@@ -1,6 +1,7 @@
 use crate::{
-    oauth, FriendInvite, FriendLinkState, GroupId, InvitationState, LinkedAccount, MagicLinkId,
-    ProjectId, PublishState, RoleMetadata, SaveState, ServiceHost, ServiceHostScope, UserRole,
+    oauth, AppId, ClientId, ClientState, FriendInvite, FriendLinkState, GroupId, InvitationState,
+    LinkedAccount, MagicLinkId, ProjectId, PublishState, RoleId, RoleMetadata, SaveState,
+    SendMessageSender, SendMessageTarget, ServiceHost, ServiceHostScope, UserRole,
 };
 use bson::{doc, Bson, DateTime};
 
@@ -55,6 +56,63 @@ impl From<FriendInvite> for Bson {
     }
 }
 
+impl From<RoleId> for Bson {
+    fn from(id: RoleId) -> Self {
+        Bson::String(id.as_str().to_owned())
+    }
+}
+
+impl From<AppId> for Bson {
+    fn from(id: AppId) -> Self {
+        Bson::String(id.as_str().to_owned())
+    }
+}
+
+impl From<ClientState> for Bson {
+    fn from(state: ClientState) -> Self {
+        match state {
+            ClientState::Browser(browser) => Bson::Document(
+                doc! {"type": "browser", "roleId":browser.role_id, "projectId": browser.project_id},
+            ),
+            ClientState::External(external) => Bson::Document(
+                doc! {"type": "external", "address": external.address, "appId": external.app_id},
+            ),
+        }
+    }
+}
+
+impl From<SendMessageSender> for Bson {
+    fn from(sender: SendMessageSender) -> Self {
+        match sender {
+            SendMessageSender::Username(s) => Bson::String(s),
+            SendMessageSender::Client(cl) => Bson::String(cl.0),
+        }
+    }
+}
+
+impl From<SendMessageTarget> for Bson {
+    fn from(target: SendMessageTarget) -> Self {
+        match target {
+            SendMessageTarget::Address { address } => {
+                doc! { "type": "address", "address": address }.into()
+            }
+            SendMessageTarget::Room { project_id } => {
+                doc! { "type": "room", "projectId": project_id }.into()
+            }
+            SendMessageTarget::Role {
+                project_id,
+                role_id,
+            } => doc! { "type": "role", "projectId": project_id, "roleId": role_id }.into(),
+            SendMessageTarget::Client { state, client_id } => doc! {
+                "type": "client",
+                "clientId": client_id,
+                "state": state
+            }
+            .into(),
+        }
+    }
+}
+
 impl From<SaveState> for Bson {
     fn from(state: SaveState) -> Bson {
         match state {
@@ -89,6 +147,12 @@ impl From<PublishState> for Bson {
 
 impl From<GroupId> for Bson {
     fn from(id: GroupId) -> Bson {
+        Bson::String(id.as_str().to_owned())
+    }
+}
+
+impl From<ClientId> for Bson {
+    fn from(id: ClientId) -> Bson {
         Bson::String(id.as_str().to_owned())
     }
 }
