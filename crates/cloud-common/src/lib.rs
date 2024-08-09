@@ -555,7 +555,7 @@ pub struct LogMessage {
     pub sender: Option<api::SendMessageSender>,
     pub target: api::SendMessageTarget,
     pub content: serde_json::Value,
-    created_at: DateTime,
+    pub created_at: DateTime,
 }
 
 // NOTE: timestamped on conversion

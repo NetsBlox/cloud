@@ -479,7 +479,7 @@ mod tests {
     async fn test_log_message() {
         let group: Group = Group::new(String::from("sender"), String::from("testgroup"));
 
-        let sender: User = api::NewUser {
+        let sendr: User = api::NewUser {
             username: "sender".to_string(),
             email: "sender@netsblox.org".into(),
             password: None,
@@ -513,33 +513,40 @@ mod tests {
             .build();
 
         let addr = format!("{}@{}@{}", recvr.username, project.name, role.name);
-
+        let content = serde_json::json!("hello from sender");
+        let sender = Some(api::SendMessageSender::Username(sendr.username.clone()));
+        let target = api::SendMessageTarget::Address {
+            address: addr.clone(),
+        };
         let message: api::LogMessage = api::LogMessage {
-            sender: Some(api::SendMessageSender::Username(sender.username.clone())),
-            target: api::SendMessageTarget::Address { address: addr },
-            content: serde_json::json!("hello from sender"),
+            sender,
+            target,
+            content: content.clone(),
         };
 
         let lm = auth::LogMessage::test(message);
 
         test_utils::setup()
-            .with_users(&[sender.clone(), recvr.clone()])
+            .with_users(&[sendr.clone(), recvr.clone()])
             .with_groups(&[group.clone()])
             .run(|app_data| async move {
                 let actions = app_data.as_network_actions();
 
                 let result = actions.log_message(&lm).await.unwrap();
 
-                let filter = doc! {"sender": result.sender, "target": result.target};
+                let filter = doc! {
+                    "sender.username" : sendr.username,
+                    "target.address.address" : addr,
+                    "content": mongodb::bson::to_bson(&result.content).unwrap(),
+                    "createdAt": result.created_at,
+                };
 
-                let result = actions
+                let _query = actions
                     .logged_messages
                     .find_one(filter, None)
                     .await
                     .unwrap()
                     .unwrap();
-
-                dbg!(result);
             })
             .await;
     }

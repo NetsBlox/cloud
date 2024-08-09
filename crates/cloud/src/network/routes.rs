@@ -443,7 +443,7 @@ mod tests {
     use std::{collections::HashMap, time::Duration};
 
     use actix_web::{http, test, App};
-    use netsblox_cloud_common::api::{BrowserClientState, UserRole};
+    use netsblox_cloud_common::api::BrowserClientState;
     use netsblox_cloud_common::{Group, NetworkTraceMetadata, User};
 
     use super::*;
@@ -1052,9 +1052,7 @@ mod tests {
                     .set_json(message.clone())
                     .to_request();
 
-                let logged: api::LogMessage = test::call_and_read_body_json(&app, req).await;
-                dbg!(logged);
-                panic!();
+                let _logged: api::LogMessage = test::call_and_read_body_json(&app, req).await;
             })
             .await;
     }
