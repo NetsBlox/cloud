@@ -389,6 +389,25 @@ impl<'a> NetworkActions<'a> {
             .map_err(InternalError::DatabaseConnectionError)?;
         Ok(lm)
     }
+
+    pub(crate) async fn get_message_logs(
+        &self,
+        eu: &auth::EditUser,
+    ) -> Result<Vec<api::LogMessage>, UserError> {
+        let filter = doc! { "sender.username": eu.username.clone()};
+        let messages: Vec<api::LogMessage> = self
+            .logged_messages
+            .find(filter, None)
+            .await
+            .map_err(InternalError::DatabaseConnectionError)?
+            .try_collect::<Vec<_>>()
+            .await
+            .map_err(InternalError::DatabaseConnectionError)?
+            .into_iter()
+            .map(|msg| msg.into())
+            .collect();
+        Ok(messages)
+    }
 }
 
 #[cfg(test)]
@@ -547,6 +566,79 @@ mod tests {
                     .await
                     .unwrap()
                     .unwrap();
+            })
+            .await;
+    }
+    #[actix_web::test]
+    async fn test_get_message_logs() {
+        let group: Group = Group::new(String::from("sender"), String::from("testgroup"));
+
+        let sendr: User = api::NewUser {
+            username: "sender".to_string(),
+            email: "sender@netsblox.org".into(),
+            password: None,
+            group_id: Some(group.id.clone()),
+            role: None,
+        }
+        .into();
+
+        let recvr: User = api::NewUser {
+            username: "recvr".to_string(),
+            email: "recvr@netsblox.org".into(),
+            password: None,
+            group_id: Some(group.id.clone()),
+            role: None,
+        }
+        .into();
+
+        let r1_id = api::RoleId::new("r1".to_string());
+        let role = api::RoleData {
+            name: "recvr_role".into(),
+            code: "<code/>".into(),
+            media: "<media/>".into(),
+        };
+
+        let roles: HashMap<_, _> = [(r1_id.clone(), role.clone())].into_iter().collect();
+
+        let project = test_utils::project::builder()
+            .with_name("project")
+            .with_owner(recvr.username.clone())
+            .with_roles(roles)
+            .build();
+
+        let addr = format!("{}@{}@{}", recvr.username, project.name, role.name);
+        let content1 = serde_json::json!("hello from sender");
+        let content2 = serde_json::json!("goodbye");
+        let sender = Some(api::SendMessageSender::Username(sendr.username.clone()));
+
+        let target = api::SendMessageTarget::Address {
+            address: addr.clone(),
+        };
+        let message1: LogMessage = LogMessage {
+            sender: sender.clone(),
+            target: target.clone(),
+            content: content1.clone(),
+            created_at: DateTime::now(),
+        };
+        let message2: LogMessage = LogMessage {
+            sender,
+            target,
+            content: content2.clone(),
+            created_at: DateTime::now(),
+        };
+
+        let eu = auth::EditUser::test(sendr.username.clone());
+
+        test_utils::setup()
+            .with_users(&[sendr.clone(), recvr.clone()])
+            .with_groups(&[group.clone()])
+            .with_message_logs(&[message1, message2])
+            .run(|app_data| async move {
+                let actions = app_data.as_network_actions();
+
+                let result = actions.get_message_logs(&eu).await.unwrap();
+
+                assert_eq!(result.len(), 2);
             })
             .await;
     }

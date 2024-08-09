@@ -288,6 +288,22 @@ async fn log_message(
     Ok(HttpResponse::Ok().json(log))
 }
 
+#[get("/messages/log/{username}")]
+async fn get_message_log_username(
+    app: web::Data<AppData>,
+    path: web::Path<String>,
+    req: HttpRequest,
+) -> Result<HttpResponse, UserError> {
+    let username = path.into_inner();
+
+    let auth_eu = auth::try_edit_user(&app, &req, None, &username).await?;
+
+    let actions: NetworkActions = app.as_network_actions();
+    let logs: Vec<api::LogMessage> = actions.get_message_logs(&auth_eu).await?;
+
+    Ok(HttpResponse::Ok().json(logs))
+}
+
 #[get("/{client}/state")]
 async fn get_client_state(
     app: web::Data<AppData>,
@@ -311,6 +327,7 @@ pub fn config(cfg: &mut web::ServiceConfig) {
         .service(get_room_state)
         .service(send_message)
         .service(log_message)
+        .service(get_message_log_username)
         .service(get_rooms)
         .service(invite_occupant)
         .service(evict_occupant)
@@ -443,8 +460,9 @@ mod tests {
     use std::{collections::HashMap, time::Duration};
 
     use actix_web::{http, test, App};
+    use mongodb::bson::DateTime;
     use netsblox_cloud_common::api::BrowserClientState;
-    use netsblox_cloud_common::{Group, NetworkTraceMetadata, User};
+    use netsblox_cloud_common::{Group, LogMessage, NetworkTraceMetadata, User};
 
     use super::*;
     use crate::test_utils;
@@ -1053,6 +1071,88 @@ mod tests {
                     .to_request();
 
                 let _logged: api::LogMessage = test::call_and_read_body_json(&app, req).await;
+            })
+            .await;
+    }
+
+    #[test]
+    async fn test_get_message_logs() {
+        let group: Group = Group::new(String::from("sender"), String::from("testgroup"));
+
+        let sendr: User = api::NewUser {
+            username: "sender".to_string(),
+            email: "sender@netsblox.org".into(),
+            password: None,
+            group_id: Some(group.id.clone()),
+            role: None,
+        }
+        .into();
+
+        let recvr: User = api::NewUser {
+            username: "recvr".to_string(),
+            email: "recvr@netsblox.org".into(),
+            password: None,
+            group_id: Some(group.id.clone()),
+            role: None,
+        }
+        .into();
+
+        let r1_id = api::RoleId::new("r1".to_string());
+        let role = api::RoleData {
+            name: "recvr_role".into(),
+            code: "<code/>".into(),
+            media: "<media/>".into(),
+        };
+
+        let roles: HashMap<_, _> = [(r1_id.clone(), role.clone())].into_iter().collect();
+
+        let project = test_utils::project::builder()
+            .with_name("project")
+            .with_owner(recvr.username.clone())
+            .with_roles(roles)
+            .build();
+
+        let addr = format!("{}@{}@{}", recvr.username, project.name, role.name);
+        let content1 = serde_json::json!("hello from sender");
+        let content2 = serde_json::json!("goodbye");
+        let sender = Some(api::SendMessageSender::Username(sendr.username.clone()));
+
+        let target = api::SendMessageTarget::Address {
+            address: addr.clone(),
+        };
+        let message1: LogMessage = LogMessage {
+            sender: sender.clone(),
+            target: target.clone(),
+            content: content1.clone(),
+            created_at: DateTime::now(),
+        };
+        let message2: LogMessage = LogMessage {
+            sender,
+            target,
+            content: content2.clone(),
+            created_at: DateTime::now(),
+        };
+
+        test_utils::setup()
+            .with_users(&[sendr.clone(), recvr.clone()])
+            .with_groups(&[group.clone()])
+            .with_message_logs(&[message1, message2])
+            .run(|app_data| async move {
+                let app = test::init_service(
+                    App::new()
+                        .wrap(test_utils::cookie::middleware())
+                        .app_data(web::Data::new(app_data.clone()))
+                        .configure(config),
+                )
+                .await;
+
+                let req = test::TestRequest::get()
+                    .cookie(test_utils::cookie::new(&sendr.username))
+                    .uri(format!("/messages/log/{}", &sendr.username).as_str())
+                    .to_request();
+
+                let logs: Vec<api::LogMessage> = test::call_and_read_body_json(&app, req).await;
+                assert_eq!(logs.len(), 2);
             })
             .await;
     }
