@@ -31,6 +31,21 @@ pub(crate) struct SendMessage {
     pub(crate) msg: api::SendMessage,
 }
 
+pub(crate) struct LogMessage {
+    _private: (),
+    pub(crate) msg: api::LogMessage,
+}
+
+#[cfg(test)]
+impl LogMessage {
+    pub fn test(data: api::LogMessage) -> Self {
+        LogMessage {
+            msg: data,
+            _private: (),
+        }
+    }
+}
+
 pub(crate) async fn try_view_client(
     app: &AppData,
     req: &HttpRequest,
@@ -187,6 +202,25 @@ pub(crate) async fn try_send_message(
     } else {
         Err(UserError::PermissionsError)
     }
+}
+
+pub(crate) async fn try_log_message(
+    app: &AppData,
+    req: &HttpRequest,
+    msg: api::LogMessage,
+) -> Result<LogMessage, UserError> {
+    let sendmsg = api::SendMessage {
+        sender: msg.sender.clone(),
+        target: msg.target.clone(),
+        content: msg.content.clone(),
+    };
+
+    try_send_message(app, req, sendmsg)
+        .await
+        .map(|r| LogMessage {
+            _private: (),
+            msg: r.msg.into(),
+        })
 }
 
 async fn get_project_for_client(
