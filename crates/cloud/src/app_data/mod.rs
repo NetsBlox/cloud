@@ -343,8 +343,8 @@ impl AppData {
     }
 
     async fn initialize_message_log(&self) -> Result<(), InternalError> {
-        let six_months = Duration::from_secs(60 * 60 * 24 * 30 * 6);
-        let index_opts = IndexOptions::builder().expire_after(six_months).build();
+        let three_months = Duration::from_secs(60 * 60 * 24 * 30 * 3);
+        let index_opts = IndexOptions::builder().expire_after(three_months).build();
 
         let token_index = IndexModel::builder()
             .keys(doc! {"createdAt": 1})

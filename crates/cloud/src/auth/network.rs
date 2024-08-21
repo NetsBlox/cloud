@@ -1,4 +1,4 @@
-use super::{can_edit_project, is_super_user};
+use super::{can_edit_project, is_super_user, try_edit_user};
 use crate::app_data::AppData;
 use crate::errors::{InternalError, UserError};
 use crate::network::topology;
@@ -209,18 +209,8 @@ pub(crate) async fn try_log_message(
     req: &HttpRequest,
     msg: api::LogMessage,
 ) -> Result<LogMessage, UserError> {
-    let sendmsg = api::SendMessage {
-        sender: msg.sender.clone(),
-        target: msg.target.clone(),
-        content: msg.content.clone(),
-    };
-
-    try_send_message(app, req, sendmsg)
-        .await
-        .map(|r| LogMessage {
-            _private: (),
-            msg: r.msg.into(),
-        })
+    try_edit_user(app, req, None, &msg.sender).await?;
+    Ok(LogMessage { _private: (), msg })
 }
 
 async fn get_project_for_client(

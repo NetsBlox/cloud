@@ -714,23 +714,13 @@ pub struct SendMessage {
     pub content: Value,
 }
 
-impl From<SendMessage> for LogMessage {
-    fn from(value: SendMessage) -> Self {
-        LogMessage {
-            sender: value.sender,
-            target: value.target,
-            content: value.content,
-        }
-    }
-}
-
 /// Send message request (for authorized services)
 #[derive(Deserialize, Serialize, Debug, Clone, TS)]
 #[serde(rename_all = "camelCase")]
 #[ts(export)]
 pub struct LogMessage {
-    pub sender: Option<SendMessageSender>,
-    pub target: SendMessageTarget,
+    pub sender: String,
+    pub recipients: Vec<String>,
     // TODO: Should we only allow "message" types or any sort of message?
     #[ts(type = "object")]
     pub content: Value,

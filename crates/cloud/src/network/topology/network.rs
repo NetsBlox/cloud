@@ -18,7 +18,7 @@ use std::time::{Duration, SystemTime};
 
 use crate::app_data::AppData;
 use crate::common::api::{ProjectId, SaveState};
-use crate::common::ProjectMetadata;
+use crate::common::{LogMessage, ProjectMetadata};
 use crate::errors::InternalError;
 use crate::network::topology::address::ClientAddress;
 
@@ -50,7 +50,7 @@ impl From<RoomState> for ClientCommand {
         let msg = value.as_object_mut().unwrap(); // safe to unwrap since RoomState is serialized as a JSON object
         msg.insert(
             "type".into(),
-            serde_json::to_value("room-roles").unwrap(), // save to unwrap since it is just a string
+            serde_json::to_value("room-roles").unwrap(), // safe to unwrap since it is just a string
         );
         ClientCommand::SendMessage(value)
     }
@@ -313,11 +313,26 @@ impl Topology {
             // target) is quite low, we will allow all messages to be sent for now.
             //let recipients = self.allowed_recipients(app, &msg.sender, recipients).await;
 
+            let sender = self.usernames.get(&msg.sender);
+            let mut recipient_names: Vec<String> = Vec::new();
+
             recipients.iter().for_each(|client| {
                 if let Err(err) = client.addr.do_send(message.clone()) {
                     log::error!("Unable to send message to client: {}", err);
+                } else if let Some(recname) = self.usernames.get(&client.id) {
+                    recipient_names.push(recname.to_owned());
                 }
             });
+
+            if let Some(sender) = sender {
+                let msg_log = LogMessage {
+                    sender: sender.to_owned(),
+                    recipients: recipient_names,
+                    content: msg.content.clone(),
+                    created_at: DateTime::now(),
+                };
+                app.logged_messages.insert_one(msg_log, None).await;
+            }
 
             // maybe record the message
             let project_ids: HashSet<_> = recipients
@@ -944,6 +959,7 @@ impl Topology {
 mod tests {
     use std::num::NonZeroUsize;
 
+    use mongodb::bson::doc;
     use netsblox_cloud_common::{
         api::{self, AppId, ClientId, ClientState, ExternalClientState},
         Group, User,
@@ -1081,6 +1097,51 @@ mod tests {
                         content: json!({}),
                     })
                     .await
+                    .unwrap();
+            })
+            .await;
+    }
+
+    #[actix_web::test]
+    async fn test_send_msg_log() {
+        let sendr: User = api::NewUser {
+            username: "iamsender".to_string(),
+            email: "sender@netsblox.org".into(),
+            password: None,
+            group_id: None,
+            role: None,
+        }
+        .into();
+
+        let s_client = test_utils::network::Client::new(Some(sendr.username.clone()), None);
+
+        test_utils::setup()
+            .with_users(&[sendr.clone()])
+            .with_clients(&[s_client.clone()])
+            .run(|app_data| async move {
+                app_data
+                    .network
+                    .send(SetStorage {
+                        app_data: app_data.clone(),
+                    })
+                    .await
+                    .unwrap();
+
+                app_data
+                    .network
+                    .send(SendMessage {
+                        sender: s_client.id.clone(),
+                        addresses: Vec::new(),
+                        content: json!({}),
+                    })
+                    .await
+                    .unwrap();
+
+                let _res = app_data
+                    .logged_messages
+                    .find_one(doc! {"sender": "iamsender"}, None)
+                    .await
+                    .unwrap()
                     .unwrap();
             })
             .await;

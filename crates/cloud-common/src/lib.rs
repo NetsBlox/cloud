@@ -552,30 +552,29 @@ pub struct SentMessage {
 #[derive(Deserialize, Serialize, Debug, Clone)]
 #[serde(rename_all = "camelCase")]
 pub struct LogMessage {
-    pub sender: Option<api::SendMessageSender>,
-    pub target: api::SendMessageTarget,
+    pub sender: String,
+    pub recipients: Vec<String>,
     pub content: serde_json::Value,
     pub created_at: DateTime,
 }
 
 // NOTE: timestamped on conversion
-impl Into<LogMessage> for api::LogMessage {
-    fn into(self) -> LogMessage {
+impl From<api::LogMessage> for LogMessage {
+    fn from(value: api::LogMessage) -> Self {
         LogMessage {
-            sender: self.sender,
-            target: self.target,
-            content: self.content,
+            sender: value.sender,
+            recipients: value.recipients,
+            content: value.content,
             created_at: DateTime::now(),
         }
     }
 }
 
-// NOTE: timestamped on conversion
 impl From<LogMessage> for api::LogMessage {
     fn from(value: LogMessage) -> Self {
         api::LogMessage {
             sender: value.sender,
-            target: value.target,
+            recipients: value.recipients,
             content: value.content,
         }
     }
