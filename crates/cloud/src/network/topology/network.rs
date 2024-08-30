@@ -1137,12 +1137,14 @@ mod tests {
                     .await
                     .unwrap();
 
-                let _res = app_data
+                let res = app_data
                     .logged_messages
                     .find_one(doc! {"sender": "iamsender"}, None)
                     .await
-                    .unwrap()
-                    .unwrap();
+                    .expect("failed to connect to db")
+                    .is_some();
+
+                assert!(res);
             })
             .await;
     }
