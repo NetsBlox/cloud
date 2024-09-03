@@ -272,6 +272,22 @@ async fn send_message(
     Ok(HttpResponse::Ok().finish())
 }
 
+#[get("/messages/log/{username}")]
+async fn get_message_log_username(
+    app: web::Data<AppData>,
+    path: web::Path<String>,
+    req: HttpRequest,
+) -> Result<HttpResponse, UserError> {
+    let username = path.into_inner();
+
+    let auth_vu = auth::try_view_user(&app, &req, None, &username).await?;
+
+    let actions: NetworkActions = app.as_network_actions();
+    let logs: Vec<api::LogMessage> = actions.get_message_logs(&auth_vu).await?;
+
+    Ok(HttpResponse::Ok().json(logs))
+}
+
 #[get("/{client}/state")]
 async fn get_client_state(
     app: web::Data<AppData>,
@@ -294,6 +310,7 @@ pub fn config(cfg: &mut web::ServiceConfig) {
         .service(get_external_clients)
         .service(get_room_state)
         .service(send_message)
+        .service(get_message_log_username)
         .service(get_rooms)
         .service(invite_occupant)
         .service(evict_occupant)
@@ -426,8 +443,9 @@ mod tests {
     use std::{collections::HashMap, time::Duration};
 
     use actix_web::{http, test, App};
+    use mongodb::bson::DateTime;
     use netsblox_cloud_common::api::BrowserClientState;
-    use netsblox_cloud_common::{NetworkTraceMetadata, User};
+    use netsblox_cloud_common::{LogMessage, NetworkTraceMetadata, User};
 
     use super::*;
     use crate::test_utils;
@@ -970,5 +988,54 @@ mod tests {
     #[ignore]
     async fn test_evict_occupant_group_owner() {
         todo!();
+    }
+
+    #[test]
+    async fn test_get_message_logs() {
+        let sendr: User = api::NewUser {
+            username: "sender".to_string(),
+            email: "sender@netsblox.org".into(),
+            password: None,
+            group_id: None,
+            role: None,
+        }
+        .into();
+        let recvr: User = api::NewUser {
+            username: "recvr".to_string(),
+            email: "recvr@netsblox.org".into(),
+            password: None,
+            group_id: None,
+            role: None,
+        }
+        .into();
+
+        let log: LogMessage = LogMessage {
+            sender: sendr.username.clone(),
+            recipients: vec![recvr.username.clone()],
+            content: serde_json::json!({}),
+            created_at: DateTime::now(),
+        };
+
+        test_utils::setup()
+            .with_users(&[sendr.clone(), recvr.clone()])
+            .with_message_logs(&[log])
+            .run(|app_data| async move {
+                let app = test::init_service(
+                    App::new()
+                        .wrap(test_utils::cookie::middleware())
+                        .app_data(web::Data::new(app_data.clone()))
+                        .configure(config),
+                )
+                .await;
+
+                let req = test::TestRequest::get()
+                    .cookie(test_utils::cookie::new(&sendr.username))
+                    .uri(format!("/messages/log/{}", &sendr.username).as_str())
+                    .to_request();
+
+                let logs: Vec<api::LogMessage> = test::call_and_read_body_json(&app, req).await;
+                assert!(!logs.is_empty());
+            })
+            .await;
     }
 }

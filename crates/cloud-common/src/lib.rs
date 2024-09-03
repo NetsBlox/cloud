@@ -548,6 +548,38 @@ pub struct SentMessage {
     pub content: serde_json::Value,
 }
 
+/// log message type
+#[derive(Deserialize, Serialize, Debug, Clone)]
+#[serde(rename_all = "camelCase")]
+pub struct LogMessage {
+    pub sender: String,
+    pub recipients: Vec<String>,
+    pub content: serde_json::Value,
+    pub created_at: DateTime,
+}
+
+// NOTE: timestamped on conversion
+impl From<api::LogMessage> for LogMessage {
+    fn from(value: api::LogMessage) -> Self {
+        LogMessage {
+            sender: value.sender,
+            recipients: value.recipients,
+            content: value.content,
+            created_at: DateTime::now(),
+        }
+    }
+}
+
+impl From<LogMessage> for api::LogMessage {
+    fn from(value: LogMessage) -> Self {
+        api::LogMessage {
+            sender: value.sender,
+            recipients: value.recipients,
+            content: value.content,
+        }
+    }
+}
+
 impl SentMessage {
     pub fn new(
         project_id: ProjectId,

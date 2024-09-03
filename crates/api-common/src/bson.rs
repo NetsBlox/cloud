@@ -1,6 +1,7 @@
 use crate::{
-    oauth, FriendInvite, FriendLinkState, GroupId, InvitationState, LinkedAccount, MagicLinkId,
-    ProjectId, PublishState, RoleMetadata, SaveState, ServiceHost, ServiceHostScope, UserRole,
+    oauth, AppId, ClientId, FriendInvite, FriendLinkState, GroupId, InvitationState, LinkedAccount,
+    MagicLinkId, ProjectId, PublishState, RoleId, RoleMetadata, SaveState, ServiceHost,
+    ServiceHostScope, UserRole,
 };
 use bson::{doc, Bson, DateTime};
 
@@ -55,6 +56,18 @@ impl From<FriendInvite> for Bson {
     }
 }
 
+impl From<RoleId> for Bson {
+    fn from(id: RoleId) -> Self {
+        Bson::String(id.as_str().to_owned())
+    }
+}
+
+impl From<AppId> for Bson {
+    fn from(id: AppId) -> Self {
+        Bson::String(id.as_str().to_owned())
+    }
+}
+
 impl From<SaveState> for Bson {
     fn from(state: SaveState) -> Bson {
         match state {
@@ -89,6 +102,12 @@ impl From<PublishState> for Bson {
 
 impl From<GroupId> for Bson {
     fn from(id: GroupId) -> Bson {
+        Bson::String(id.as_str().to_owned())
+    }
+}
+
+impl From<ClientId> for Bson {
+    fn from(id: ClientId) -> Bson {
         Bson::String(id.as_str().to_owned())
     }
 }

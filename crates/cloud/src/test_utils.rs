@@ -5,7 +5,7 @@ use lazy_static::lazy_static;
 use mongodb::{bson::doc, Client};
 use netsblox_cloud_common::{
     api, AuthorizedServiceHost, BannedAccount, CollaborationInvite, FriendLink, Group, Library,
-    MagicLink, User,
+    LogMessage, MagicLink, User,
 };
 
 use crate::{
@@ -35,6 +35,7 @@ pub(crate) fn setup() -> TestSetupBuilder {
         magic_links: Vec::new(),
         collab_invites: Vec::new(),
         authorized_services: Vec::new(),
+        message_logs: Vec::new(),
         // network: None,
     }
 }
@@ -51,6 +52,7 @@ pub(crate) struct TestSetupBuilder {
     banned_users: Vec<String>,
     collab_invites: Vec<CollaborationInvite>,
     authorized_services: Vec<AuthorizedServiceHost>,
+    message_logs: Vec<LogMessage>,
     //network: Option<Addr<TopologyActor>>,
 }
 
@@ -102,6 +104,11 @@ impl TestSetupBuilder {
 
     pub(crate) fn with_magic_links(mut self, links: &[MagicLink]) -> Self {
         self.magic_links.extend_from_slice(links);
+        self
+    }
+
+    pub(crate) fn with_message_logs(mut self, groups: &[LogMessage]) -> Self {
+        self.message_logs.extend_from_slice(groups);
         self
     }
 
@@ -230,6 +237,13 @@ impl TestSetupBuilder {
             app_data
                 .authorized_services
                 .insert_many(self.authorized_services, None)
+                .await
+                .unwrap();
+        }
+        if !self.message_logs.is_empty() {
+            app_data
+                .logged_messages
+                .insert_many(self.message_logs, None)
                 .await
                 .unwrap();
         }

@@ -1,4 +1,4 @@
-use super::{can_edit_project, is_super_user};
+use super::{can_edit_project, is_super_user, try_edit_user};
 use crate::app_data::AppData;
 use crate::errors::{InternalError, UserError};
 use crate::network::topology;
@@ -29,6 +29,21 @@ pub(crate) struct ListClients {
 pub(crate) struct SendMessage {
     _private: (),
     pub(crate) msg: api::SendMessage,
+}
+
+pub(crate) struct LogMessage {
+    _private: (),
+    pub(crate) msg: api::LogMessage,
+}
+
+#[cfg(test)]
+impl LogMessage {
+    pub fn test(data: api::LogMessage) -> Self {
+        LogMessage {
+            msg: data,
+            _private: (),
+        }
+    }
 }
 
 pub(crate) async fn try_view_client(
@@ -187,6 +202,15 @@ pub(crate) async fn try_send_message(
     } else {
         Err(UserError::PermissionsError)
     }
+}
+
+pub(crate) async fn try_log_message(
+    app: &AppData,
+    req: &HttpRequest,
+    msg: api::LogMessage,
+) -> Result<LogMessage, UserError> {
+    try_edit_user(app, req, None, &msg.sender).await?;
+    Ok(LogMessage { _private: (), msg })
 }
 
 async fn get_project_for_client(
