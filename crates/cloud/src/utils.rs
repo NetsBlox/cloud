@@ -14,6 +14,7 @@ use netsblox_cloud_common::{
 use nonempty::NonEmpty;
 use regex::Regex;
 use rustrict::CensorStr;
+use serde::Serialize;
 use sha2::{Digest, Sha512};
 use std::{
     borrow::Borrow,
@@ -333,6 +334,20 @@ pub(crate) fn send_email(
     Ok(())
 }
 
+/// Convert the given struct into a serde_json::Map containing with the None fields removed.
+pub(crate) fn fields_with_values<T: Serialize>(
+    data: &T,
+) -> Option<serde_json::Map<String, serde_json::Value>> {
+    serde_json::to_value(&data).ok().and_then(|v| {
+        v.as_object().map(|obj| {
+            obj.clone()
+                .into_iter()
+                .filter(|(_key, value)| !value.is_null())
+                .collect::<serde_json::Map<String, serde_json::Value>>()
+        })
+    })
+}
+
 /// Find the usernames given the associated email address.
 ///
 /// Results in a UserNotFound error if no users are associated with the given email address.
@@ -369,6 +384,7 @@ mod tests {
         time::{Duration, SystemTime},
     };
 
+    use itertools::Itertools;
     use lru::LruCache;
     use mongodb::bson::DateTime;
 
@@ -570,5 +586,24 @@ mod tests {
                 assert!(usernames.iter().any(|name| name == "u2"));
             })
             .await;
+    }
+
+    #[actix_web::test]
+    async fn test_fields_with_values() {
+        #[derive(Serialize)]
+        struct TestData {
+            number: u8,
+            maybe: Option<bool>,
+        }
+
+        let data = TestData {
+            number: 1_u8,
+            maybe: None,
+        };
+
+        let obj = fields_with_values(&data).unwrap();
+
+        assert_eq!(obj.keys().count(), 1);
+        assert!(obj.get("maybe").is_none(), "Has a key with a null value");
     }
 }
