@@ -120,20 +120,39 @@ pub(crate) async fn try_create_user(
     }
 
     let new_user_role = data.role.unwrap_or(UserRole::User);
-    let is_privileged = !matches!(new_user_role, UserRole::User);
+    try_assign_role(app, req, &new_user_role)
+        .await
+        .map(|_| CreateUser { data, _private: () })
+}
+
+/// Permissions for assigning a given role
+struct AssignRole {
+    role: UserRole,
+    _private: (),
+}
+
+async fn try_assign_role(
+    app: &AppData,
+    req: &HttpRequest,
+    role: &UserRole,
+) -> Result<AssignRole, UserError> {
+    let is_privileged = !matches!(role, UserRole::User);
 
     let is_authorized = if is_privileged {
         // only moderators, admins can make privileged users (up to their role)
         let username = utils::get_username(req).ok_or(UserError::LoginRequiredError)?;
         let req_role = get_user_role(app, &username).await?;
-        dbg!(&req_role, &new_user_role);
-        req_role >= UserRole::Moderator && req_role >= new_user_role
+        dbg!(&req_role, &role);
+        req_role >= UserRole::Moderator && req_role >= *role
     } else {
         true
     };
 
     if is_authorized {
-        Ok(CreateUser { data, _private: () })
+        Ok(AssignRole {
+            role: role.to_owned(),
+            _private: (),
+        })
     } else {
         Err(UserError::PermissionsError)
     }
@@ -239,26 +258,23 @@ pub(crate) async fn try_update_user(
     username: &str,
     update: UpdateUserData,
 ) -> Result<UpdateUser, UserError> {
-    // If setting the role or group_id, we must be an admin
-    if update.group_id.is_some() || update.role.is_some() {
-        if is_super_user(app, req).await? {
-            Ok(UpdateUser {
-                username: username.to_owned(),
-                update,
-                _private: (),
-            })
-        } else {
-            Err(UserError::PermissionsError)
-        }
-    } else {
-        try_edit_user(&app, &req, None, &username)
-            .await
-            .map(|eu| UpdateUser {
-                username: eu.username.to_owned(),
-                update,
-                _private: (),
-            })
+    // If setting the group_id, we must be able to edit the group
+    if let Some(group_id) = update.group_id.as_ref() {
+        auth::try_edit_group(app, req, group_id).await?;
     }
+
+    // If setting the user role, we must be able to assign those roles
+    if let Some(role) = update.role.as_ref() {
+        try_assign_role(app, req, role).await?;
+    }
+
+    try_edit_user(&app, &req, None, &username)
+        .await
+        .map(|eu| UpdateUser {
+            username: eu.username.to_owned(),
+            update,
+            _private: (),
+        })
 }
 
 pub(crate) async fn try_set_password(
