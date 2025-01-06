@@ -125,9 +125,10 @@ pub(crate) async fn try_create_user(
         .map(|_| CreateUser { data, _private: () })
 }
 
-/// Permissions for assigning a given role
+/// Permissions for assigning a given role. Used as a helper method for related functions.
 struct AssignRole {
-    role: UserRole,
+    /// The role that the permissions are assigned for.
+    _role: UserRole,
     _private: (),
 }
 
@@ -150,7 +151,7 @@ async fn try_assign_role(
 
     if is_authorized {
         Ok(AssignRole {
-            role: role.to_owned(),
+            _role: role.to_owned(),
             _private: (),
         })
     } else {
@@ -268,7 +269,7 @@ pub(crate) async fn try_update_user(
         try_assign_role(app, req, role).await?;
     }
 
-    try_edit_user(&app, &req, None, &username)
+    try_edit_user(app, req, None, username)
         .await
         .map(|eu| UpdateUser {
             username: eu.username.to_owned(),

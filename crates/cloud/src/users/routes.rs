@@ -382,7 +382,7 @@ mod tests {
                 .await;
 
                 let user_data = api::UpdateUserData {
-                    group_id: Some(new_group.id),
+                    group_id: Some(new_group.id.clone()),
                     email: None,
                     role: None,
                 };
@@ -396,13 +396,18 @@ mod tests {
                 assert_eq!(response.status(), http::StatusCode::OK);
 
                 let query = doc! {"username": user.username};
-                let result = app_data
+                let updated_user = app_data
                     .users
                     .find_one(query, None)
                     .await
-                    .expect("Could not query for user");
+                    .expect("Could not query for user")
+                    .expect("could not find user");
 
-                assert!(result.is_some(), "User not found");
+                assert_eq!(
+                    &updated_user.group_id.unwrap(),
+                    &new_group.id,
+                    "User not found"
+                );
             })
             .await;
     }
@@ -461,6 +466,63 @@ mod tests {
 
                 let response = test::call_service(&app, req).await;
                 assert_eq!(response.status(), http::StatusCode::FORBIDDEN);
+            })
+            .await;
+    }
+
+    #[actix_web::test]
+    async fn test_update_user_elevate_role() {
+        let owner: User = api::NewUser {
+            username: "owner".into(),
+            email: "owner@netsblox.org".into(),
+            password: None,
+            group_id: None,
+            role: Some(UserRole::Moderator),
+        }
+        .into();
+        let user: User = api::NewUser {
+            username: "user".into(),
+            email: "user@netsblox.org".into(),
+            password: None,
+            group_id: None,
+            role: None,
+        }
+        .into();
+
+        test_utils::setup()
+            .with_users(&[owner.clone(), user.clone()])
+            .run(|app_data| async move {
+                let app = test::init_service(
+                    App::new()
+                        .app_data(web::Data::new(app_data.clone()))
+                        .wrap(test_utils::cookie::middleware())
+                        .configure(config),
+                )
+                .await;
+
+                let user_data = api::UpdateUserData {
+                    group_id: None,
+                    email: None,
+                    role: Some(UserRole::Moderator),
+                };
+                let req = test::TestRequest::patch()
+                    .cookie(test_utils::cookie::new(&owner.username))
+                    .uri(&format!("/{}", &user.username))
+                    .set_json(&user_data)
+                    .to_request();
+
+                let response = test::call_service(&app, req).await;
+                assert_eq!(response.status(), http::StatusCode::OK);
+
+                let query = doc! {"username": user.username};
+                let updated_user = app_data
+                    .users
+                    .find_one(query, None)
+                    .await
+                    .expect("Could not query for user")
+                    .expect("could not find user");
+
+                assert!(matches!(updated_user.role, UserRole::Moderator));
             })
             .await;
     }
