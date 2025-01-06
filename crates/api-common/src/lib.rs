@@ -723,6 +723,18 @@ pub struct SendMessage {
     pub content: Value,
 }
 
+/// Send message request (for authorized services)
+#[derive(Deserialize, Serialize, Debug, Clone, TS)]
+#[serde(rename_all = "camelCase")]
+#[ts(export)]
+pub struct LogMessage {
+    pub sender: String,
+    pub recipients: Vec<String>,
+    // TODO: Should we only allow "message" types or any sort of message?
+    #[ts(type = "object")]
+    pub content: Value,
+}
+
 #[derive(Deserialize, Serialize, Debug, Clone, TS)]
 #[serde(rename_all = "camelCase")]
 #[ts(export)]

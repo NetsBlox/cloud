@@ -10,7 +10,7 @@ use mongodb::{
 };
 use netsblox_cloud_common::{
     api::{self, SaveState},
-    NetworkTraceMetadata, OccupantInvite, ProjectMetadata, SentMessage,
+    LogMessage, NetworkTraceMetadata, OccupantInvite, ProjectMetadata, SentMessage,
 };
 
 use crate::{
@@ -26,6 +26,7 @@ pub(crate) struct NetworkActions<'a> {
     occupant_invites: &'a Collection<OccupantInvite>,
     project_cache: &'a Arc<RwLock<LruCache<api::ProjectId, ProjectMetadata>>>,
     recorded_messages: &'a Collection<SentMessage>,
+    logged_messages: &'a Collection<LogMessage>,
     network: &'a Addr<TopologyActor>,
 }
 
@@ -37,12 +38,14 @@ impl<'a> NetworkActions<'a> {
 
         occupant_invites: &'a Collection<OccupantInvite>,
         recorded_messages: &'a Collection<SentMessage>,
+        logged_messages: &'a Collection<LogMessage>,
     ) -> Self {
         Self {
             project_metadata,
             occupant_invites,
             project_cache,
             recorded_messages,
+            logged_messages,
             network,
         }
     }
@@ -376,10 +379,30 @@ impl<'a> NetworkActions<'a> {
             message: sm.msg.clone(),
         });
     }
+
+    pub(crate) async fn get_message_logs(
+        &self,
+        vu: &auth::ViewUser,
+    ) -> Result<Vec<api::LogMessage>, UserError> {
+        let filter = doc! { "sender": vu.username.clone()};
+        let messages: Vec<api::LogMessage> = self
+            .logged_messages
+            .find(filter, None)
+            .await
+            .map_err(InternalError::DatabaseConnectionError)?
+            .try_collect::<Vec<_>>()
+            .await
+            .map_err(InternalError::DatabaseConnectionError)?
+            .into_iter()
+            .map(Into::into)
+            .collect();
+        Ok(messages)
+    }
 }
 
 #[cfg(test)]
 mod tests {
+    use netsblox_cloud_common::User;
     use std::collections::HashMap;
 
     use crate::test_utils;
@@ -457,6 +480,48 @@ mod tests {
                 let vc = auth::ViewClient::test(api::ClientId::new("_nonexistentClientId".into()));
                 let state = actions.get_client_info(&vc).await;
                 assert!(matches!(state, Err(UserError::ClientNotFoundError)));
+            })
+            .await;
+    }
+
+    #[actix_web::test]
+    async fn test_get_message_logs() {
+        let sendr: User = api::NewUser {
+            username: "sender".to_string(),
+            email: "sender@netsblox.org".into(),
+            password: None,
+            group_id: None,
+            role: None,
+        }
+        .into();
+
+        let recvr: User = api::NewUser {
+            username: "recvr".to_string(),
+            email: "recvr@netsblox.org".into(),
+            password: None,
+            group_id: None,
+            role: None,
+        }
+        .into();
+
+        let log: LogMessage = LogMessage {
+            sender: sendr.username.clone(),
+            recipients: vec![recvr.username.clone()],
+            content: serde_json::json!({}),
+            created_at: DateTime::now(),
+        };
+
+        let vu = auth::ViewUser::test(sendr.username.clone());
+
+        test_utils::setup()
+            .with_users(&[sendr.clone(), recvr.clone()])
+            .with_message_logs(&[log])
+            .run(|app_data| async move {
+                let actions = app_data.as_network_actions();
+
+                let result = actions.get_message_logs(&vu).await.unwrap();
+
+                assert!(!result.is_empty());
             })
             .await;
     }

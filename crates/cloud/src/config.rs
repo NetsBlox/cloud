@@ -1,10 +1,13 @@
 use std::{env, num::NonZeroUsize};
 
-use config::{Config, ConfigError, File};
+use figment::{
+    providers::{Format, Toml},
+    Figment,
+};
 use netsblox_cloud_common::api::ServiceHostScope;
 use serde::Deserialize;
 
-#[derive(Clone, Deserialize)]
+#[derive(Clone, Deserialize, Debug)]
 pub struct Database {
     pub url: String,
     pub name: String,
@@ -24,39 +27,39 @@ pub struct S3Credentials {
     pub secret_key: String,
 }
 
-#[derive(Clone, Deserialize)]
+#[derive(Clone, Deserialize, Debug)]
 pub struct CookieSettings {
     pub name: String,
     pub domain: String,
     pub key: String,
 }
 
-#[derive(Clone, Deserialize)]
+#[derive(Clone, Deserialize, Debug)]
 pub struct EmailSettings {
     pub sender: String,
     pub smtp: SMTPSettings,
 }
 
-#[derive(Clone, Deserialize)]
+#[derive(Clone, Deserialize, Debug)]
 pub struct SMTPSettings {
     pub host: String,
     pub username: String,
     pub password: String,
 }
 
-#[derive(Clone, Deserialize)]
+#[derive(Clone, Deserialize, Debug)]
 pub struct SecuritySettings {
     pub allow_tor_login: bool,
 }
 
-#[derive(Clone, Deserialize)]
+#[derive(Clone, Deserialize, Debug)]
 pub struct UserCreds {
     pub username: String,
     pub password: String,
     pub email: String,
 }
 
-#[derive(Clone, Deserialize)]
+#[derive(Clone, Deserialize, Debug)]
 pub struct CacheSettings {
     pub num_projects: NonZeroUsize,
     pub num_users_membership_data: NonZeroUsize,
@@ -65,7 +68,7 @@ pub struct CacheSettings {
     pub num_addresses: NonZeroUsize,
 }
 
-#[derive(Clone, Deserialize)]
+#[derive(Clone, Deserialize, Debug)]
 pub struct AuthorizedServiceHost {
     pub(crate) id: String,
     pub(crate) url: String,
@@ -85,7 +88,7 @@ impl From<AuthorizedServiceHost> for netsblox_cloud_common::AuthorizedServiceHos
     }
 }
 
-#[derive(Clone, Deserialize)]
+#[derive(Clone, Deserialize, Debug)]
 pub struct Settings {
     pub address: String,
     pub public_url: String,
@@ -101,13 +104,13 @@ pub struct Settings {
 }
 
 impl Settings {
-    pub fn new() -> Result<Self, ConfigError> {
+    pub fn new() -> Result<Self, figment::Error> {
         let run_mode = env::var("RUN_MODE").unwrap_or_else(|_| "development".to_owned());
-        let mut c = Config::new();
+        let c: Settings = Figment::new()
+            .merge(Toml::file("config/default.toml"))
+            .merge(Toml::file(format!("config/{}.toml", run_mode)))
+            .extract()?;
 
-        c.merge(File::with_name("config/default"))?;
-        c.merge(File::with_name(&format!("config/{}", run_mode)).required(false))?;
-
-        c.try_into()
+        Ok(c)
     }
 }
