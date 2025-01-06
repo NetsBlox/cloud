@@ -696,9 +696,11 @@ mod tests {
             role: None,
         }
         .into();
+        let group = Group::new(user.username.clone(), "someGroup".into());
 
         test_utils::setup()
             .with_users(&[user.clone()])
+            .with_groups(&[group.clone()])
             .run(|app_data| async move {
                 let actions = app_data.as_user_actions();
 

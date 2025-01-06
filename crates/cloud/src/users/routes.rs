@@ -349,6 +349,123 @@ mod tests {
     }
 
     #[actix_web::test]
+    async fn test_update_user_switch_group() {
+        let owner: User = api::NewUser {
+            username: "owner".into(),
+            email: "owner@netsblox.org".into(),
+            password: None,
+            group_id: None,
+            role: None,
+        }
+        .into();
+        let old_group = Group::new(owner.username.clone(), "oldGroup".into());
+        let new_group = Group::new(owner.username.clone(), "newGroup".into());
+        let user: User = api::NewUser {
+            username: "user".into(),
+            email: "user@netsblox.org".into(),
+            password: None,
+            group_id: Some(old_group.id.clone()),
+            role: None,
+        }
+        .into();
+
+        test_utils::setup()
+            .with_users(&[owner.clone(), user.clone()])
+            .with_groups(&[old_group.clone(), new_group.clone()])
+            .run(|app_data| async move {
+                let app = test::init_service(
+                    App::new()
+                        .app_data(web::Data::new(app_data.clone()))
+                        .wrap(test_utils::cookie::middleware())
+                        .configure(config),
+                )
+                .await;
+
+                let user_data = api::UpdateUserData {
+                    group_id: Some(new_group.id),
+                    email: None,
+                    role: None,
+                };
+                let req = test::TestRequest::patch()
+                    .cookie(test_utils::cookie::new(&owner.username))
+                    .uri(&format!("/{}", &user.username))
+                    .set_json(&user_data)
+                    .to_request();
+
+                let response = test::call_service(&app, req).await;
+                assert_eq!(response.status(), http::StatusCode::OK);
+
+                let query = doc! {"username": user.username};
+                let result = app_data
+                    .users
+                    .find_one(query, None)
+                    .await
+                    .expect("Could not query for user");
+
+                assert!(result.is_some(), "User not found");
+            })
+            .await;
+    }
+
+    #[actix_web::test]
+    async fn test_update_user_switch_to_other_group() {
+        let owner: User = api::NewUser {
+            username: "owner".into(),
+            email: "owner@netsblox.org".into(),
+            password: None,
+            group_id: None,
+            role: None,
+        }
+        .into();
+        let other: User = api::NewUser {
+            username: "other".into(),
+            email: "other@netsblox.org".into(),
+            password: None,
+            group_id: None,
+            role: None,
+        }
+        .into();
+        let old_group = Group::new(owner.username.clone(), "oldGroup".into());
+        let new_group = Group::new(other.username.clone(), "newGroup".into());
+        let user: User = api::NewUser {
+            username: "user".into(),
+            email: "user@netsblox.org".into(),
+            password: None,
+            group_id: Some(old_group.id.clone()),
+            role: None,
+        }
+        .into();
+
+        test_utils::setup()
+            .with_users(&[owner.clone(), user.clone()])
+            .with_groups(&[old_group.clone(), new_group.clone()])
+            .run(|app_data| async move {
+                let app = test::init_service(
+                    App::new()
+                        .app_data(web::Data::new(app_data.clone()))
+                        .wrap(test_utils::cookie::middleware())
+                        .configure(config),
+                )
+                .await;
+
+                let user_data = api::UpdateUserData {
+                    group_id: Some(new_group.id),
+                    email: None,
+                    role: None,
+                };
+                let req = test::TestRequest::patch()
+                    .cookie(test_utils::cookie::new(&owner.username))
+                    .uri(&format!("/{}", &user.username))
+                    .set_json(&user_data)
+                    .to_request();
+
+                let response = test::call_service(&app, req).await;
+                assert_eq!(response.status(), http::StatusCode::FORBIDDEN);
+            })
+            .await;
+    }
+
+    #[actix_web::test]
     async fn test_create_user_profane() {
         test_utils::setup()
             .run(|app_data| async move {
