@@ -203,11 +203,6 @@ impl<'a> UserActions<'a> {
         Ok(())
     }
 
-    // FIXME: what about permissions?
-    // maybe I should split these apart to individual functions - auth will be easier:
-    //  - role (admin required)
-    //  - group_id (admin or group owner)
-    //  - email (edit user)
     pub(crate) async fn update_user(&self, eu: &auth::UpdateUser) -> Result<api::User, UserError> {
         let query = doc! {"username": &eu.username};
 
