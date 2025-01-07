@@ -2574,7 +2574,7 @@ dependencies = [
 
 [[package]]
 name = "netsblox-api"
-version = "1.6.3"
+version = "1.6.4"
 dependencies = [
  "derive_more",
  "futures-util",
@@ -2589,7 +2589,7 @@ dependencies = [
 
 [[package]]
 name = "netsblox-api-common"
-version = "1.6.3"
+version = "1.6.4"
 dependencies = [
  "bson",
  "derive_more",
@@ -2601,7 +2601,7 @@ dependencies = [
 
 [[package]]
 name = "netsblox-cli"
-version = "1.6.3"
+version = "1.6.4"
 dependencies = [
  "clap",
  "confy",
@@ -2621,7 +2621,7 @@ dependencies = [
 
 [[package]]
 name = "netsblox-cloud"
-version = "1.6.3"
+version = "1.6.4"
 dependencies = [
  "actix",
  "actix-cors",
@@ -2661,7 +2661,7 @@ dependencies = [
 
 [[package]]
 name = "netsblox-cloud-common"
-version = "1.6.3"
+version = "1.6.4"
 dependencies = [
  "hex",
  "mongodb",
@@ -2675,7 +2675,7 @@ dependencies = [
 
 [[package]]
 name = "netsblox-migrate"
-version = "1.6.3"
+version = "1.6.4"
 dependencies = [
  "aws-config",
  "aws-credential-types",
