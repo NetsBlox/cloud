@@ -1,6 +1,6 @@
 [package]
 name = "netsblox-cloud"
-version = "1.6.0"
+version = "1.6.3"
 edition = "2021"
 license = "MIT"
 description = """
@@ -31,7 +31,7 @@ figment = { version = "0.10.19", features = ["toml"]}
 itertools = "0.10.3"
 uuid = { version = "1.6.1", features = ["v4", "fast-rng", "serde"] }
 derive_more = "0.99.17"
-netsblox-cloud-common = { path = "../cloud-common", version = "1.6.0" }
+netsblox-cloud-common = { path = "../cloud-common" }
 reqwest = {version = "0.11.20", features = ["cookies", "json"]}
 lru = "0.11.1"
 lettre = {version = "0.11.2", features = ["smtp-transport", "builder"]}

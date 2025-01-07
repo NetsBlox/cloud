@@ -1,2 +1,3 @@
 [workspace]
 members = ["crates/cloud", "crates/cli", "crates/api", "crates/api-common", "crates/cloud-common", "crates/migrate"]
+resolver = "2"
