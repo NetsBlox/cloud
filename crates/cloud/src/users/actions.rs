@@ -203,6 +203,32 @@ impl<'a> UserActions<'a> {
         Ok(())
     }
 
+    pub(crate) async fn update_user(&self, eu: &auth::UpdateUser) -> Result<api::User, UserError> {
+        let query = doc! {"username": &eu.username};
+
+        // Get a doc with just the fields to set
+        let update_fields = utils::fields_with_values(&eu.update)
+            .and_then(|obj| if obj.is_empty() { None } else { Some(obj) })
+            .ok_or(UserError::UserUpdateFieldRequiredError)?;
+
+        let update = doc! {
+          "$set": mongodb::bson::to_document(&update_fields).unwrap()
+        };
+
+        let options = mongodb::options::FindOneAndUpdateOptions::builder()
+            .return_document(ReturnDocument::After)
+            .build();
+
+        let user = self
+            .users
+            .find_one_and_update(query, update, options)
+            .await
+            .map_err(InternalError::DatabaseConnectionError)?
+            .ok_or(UserError::UserNotFoundError)?;
+
+        Ok(user.into())
+    }
+
     pub(crate) async fn set_password(
         &self,
         sp: &auth::SetPassword,
@@ -541,7 +567,7 @@ impl TryFrom<ForgotUsernameEmail> for lettre::Message {
 
 #[cfg(test)]
 mod tests {
-    use netsblox_cloud_common::Group;
+    use netsblox_cloud_common::{api::UserRole, Group};
 
     use crate::test_utils;
 
@@ -579,6 +605,127 @@ mod tests {
                     user.group_id.unwrap(),
                     group.id,
                     "User assigned to incorrect group"
+                );
+            })
+            .await;
+    }
+
+    #[actix_web::test]
+    async fn test_update_user_email() {
+        let user: User = api::NewUser {
+            username: "user".into(),
+            email: "user@netsblox.org".into(),
+            password: None,
+            group_id: None,
+            role: None,
+        }
+        .into();
+
+        test_utils::setup()
+            .with_users(&[user.clone()])
+            .run(|app_data| async move {
+                let actions = app_data.as_user_actions();
+
+                let data = api::UpdateUserData {
+                    email: Some("brian@netsblox.org".into()),
+                    group_id: None,
+                    role: None,
+                };
+                let auth_uu = auth::UpdateUser::test(user.username.clone(), data.clone());
+                let res_user = actions.update_user(&auth_uu).await.unwrap();
+
+                let query = doc! {"username": user.username};
+                let user = actions
+                    .users
+                    .find_one(query, None)
+                    .await
+                    .unwrap()
+                    .expect("No user found.");
+
+                assert!(matches!(user.role, UserRole::User));
+                assert_eq!(user.email, data.email.unwrap(), "Email not updated.");
+                assert_eq!(res_user.email, user.email, "Returned original user");
+            })
+            .await;
+    }
+
+    #[actix_web::test]
+    async fn test_update_user_role() {
+        let user: User = api::NewUser {
+            username: "user".into(),
+            email: "user@netsblox.org".into(),
+            password: None,
+            group_id: None,
+            role: None,
+        }
+        .into();
+
+        test_utils::setup()
+            .with_users(&[user.clone()])
+            .run(|app_data| async move {
+                let actions = app_data.as_user_actions();
+
+                let data = api::UpdateUserData {
+                    email: None,
+                    group_id: None,
+                    role: Some(UserRole::Teacher),
+                };
+                let auth_uu = auth::UpdateUser::test(user.username.clone(), data);
+                actions.update_user(&auth_uu).await.unwrap();
+
+                let query = doc! {"username": user.username};
+                let user = actions
+                    .users
+                    .find_one(query, None)
+                    .await
+                    .unwrap()
+                    .expect("No user found.");
+
+                assert!(matches!(user.role, UserRole::Teacher));
+            })
+            .await;
+    }
+
+    #[actix_web::test]
+    async fn test_update_user_email_group_id() {
+        let user: User = api::NewUser {
+            username: "user".into(),
+            email: "user@netsblox.org".into(),
+            password: None,
+            group_id: None,
+            role: None,
+        }
+        .into();
+        let group = Group::new(user.username.clone(), "someGroup".into());
+
+        test_utils::setup()
+            .with_users(&[user.clone()])
+            .with_groups(&[group.clone()])
+            .run(|app_data| async move {
+                let actions = app_data.as_user_actions();
+
+                let data = api::UpdateUserData {
+                    email: Some("brian@netsblox.org".into()),
+                    group_id: Some(api::GroupId::new("someGroup".into())),
+                    role: None,
+                };
+                let auth_uu = auth::UpdateUser::test(user.username.clone(), data.clone());
+                actions.update_user(&auth_uu).await.unwrap();
+
+                let query = doc! {"username": user.username};
+                let user = actions
+                    .users
+                    .find_one(query, None)
+                    .await
+                    .unwrap()
+                    .expect("No user found.");
+
+                assert!(matches!(user.role, UserRole::User));
+                assert_eq!(user.email, data.email.unwrap(), "Email not updated.");
+                assert_eq!(
+                    user.group_id.unwrap(),
+                    data.group_id.unwrap(),
+                    "GroupId not updated."
                 );
             })
             .await;

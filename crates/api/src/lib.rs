@@ -4,7 +4,7 @@ pub mod error;
 use crate::common::*;
 use futures_util::SinkExt;
 use netsblox_api_common::{
-    CreateGroupData, CreateMagicLinkData, ServiceHostScope, UpdateGroupData,
+    CreateGroupData, CreateMagicLinkData, ServiceHostScope, UpdateGroupData, UpdateUserData,
 };
 use reqwest::{self, Method, RequestBuilder, Response};
 use serde::{Deserialize, Serialize};
@@ -176,6 +176,23 @@ impl Client {
     pub async fn view_user(&self, username: &str) -> Result<User, error::Error> {
         let response = self
             .request(Method::GET, &format!("/users/{}", username))
+            .send()
+            .await
+            .map_err(error::Error::RequestError)?;
+
+        let response = check_response(response).await?;
+        Ok(response.json::<User>().await.unwrap())
+    }
+
+    pub async fn update_user(
+        &self,
+        username: &str,
+        update: &UpdateUserData,
+    ) -> Result<User, error::Error> {
+        let path = format!("/users/{}", username);
+        let response = self
+            .request(Method::PATCH, &path)
+            .json(&update)
             .send()
             .await
             .map_err(error::Error::RequestError)?;

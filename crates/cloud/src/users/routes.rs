@@ -226,6 +226,22 @@ async fn view_user(
     Ok(HttpResponse::Ok().json(user))
 }
 
+#[patch("/{username}")]
+async fn update_user(
+    app: web::Data<AppData>,
+    path: web::Path<(String,)>,
+    data: web::Json<api::UpdateUserData>,
+    req: HttpRequest,
+) -> Result<HttpResponse, UserError> {
+    let (username,) = path.into_inner();
+    let auth_uu = auth::try_update_user(&app, &req, &username, data.into_inner()).await?;
+
+    let actions = app.as_user_actions();
+    let user = actions.update_user(&auth_uu).await?;
+
+    Ok(HttpResponse::Ok().json(user))
+}
+
 #[post("/{username}/link/")]
 async fn link_account(
     app: web::Data<AppData>,
@@ -264,6 +280,7 @@ async fn unlink_account(
 
 pub fn config(cfg: &mut web::ServiceConfig) {
     cfg.service(create_user)
+        .service(update_user)
         .service(list_users)
         .service(login)
         .service(logout)
@@ -327,6 +344,185 @@ mod tests {
                     .expect("Could not query for user");
 
                 assert!(result.is_some(), "User not found");
+            })
+            .await;
+    }
+
+    #[actix_web::test]
+    async fn test_update_user_switch_group() {
+        let owner: User = api::NewUser {
+            username: "owner".into(),
+            email: "owner@netsblox.org".into(),
+            password: None,
+            group_id: None,
+            role: None,
+        }
+        .into();
+        let old_group = Group::new(owner.username.clone(), "oldGroup".into());
+        let new_group = Group::new(owner.username.clone(), "newGroup".into());
+        let user: User = api::NewUser {
+            username: "user".into(),
+            email: "user@netsblox.org".into(),
+            password: None,
+            group_id: Some(old_group.id.clone()),
+            role: None,
+        }
+        .into();
+
+        test_utils::setup()
+            .with_users(&[owner.clone(), user.clone()])
+            .with_groups(&[old_group.clone(), new_group.clone()])
+            .run(|app_data| async move {
+                let app = test::init_service(
+                    App::new()
+                        .app_data(web::Data::new(app_data.clone()))
+                        .wrap(test_utils::cookie::middleware())
+                        .configure(config),
+                )
+                .await;
+
+                let user_data = api::UpdateUserData {
+                    group_id: Some(new_group.id.clone()),
+                    email: None,
+                    role: None,
+                };
+                let req = test::TestRequest::patch()
+                    .cookie(test_utils::cookie::new(&owner.username))
+                    .uri(&format!("/{}", &user.username))
+                    .set_json(&user_data)
+                    .to_request();
+
+                let response = test::call_service(&app, req).await;
+                assert_eq!(response.status(), http::StatusCode::OK);
+
+                let query = doc! {"username": user.username};
+                let updated_user = app_data
+                    .users
+                    .find_one(query, None)
+                    .await
+                    .expect("Could not query for user")
+                    .expect("could not find user");
+
+                assert_eq!(
+                    &updated_user.group_id.unwrap(),
+                    &new_group.id,
+                    "User not found"
+                );
+            })
+            .await;
+    }
+
+    #[actix_web::test]
+    async fn test_update_user_switch_to_other_group() {
+        let owner: User = api::NewUser {
+            username: "owner".into(),
+            email: "owner@netsblox.org".into(),
+            password: None,
+            group_id: None,
+            role: None,
+        }
+        .into();
+        let other: User = api::NewUser {
+            username: "other".into(),
+            email: "other@netsblox.org".into(),
+            password: None,
+            group_id: None,
+            role: None,
+        }
+        .into();
+        let old_group = Group::new(owner.username.clone(), "oldGroup".into());
+        let new_group = Group::new(other.username.clone(), "newGroup".into());
+        let user: User = api::NewUser {
+            username: "user".into(),
+            email: "user@netsblox.org".into(),
+            password: None,
+            group_id: Some(old_group.id.clone()),
+            role: None,
+        }
+        .into();
+
+        test_utils::setup()
+            .with_users(&[owner.clone(), user.clone()])
+            .with_groups(&[old_group.clone(), new_group.clone()])
+            .run(|app_data| async move {
+                let app = test::init_service(
+                    App::new()
+                        .app_data(web::Data::new(app_data.clone()))
+                        .wrap(test_utils::cookie::middleware())
+                        .configure(config),
+                )
+                .await;
+
+                let user_data = api::UpdateUserData {
+                    group_id: Some(new_group.id),
+                    email: None,
+                    role: None,
+                };
+                let req = test::TestRequest::patch()
+                    .cookie(test_utils::cookie::new(&owner.username))
+                    .uri(&format!("/{}", &user.username))
+                    .set_json(&user_data)
+                    .to_request();
+
+                let response = test::call_service(&app, req).await;
+                assert_eq!(response.status(), http::StatusCode::FORBIDDEN);
+            })
+            .await;
+    }
+
+    #[actix_web::test]
+    async fn test_update_user_elevate_role() {
+        let owner: User = api::NewUser {
+            username: "owner".into(),
+            email: "owner@netsblox.org".into(),
+            password: None,
+            group_id: None,
+            role: Some(UserRole::Moderator),
+        }
+        .into();
+        let user: User = api::NewUser {
+            username: "user".into(),
+            email: "user@netsblox.org".into(),
+            password: None,
+            group_id: None,
+            role: None,
+        }
+        .into();
+
+        test_utils::setup()
+            .with_users(&[owner.clone(), user.clone()])
+            .run(|app_data| async move {
+                let app = test::init_service(
+                    App::new()
+                        .app_data(web::Data::new(app_data.clone()))
+                        .wrap(test_utils::cookie::middleware())
+                        .configure(config),
+                )
+                .await;
+
+                let user_data = api::UpdateUserData {
+                    group_id: None,
+                    email: None,
+                    role: Some(UserRole::Moderator),
+                };
+                let req = test::TestRequest::patch()
+                    .cookie(test_utils::cookie::new(&owner.username))
+                    .uri(&format!("/{}", &user.username))
+                    .set_json(&user_data)
+                    .to_request();
+
+                let response = test::call_service(&app, req).await;
+                assert_eq!(response.status(), http::StatusCode::OK);
+
+                let query = doc! {"username": user.username};
+                let updated_user = app_data
+                    .users
+                    .find_one(query, None)
+                    .await
+                    .expect("Could not query for user")
+                    .expect("could not find user");
+
+                assert!(matches!(updated_user.role, UserRole::Moderator));
             })
             .await;
     }

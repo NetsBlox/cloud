@@ -48,6 +48,15 @@ pub struct User {
     pub services_hosts: Option<Vec<ServiceHost>>,
 }
 
+#[derive(Serialize, Deserialize, TS, Clone)]
+#[serde(rename_all = "camelCase")]
+#[ts(export)]
+pub struct UpdateUserData {
+    pub email: Option<String>,
+    pub group_id: Option<GroupId>,
+    pub role: Option<UserRole>,
+}
+
 #[derive(Serialize, Deserialize, Debug, TS)]
 #[serde(rename_all = "camelCase")]
 #[ts(export)]
