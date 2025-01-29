@@ -10,36 +10,36 @@ A cloud server for the NetsBlox programming environment. Provides user/project m
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-actix-web = { version = "4.4.0", features = ["cookies"] }
-actix-cors = "0.6.0"
-serde = "1.0.130"
-serde_json = "1.0.59"
-mongodb = "2.6.1"
-futures = "0.3.0"
-env_logger = "0.10.0"
-log = "0.4.16"
-rustrict = "0.1.30"
+actix-web = { version = "4.9.0", features = ["cookies"] }
+actix-cors = "0.6.5"
+serde = "1.0.217"
+serde_json = "1.0.138"
+mongodb = "2.8.2"
+futures = "0.3.31"
+env_logger = "0.10.2"
+log = "0.4.25"
+rustrict = "0.1.42"
 regex = "1"
-lazy_static = "1.4.0"
+lazy_static = "1.5.0"
 actix-session = { version = "0.7.2", features = ["cookie-session"] }
-actix-web-actors = "4.2.0"
+actix-web-actors = "4.3.1"
 actix = "0.12.0"
-sha2 = "0.10.7"
-passwords = "3.1.8"
+sha2 = "0.10.8"
+passwords = "3.1.16"
 hex = "0.4.3"
 figment = { version = "0.10.19", features = ["toml"]}
-itertools = "0.10.3"
-uuid = { version = "1.6.1", features = ["v4", "fast-rng", "serde"] }
-derive_more = "0.99.17"
+itertools = "0.10.5"
+uuid = { version = "1.12.1", features = ["v4", "fast-rng", "serde"] }
+derive_more = "0.99.18"
 netsblox-cloud-common = { path = "../cloud-common", version = "1.6.6" }
-reqwest = {version = "0.11.20", features = ["cookies", "json"]}
+reqwest = {version = "0.11.27", features = ["cookies", "json"]}
 lru = "0.11.1"
-lettre = {version = "0.11.2", features = ["smtp-transport", "builder"]}
-image = "0.24.7"
-base64 = "0.13.0"
-tokio = { version = "1.13.1", features = ["sync", "time"]}
+lettre = {version = "0.11.11", features = ["smtp-transport", "builder"]}
+image = "0.24.9"
+base64 = "0.13.1"
+tokio = { version = "1.43.0", features = ["sync", "time"]}
 actix-web-prom = "0.6.0"
-prometheus = "0.13.3"
+prometheus = "0.13.4"
 aws-sdk-s3 = "0.31.2"
 aws-credential-types = "0.56.1"
 aws-config = "0.56.1"
