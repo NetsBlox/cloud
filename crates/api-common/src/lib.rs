@@ -9,7 +9,7 @@ use serde::{
     Deserialize, Deserializer, Serialize,
 };
 use serde_json::Value;
-use std::{collections::HashMap, str::FromStr, time::SystemTime};
+use std::{collections::HashMap, str::FromStr as _, time::SystemTime};
 use ts_rs::TS;
 use uuid::Uuid;
 
@@ -119,7 +119,7 @@ pub struct OccupantInvite {
 }
 
 #[derive(Debug, Display, Error, TS)]
-#[display(fmt = "Unable to parse user role. Expected admin, moderator, or user.")]
+#[display("Unable to parse user role. Expected admin, moderator, or user.")]
 #[ts(export)]
 pub struct UserRoleError;
 
@@ -610,7 +610,7 @@ impl ClientId {
 }
 
 #[derive(Debug, Display, Error, TS)]
-#[display(fmt = "Invalid client ID. Must start with a _")]
+#[display("Invalid client ID. Must start with a _")]
 #[ts(export)]
 pub struct ClientIDError;
 

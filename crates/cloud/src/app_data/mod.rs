@@ -502,7 +502,7 @@ impl AppData {
             let query = doc! {"username": &username};
             let is_admin = self
                 .users
-                .find_one(query, None)
+                .find_one(query)
                 .await
                 .map_err(|err| {
                     error!("Database error: {:?}", err);
