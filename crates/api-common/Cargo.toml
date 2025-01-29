@@ -13,10 +13,10 @@ A crate containing the types used by the NetsBlox cloud API
 uuid = { version = "1.12.1", features = ["v4", "fast-rng", "serde"] }
 serde = { version = "1.0.217", features = ["derive"] }
 bson = { version = "2.13.0", optional = true }
-derive_more = "0.99.18"
+derive_more = { version = "1.0.0", feature = ["from_str"] }
 serde_json = "1.0.138"
 # TODO: make this a dev dependency or a feature
-ts-rs = { version = "7.1", features = ["uuid-impl", "serde-compat"] }
+ts-rs = { version = "10.1", features = ["uuid-impl", "serde-compat"] }
 
 [features]
 to_bson = ["bson"]

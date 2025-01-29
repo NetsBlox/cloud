@@ -17,14 +17,14 @@ path = "src/main.rs"
 uuid = { version = "1.12.1", features = ["v4", "fast-rng", "serde"] }
 clap = { version = "4.5.27", features = ["derive"] }
 tokio = { version = "1", features = ["full"] }
-confy = "0.4.0"
+confy = "0.6.1"
 serde = { version = "1.0.217", features = ["derive"] }
 serde_json = "1.0.138"
-inquire = "0.6.2"
-reqwest = {version = "0.11.27", features = ["json", "cookies"]}
+inquire = "0.7.5"
+reqwest = {version = "0.12.12", features = ["json", "cookies"]}
 netsblox-api = { path = "../api", version = "1.6.6" }
 futures-util = "0.3.31"
 exitcode = "1.1.2"
 xmlparser = "0.13.6"
 lazy_static = "1.5.0"
-derive_more = "0.99.18"
+derive_more = { version = "1.0.0", features = ["from_str"] }
