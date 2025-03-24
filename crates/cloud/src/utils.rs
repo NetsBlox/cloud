@@ -17,7 +17,6 @@ use netsblox_cloud_common::{
 use nonempty::NonEmpty;
 use regex::Regex;
 use rustrict::CensorStr;
-use s3::operation::put_object::PutObjectOutput;
 use serde::Serialize;
 use sha2::{Digest, Sha512};
 use std::{
@@ -412,8 +411,8 @@ pub(crate) async fn upload(
 ) -> Result<PutObjectOutput, InternalError> {
     client
         .put_object()
-        .bucket(bucket.to_owned())
-        .key(key)
+        .bucket(bucket.as_str())
+        .key(key.as_str())
         .body(String::into_bytes(body).into())
         .send()
         .await
