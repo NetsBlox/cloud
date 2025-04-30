@@ -1,14 +1,11 @@
-use std::{
-    any::Any,
-    sync::{Arc, Mutex},
-};
+use std::sync::{Arc, Mutex};
 
 use futures::{future::join_all, Future};
 use lazy_static::lazy_static;
 use mongodb::{bson::doc, Client};
 use netsblox_cloud_common::{
-    api, AuthorizedServiceHost, BannedAccount, CollaborationInvite, FriendLink, Gallery,
-    GalleryProjectMetadata, Group, Library, LogMessage, MagicLink, User,
+    api, Assignment, AuthorizedServiceHost, BannedAccount, CollaborationInvite, FriendLink,
+    Gallery, GalleryProjectMetadata, Group, Library, LogMessage, MagicLink, Submission, User,
 };
 
 use crate::{
@@ -25,7 +22,7 @@ lazy_static! {
 pub(crate) fn setup() -> TestSetupBuilder {
     let mut counter = COUNTER.lock().unwrap();
     *counter += 1_u32;
-    let prefix = format!("test-{}", counter);
+    let prefix = format!("test-{counter}");
     TestSetupBuilder {
         prefix,
         users: Vec::new(),
@@ -33,6 +30,8 @@ pub(crate) fn setup() -> TestSetupBuilder {
         projects: Vec::new(),
         libraries: Vec::new(),
         groups: Vec::new(),
+        assignments: Vec::new(),
+        submissions: Vec::new(),
         clients: Vec::new(),
         friends: Vec::new(),
         magic_links: Vec::new(),
@@ -53,6 +52,8 @@ pub(crate) struct TestSetupBuilder {
     galleries: Vec<Gallery>,
     gallery_projects: Vec<GalleryProjectMetadata>,
     groups: Vec<Group>,
+    assignments: Vec<Assignment>,
+    submissions: Vec<Submission>,
     clients: Vec<network::Client>,
     friends: Vec<FriendLink>,
     magic_links: Vec<MagicLink>,
@@ -87,6 +88,16 @@ impl TestSetupBuilder {
 
     pub(crate) fn with_galleries(mut self, galleries: &[Gallery]) -> Self {
         self.galleries.extend_from_slice(galleries);
+        self
+    }
+
+    pub(crate) fn with_assignments(mut self, assignments: &[Assignment]) -> Self {
+        self.assignments.extend_from_slice(assignments);
+        self
+    }
+
+    pub(crate) fn with_submissions(mut self, submissions: &[Submission]) -> Self {
+        self.submissions.extend_from_slice(submissions);
         self
     }
 
@@ -242,6 +253,18 @@ impl TestSetupBuilder {
         }
         if !self.galleries.is_empty() {
             app_data.insert_galleries(&self.galleries).await.unwrap();
+        }
+        if !self.assignments.is_empty() {
+            app_data
+                .insert_assignments(&self.assignments)
+                .await
+                .unwrap();
+        }
+        if !self.submissions.is_empty() {
+            app_data
+                .insert_submissions(&self.submissions)
+                .await
+                .unwrap();
         }
         if !self.gallery_projects.is_empty() {
             app_data

@@ -1,20 +1,40 @@
+use crate::{auth, utils};
+use aws_sdk_s3 as s3;
+use mongodb::bson::DateTime;
 use std::collections::HashMap;
 
 use futures::TryStreamExt;
 use mongodb::{bson::doc, options::ReturnDocument, Collection};
-use netsblox_cloud_common::{api, Group, User};
+use netsblox_cloud_common::{api, Assignment, Bucket, Group, Submission, User};
 
-use crate::auth;
 use crate::errors::{InternalError, UserError};
 
 pub(crate) struct GroupActions<'a> {
     groups: &'a Collection<Group>,
     users: &'a Collection<User>,
+    assignments: &'a Collection<Assignment>,
+    submissions: &'a Collection<Submission>,
+    bucket: &'a Bucket,
+    s3: &'a s3::Client,
 }
 
 impl<'a> GroupActions<'a> {
-    pub(crate) fn new(groups: &'a Collection<Group>, users: &'a Collection<User>) -> Self {
-        Self { groups, users }
+    pub(crate) fn new(
+        groups: &'a Collection<Group>,
+        users: &'a Collection<User>,
+        assignments: &'a Collection<Assignment>,
+        submissions: &'a Collection<Submission>,
+        bucket: &'a Bucket,
+        s3: &'a s3::Client,
+    ) -> Self {
+        Self {
+            groups,
+            users,
+            assignments,
+            submissions,
+            bucket,
+            s3,
+        }
     }
 
     pub(crate) async fn create_group(
@@ -217,6 +237,188 @@ impl<'a> GroupActions<'a> {
             .collect();
 
         Ok(members)
+    }
+
+    pub(crate) async fn create_assignment(
+        &self,
+        auth_ca: &auth::CreateAssignment,
+    ) -> Result<api::Assignment, UserError> {
+        let assignment = Assignment::from_data(auth_ca.ca_data.clone(), auth_ca.group_id.clone());
+        let query = doc! {
+            "name": &assignment.name,
+            "groupId": &assignment.group_id,
+        };
+        let update = doc! {"$setOnInsert": &assignment};
+        let options = mongodb::options::UpdateOptions::builder()
+            .upsert(true)
+            .build();
+
+        let res = self
+            .assignments
+            .update_one(query, update, options)
+            .await
+            .map_err(InternalError::DatabaseConnectionError)?;
+
+        if res.matched_count == 1 {
+            Err(UserError::AssignmentExistsError)
+        } else {
+            Ok(api::Assignment::from(assignment))
+        }
+    }
+
+    pub(crate) async fn view_group_assignments(
+        &self,
+        auth_vga: &auth::ViewGroupAssignments,
+    ) -> Result<Vec<api::Assignment>, UserError> {
+        let query = doc! {"groupId": auth_vga.group_id.clone()};
+        let assignments: Vec<api::Assignment> = self
+            .assignments
+            .find(query, None)
+            .await
+            .map_err(InternalError::DatabaseConnectionError)?
+            .map_ok(api::Assignment::from)
+            .try_collect()
+            .await
+            .map_err(InternalError::DatabaseConnectionError)?;
+        Ok(assignments)
+    }
+
+    pub(crate) async fn edit_assignment(
+        &self,
+        auth_ea: &auth::EditAssignment,
+        update_data: api::UpdateAssignmentData,
+    ) -> Result<api::Assignment, UserError> {
+        let query = doc! {"id": &auth_ea.assignment.id};
+
+        let mut set_doc = doc! {};
+        if let Some(name) = update_data.name.clone() {
+            set_doc.insert("name", name);
+        }
+        if let Some(due_date) = update_data.due_date {
+            set_doc.insert("state", DateTime::from(due_date));
+        }
+        let update = doc! { "$set": set_doc };
+
+        let options = mongodb::options::FindOneAndUpdateOptions::builder()
+            .return_document(ReturnDocument::After)
+            .build();
+
+        let assignment = self
+            .assignments
+            .find_one_and_update(query, update, options)
+            .await
+            .map_err(InternalError::DatabaseConnectionError)?
+            .ok_or(UserError::AssignmentNotFoundError)?;
+
+        Ok(api::Assignment::from(assignment))
+    }
+
+    pub(crate) async fn delete_assignment(
+        &self,
+        auth_da: &auth::DeleteAssignment,
+    ) -> Result<api::Assignment, UserError> {
+        let query = doc! {"id": &auth_da.assignment.id};
+
+        let assignment = self
+            .assignments
+            .find_one_and_delete(query, None)
+            .await
+            .map_err(InternalError::DatabaseConnectionError)?
+            .ok_or(UserError::AssignmentNotFoundError)?;
+
+        Ok(api::Assignment::from(assignment))
+    }
+
+    pub(crate) async fn create_submission(
+        &self,
+        auth_cs: &auth::CreateSubmission,
+    ) -> Result<api::Submission, UserError> {
+        let assignment_id = auth_cs.assignment_id.clone();
+        let cs_data = auth_cs.cs_data.clone();
+        let xml = cs_data.xml.clone();
+        let submission = Submission::from_data(assignment_id, cs_data);
+
+        self.submissions
+            .insert_one(&submission, None)
+            .await
+            .map_err(InternalError::DatabaseConnectionError)?;
+
+        utils::upload(self.s3, self.bucket, &submission.key, xml).await?;
+
+        Ok(api::Submission::from(submission))
+    }
+
+    pub(crate) async fn view_user_submissions(
+        &self,
+        auth_vus: &auth::ViewOwnerSubmissions,
+    ) -> Result<Vec<api::Submission>, UserError> {
+        let owner = auth_vus.owner.clone();
+        let assignment_id = auth_vus.assignment_id.clone();
+        let filter = doc! {"owner": owner, "assignmentId": assignment_id};
+        let submissions = self
+            .submissions
+            .find(filter, None)
+            .await
+            .map_err(InternalError::DatabaseConnectionError)?
+            .try_filter_map(|s| async move { Ok(Some(api::Submission::from(s))) })
+            .try_collect::<Vec<api::Submission>>()
+            .await
+            .map_err(InternalError::DatabaseConnectionError)?;
+
+        Ok(submissions)
+    }
+
+    pub(crate) async fn view_assignment_submissions(
+        &self,
+        auth_vas: &auth::ViewAssignmentSubmissions,
+    ) -> Result<Vec<api::Submission>, UserError> {
+        let filter = doc! {"assignmentId": auth_vas.assignment.id.clone()};
+        let submissions = self
+            .submissions
+            .find(filter, None)
+            .await
+            .map_err(InternalError::DatabaseConnectionError)?
+            .try_filter_map(|s| async move { Ok(Some(api::Submission::from(s))) })
+            .try_collect::<Vec<api::Submission>>()
+            .await
+            .map_err(InternalError::DatabaseConnectionError)?;
+
+        Ok(submissions)
+    }
+
+    pub(crate) async fn delete_submission(
+        &self,
+        auth_ds: &auth::DeleteSubmission,
+    ) -> Result<api::Submission, UserError> {
+        let query = doc! {"id": auth_ds.submission.id.clone()};
+
+        let submission = self
+            .submissions
+            .find_one_and_delete(query, None)
+            .await
+            .map_err(InternalError::DatabaseConnectionError)?
+            .ok_or(UserError::SubmissionNotFoundError)?;
+
+        let s3_res = utils::delete(self.s3, self.bucket, submission.key.clone()).await;
+
+        if let Err(s3_err) = s3_res {
+            self.submissions
+                .insert_one(&submission, None)
+                .await
+                .map_err(InternalError::DatabaseConnectionError)?;
+            Err(s3_err)
+        } else {
+            Ok(api::Submission::from(submission))
+        }
+    }
+
+    pub(crate) async fn view_submission_xml(
+        &self,
+        auth_vs: &auth::ViewSubmission,
+    ) -> Result<String, UserError> {
+        let key = auth_vs.submission.key.clone();
+        let xml = utils::download(self.s3, self.bucket, &key).await?;
+        Ok(xml)
     }
 }
 

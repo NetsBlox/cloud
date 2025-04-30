@@ -55,14 +55,14 @@ async fn get_client_config(
         .await
         .map_err(InternalError::DatabaseConnectionError)?
         .into_iter()
-        .map(|host| host.into())
+        .map(std::convert::Into::into)
         .collect();
 
     let config = api::ClientConfig {
         client_id: format!("_netsblox{}", Uuid::new_v4()),
         username: session.get::<String>("username").unwrap_or(None),
         services_hosts: default_hosts,
-        cloud_url: app.settings.public_url.to_owned(),
+        cloud_url: app.settings.public_url.clone(),
     };
 
     Ok(HttpResponse::Ok().json(config))

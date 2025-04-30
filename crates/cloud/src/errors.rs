@@ -59,6 +59,10 @@ pub enum UserError {
     GalleryProjectVersionsEmptyError,
     #[display(fmt = "Gallery Project Versions not found.")]
     GalleryProjectVersionNotFoundError,
+    #[display(fmt = "Assignment not found.")]
+    AssignmentNotFoundError,
+    #[display(fmt = "Submission not found.")]
+    SubmissionNotFoundError,
     #[display(fmt = "User not found.")]
     UserNotFoundError,
     #[display(fmt = "Message not found.")]
@@ -95,6 +99,10 @@ pub enum UserError {
     GalleryExistsError,
     #[display(fmt = "Gallery project already exists.")]
     GalleryProjectExistsError,
+    #[display(fmt = "Assignment already exists.")]
+    AssignmentExistsError,
+    #[display(fmt = "Submission already exists.")]
+    SubmissionExistsError,
     #[display(fmt = "Invalid username.")]
     InvalidUsername,
     #[display(fmt = "Invalid name.")]
@@ -215,6 +223,8 @@ impl error::ResponseError for UserError {
             | Self::GalleryNotFoundError
             | Self::GalleryProjectVersionsEmptyError
             | Self::GalleryProjectVersionNotFoundError
+            | Self::AssignmentNotFoundError
+            | Self::SubmissionNotFoundError
             | Self::GroupNotFoundError => StatusCode::NOT_FOUND,
             Self::InternalError | Self::SnapConnectionError => StatusCode::INTERNAL_SERVER_ERROR,
             Self::InvalidUsername
@@ -237,6 +247,8 @@ impl error::ResponseError for UserError {
             | Self::OAuthClientAlreadyExistsError
             | Self::GalleryExistsError
             | Self::GalleryProjectExistsError
+            | Self::AssignmentExistsError
+            | Self::SubmissionExistsError
             | Self::GroupExistsError
             | Self::CannotDeleteLastRoleError
             | Self::ServiceHostAlreadyAuthorizedError

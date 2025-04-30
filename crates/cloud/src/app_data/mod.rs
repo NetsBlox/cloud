@@ -23,7 +23,9 @@ use log::{error, info, warn};
 use lru::LruCache;
 use mongodb::bson::{doc, Document};
 use mongodb::options::{FindOptions, IndexOptions, UpdateOptions};
-use netsblox_cloud_common::{api, Bucket, Gallery, GalleryProjectMetadata, MagicLink};
+use netsblox_cloud_common::{
+    api, Assignment, Bucket, Gallery, GalleryProjectMetadata, MagicLink, Submission,
+};
 use serde::{Deserialize, Serialize};
 use std::collections::HashSet;
 use std::net::IpAddr;
@@ -61,6 +63,8 @@ pub struct AppData {
     magic_links: Collection<MagicLink>,
     pub(crate) galleries: Collection<Gallery>,
     pub(crate) gallery_projects: Collection<GalleryProjectMetadata>,
+    pub(crate) assignments: Collection<Assignment>,
+    pub(crate) submissions: Collection<Submission>,
     pub(crate) project_metadata: Collection<ProjectMetadata>,
     pub(crate) libraries: Collection<Library>,
     pub(crate) authorized_services: Collection<AuthorizedServiceHost>,
@@ -151,6 +155,8 @@ impl AppData {
         let galleries = db.collection::<Gallery>(&(prefix.to_owned() + "galleries"));
         let gallery_projects =
             db.collection::<GalleryProjectMetadata>(&(prefix.to_owned() + "galleryProjects"));
+        let assignments = db.collection::<Assignment>(&(prefix.to_owned() + "assignments"));
+        let submissions = db.collection::<Submission>(&(prefix.to_owned() + "submissions"));
         let recorded_messages =
             db.collection::<SentMessage>(&(prefix.to_owned() + "recordedMessages"));
         let logged_messages = db.collection::<LogMessage>(&(prefix.to_owned() + "loggedMessages"));
@@ -195,6 +201,8 @@ impl AppData {
             magic_links,
             galleries,
             gallery_projects,
+            assignments,
+            submissions,
 
             mailer,
             sender,
@@ -580,6 +588,32 @@ impl AppData {
     }
 
     #[cfg(test)]
+    pub(crate) async fn insert_assignments(
+        &self,
+        assignments: &[Assignment],
+    ) -> Result<(), InternalError> {
+        self.assignments
+            .insert_many(assignments, None)
+            .await
+            .map_err(InternalError::DatabaseConnectionError)?;
+
+        Ok(())
+    }
+
+    #[cfg(test)]
+    pub(crate) async fn insert_submissions(
+        &self,
+        submissions: &[Submission],
+    ) -> Result<(), InternalError> {
+        self.submissions
+            .insert_many(submissions, None)
+            .await
+            .map_err(InternalError::DatabaseConnectionError)?;
+
+        Ok(())
+    }
+
+    #[cfg(test)]
     pub(crate) async fn insert_gallery_projects(
         &self,
         gallery_projects: &[GalleryProjectMetadata],
@@ -659,7 +693,14 @@ impl AppData {
     }
 
     pub(crate) fn as_group_actions(&self) -> GroupActions {
-        GroupActions::new(&self.groups, &self.users)
+        GroupActions::new(
+            &self.groups,
+            &self.users,
+            &self.assignments,
+            &self.submissions,
+            &self.bucket,
+            &self.s3,
+        )
     }
 
     pub(crate) fn as_friend_actions(&self) -> FriendActions {
@@ -719,7 +760,6 @@ impl AppData {
 
             network: &self.network,
             friend_cache: &self.friend_cache,
-
             mailer: &self.mailer,
             sender: &self.sender,
             public_url: &self.settings.public_url,

@@ -89,7 +89,7 @@ impl<'a> ProjectActions<'a> {
         let save_state = project_data.save_state.unwrap_or(SaveState::Created);
         let unique_name =
             utils::get_valid_project_name(self.project_metadata, owner, &name).await?;
-        let mut metadata = ProjectMetadata::new(owner, &unique_name, roles, save_state);
+        let mut metadata = ProjectMetadata::new(owner, &unique_name, roles, save_state, vec![]);
         metadata.id = project_id;
         metadata.state = project_data.state;
 
@@ -772,9 +772,11 @@ mod tests {
     };
 
     use futures::future::join_all;
-    use mongodb::bson::{doc, DateTime};
+    use log::debug;
+    use mongodb::bson::{self, doc, DateTime};
     use netsblox_cloud_common::api;
     use netsblox_cloud_common::api::S3Key;
+    use serde::Deserialize;
 
     use crate::{auth, test_utils, utils};
 

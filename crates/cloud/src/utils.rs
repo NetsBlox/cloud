@@ -32,6 +32,7 @@ use image::{
 };
 use std::io::BufWriter;
 
+use crate::app_data::AppData;
 use crate::{
     errors::{InternalError, UserError},
     network::topology::{self, TopologyActor},
@@ -305,6 +306,21 @@ pub(crate) fn get_username(req: &HttpRequest) -> Option<String> {
     session.get::<String>("username").unwrap_or(None)
 }
 
+pub(crate) async fn is_group_member(
+    app: &AppData,
+    username: &str,
+    group_id: &api::GroupId,
+) -> Result<bool, UserError> {
+    let user = app
+        .users
+        .find_one(doc! {"username": username}, None)
+        .await
+        .map_err(InternalError::DatabaseConnectionError)?
+        .ok_or(UserError::UserNotFoundError)?;
+
+    Ok(user.group_id == Some(group_id.clone()))
+}
+
 pub(crate) async fn get_authorized_host(
     authorized_services: &Collection<AuthorizedServiceHost>,
     req: &HttpRequest,
@@ -549,7 +565,13 @@ mod tests {
         //   - add update time and use this when updating the cache?
         // - update cache with metadata2
         // - update cache with metadata1
-        let original = ProjectMetadata::new("owner", "name", HashMap::new(), api::SaveState::Saved);
+        let original = ProjectMetadata::new(
+            "owner",
+            "name",
+            HashMap::new(),
+            api::SaveState::Saved,
+            Vec::new(),
+        );
         let id = original.id.clone();
         let mut new_project = original.clone();
         new_project.name = "new name".into();
@@ -570,7 +592,13 @@ mod tests {
 
     #[actix_web::test]
     async fn test_update_project_cache_tie_goes_to_update() {
-        let original = ProjectMetadata::new("owner", "name", HashMap::new(), api::SaveState::Saved);
+        let original = ProjectMetadata::new(
+            "owner",
+            "name",
+            HashMap::new(),
+            api::SaveState::Saved,
+            Vec::new(),
+        );
         let id = original.id.clone();
         let mut new_project = original.clone();
         new_project.name = "new name".into();

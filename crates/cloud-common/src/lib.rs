@@ -1,7 +1,8 @@
 use mongodb::bson::{self, doc, document::Document, Bson, DateTime};
 pub use netsblox_api_common as api;
 use netsblox_api_common::{
-    oauth, ClientState, LibraryMetadata, NewUser, PublishState, RoleId, UserRole,
+    oauth, AssignmentId, ClientState, LibraryMetadata, NewUser, PublishState, RoleId, SubmissionId,
+    UserRole,
 };
 use netsblox_api_common::{
     FriendInvite, FriendLinkState, GalleryId, GroupId, InvitationState, LinkedAccount, ProjectId,
@@ -362,7 +363,7 @@ impl Bucket {
     }
 }
 
-/// A Gallery allows the owner to retrieve project information of the members  
+/// Gallery
 #[derive(Serialize, Deserialize, Clone, Debug)]
 #[serde(rename_all = "camelCase")]
 pub struct Gallery {
@@ -436,7 +437,6 @@ impl From<Version> for netsblox_api_common::Version {
     fn from(version: Version) -> netsblox_api_common::Version {
         netsblox_api_common::Version {
             updated: version.updated.to_system_time(),
-            key: version.key,
             deleted: version.deleted,
         }
     }
@@ -508,6 +508,128 @@ impl From<GalleryProjectMetadata> for Bson {
     }
 }
 
+/// Assignments
+#[derive(Deserialize, Serialize, Clone, Debug)]
+#[serde(rename_all = "camelCase")]
+pub struct Assignment {
+    pub id: AssignmentId,
+    pub group_id: GroupId,
+    pub name: String,
+    pub origin_time: DateTime,
+    pub due_date: DateTime,
+}
+
+impl From<Assignment> for Bson {
+    fn from(value: Assignment) -> Bson {
+        Bson::Document(doc! {
+        "id": value.id,
+        "groupId": value.group_id,
+        "name": value.name,
+        "originTime": value.origin_time,
+        "dueDate": value.due_date })
+    }
+}
+
+impl From<Assignment> for api::Assignment {
+    fn from(value: Assignment) -> api::Assignment {
+        api::Assignment {
+            id: value.id,
+            group_id: value.group_id,
+            name: value.name,
+            origin_time: value.origin_time.to_system_time(),
+            due_date: value.due_date.to_system_time(),
+        }
+    }
+}
+
+impl Assignment {
+    #[must_use]
+    pub fn new(name: String, group_id: GroupId, due_date: DateTime) -> Self {
+        Self {
+            id: api::AssignmentId::new(Uuid::new_v4().to_string()),
+            group_id,
+            name,
+            origin_time: DateTime::now(),
+            due_date,
+        }
+    }
+
+    pub fn from_data(data: api::CreateAssignmentData, group_id: GroupId) -> Assignment {
+        Assignment {
+            id: AssignmentId::new(Uuid::new_v4().to_string()),
+            group_id,
+            name: data.name,
+            origin_time: DateTime::now(),
+            due_date: DateTime::from_system_time(data.due_date),
+        }
+    }
+
+    #[must_use]
+    pub fn apply_update(&self, update: api::UpdateAssignmentData) -> Assignment {
+        let prior = self.clone();
+        Assignment {
+            id: prior.id,
+            group_id: prior.group_id,
+            name: update.name.unwrap_or(prior.name),
+            origin_time: prior.origin_time,
+            due_date: update
+                .due_date
+                .map_or(self.due_date, DateTime::from_system_time),
+        }
+    }
+}
+
+/// Submissions
+#[derive(Deserialize, Serialize, Clone, Debug)]
+#[serde(rename_all = "camelCase")]
+pub struct Submission {
+    pub id: SubmissionId,
+    pub assignment_id: AssignmentId,
+    pub owner: String,
+    pub origin_time: DateTime,
+    pub key: S3Key,
+}
+
+impl Submission {
+    #[must_use]
+    pub fn from_data(assignment_id: AssignmentId, data: api::CreateSubmissionData) -> Submission {
+        let id = api::SubmissionId::new(Uuid::new_v4().to_string());
+        let owner = data.owner;
+        let key = S3Key::new(format!(
+            "assignment/{assignment_id}/submission/{id}/{owner}.xml"
+        ));
+        Submission {
+            id,
+            assignment_id,
+            owner,
+            origin_time: DateTime::now(),
+            key,
+        }
+    }
+}
+
+impl From<Submission> for Bson {
+    fn from(value: Submission) -> Bson {
+        Bson::Document(doc! {
+        "id": value.id,
+        "assignmentId": value.assignment_id,
+        "owner": value.owner,
+        "originTime": value.origin_time,
+        "key": value.key})
+    }
+}
+
+impl From<Submission> for api::Submission {
+    fn from(value: Submission) -> api::Submission {
+        api::Submission {
+            id: value.id,
+            assignment_id: value.assignment_id,
+            owner: value.owner,
+            origin_time: value.origin_time.to_system_time(),
+        }
+    }
+}
+
 #[derive(Deserialize, Serialize, Clone, Debug)]
 #[serde(rename_all = "camelCase")]
 pub struct ProjectMetadata {
@@ -521,6 +643,8 @@ pub struct ProjectMetadata {
     pub save_state: SaveState,
     pub delete_at: Option<DateTime>,
     pub network_traces: Vec<NetworkTraceMetadata>,
+    #[serde(default)]
+    pub extensions: Vec<String>,
     pub roles: HashMap<RoleId, RoleMetadata>,
 }
 
@@ -530,6 +654,7 @@ impl ProjectMetadata {
         name: &str,
         roles: HashMap<RoleId, RoleMetadata>,
         save_state: SaveState,
+        extensions: Vec<String>,
     ) -> ProjectMetadata {
         let origin_time = DateTime::now();
 
@@ -554,6 +679,7 @@ impl ProjectMetadata {
             save_state,
             delete_at,
             network_traces: Vec::new(),
+            extensions,
             roles,
         }
     }
@@ -578,6 +704,7 @@ impl From<ProjectMetadata> for Bson {
             "roles": roles,
             "deleteAt": metadata.delete_at,
             "networkTraces": metadata.network_traces,
+            "extensions": metadata.extensions,
         })
     }
 }
@@ -598,6 +725,7 @@ impl From<ProjectMetadata> for netsblox_api_common::ProjectMetadata {
                 .into_iter()
                 .map(|t| t.into())
                 .collect(),
+            extensions: metadata.extensions,
             roles: metadata
                 .roles
                 .into_iter()
@@ -1043,16 +1171,26 @@ mod tests {
 
     #[test]
     fn test_dont_schedule_deletion_for_saved_projects() {
-        let metadata =
-            ProjectMetadata::new("owner", "someProject", HashMap::new(), SaveState::Saved);
+        let metadata = ProjectMetadata::new(
+            "owner",
+            "someProject",
+            HashMap::new(),
+            SaveState::Saved,
+            Vec::new(),
+        );
         assert!(metadata.delete_at.is_none());
     }
 
     #[test]
     fn test_schedule_deletion_for_created_projects() {
         // This gives them 10 minutes to be occupied before deletion
-        let metadata =
-            ProjectMetadata::new("owner", "someProject", HashMap::new(), SaveState::Created);
+        let metadata = ProjectMetadata::new(
+            "owner",
+            "someProject",
+            HashMap::new(),
+            SaveState::Created,
+            Vec::new(),
+        );
         assert!(metadata.delete_at.is_some());
     }
 

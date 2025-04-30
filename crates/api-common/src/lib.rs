@@ -306,6 +306,7 @@ pub struct ProjectMetadata {
     pub state: PublishState,
     pub collaborators: std::vec::Vec<String>,
     pub network_traces: Vec<NetworkTraceMetadata>,
+    pub extensions: Vec<String>,
     #[ts(type = "any")] // FIXME
     pub origin_time: SystemTime,
     pub save_state: SaveState,
@@ -550,13 +551,93 @@ pub struct GalleryId(String);
 
 impl GalleryId {
     #[must_use]
-    pub fn new(name: String) -> Self {
-        Self(name)
+    pub fn new(id: String) -> Self {
+        Self(id)
     }
     #[must_use]
     pub fn as_str(&self) -> &str {
         &self.0
     }
+}
+
+#[derive(Deserialize, Serialize, Clone, Debug, PartialEq, Eq, Display, Hash, FromStr, TS)]
+#[ts(export)]
+pub struct AssignmentId(String);
+
+impl AssignmentId {
+    #[must_use]
+    pub fn new(id: String) -> Self {
+        Self(id)
+    }
+    #[must_use]
+    pub fn as_str(&self) -> &str {
+        &self.0
+    }
+}
+
+#[derive(Serialize, Deserialize, Clone, Debug, TS)]
+#[serde(rename_all = "camelCase")]
+#[ts(export)]
+pub struct Assignment {
+    pub id: AssignmentId,
+    pub group_id: GroupId,
+    pub name: String,
+    #[ts(type = "any")] // FIXME
+    pub origin_time: SystemTime,
+    #[ts(type = "any")] // FIXME
+    pub due_date: SystemTime,
+}
+
+#[derive(Serialize, Deserialize, Clone, Debug, TS)]
+#[serde(rename_all = "camelCase")]
+#[ts(export)]
+pub struct CreateAssignmentData {
+    pub name: String,
+    #[ts(type = "any")] // FIXME
+    pub due_date: SystemTime,
+}
+
+#[derive(Serialize, Deserialize, Clone, Debug, TS)]
+#[serde(rename_all = "camelCase")]
+#[ts(export)]
+pub struct UpdateAssignmentData {
+    pub name: Option<String>,
+    #[ts(type = "any", optional)] // FIXME
+    pub due_date: Option<SystemTime>,
+}
+
+#[derive(Deserialize, Serialize, Clone, Debug, PartialEq, Eq, Display, Hash, FromStr, TS)]
+#[ts(export)]
+pub struct SubmissionId(String);
+
+impl SubmissionId {
+    #[must_use]
+    pub fn new(id: String) -> Self {
+        Self(id)
+    }
+    #[must_use]
+    pub fn as_str(&self) -> &str {
+        &self.0
+    }
+}
+
+#[derive(Serialize, Deserialize, Clone, Debug, TS)]
+#[serde(rename_all = "camelCase")]
+#[ts(export)]
+pub struct Submission {
+    pub id: SubmissionId,
+    pub assignment_id: AssignmentId,
+    pub owner: String,
+    #[ts(type = "any")] // FIXME
+    pub origin_time: SystemTime,
+}
+
+#[derive(Serialize, Deserialize, Clone, Debug, TS)]
+#[serde(rename_all = "camelCase")]
+#[ts(export)]
+pub struct CreateSubmissionData {
+    pub owner: String,
+    pub xml: String,
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug, TS)]
@@ -595,7 +676,6 @@ pub struct ChangeGalleryData {
 #[serde(rename_all = "camelCase")]
 #[ts(export)]
 pub struct Version {
-    pub key: S3Key,
     #[ts(type = "any")] // FIXME
     pub updated: SystemTime,
     pub deleted: bool,
