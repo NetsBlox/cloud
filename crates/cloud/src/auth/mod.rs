@@ -1,4 +1,3 @@
-pub(crate) mod assignments;
 pub(crate) mod collaboration;
 pub(crate) mod galleries;
 pub(crate) mod groups;
