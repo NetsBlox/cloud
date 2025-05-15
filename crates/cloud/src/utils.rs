@@ -500,7 +500,13 @@ mod tests {
         //   - add update time and use this when updating the cache?
         // - update cache with metadata2
         // - update cache with metadata1
-        let original = ProjectMetadata::new("owner", "name", HashMap::new(), api::SaveState::Saved);
+        let original = ProjectMetadata::new(
+            "owner",
+            "name",
+            HashMap::new(),
+            api::SaveState::Saved,
+            Vec::new(),
+        );
         let id = original.id.clone();
         let mut new_project = original.clone();
         new_project.name = "new name".into();
@@ -521,7 +527,13 @@ mod tests {
 
     #[actix_web::test]
     async fn test_update_project_cache_tie_goes_to_update() {
-        let original = ProjectMetadata::new("owner", "name", HashMap::new(), api::SaveState::Saved);
+        let original = ProjectMetadata::new(
+            "owner",
+            "name",
+            HashMap::new(),
+            api::SaveState::Saved,
+            Vec::new(),
+        );
         let id = original.id.clone();
         let mut new_project = original.clone();
         new_project.name = "new name".into();

@@ -505,6 +505,8 @@ pub struct ProjectMetadata {
     pub delete_at: Option<DateTime>,
     pub network_traces: Vec<NetworkTraceMetadata>,
     pub roles: HashMap<RoleId, RoleMetadata>,
+    #[serde(default)]
+    pub extensions: Vec<String>,
 }
 
 impl ProjectMetadata {
@@ -513,6 +515,7 @@ impl ProjectMetadata {
         name: &str,
         roles: HashMap<RoleId, RoleMetadata>,
         save_state: SaveState,
+        extensions: Vec<String>,
     ) -> ProjectMetadata {
         let origin_time = DateTime::now();
 
@@ -538,6 +541,7 @@ impl ProjectMetadata {
             delete_at,
             network_traces: Vec::new(),
             roles,
+            extensions,
         }
     }
 }
@@ -561,6 +565,7 @@ impl From<ProjectMetadata> for Bson {
             "roles": roles,
             "deleteAt": metadata.delete_at,
             "networkTraces": metadata.network_traces,
+            "extensions": metadata.extensions,
         })
     }
 }
@@ -586,6 +591,7 @@ impl From<ProjectMetadata> for netsblox_api_common::ProjectMetadata {
                 .into_iter()
                 .map(|(k, v)| (k, v.into()))
                 .collect(),
+            extensions: metadata.extensions,
         }
     }
 }
@@ -1027,16 +1033,26 @@ mod tests {
 
     #[test]
     fn test_dont_schedule_deletion_for_saved_projects() {
-        let metadata =
-            ProjectMetadata::new("owner", "someProject", HashMap::new(), SaveState::Saved);
+        let metadata = ProjectMetadata::new(
+            "owner",
+            "someProject",
+            HashMap::new(),
+            SaveState::Saved,
+            Vec::new(),
+        );
         assert!(metadata.delete_at.is_none());
     }
 
     #[test]
     fn test_schedule_deletion_for_created_projects() {
         // This gives them 10 minutes to be occupied before deletion
-        let metadata =
-            ProjectMetadata::new("owner", "someProject", HashMap::new(), SaveState::Created);
+        let metadata = ProjectMetadata::new(
+            "owner",
+            "someProject",
+            HashMap::new(),
+            SaveState::Created,
+            Vec::new(),
+        );
         assert!(metadata.delete_at.is_some());
     }
 

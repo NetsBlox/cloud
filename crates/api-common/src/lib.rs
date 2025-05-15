@@ -312,6 +312,7 @@ pub struct ProjectMetadata {
     pub origin_time: SystemTime,
     pub save_state: SaveState,
     pub roles: HashMap<RoleId, RoleMetadata>,
+    pub extensions: Vec<String>,
 }
 
 #[derive(Deserialize, Serialize, Clone, Debug, TS)]

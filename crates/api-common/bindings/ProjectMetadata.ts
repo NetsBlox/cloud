@@ -6,4 +6,4 @@ import type { RoleId } from "./RoleId";
 import type { RoleMetadata } from "./RoleMetadata";
 import type { SaveState } from "./SaveState";
 
-export interface ProjectMetadata { id: ProjectId, owner: string, name: string, updated: any, state: PublishState, collaborators: Array<string>, networkTraces: Array<NetworkTraceMetadata>, originTime: any, saveState: SaveState, roles: Record<RoleId, RoleMetadata>, }
+export interface ProjectMetadata { id: ProjectId, owner: string, name: string, updated: any, state: PublishState, collaborators: Array<string>, networkTraces: Array<NetworkTraceMetadata>, originTime: any, saveState: SaveState, roles: Record<RoleId, RoleMetadata>, extensions: Array<string>, }

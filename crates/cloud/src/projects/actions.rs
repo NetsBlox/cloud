@@ -95,7 +95,7 @@ impl<'a> ProjectActions<'a> {
         let save_state = project_data.save_state.unwrap_or(SaveState::Created);
         let unique_name =
             utils::get_valid_project_name(self.project_metadata, owner, &name).await?;
-        let mut metadata = ProjectMetadata::new(owner, &unique_name, roles, save_state);
+        let mut metadata = ProjectMetadata::new(owner, &unique_name, roles, save_state, vec![]);
         metadata.id = project_id;
         metadata.state = project_data.state;
 

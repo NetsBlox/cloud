@@ -202,6 +202,7 @@ async fn upload(
         save_state: project.save_state,
         delete_at: None,
         network_traces: Vec::new(),
+        extensions: Vec::new(),
         roles,
     }
 }
