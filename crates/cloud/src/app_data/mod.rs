@@ -22,7 +22,7 @@ use log::{error, info, warn};
 use lru::LruCache;
 use mongodb::bson::{doc, Document};
 use mongodb::options::{FindOptions, IndexOptions, UpdateOptions};
-use netsblox_cloud_common::{api, MagicLink};
+use netsblox_cloud_common::{api, Bucket, MagicLink};
 use serde::{Deserialize, Serialize};
 use std::collections::HashSet;
 use std::net::IpAddr;
@@ -48,7 +48,7 @@ use mongodb::{Client, Collection, IndexModel};
 
 #[derive(Clone)]
 pub struct AppData {
-    bucket: String,
+    bucket: Bucket,
     tor_exit_nodes: Collection<TorNode>,
     s3: s3::Client,
     pub(crate) settings: Settings,
@@ -154,7 +154,7 @@ impl AppData {
         let oauth_tokens = db.collection::<OAuthToken>(&(prefix.to_owned() + "oauthToken"));
         let oauth_codes = db.collection::<oauth::Code>(&(prefix.to_owned() + "oauthCode"));
         let tor_exit_nodes = db.collection::<TorNode>(&(prefix.to_owned() + "torExitNodes"));
-        let bucket = settings.s3.bucket.clone();
+        let bucket = Bucket::new(settings.s3.bucket.clone());
 
         let project_cache = Arc::new(RwLock::new(LruCache::new(
             settings.cache_settings.num_projects,
@@ -677,6 +677,13 @@ impl AppData {
             &self.project_cache,
             &self.banned_accounts,
         )
+    }
+
+    #[cfg(test)]
+    pub(crate) fn drop_s3(&mut self) {
+        let config = SdkConfig::builder().build();
+
+        self.s3 = s3::Client::new(&config);
     }
 
     #[cfg(test)]

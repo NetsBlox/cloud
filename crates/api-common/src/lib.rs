@@ -274,6 +274,27 @@ impl RoleId {
         &self.0
     }
 }
+#[derive(Deserialize, Serialize, Clone, Debug, PartialEq, Eq, Display, Hash, TS)]
+#[ts(export)]
+pub struct S3Key(String);
+
+impl S3Key {
+    #[must_use]
+    pub fn new(key: String) -> Self {
+        S3Key(key)
+    }
+
+    #[must_use]
+    pub fn as_str(&self) -> &str {
+        &self.0
+    }
+}
+
+impl From<&S3Key> for String {
+    fn from(value: &S3Key) -> Self {
+        value.0.clone()
+    }
+}
 
 #[derive(Deserialize, Serialize, Clone, Debug, TS)]
 #[serde(rename_all = "camelCase")]
@@ -306,8 +327,8 @@ pub enum SaveState {
 #[ts(export)]
 pub struct RoleMetadata {
     pub name: String,
-    pub code: String,
-    pub media: String,
+    pub code: S3Key,
+    pub media: S3Key,
 }
 
 #[derive(Deserialize, Serialize, TS)]

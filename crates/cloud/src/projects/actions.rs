@@ -21,13 +21,12 @@ use lru::LruCache;
 use mongodb::bson::{doc, DateTime};
 use mongodb::options::{FindOneAndUpdateOptions, FindOptions, ReturnDocument};
 use mongodb::{Collection, Cursor};
-use netsblox_cloud_common::api::{BrowserClientState, RoleData, RoleId, SaveState};
+use netsblox_cloud_common::api::{BrowserClientState, RoleData, RoleId, S3Key, SaveState};
 use netsblox_cloud_common::{
     api::{self, PublishState},
     ProjectMetadata,
 };
-use netsblox_cloud_common::{Project, RoleMetadata};
-use s3::operation::put_object::PutObjectOutput;
+use netsblox_cloud_common::{Bucket, Project, RoleMetadata};
 use uuid::Uuid;
 
 pub(crate) struct ProjectActions<'a> {
@@ -35,7 +34,7 @@ pub(crate) struct ProjectActions<'a> {
     project_cache: &'a Arc<RwLock<LruCache<api::ProjectId, ProjectMetadata>>>,
     network: &'a Addr<TopologyActor>,
 
-    bucket: &'a String,
+    bucket: &'a Bucket,
     s3: &'a s3::Client,
 }
 
@@ -45,7 +44,7 @@ impl<'a> ProjectActions<'a> {
         project_cache: &'a Arc<RwLock<LruCache<api::ProjectId, ProjectMetadata>>>,
         network: &'a Addr<TopologyActor>,
 
-        bucket: &'a String,
+        bucket: &'a Bucket,
         s3: &'a s3::Client,
     ) -> Self {
         Self {
@@ -179,7 +178,7 @@ impl<'a> ProjectActions<'a> {
             .max_by_key(|md| md.updated)
             .ok_or(UserError::ThumbnailNotFoundError)?;
 
-        let code = self.download(&role_metadata.code).await?;
+        let code = utils::download(self.s3, self.bucket, &role_metadata.code).await?;
         self.get_thumbnail(&code, aspect_ratio)
     }
 
@@ -535,10 +534,16 @@ impl<'a> ProjectActions<'a> {
             .ok_or(UserError::RoleNotFoundError)?;
 
         let RoleMetadata { media, code, .. } = role;
-        join_all([self.delete(media.to_owned()), self.delete(code.to_owned())].into_iter())
-            .await
-            .into_iter()
-            .collect::<Result<_, _>>()?;
+        join_all(
+            [
+                utils::delete(&self.s3, &self.bucket, media.to_owned()),
+                utils::delete(&self.s3, &self.bucket, code.to_owned()),
+            ]
+            .into_iter(),
+        )
+        .await
+        .into_iter()
+        .collect::<Result<_, _>>()?;
 
         let metadata = utils::on_room_changed(self.network, self.project_cache, updated_metadata);
         Ok(metadata.into())
@@ -629,7 +634,7 @@ impl<'a> ProjectActions<'a> {
             .into_values()
             .flat_map(|role| vec![role.code, role.media]);
 
-        join_all(paths.map(move |path| self.delete(path)))
+        join_all(paths.map(move |path| utils::delete(&self.s3, &self.bucket, path)))
             .await
             .into_iter()
             .collect::<Result<Vec<_>, _>>()?;
@@ -740,45 +745,14 @@ impl<'a> ProjectActions<'a> {
     // Helper functions
     async fn fetch_role(&self, metadata: &RoleMetadata) -> Result<RoleData, InternalError> {
         let (code, media) = join!(
-            self.download(&metadata.code),
-            self.download(&metadata.media),
+            utils::download(self.s3, self.bucket, &metadata.code),
+            utils::download(self.s3, self.bucket, &metadata.media),
         );
         Ok(RoleData {
             name: metadata.name.to_owned(),
             code: code?,
             media: media?,
         })
-    }
-
-    async fn download(&self, key: &str) -> Result<String, InternalError> {
-        let output = self
-            .s3
-            .get_object()
-            .bucket(self.bucket.clone())
-            .key(key)
-            .send()
-            .await
-            .map_err(|_err| InternalError::S3Error)?;
-        let bytes: Vec<u8> = output
-            .body
-            .collect()
-            .await
-            .map(|data| data.to_vec())
-            .map_err(|_err| InternalError::S3ContentError)?;
-
-        String::from_utf8(bytes).map_err(|_err| InternalError::S3ContentError)
-    }
-
-    async fn delete(&self, key: String) -> Result<(), UserError> {
-        self.s3
-            .delete_object()
-            .bucket(self.bucket.clone())
-            .key(key)
-            .send()
-            .await
-            .map_err(|_err| InternalError::S3Error)?;
-
-        Ok(())
     }
 
     async fn is_approval_required(&self, metadata: &ProjectMetadata) -> Result<bool, UserError> {
@@ -801,11 +775,11 @@ impl<'a> ProjectActions<'a> {
         let is_guest = owner.starts_with('_');
         let top_level = if is_guest { "guests" } else { "users" };
         let basepath = format!("{}/{}/{}/{}", top_level, owner, project_id, &role_id);
-        let src_path = format!("{}/code.xml", &basepath);
-        let media_path = format!("{}/media.xml", &basepath);
+        let src_path = S3Key::new(format!("{}/code.xml", &basepath));
+        let media_path = S3Key::new(format!("{}/media.xml", &basepath));
 
-        self.upload(&media_path, role.media.to_owned()).await?;
-        self.upload(&src_path, role.code.to_owned()).await?;
+        utils::upload(self.s3, &self.bucket, &media_path, role.media.to_owned()).await?;
+        utils::upload(self.s3, &self.bucket, &src_path, role.code.to_owned()).await?;
 
         Ok(RoleMetadata {
             name: role.name.to_owned(),
@@ -813,20 +787,6 @@ impl<'a> ProjectActions<'a> {
             media: media_path,
             updated: DateTime::now(),
         })
-    }
-
-    async fn upload(&self, key: &str, body: String) -> Result<PutObjectOutput, InternalError> {
-        self.s3
-            .put_object()
-            .bucket(self.bucket.clone())
-            .key(key)
-            .body(String::into_bytes(body).into())
-            .send()
-            .await
-            .map_err(|err| {
-                warn!("Unable to upload to s3: {}", err);
-                InternalError::S3Error
-            })
     }
 }
 
@@ -885,7 +845,7 @@ mod tests {
     use mongodb::bson::{doc, DateTime};
     use netsblox_cloud_common::api;
 
-    use crate::{auth, test_utils};
+    use crate::{auth, test_utils, utils};
 
     #[actix_web::test]
     async fn test_set_pending_approval_on_save_role_name() {
@@ -1164,7 +1124,8 @@ mod tests {
 
                 // ensure the s3 content is empty
                 let role = metadata.roles.values().next().unwrap();
-                let content = actions.download(&role.media).await;
+
+                let content = utils::download(actions.s3, actions.bucket, &role.media).await;
                 dbg!(&content, &role.media);
                 assert!(content.is_err(), "S3 content is not cleared.");
             })
@@ -1214,7 +1175,8 @@ mod tests {
 
                 // ensure the s3 content is empty
                 let role = metadata.roles.get(&role_id).unwrap();
-                let content = actions.download(&role.media).await;
+
+                let content = utils::download(actions.s3, actions.bucket, &role.media).await;
                 assert!(content.is_err(), "S3 content is not cleared.");
             })
             .await;
