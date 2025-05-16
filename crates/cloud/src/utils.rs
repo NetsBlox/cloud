@@ -1,3 +1,4 @@
+use crate::app_data::AppData;
 use actix::Addr;
 use actix_session::SessionExt;
 use actix_web::HttpRequest;
@@ -296,6 +297,21 @@ fn get_cached_friends(
 pub(crate) fn get_username(req: &HttpRequest) -> Option<String> {
     let session = req.get_session();
     session.get::<String>("username").unwrap_or(None)
+}
+
+pub(crate) async fn is_group_member(
+    app: &AppData,
+    username: &str,
+    group_id: &api::GroupId,
+) -> Result<bool, UserError> {
+    let user = app
+        .users
+        .find_one(doc! {"username": username}, None)
+        .await
+        .map_err(InternalError::DatabaseConnectionError)?
+        .ok_or(UserError::UserNotFoundError)?;
+
+    Ok(user.group_id == Some(group_id.clone()))
 }
 
 pub(crate) async fn get_authorized_host(

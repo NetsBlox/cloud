@@ -4,8 +4,8 @@ use futures::{future::join_all, Future};
 use lazy_static::lazy_static;
 use mongodb::{bson::doc, Client};
 use netsblox_cloud_common::{
-    api, AuthorizedServiceHost, BannedAccount, CollaborationInvite, FriendLink, Group, Library,
-    LogMessage, MagicLink, User,
+    api, Assignment, AuthorizedServiceHost, BannedAccount, CollaborationInvite, FriendLink, Group,
+    Library, LogMessage, MagicLink, Submission, User,
 };
 
 use crate::{
@@ -30,6 +30,8 @@ pub(crate) fn setup() -> TestSetupBuilder {
         projects: Vec::new(),
         libraries: Vec::new(),
         groups: Vec::new(),
+        assignments: Vec::new(),
+        submissions: Vec::new(),
         clients: Vec::new(),
         friends: Vec::new(),
         magic_links: Vec::new(),
@@ -46,6 +48,8 @@ pub(crate) struct TestSetupBuilder {
     projects: Vec<project::ProjectFixture>,
     libraries: Vec<Library>,
     groups: Vec<Group>,
+    assignments: Vec<Assignment>,
+    submissions: Vec<Submission>,
     clients: Vec<network::Client>,
     friends: Vec<FriendLink>,
     magic_links: Vec<MagicLink>,
@@ -75,6 +79,16 @@ impl TestSetupBuilder {
 
     pub(crate) fn with_projects(mut self, projects: &[project::ProjectFixture]) -> Self {
         self.projects.extend_from_slice(projects);
+        self
+    }
+
+    pub(crate) fn with_assignments(mut self, assignments: &[Assignment]) -> Self {
+        self.assignments.extend_from_slice(assignments);
+        self
+    }
+
+    pub(crate) fn with_submissions(mut self, submissions: &[Submission]) -> Self {
+        self.submissions.extend_from_slice(submissions);
         self
     }
 
@@ -218,6 +232,18 @@ impl TestSetupBuilder {
         }
         if !self.friends.is_empty() {
             app_data.insert_friends(&self.friends).await.unwrap();
+        }
+        if !self.assignments.is_empty() {
+            app_data
+                .insert_assignments(&self.assignments)
+                .await
+                .unwrap();
+        }
+        if !self.submissions.is_empty() {
+            app_data
+                .insert_submissions(&self.submissions)
+                .await
+                .unwrap();
         }
         if !self.magic_links.is_empty() {
             app_data

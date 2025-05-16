@@ -51,6 +51,10 @@ pub enum UserError {
     RoleNotFoundError,
     #[display(fmt = "Group not found.")]
     GroupNotFoundError,
+    #[display(fmt = "Assignment not found.")]
+    AssignmentNotFoundError,
+    #[display(fmt = "Submission not found.")]
+    SubmissionNotFoundError,
     #[display(fmt = "User not found.")]
     UserNotFoundError,
     #[display(fmt = "Message not found.")]
@@ -83,6 +87,10 @@ pub enum UserError {
     UsernameExists,
     #[display(fmt = "Group already exists.")]
     GroupExistsError,
+    #[display(fmt = "Assignment already exists.")]
+    AssignmentExistsError,
+    #[display(fmt = "Submission already exists.")]
+    SubmissionExistsError,
     #[display(fmt = "Invalid username.")]
     InvalidUsername,
     #[display(fmt = "Invalid name.")]
@@ -197,6 +205,8 @@ impl error::ResponseError for UserError {
             | Self::FriendNotFoundError
             | Self::OAuthClientNotFoundError
             | Self::OAuthTokenNotFoundError
+            | Self::AssignmentNotFoundError
+            | Self::SubmissionNotFoundError
             | Self::GroupNotFoundError => StatusCode::NOT_FOUND,
             Self::InternalError | Self::SnapConnectionError => StatusCode::INTERNAL_SERVER_ERROR,
             Self::InvalidUsername
@@ -216,6 +226,8 @@ impl error::ResponseError for UserError {
             | Self::UserExistsError
             | Self::UsernameExists
             | Self::OAuthClientAlreadyExistsError
+            | Self::AssignmentExistsError
+            | Self::SubmissionExistsError
             | Self::GroupExistsError
             | Self::CannotDeleteLastRoleError
             | Self::ServiceHostAlreadyAuthorizedError

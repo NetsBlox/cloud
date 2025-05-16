@@ -1,7 +1,7 @@
 use crate::{app_data::AppData, errors::InternalError, utils};
 use actix_web::HttpRequest;
 use mongodb::bson::doc;
-use netsblox_cloud_common::api;
+use netsblox_cloud_common::{api, Assignment, Submission};
 
 use crate::errors::UserError;
 
@@ -18,6 +18,59 @@ pub(crate) struct EditGroup {
 
 pub(crate) struct DeleteGroup {
     pub(crate) id: api::GroupId,
+    _private: (),
+}
+
+pub(crate) struct CreateAssignment {
+    pub(crate) ca_data: api::CreateAssignmentData,
+    pub(crate) group_id: api::GroupId,
+    _private: (),
+}
+
+pub(crate) struct ViewAssignment {
+    pub(crate) assignment: Assignment,
+    _private: (),
+}
+
+pub(crate) struct ViewGroupAssignments {
+    pub(crate) group_id: api::GroupId,
+    _private: (),
+}
+
+pub(crate) struct EditAssignment {
+    pub(crate) assignment: Assignment,
+    _private: (),
+}
+
+pub(crate) struct DeleteAssignment {
+    pub(crate) assignment: Assignment,
+    _private: (),
+}
+
+pub(crate) struct CreateSubmission {
+    pub(crate) assignment_id: api::AssignmentId,
+    pub(crate) cs_data: api::CreateSubmissionData,
+    _private: (),
+}
+
+pub(crate) struct ViewSubmission {
+    pub(crate) submission: Submission,
+    _private: (),
+}
+
+pub(crate) struct ViewOwnerSubmissions {
+    pub(crate) owner: String,
+    pub(crate) assignment_id: api::AssignmentId,
+    _private: (),
+}
+
+pub(crate) struct ViewAssignmentSubmissions {
+    pub(crate) assignment: Assignment,
+    _private: (),
+}
+
+pub(crate) struct DeleteSubmission {
+    pub(crate) submission: Submission,
     _private: (),
 }
 
@@ -85,6 +138,194 @@ pub(crate) async fn try_delete_group(
         id: group_id.to_owned(),
         _private: (),
     })
+}
+
+pub(crate) async fn try_create_assignment(
+    app: &AppData,
+    req: &HttpRequest,
+    ca_data: api::CreateAssignmentData,
+    group_id: api::GroupId,
+) -> Result<CreateAssignment, UserError> {
+    let _auth_eg = super::try_edit_group(app, req, &group_id).await?;
+
+    Ok(CreateAssignment {
+        ca_data,
+        group_id,
+        _private: (),
+    })
+}
+
+pub(crate) async fn try_view_assignment(
+    app: &AppData,
+    req: &HttpRequest,
+    assignment_id: api::AssignmentId,
+    group_id: api::GroupId,
+) -> Result<ViewAssignment, UserError> {
+    let assignment = app
+        .assignments
+        .find_one(doc! {"id": assignment_id, "groupId": group_id}, None)
+        .await
+        .map_err(InternalError::DatabaseConnectionError)?
+        .ok_or(UserError::AssignmentNotFoundError)?;
+
+    let can_edit_group = super::try_edit_group(app, req, &assignment.group_id)
+        .await
+        .is_ok();
+
+    let requestor = utils::get_username(req).ok_or(UserError::LoginRequiredError)?;
+    let is_member = utils::is_group_member(app, &requestor, &assignment.group_id).await?;
+
+    if !can_edit_group && !is_member {
+        Err(UserError::PermissionsError)
+    } else {
+        Ok(ViewAssignment {
+            assignment,
+            _private: (),
+        })
+    }
+}
+
+pub(crate) async fn try_view_group_assignments(
+    app: &AppData,
+    req: &HttpRequest,
+    group_id: api::GroupId,
+) -> Result<ViewGroupAssignments, UserError> {
+    let can_edit_group = super::try_edit_group(app, req, &group_id).await.is_ok();
+
+    let requestor = utils::get_username(req).ok_or(UserError::LoginRequiredError)?;
+    let is_member = utils::is_group_member(app, &requestor, &group_id).await?;
+
+    if !can_edit_group && !is_member {
+        Err(UserError::PermissionsError)
+    } else {
+        Ok(ViewGroupAssignments {
+            group_id: group_id.clone(),
+            _private: (),
+        })
+    }
+}
+
+pub(crate) async fn try_edit_assignment(
+    app: &AppData,
+    req: &HttpRequest,
+    assignment_id: api::AssignmentId,
+    group_id: api::GroupId,
+) -> Result<EditAssignment, UserError> {
+    let assignment = app
+        .assignments
+        .find_one(doc! {"id": assignment_id, "groupId": group_id}, None)
+        .await
+        .map_err(InternalError::DatabaseConnectionError)?
+        .ok_or(UserError::AssignmentNotFoundError)?;
+
+    let _can_edit_group = super::try_edit_group(app, req, &assignment.group_id).await?;
+
+    Ok(EditAssignment {
+        assignment,
+        _private: (),
+    })
+}
+
+pub(crate) async fn try_delete_assignment(
+    app: &AppData,
+    req: &HttpRequest,
+    assignment_id: api::AssignmentId,
+    group_id: api::GroupId,
+) -> Result<DeleteAssignment, UserError> {
+    let auth_ea = try_edit_assignment(app, req, assignment_id, group_id).await?;
+    Ok(DeleteAssignment {
+        assignment: auth_ea.assignment,
+        _private: (),
+    })
+}
+
+pub(crate) async fn try_create_submission(
+    app: &AppData,
+    req: &HttpRequest,
+    cs_data: api::CreateSubmissionData,
+    assignment_id: api::AssignmentId,
+    group_id: api::GroupId,
+) -> Result<CreateSubmission, UserError> {
+    let _auth_eu = super::try_edit_user(app, req, None, &cs_data.owner).await?;
+    let _auth_va = try_view_assignment(app, req, assignment_id.clone(), group_id).await?;
+
+    Ok(CreateSubmission {
+        assignment_id,
+        cs_data,
+        _private: (),
+    })
+}
+
+pub(crate) async fn try_view_submission(
+    app: &AppData,
+    req: &HttpRequest,
+    id: api::SubmissionId,
+    assignment_id: api::AssignmentId,
+) -> Result<ViewSubmission, UserError> {
+    let query = doc! {"id": id, "assignmentId": assignment_id};
+    let submission = app
+        .submissions
+        .find_one(query, None)
+        .await
+        .map_err(InternalError::DatabaseConnectionError)?
+        .ok_or(UserError::SubmissionNotFoundError)?;
+
+    let _auth_eu = super::try_edit_user(app, req, None, &submission.owner).await?;
+
+    Ok(ViewSubmission {
+        submission,
+        _private: (),
+    })
+}
+
+pub(crate) async fn try_view_owner_submissions(
+    app: &AppData,
+    req: &HttpRequest,
+    owner: String,
+    assignment_id: api::AssignmentId,
+) -> Result<ViewOwnerSubmissions, UserError> {
+    let _auth_eu = super::try_edit_user(app, req, None, &owner).await?;
+
+    Ok(ViewOwnerSubmissions {
+        owner,
+        assignment_id,
+        _private: (),
+    })
+}
+
+pub(crate) async fn try_view_assignment_submissions(
+    app: &AppData,
+    req: &HttpRequest,
+    assignment_id: api::AssignmentId,
+    group_id: api::GroupId,
+) -> Result<ViewAssignmentSubmissions, UserError> {
+    let assignment = app
+        .assignments
+        .find_one(doc! {"id": assignment_id, "groupId": group_id}, None)
+        .await
+        .map_err(InternalError::DatabaseConnectionError)?
+        .ok_or(UserError::SubmissionNotFoundError)?;
+
+    let _auth_eg = super::try_edit_group(app, req, &assignment.group_id).await?;
+
+    Ok(ViewAssignmentSubmissions {
+        assignment,
+        _private: (),
+    })
+}
+
+pub(crate) async fn try_delete_submission(
+    app: &AppData,
+    req: &HttpRequest,
+    id: api::SubmissionId,
+    assignment_id: api::AssignmentId,
+) -> Result<DeleteSubmission, UserError> {
+    try_view_submission(app, req, id, assignment_id)
+        .await
+        .map(|vs| DeleteSubmission {
+            submission: vs.submission,
+            _private: (),
+        })
 }
 
 #[cfg(test)]
