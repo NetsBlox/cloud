@@ -22,7 +22,7 @@ lazy_static! {
 pub(crate) fn setup() -> TestSetupBuilder {
     let mut counter = COUNTER.lock().unwrap();
     *counter += 1_u32;
-    let prefix = format!("test-{}", counter);
+    let prefix = format!("test-{counter}");
     TestSetupBuilder {
         prefix,
         users: Vec::new(),
@@ -141,6 +141,7 @@ impl TestSetupBuilder {
     where
         Fut: Future<Output = ()>,
     {
+        //WARN: Shouldnt this get its value from the settings variable?
         let client = Client::with_uri_str("mongodb://127.0.0.1:27017/")
             .await
             .expect("Unable to connect to database");

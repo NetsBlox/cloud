@@ -85,6 +85,7 @@ pub struct AppData {
     friend_cache: Arc<RwLock<LruCache<String, Vec<String>>>>,
 }
 
+#[allow(clippy::too_many_lines)]
 impl AppData {
     pub fn new(
         client: Client,
