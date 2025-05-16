@@ -1,15 +1,18 @@
 use actix::Addr;
 use actix_session::SessionExt;
 use actix_web::HttpRequest;
+use aws_sdk_s3 as s3;
+use aws_sdk_s3::operation::put_object::PutObjectOutput;
+use aws_sdk_s3::types::{Delete, ObjectIdentifier};
 use futures::TryStreamExt;
 use lazy_static::lazy_static;
 use lettre::{Message, SmtpTransport, Transport};
-use log::error;
+use log::{error, warn};
 use lru::LruCache;
 use mongodb::{bson::doc, Collection};
 use netsblox_cloud_common::{
-    api::{self, GroupId, UserRole},
-    AuthorizedServiceHost, FriendLink, Group, ProjectMetadata, User,
+    api::{self, GroupId, S3Key, UserRole},
+    AuthorizedServiceHost, Bucket, FriendLink, Group, ProjectMetadata, User,
 };
 use nonempty::NonEmpty;
 use regex::Regex;
@@ -369,6 +372,86 @@ pub(crate) async fn find_usernames(
         .map_err(InternalError::DatabaseConnectionError)?;
 
     NonEmpty::from_vec(usernames).ok_or(UserError::UserNotFoundError)
+}
+
+pub(crate) async fn download(
+    client: &s3::Client,
+    bucket: &Bucket,
+    key: &S3Key,
+) -> Result<String, InternalError> {
+    let output = client
+        .get_object()
+        .bucket(bucket)
+        .key(key)
+        .send()
+        .await
+        .map_err(|_err| InternalError::S3Error)?;
+    let bytes: Vec<u8> = output
+        .body
+        .collect()
+        .await
+        .map(|data| data.to_vec())
+        .map_err(|_err| InternalError::S3ContentError)?;
+
+    String::from_utf8(bytes).map_err(|_err| InternalError::S3ContentError)
+}
+
+pub(crate) async fn upload(
+    client: &s3::Client,
+    bucket: &Bucket,
+    key: &S3Key,
+    body: String,
+) -> Result<PutObjectOutput, InternalError> {
+    client
+        .put_object()
+        .bucket(bucket)
+        .key(key)
+        .body(body.into_bytes().into())
+        .send()
+        .await
+        .map_err(|err| {
+            warn!("Unable to upload to s3: {}", err);
+            InternalError::S3Error
+        })
+}
+
+pub(crate) async fn delete(
+    client: &s3::Client,
+    bucket: &Bucket,
+    key: S3Key,
+) -> Result<(), UserError> {
+    client
+        .delete_object()
+        .bucket(bucket)
+        .key(&key)
+        .send()
+        .await
+        .map_err(|_err| InternalError::S3Error)?;
+
+    Ok(())
+}
+
+pub(crate) async fn delete_multiple(
+    client: &s3::Client,
+    bucket: &Bucket,
+    keys: Vec<S3Key>,
+) -> Result<(), UserError> {
+    let objects = keys
+        .iter()
+        .map(|key| ObjectIdentifier::builder().key(key).build())
+        .collect::<Vec<_>>();
+
+    let delete = Delete::builder().set_objects(Some(objects)).build();
+
+    client
+        .delete_objects()
+        .bucket(bucket)
+        .delete(delete)
+        .send()
+        .await
+        .map_err(|_err| InternalError::S3Error)?;
+
+    Ok(())
 }
 
 // TODO: tests for cache invalidation

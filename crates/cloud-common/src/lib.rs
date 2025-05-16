@@ -5,7 +5,7 @@ use netsblox_api_common::{
 };
 use netsblox_api_common::{
     FriendInvite, FriendLinkState, GroupId, InvitationState, LinkedAccount, ProjectId, RoleData,
-    SaveState, ServiceHost, ServiceHostScope,
+    S3Key, SaveState, ServiceHost, ServiceHostScope,
 };
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha512};
@@ -348,6 +348,27 @@ impl From<NetworkTraceMetadata> for netsblox_api_common::NetworkTraceMetadata {
 }
 
 #[derive(Deserialize, Serialize, Clone, Debug)]
+pub struct Bucket(String);
+
+impl Bucket {
+    #[must_use]
+    pub fn new(bucket: String) -> Self {
+        Bucket(bucket)
+    }
+
+    #[must_use]
+    pub fn as_str(&self) -> &str {
+        &self.0
+    }
+}
+
+impl From<&Bucket> for String {
+    fn from(value: &Bucket) -> Self {
+        value.0.clone()
+    }
+}
+
+#[derive(Deserialize, Serialize, Clone, Debug)]
 #[serde(rename_all = "camelCase")]
 pub struct ProjectMetadata {
     pub id: ProjectId,
@@ -480,8 +501,9 @@ impl From<Project> for netsblox_api_common::Project {
 #[serde(rename_all = "camelCase")]
 pub struct RoleMetadata {
     pub name: String,
-    pub code: String,
-    pub media: String,
+    pub code: S3Key,
+    pub media: S3Key,
+
     pub updated: DateTime,
 }
 

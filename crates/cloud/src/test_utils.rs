@@ -36,7 +36,7 @@ pub(crate) fn setup() -> TestSetupBuilder {
         collab_invites: Vec::new(),
         authorized_services: Vec::new(),
         message_logs: Vec::new(),
-        // network: None,
+        with_s3: true, // network: None,
     }
 }
 
@@ -54,6 +54,7 @@ pub(crate) struct TestSetupBuilder {
     authorized_services: Vec<AuthorizedServiceHost>,
     message_logs: Vec<LogMessage>,
     //network: Option<Addr<TopologyActor>>,
+    with_s3: bool, //network: Option<Addr<TopologyActor>>,
 }
 
 impl TestSetupBuilder {
@@ -117,6 +118,11 @@ impl TestSetupBuilder {
     //     self
     // }
 
+    pub(crate) fn without_s3(mut self) -> Self {
+        self.with_s3 = false;
+        self
+    }
+
     pub(crate) async fn run<Fut>(self, f: impl FnOnce(AppData) -> Fut)
     where
         Fut: Future<Output = ()>,
@@ -130,7 +136,8 @@ impl TestSetupBuilder {
         settings.database.name = db_name.clone();
         settings.s3.bucket = format!("{}-{}", &self.prefix, settings.s3.bucket);
 
-        let app_data = AppData::new(client.clone(), settings, None, None, None);
+        //FIXME: how can I drop s3 without this being mutable
+        let mut app_data = AppData::new(client.clone(), settings, None, None, None);
 
         // create the test fixtures (users, projects, etc)
         client.database(&db_name).drop(None).await.unwrap();
@@ -246,6 +253,9 @@ impl TestSetupBuilder {
                 .insert_many(self.message_logs, None)
                 .await
                 .unwrap();
+        }
+        if !self.with_s3 {
+            app_data.drop_s3();
         }
 
         // Connect the clients
