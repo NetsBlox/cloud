@@ -3,6 +3,7 @@ pub(crate) mod metrics;
 use crate::collaboration_invites::actions::CollaborationInviteActions;
 use crate::common::api::{oauth, NewUser, ProjectId, UserRole};
 use crate::friends::actions::FriendActions;
+use crate::galleries::actions::GalleryActions;
 use crate::groups::actions::GroupActions;
 use crate::libraries::actions::LibraryActions;
 use crate::login_helper::LoginHelper;
@@ -22,7 +23,9 @@ use log::{error, info, warn};
 use lru::LruCache;
 use mongodb::bson::{doc, Document};
 use mongodb::options::{FindOptions, IndexOptions, UpdateOptions};
-use netsblox_cloud_common::{api, Assignment, Bucket, MagicLink, Submission};
+use netsblox_cloud_common::{
+    api, Assignment, Bucket, Gallery, GalleryProjectMetadata, MagicLink, Submission,
+};
 use serde::{Deserialize, Serialize};
 use std::collections::HashSet;
 use std::net::IpAddr;
@@ -58,8 +61,11 @@ pub struct AppData {
     pub(crate) banned_accounts: Collection<BannedAccount>,
     friends: Collection<FriendLink>,
     magic_links: Collection<MagicLink>,
+
     pub(crate) assignments: Collection<Assignment>,
     pub(crate) submissions: Collection<Submission>,
+    pub(crate) galleries: Collection<Gallery>,
+    pub(crate) gallery_projects: Collection<GalleryProjectMetadata>,
     pub(crate) project_metadata: Collection<ProjectMetadata>,
     pub(crate) libraries: Collection<Library>,
     pub(crate) authorized_services: Collection<AuthorizedServiceHost>,
@@ -148,6 +154,9 @@ impl AppData {
         let magic_links = db.collection::<MagicLink>(&(prefix.to_owned() + "magicLinks"));
         let assignments = db.collection::<Assignment>(&(prefix.to_owned() + "assignments"));
         let submissions = db.collection::<Submission>(&(prefix.to_owned() + "submissions"));
+        let galleries = db.collection::<Gallery>(&(prefix.to_owned() + "galleries"));
+        let gallery_projects =
+            db.collection::<GalleryProjectMetadata>(&(prefix.to_owned() + "galleryProjects"));
         let recorded_messages =
             db.collection::<SentMessage>(&(prefix.to_owned() + "recordedMessages"));
         let logged_messages = db.collection::<LogMessage>(&(prefix.to_owned() + "loggedMessages"));
@@ -158,6 +167,7 @@ impl AppData {
         let oauth_tokens = db.collection::<OAuthToken>(&(prefix.to_owned() + "oauthToken"));
         let oauth_codes = db.collection::<oauth::Code>(&(prefix.to_owned() + "oauthCode"));
         let tor_exit_nodes = db.collection::<TorNode>(&(prefix.to_owned() + "torExitNodes"));
+
         let bucket = Bucket::new(settings.s3.bucket.clone());
 
         let project_cache = Arc::new(RwLock::new(LruCache::new(
@@ -190,8 +200,11 @@ impl AppData {
             password_tokens,
             friends,
             magic_links,
+
             assignments,
             submissions,
+            galleries,
+            gallery_projects,
 
             mailer,
             sender,
@@ -577,12 +590,56 @@ impl AppData {
     }
 
     #[cfg(test)]
+    pub(crate) async fn insert_galleries(
+        &self,
+        galleries: &[Gallery],
+    ) -> Result<(), InternalError> {
+        self.galleries
+            .insert_many(galleries, None)
+            .await
+            .map_err(InternalError::DatabaseConnectionError)?;
+
+        Ok(())
+    }
+
+    #[cfg(test)]
     pub(crate) async fn insert_submissions(
         &self,
         submissions: &[Submission],
     ) -> Result<(), InternalError> {
         self.submissions
             .insert_many(submissions, None)
+            .await
+            .map_err(InternalError::DatabaseConnectionError)?;
+
+        Ok(())
+    }
+
+    #[cfg(test)]
+    pub(crate) async fn insert_gallery_projects(
+        &self,
+        gallery_projects: &[GalleryProjectMetadata],
+    ) -> Result<(), InternalError> {
+        for project in gallery_projects {
+            for (index, version) in project.versions.iter().enumerate() {
+                let color = crate::test_utils::gallery_projects::TestThumbnail::new(index);
+
+                crate::utils::upload(
+                    &self.s3,
+                    &self.bucket,
+                    &version.key,
+                    format!(
+                        "<project><version>{}</version><thumbnail>{}</thumbnail></project>",
+                        index,
+                        color.as_str(),
+                    ),
+                )
+                .await?;
+            }
+        }
+
+        self.gallery_projects
+            .insert_many(gallery_projects, None)
             .await
             .map_err(InternalError::DatabaseConnectionError)?;
 
@@ -616,6 +673,15 @@ impl AppData {
     // get resource actions (eg, libraries, users, etc)
     pub(crate) fn as_library_actions(&self) -> LibraryActions {
         LibraryActions::new(&self.libraries)
+    }
+
+    pub(crate) fn as_gallery_actions(&self) -> GalleryActions {
+        GalleryActions::new(
+            &self.galleries,
+            &self.gallery_projects,
+            &self.bucket,
+            &self.s3,
+        )
     }
 
     pub(crate) fn as_project_actions(&self) -> ProjectActions {

@@ -55,6 +55,14 @@ pub enum UserError {
     AssignmentNotFoundError,
     #[display(fmt = "Submission not found.")]
     SubmissionNotFoundError,
+    #[display(fmt = "Gallery not found.")]
+    GalleryNotFoundError,
+    #[display(fmt = "Gallery project not found.")]
+    GalleryProjectNotFoundError,
+    #[display(fmt = "Gallery Project Versions empty.")]
+    GalleryProjectVersionsEmptyError,
+    #[display(fmt = "Gallery Project Versions not found.")]
+    GalleryProjectVersionNotFoundError,
     #[display(fmt = "User not found.")]
     UserNotFoundError,
     #[display(fmt = "Message not found.")]
@@ -91,6 +99,10 @@ pub enum UserError {
     AssignmentExistsError,
     #[display(fmt = "Submission already exists.")]
     SubmissionExistsError,
+    #[display(fmt = "Gallery already exists.")]
+    GalleryExistsError,
+    #[display(fmt = "Gallery project already exists.")]
+    GalleryProjectExistsError,
     #[display(fmt = "Invalid username.")]
     InvalidUsername,
     #[display(fmt = "Invalid name.")]
@@ -200,6 +212,7 @@ impl error::ResponseError for UserError {
             | Self::RoleNotFoundError
             | Self::InviteNotFoundError
             | Self::MagicLinkNotFoundError
+            | Self::GalleryProjectNotFoundError
             | Self::UserNotFoundError
             | Self::MessageNotFoundError
             | Self::FriendNotFoundError
@@ -207,6 +220,9 @@ impl error::ResponseError for UserError {
             | Self::OAuthTokenNotFoundError
             | Self::AssignmentNotFoundError
             | Self::SubmissionNotFoundError
+            | Self::GalleryNotFoundError
+            | Self::GalleryProjectVersionsEmptyError
+            | Self::GalleryProjectVersionNotFoundError
             | Self::GroupNotFoundError => StatusCode::NOT_FOUND,
             Self::InternalError | Self::SnapConnectionError => StatusCode::INTERNAL_SERVER_ERROR,
             Self::InvalidUsername
@@ -228,6 +244,8 @@ impl error::ResponseError for UserError {
             | Self::OAuthClientAlreadyExistsError
             | Self::AssignmentExistsError
             | Self::SubmissionExistsError
+            | Self::GalleryExistsError
+            | Self::GalleryProjectExistsError
             | Self::GroupExistsError
             | Self::CannotDeleteLastRoleError
             | Self::ServiceHostAlreadyAuthorizedError

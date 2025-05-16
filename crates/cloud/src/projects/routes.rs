@@ -301,17 +301,11 @@ async fn get_latest_project(
     Ok(HttpResponse::Ok().json(project))
 }
 
-#[derive(Deserialize)]
-#[serde(rename_all = "camelCase")]
-struct ThumbnailParams {
-    aspect_ratio: Option<f32>,
-}
-
 #[get("/id/{projectID}/thumbnail")]
 async fn get_project_thumbnail(
     app: web::Data<AppData>,
     path: web::Path<(ProjectId,)>,
-    params: web::Query<ThumbnailParams>,
+    params: web::Query<api::ThumbnailParams>,
     req: HttpRequest,
 ) -> Result<HttpResponse, UserError> {
     let (project_id,) = path.into_inner();
@@ -329,7 +323,7 @@ async fn get_project_thumbnail(
 async fn get_user_project_thumbnail(
     app: web::Data<AppData>,
     path: web::Path<(String, String)>,
-    params: web::Query<ThumbnailParams>,
+    params: web::Query<api::ThumbnailParams>,
     req: HttpRequest,
 ) -> Result<HttpResponse, UserError> {
     let (owner, name) = path.into_inner();
@@ -365,7 +359,6 @@ async fn get_thumbnail(
     app: web::Data<AppData>,
     params: web::Query<GetThumbnailParams>,
 ) -> Result<HttpResponse, UserError> {
-    let actions: ProjectActions = app.as_project_actions();
     let xml = if let Some(xml) = params.xml.as_ref() {
         xml.to_owned()
     } else if let Some(url) = params.url.as_ref() {
@@ -383,7 +376,7 @@ async fn get_thumbnail(
     } else {
         return Err(UserError::MissingUrlOrXmlError);
     };
-    let thumbnail = actions.get_thumbnail(&xml, params.aspect_ratio)?;
+    let thumbnail = utils::get_thumbnail(&xml, params.aspect_ratio)?;
 
     Ok(HttpResponse::Ok().content_type("image/png").body(thumbnail))
 }

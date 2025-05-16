@@ -1,4 +1,5 @@
 pub(crate) mod collaboration;
+pub(crate) mod galleries;
 pub(crate) mod groups;
 pub(crate) mod hosts;
 pub(crate) mod libraries;
@@ -9,6 +10,7 @@ pub(crate) mod system;
 pub(crate) mod users;
 
 pub(crate) use crate::auth::collaboration::*;
+pub(crate) use crate::auth::galleries::*;
 pub(crate) use crate::auth::groups::*;
 pub(crate) use crate::auth::hosts::*;
 pub(crate) use crate::auth::libraries::*;

@@ -2,6 +2,8 @@ pub mod common;
 pub mod error;
 
 use crate::common::*;
+use bytes::Bytes;
+
 use futures_util::SinkExt;
 use netsblox_api_common::{
     CreateGroupData, CreateMagicLinkData, ServiceHostScope, UpdateGroupData, UpdateUserData,
@@ -1312,6 +1314,782 @@ impl Client {
         let response = check_response(response).await?;
 
         Ok(response.json::<Vec<oauth::Client>>().await.unwrap())
+    }
+
+    /// Asynchronously creates a new gallery.
+    ///
+    /// # Arguments
+    ///
+    /// * `data` - A reference to the `CreateGalleryData` struct.
+    ///
+    /// # Returns
+    /// * `Result<common::Gallery, error::Error>` -
+    /// * On success, returns an instance of the created `Gallery`.
+    /// * On failure, returns an `error::Error`.
+    ///
+    /// # Errors
+    ///
+    /// * `error::Error::RequestError` - Returned if there is an error sending the request.
+    /// * `error::Error::ParseJsonFailedError` - Returned if there is an error parsing
+    /// the JSON response.
+    /// * If server respondes with error, we return the error.
+    ///
+    /// # Notes
+    ///
+    /// This function makes an HTTP POST request to the `/galleries/` endpoint
+    /// with the provided `data`.
+    /// It then checks the response for any errors and attempts to parse the
+    /// response body as JSON into a `Gallery` struct.
+    ///
+    /// The `check_response` function is called to handle potential HTTP errors.
+    /// If the response is successful, it is parsed into a `Gallery` object and returned.
+    pub async fn create_gallery(&self, data: &CreateGalleryData) -> Result<Gallery, error::Error> {
+        let response = self
+            .request(Method::POST, "/galleries/")
+            .json(&data)
+            .send()
+            .await
+            .map_err(error::Error::RequestError)?;
+
+        let response = check_response(response).await?;
+
+        let gallery = response
+            .json::<Gallery>()
+            .await
+            .map_err(|e| error::Error::ParseResponseFailedError(e.to_string()))?;
+
+        Ok(gallery)
+    }
+
+    /// Asynchronously retrieves the galleries of a specified user.
+    ///
+    /// # Arguments
+    ///
+    /// * `owner` - A reference to a `String` containing the username or identifier
+    /// of the gallery owner.
+    ///
+    /// # Returns
+    ///
+    /// * `Result<common::Gallery, error::Error>` -
+    ///   * On success, returns an instance of the retrieved `Gallery`.
+    ///   * On failure, returns an `error::Error`.
+    ///
+    /// # Errors
+    ///
+    /// * `error::Error::RequestError` - Returned if there is an error sending the request.
+    /// * `error::Error::ParseJsonFailedError` - Returned if there is an error parsing
+    /// the JSON response.
+    /// * If server responds with an error, we return the error.
+    ///
+    /// # Notes
+    ///
+    /// This function makes an HTTP GET request to the `/galleries/user/{owner}` endpoint,
+    /// where `{owner}` is replaced with the specified owner identifier.
+    /// It then checks the response for any errors and attempts to parse the response body
+    /// as JSON into a `Gallery` struct.
+    ///
+    /// The `check_response` function is called to handle potential HTTP errors.
+    /// If the response is successful, it is parsed into a `Gallery` object and returned.
+    pub async fn view_galleries_with_name(&self, owner: &str) -> Result<Gallery, error::Error> {
+        let url = format!("/galleries/user/{owner}");
+
+        let response = self
+            .request(Method::GET, &url)
+            .send()
+            .await
+            .map_err(error::Error::RequestError)?;
+
+        let response = check_response(response).await?;
+
+        let gallery = response
+            .json::<Gallery>()
+            .await
+            .map_err(|e| error::Error::ParseResponseFailedError(e.to_string()))?;
+
+        Ok(gallery)
+    }
+
+    /// Asynchronously retrieves a gallery by its ID.
+    ///
+    /// # Arguments
+    ///
+    /// * `id` - A reference to a `GalleryId` struct representing the ID of the gallery
+    /// to retrieve.
+    ///
+    /// # Returns
+    ///
+    /// * `Result<common::Gallery, error::Error>` -
+    ///   * On success, returns an instance of the retrieved `Gallery`.
+    ///   * On failure, returns an `error::Error`.
+    ///
+    /// # Errors
+    ///
+    /// * `error::Error::RequestError` - Returned if there is an error sending the request.
+    /// * `error::Error::ParseJsonFailedError` - Returned if there is an error parsing
+    /// the JSON response.
+    /// * If server responds with an error, we return the error.
+    ///
+    /// # Notes
+    ///
+    /// This function makes an HTTP GET request to the `/galleries/id/{id}` endpoint, where `{id}` is replaced with the specified gallery ID.
+    /// It then checks the response for any errors and attempts to parse the response
+    /// body as JSON into a `Gallery` struct.
+    ///
+    /// The `check_response` function is called to handle potential HTTP errors.
+    /// If the response is successful, it is parsed into a `Gallery` object and returned.
+    pub async fn view_gallery_with_id(&self, id: &GalleryId) -> Result<Gallery, error::Error> {
+        let url = format!("/galleries/id/{id}");
+
+        let response = self
+            .request(Method::GET, &url)
+            .send()
+            .await
+            .map_err(error::Error::RequestError)?;
+
+        let response = check_response(response).await?;
+
+        let gallery = response
+            .json::<Gallery>()
+            .await
+            .map_err(|e| error::Error::ParseResponseFailedError(e.to_string()))?;
+
+        Ok(gallery)
+    }
+
+    /// Asynchronously updates an existing gallery.
+    ///
+    /// # Arguments
+    ///
+    /// * `id` - A reference to a `GalleryId` struct representing the ID of the gallery
+    /// to update.
+    /// * `data` - A reference to the `ChangeGalleryData` struct containing the new data
+    /// for the gallery.
+    ///
+    /// # Returns
+    ///
+    /// * `Result<Gallery, error::Error>` -
+    ///   * On success, returns an instance of the updated `Gallery`.
+    ///   * On failure, returns an `error::Error`.
+    ///
+    /// # Errors
+    ///
+    /// * `error::Error::RequestError` - Returned if there is an error sending the request.
+    /// * `error::Error::ParseJsonFailedError` - Returned if there is an error parsing
+    /// the JSON response.
+    /// * If server responds with an error, we return the error.
+    ///
+    /// # Notes
+    ///
+    /// This function makes an HTTP PATCH request to the `/galleries/id/{id}` endpoint,
+    /// where `{id}` is replaced with the specified gallery ID.
+    /// It sends the `data` as JSON in the request body to update the gallery with
+    /// the new information provided.
+    /// It then checks the response for any errors and attempts to parse the response body
+    /// as JSON into a `Gallery` struct.
+    ///
+    /// The `check_response` function is called to handle potential HTTP errors.
+    /// If the response is successful, it is parsed into a `Gallery` object and returned.
+    pub async fn change_gallery(
+        &self,
+        id: &GalleryId,
+        data: &ChangeGalleryData,
+    ) -> Result<Gallery, error::Error> {
+        let url = format!("/galleries/id/{id}");
+
+        let response = self
+            .request(Method::PATCH, &url)
+            .json(&data)
+            .send()
+            .await
+            .map_err(error::Error::RequestError)?;
+
+        let response = check_response(response).await?;
+
+        let gallery = response
+            .json::<Gallery>()
+            .await
+            .map_err(|e| error::Error::ParseResponseFailedError(e.to_string()))?;
+
+        Ok(gallery)
+    }
+
+    /// Asynchronously deletes an existing gallery by its ID.
+    ///
+    /// # Arguments
+    ///
+    /// * `id` - A reference to a `GalleryId` struct representing the ID of the
+    /// gallery to delete.
+    ///
+    /// # Returns
+    ///
+    /// * `Result<Gallery, error::Error>` -
+    ///   * On success, returns an instance of the deleted `Gallery`.
+    ///   * On failure, returns an `error::Error`.
+    ///
+    /// # Errors
+    ///
+    /// * `error::Error::RequestError` - Returned if there is an error sending the request.
+    /// * `error::Error::ParseJsonFailedError` - Returned if there is an error parsing \
+    /// the JSON response.
+    /// * If server responds with an error, we return the error.
+    ///
+    /// # Notes
+    ///
+    /// This function makes an HTTP DELETE request to the `/galleries/id/{id}` endpoint,
+    /// where `{id}` is replaced with the specified gallery ID.
+    /// It then checks the response for any errors and attempts to parse the response body
+    /// as JSON into a `Gallery` struct.
+    ///
+    /// The `check_response` function is called to handle potential HTTP errors.
+    /// If the response is successful, it is parsed into a `Gallery` object and returned.
+    pub async fn delete_gallery(&self, id: &GalleryId) -> Result<Gallery, error::Error> {
+        let url = format!("/galleries/id/{id}");
+
+        let response = self
+            .request(Method::DELETE, &url)
+            .send()
+            .await
+            .map_err(error::Error::RequestError)?;
+
+        let response = check_response(response).await?;
+
+        let gallery = response
+            .json::<Gallery>()
+            .await
+            .map_err(|e| error::Error::ParseResponseFailedError(e.to_string()))?;
+
+        Ok(gallery)
+    }
+
+    /// Asynchronously adds a new project to an existing gallery.
+    ///
+    /// # Arguments
+    ///
+    /// * `id` - A reference to a `GalleryId` struct representing the ID of the
+    ///   gallery to add the project to.
+    /// * `data` - A reference to the `CreateGalleryProjectData` struct containing
+    ///   the data for the new project.
+    ///
+    /// # Returns
+    ///
+    /// * `Result<GalleryProjectMetadata, error::Error>` -
+    ///   * On success, returns an instance of the created `GalleryProjectMetadata`.
+    ///   * On failure, returns an `error::Error`.
+    ///
+    /// # Errors
+    ///
+    /// * `error::Error::RequestError` - Returned if there is an error sending the
+    ///   request.
+    /// * `error::Error::ParseJsonFailedError` - Returned if there is an error
+    ///   parsing the JSON response.
+    /// * If server responds with an error, we return the error.
+    ///
+    /// # Notes
+    ///
+    /// This function makes an HTTP POST request to the `/galleries/id/{id}`
+    /// endpoint, where `{id}` is replaced with the specified gallery ID.
+    /// It sends the `data` as JSON in the request body to add the new project to
+    /// the gallery.
+    /// It then checks the response for any errors and attempts to parse the
+    /// response body as JSON into a `GalleryProjectMetadata` struct.
+    ///
+    /// The `check_response` function is called to handle potential HTTP errors.
+    /// If the response is successful, it is parsed into a `GalleryProjectMetadata`
+    /// object and returned.
+    pub async fn add_gallery_project(
+        &self,
+        id: &GalleryId,
+        data: &CreateGalleryProjectData,
+    ) -> Result<GalleryProjectMetadata, error::Error> {
+        let url = format!("/galleries/id/{id}");
+
+        let response = self
+            .request(Method::POST, &url)
+            .json(&data)
+            .send()
+            .await
+            .map_err(error::Error::RequestError)?;
+
+        let response = check_response(response).await?;
+
+        let project = response
+            .json::<GalleryProjectMetadata>()
+            .await
+            .map_err(|e| error::Error::ParseResponseFailedError(e.to_string()))?;
+
+        Ok(project)
+    }
+
+    /// Asynchronously retrieves metadata for a specific project within a gallery.
+    ///
+    /// # Arguments
+    ///
+    /// * `id` - A reference to a `GalleryId` struct representing the ID of the gallery.
+    /// * `prid` - A reference to a `ProjectId` struct representing the ID of the project
+    /// within the gallery.
+    ///
+    /// # Returns
+    ///
+    /// * `Result<GalleryProjectMetadata, error::Error>` -
+    ///   * On success, returns an instance of the retrieved `GalleryProjectMetadata`.
+    ///   * On failure, returns an `error::Error`.
+    ///
+    /// # Errors
+    ///
+    /// * `error::Error::RequestError` - Returned if there is an error sending the request.
+    /// * `error::Error::ParseJsonFailedError` - Returned if there is an error parsing
+    /// the JSON response.
+    /// * If server responds with an error, we return the error.
+    ///
+    /// # Notes
+    ///
+    /// This function makes an HTTP GET request to the `/galleries/id/{id}/project/{prid}`
+    /// endpoint, where `{id}` and `{prid}` are replaced with the specified gallery ID
+    /// and project ID respectively.
+    /// It then checks the response for any errors and attempts to parse the response body
+    /// as JSON into a `GalleryProjectMetadata` struct.
+    ///
+    /// The `check_response` function is called to handle potential HTTP errors.
+    /// If the response is successful, it is parsed into a `GalleryProjectMetadata` object
+    /// and returned.
+    pub async fn view_gallery_project(
+        &self,
+        id: &GalleryId,
+        prid: &ProjectId,
+    ) -> Result<GalleryProjectMetadata, error::Error> {
+        let url = format!("/galleries/id/{id}/project/{prid}");
+
+        let response = self
+            .request(Method::GET, &url)
+            .send()
+            .await
+            .map_err(error::Error::RequestError)?;
+
+        let response = check_response(response).await?;
+
+        let project = response
+            .json::<GalleryProjectMetadata>()
+            .await
+            .map_err(|e| error::Error::ParseResponseFailedError(e.to_string()))?;
+
+        Ok(project)
+    }
+
+    /// Asynchronously retrieves the thumbnail of a specific project within a gallery.
+    ///
+    /// # Arguments
+    ///
+    /// * `id` - A reference to a `GalleryId` struct representing the ID of the gallery.
+    /// * `prid` - A reference to a `ProjectId` struct representing the ID of
+    /// the project within the gallery.
+    /// * `aspect_ratio` - An optional reference to an `f32` representing the desired
+    /// aspect ratio of the thumbnail.
+    ///
+    /// # Returns
+    ///
+    /// * `Result<Bytes, error::Error>` -
+    ///   * On success, returns the thumbnail as `Bytes`.
+    ///   * On failure, returns an `error::Error`.
+    ///
+    /// # Errors
+    ///
+    /// * `error::Error::RequestError` - Returned if there is an error sending the request.
+    /// * `error::Error::ParseJsonFailedError` - Returned if there is an error
+    /// parsing the JSON response.
+    /// * If server responds with an error, we return the error.
+    ///
+    /// # Notes
+    ///
+    /// This function makes an HTTP GET request to the
+    /// `/galleries/id/{id}/project/{prid}/thumbnail`
+    /// endpoint, where `{id}` and `{prid}` are replaced with the specified gallery ID
+    /// and project ID
+    /// respectively. If an `aspect_ratio` is provided, it is appended as a query parameter.
+    ///
+    /// It then checks the response for any errors and attempts to retrieve the response
+    /// body as `Bytes`.
+    ///
+    /// The `check_response` function is called to handle potential HTTP errors.
+    /// If the response is successful, the thumbnail is returned as `Bytes`.
+    pub async fn view_gallery_project_thumbnail(
+        &self,
+        id: &GalleryId,
+        prid: &ProjectId,
+        aspect_ratio: &Option<f32>,
+    ) -> Result<Bytes, error::Error> {
+        let base = format!("/galleries/id/{id}/project/{prid}/thumbnail");
+
+        let url = if let Some(ratio) = aspect_ratio {
+            format!("{base}?aspect_ratio={ratio}")
+        } else {
+            base
+        };
+
+        let response = self
+            .request(Method::GET, &url)
+            .send()
+            .await
+            .map_err(error::Error::RequestError)?;
+
+        let response = check_response(response).await?;
+
+        let thumbnail = response
+            .bytes()
+            .await
+            .map_err(|e| error::Error::ParseResponseFailedError(e.to_string()))?;
+
+        Ok(thumbnail)
+    }
+    /// Asynchronously retrieves all projects within a specified gallery.
+    ///
+    /// # Arguments
+    ///
+    /// * `id` - A reference to a `GalleryId` struct representing the ID of the
+    ///   gallery.
+    ///
+    /// # Returns
+    ///
+    /// * `Result<Vec<GalleryProjectMetadata>, error::Error>` -
+    ///   * On success, returns a vector of `GalleryProjectMetadata`.
+    ///   * On failure, returns an `error::Error`.
+    ///
+    /// # Errors
+    ///
+    /// * `error::Error::RequestError` - Returned if there is an error sending the
+    ///   request.
+    /// * `error::Error::ParseResponseFailedError` - Returned if there is an error
+    ///   parsing the JSON response.
+    /// * If server responds with an error, we return the error.
+    ///
+    /// # Notes
+    ///
+    /// This function makes an HTTP GET request to the `/galleries/id/{id}/projects`
+    /// endpoint, where `{id}` is replaced with the specified gallery ID.
+    /// It then checks the response for any errors and attempts to parse the
+    /// response body as JSON into a vector of `GalleryProjectMetadata`.
+    ///
+    /// The `check_response` function is called to handle potential HTTP errors.
+    /// If the response is successful, it is parsed into a vector of
+    /// `GalleryProjectMetadata` and returned.
+    pub async fn view_gallery_projects(
+        &self,
+        id: &GalleryId,
+    ) -> Result<Vec<GalleryProjectMetadata>, error::Error> {
+        let url = format!("/galleries/id/{id}/projects");
+
+        let response = self
+            .request(Method::GET, &url)
+            .send()
+            .await
+            .map_err(error::Error::RequestError)?;
+
+        let response = check_response(response).await?;
+
+        let projects = response
+            .json::<Vec<GalleryProjectMetadata>>()
+            .await
+            .map_err(|e| error::Error::ParseResponseFailedError(e.to_string()))?;
+
+        Ok(projects)
+    }
+
+    /// Asynchronously adds a new version to a project within a gallery.
+    ///
+    /// # Arguments
+    ///
+    /// * `id` - A reference to a `GalleryId` struct representing the ID of the
+    ///   gallery.
+    /// * `prid` - A reference to a `ProjectId` struct representing the ID of the
+    ///   project within the gallery.
+    /// * `xml` - A string slice containing the XML data for the new version.
+    ///
+    /// # Returns
+    ///
+    /// * `Result<GalleryProjectMetadata, error::Error>` -
+    ///   * On success, returns an instance of the updated `GalleryProjectMetadata`.
+    ///   * On failure, returns an `error::Error`.
+    ///
+    /// # Errors
+    ///
+    /// * `error::Error::RequestError` - Returned if there is an error sending the
+    ///   request.
+    /// * `error::Error::ParseResponseFailedError` - Returned if there is an error
+    ///   parsing the JSON response.
+    /// * If server responds with an error, we return the error.
+    ///
+    /// # Notes
+    ///
+    /// This function makes an HTTP POST request to the `/galleries/id/{id}/project/{prid}`
+    /// endpoint, where `{id}` and `{prid}` are replaced with the specified gallery ID
+    /// and project ID respectively.
+    /// It sends the `xml` data as JSON in the request body to add the new version
+    /// to the project.
+    ///
+    /// It then checks the response for any errors and attempts to parse the
+    /// response body as JSON into a `GalleryProjectMetadata` struct.
+    ///
+    /// The `check_response` function is called to handle potential HTTP errors.
+    /// If the response is successful, it is parsed into a `GalleryProjectMetadata`
+    /// object and returned.
+    pub async fn add_gallery_project_version(
+        &self,
+        id: &GalleryId,
+        prid: &ProjectId,
+        xml: &str,
+    ) -> Result<GalleryProjectMetadata, error::Error> {
+        let url = format!("/galleries/id/{id}/project/{prid}");
+
+        let response = self
+            .request(Method::POST, &url)
+            .json(xml)
+            .send()
+            .await
+            .map_err(error::Error::RequestError)?;
+
+        let response = check_response(response).await?;
+
+        let project = response
+            .json::<GalleryProjectMetadata>()
+            .await
+            .map_err(|e| error::Error::ParseResponseFailedError(e.to_string()))?;
+
+        Ok(project)
+    }
+
+    /// Asynchronously retrieves the XML data for a specific project within a gallery.
+    ///
+    /// # Arguments
+    ///
+    /// * `id` - A reference to a `GalleryId` struct representing the ID of the
+    ///   gallery.
+    /// * `prid` - A reference to a `ProjectId` struct representing the ID of the
+    ///   project within the gallery.
+    ///
+    /// # Returns
+    ///
+    /// * `Result<String, error::Error>` -
+    ///   * On success, returns the XML data as a `String`.
+    ///   * On failure, returns an `error::Error`.
+    ///
+    /// # Errors
+    ///
+    /// * `error::Error::RequestError` - Returned if there is an error sending the
+    ///   request.
+    /// * `error::Error::ParseResponseFailedError` - Returned if there is an error
+    ///   parsing the response text.
+    /// * If server responds with an error, we return the error.
+    ///
+    /// # Notes
+    ///
+    /// This function makes an HTTP GET request to the `/galleries/id/{id}/project/{prid}/xml`
+    /// endpoint, where `{id}` and `{prid}` are replaced with the specified gallery ID
+    /// and project ID respectively.
+    /// It then checks the response for any errors and attempts to retrieve the
+    /// response body as text.
+    ///
+    /// The `check_response` function is called to handle potential HTTP errors.
+    /// If the response is successful, the XML data is returned as a `String`.
+    pub async fn view_gallery_project_xml(
+        &self,
+        id: &GalleryId,
+        prid: &ProjectId,
+    ) -> Result<String, error::Error> {
+        let url = format!("/galleries/id/{id}/project/{prid}/xml");
+
+        let response = self
+            .request(Method::GET, &url)
+            .send()
+            .await
+            .map_err(error::Error::RequestError)?;
+
+        let response = check_response(response).await?;
+
+        let xml = response
+            .text()
+            .await
+            .map_err(|e| error::Error::ParseResponseFailedError(e.to_string()))?;
+
+        Ok(xml)
+    }
+
+    /// Asynchronously retrieves the XML data for a specific version of a project
+    /// within a gallery.
+    ///
+    /// # Arguments
+    ///
+    /// * `id` - A reference to a `GalleryId` struct representing the ID of the
+    ///   gallery.
+    /// * `prid` - A reference to a `ProjectId` struct representing the ID of the
+    ///   project within the gallery.
+    /// * `version` - A reference to a `usize` representing the version number of
+    ///   the project.
+    ///
+    /// # Returns
+    ///
+    /// * `Result<String, error::Error>` -
+    ///   * On success, returns the XML data as a `String`.
+    ///   * On failure, returns an `error::Error`.
+    ///
+    /// # Errors
+    ///
+    /// * `error::Error::RequestError` - Returned if there is an error sending the
+    ///   request.
+    /// * `error::Error::ParseResponseFailedError` - Returned if there is an error
+    ///   parsing the response text.
+    /// * If server responds with an error, we return the error.
+    ///
+    /// # Notes
+    ///
+    /// This function makes an HTTP GET request to the
+    /// `/galleries/id/{id}/project/{prid}/version/{version}/xml` endpoint, where
+    /// `{id}`, `{prid}`, and `{version}` are replaced with the specified gallery
+    /// ID, project ID, and version number respectively.
+    /// It then checks the response for any errors and attempts to retrieve the
+    /// response body as text.
+    ///
+    /// The `check_response` function is called to handle potential HTTP errors.
+    /// If the response is successful, the XML data for the specified version is
+    /// returned as a `String`.
+    pub async fn view_gallery_project_xml_version(
+        &self,
+        id: &GalleryId,
+        prid: &ProjectId,
+        version: &usize,
+    ) -> Result<String, error::Error> {
+        let url = format!("/galleries/id/{id}/project/{prid}/version/{version}/xml");
+
+        let response = self
+            .request(Method::GET, &url)
+            .send()
+            .await
+            .map_err(error::Error::RequestError)?;
+
+        let response = check_response(response).await?;
+
+        let xml = response
+            .text()
+            .await
+            .map_err(|e| error::Error::ParseResponseFailedError(e.to_string()))?;
+
+        Ok(xml)
+    }
+
+    /// Asynchronously deletes a specific project within a gallery.
+    ///
+    /// # Arguments
+    ///
+    /// * `id` - A reference to a `GalleryId` struct representing the ID of the
+    ///   gallery.
+    /// * `prid` - A reference to a `ProjectId` struct representing the ID of the
+    ///   project within the gallery.
+    ///
+    /// # Returns
+    ///
+    /// * `Result<GalleryProjectMetadata, error::Error>` -
+    ///   * On success, returns the metadata of the deleted `GalleryProjectMetadata`.
+    ///   * On failure, returns an `error::Error`.
+    ///
+    /// # Errors
+    ///
+    /// * `error::Error::RequestError` - Returned if there is an error sending the
+    ///   request.
+    /// * `error::Error::ParseResponseFailedError` - Returned if there is an error
+    ///   parsing the JSON response.
+    /// * If server responds with an error, we return the error.
+    ///
+    /// # Notes
+    ///
+    /// This function makes an HTTP DELETE request to the
+    /// `/galleries/id/{id}/project/{prid}` endpoint, where `{id}` and `{prid}` are
+    /// replaced with the specified gallery ID and project ID respectively.
+    /// It then checks the response for any errors and attempts to parse the
+    /// response body as JSON into a `GalleryProjectMetadata` struct.
+    ///
+    /// The `check_response` function is called to handle potential HTTP errors.
+    /// If the response is successful, it is parsed into a `GalleryProjectMetadata`
+    /// object and returned.
+    pub async fn delete_gallery_project(
+        &self,
+        id: &GalleryId,
+        prid: &ProjectId,
+    ) -> Result<GalleryProjectMetadata, error::Error> {
+        let url = format!("/galleries/id/{id}/project/{prid}");
+
+        let response = self
+            .request(Method::DELETE, &url)
+            .send()
+            .await
+            .map_err(error::Error::RequestError)?;
+
+        let response = check_response(response).await?;
+
+        let project = response
+            .json::<GalleryProjectMetadata>()
+            .await
+            .map_err(|e| error::Error::ParseResponseFailedError(e.to_string()))?;
+
+        Ok(project)
+    }
+
+    /// Asynchronously deletes a specific version of a project within a gallery.
+    ///
+    /// # Arguments
+    ///
+    /// * `id` - A reference to a `GalleryId` struct representing the ID of the
+    ///   gallery.
+    /// * `prid` - A reference to a `ProjectId` struct representing the ID of the
+    ///   project within the gallery.
+    /// * `version` - A reference to a `usize` representing the version number of
+    ///   the project to delete.
+    ///
+    /// # Returns
+    ///
+    /// * `Result<GalleryProjectMetadata, error::Error>` -
+    ///   * On success, returns the metadata of the updated `GalleryProjectMetadata`.
+    ///   * On failure, returns an `error::Error`.
+    ///
+    /// # Errors
+    ///
+    /// * `error::Error::RequestError` - Returned if there is an error sending the
+    ///   request.
+    /// * `error::Error::ParseResponseFailedError` - Returned if there is an error
+    ///   parsing the JSON response.
+    /// * If server responds with an error, we return the error.
+    ///
+    /// # Notes
+    ///
+    /// This function makes an HTTP DELETE request to the
+    /// `/galleries/id/{id}/project/{prid}/version/{version}` endpoint, where `{id}`,
+    /// `{prid}`, and `{version}` are replaced with the specified gallery ID, project
+    /// ID, and version number respectively.
+    /// It then checks the response for any errors and attempts to parse the
+    /// response body as JSON into a `GalleryProjectMetadata` struct.
+    ///
+    /// The `check_response` function is called to handle potential HTTP errors.
+    /// If the response is successful, it is parsed into a `GalleryProjectMetadata`
+    /// object and returned.
+    pub async fn delete_gallery_project_version(
+        &self,
+        id: &GalleryId,
+        prid: &ProjectId,
+        version: &usize,
+    ) -> Result<GalleryProjectMetadata, error::Error> {
+        let url = format!("/galleries/id/{id}/project/{prid}/version/{version}");
+
+        let response = self
+            .request(Method::DELETE, &url)
+            .send()
+            .await
+            .map_err(error::Error::RequestError)?;
+
+        let response = check_response(response).await?;
+
+        let project = response
+            .json::<GalleryProjectMetadata>()
+            .await
+            .map_err(|e| error::Error::ParseResponseFailedError(e.to_string()))?;
+
+        Ok(project)
     }
 }
 

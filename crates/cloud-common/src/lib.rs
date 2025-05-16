@@ -5,8 +5,8 @@ use netsblox_api_common::{
     UserRole,
 };
 use netsblox_api_common::{
-    FriendInvite, FriendLinkState, GroupId, InvitationState, LinkedAccount, ProjectId, RoleData,
-    S3Key, SaveState, ServiceHost, ServiceHostScope,
+    FriendInvite, FriendLinkState, GalleryId, GroupId, InvitationState, LinkedAccount, ProjectId,
+    RoleData, S3Key, SaveState, ServiceHost, ServiceHostScope,
 };
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha512};
@@ -448,6 +448,125 @@ impl Submission {
     }
 }
 
+/// Gallery
+#[derive(Serialize, Deserialize, Clone, Debug)]
+#[serde(rename_all = "camelCase")]
+pub struct Gallery {
+    pub id: GalleryId,
+    pub owner: String,
+    pub name: String,
+    pub state: api::PublishState,
+}
+
+impl From<api::CreateGalleryData> for Gallery {
+    fn from(data: api::CreateGalleryData) -> Gallery {
+        Gallery::new(data.owner, data.name, data.state)
+    }
+}
+
+impl Gallery {
+    #[must_use]
+    pub fn new(owner: String, name: String, state: api::PublishState) -> Self {
+        Self {
+            id: api::GalleryId::new(Uuid::new_v4().to_string()),
+            name,
+            owner,
+            state,
+        }
+    }
+}
+
+impl From<Gallery> for netsblox_api_common::Gallery {
+    fn from(gallery: Gallery) -> netsblox_api_common::Gallery {
+        netsblox_api_common::Gallery {
+            id: gallery.id,
+            owner: gallery.owner,
+            name: gallery.name,
+            state: gallery.state,
+        }
+    }
+}
+
+impl From<Gallery> for Bson {
+    fn from(gallery: Gallery) -> Self {
+        Bson::Document(doc! {
+            "id": gallery.id,
+            "owner": gallery.owner,
+            "name": gallery.name,
+            "state": gallery.state,
+        })
+    }
+}
+
+#[derive(Deserialize, Serialize, Clone, Debug)]
+#[serde(rename_all = "camelCase")]
+pub struct Version {
+    pub key: S3Key,
+    pub updated: DateTime,
+    pub deleted: bool,
+}
+
+impl Version {
+    #[must_use]
+    pub fn new(id: &GalleryId, prid: &ProjectId, index: usize) -> Self {
+        let key = S3Key::new(format!("galleries/{id}/{prid}/{index:05}.xml"));
+        Self {
+            updated: DateTime::now(),
+            key,
+            deleted: false,
+        }
+    }
+}
+
+impl From<Version> for netsblox_api_common::Version {
+    fn from(version: Version) -> netsblox_api_common::Version {
+        netsblox_api_common::Version {
+            updated: version.updated.to_system_time(),
+            deleted: version.deleted,
+        }
+    }
+}
+
+impl From<Version> for Bson {
+    fn from(version: Version) -> Self {
+        Bson::Document(doc! {
+            "updated": version.updated,
+            "key": version.key,
+            "deleted": version.deleted,
+        })
+    }
+}
+
+//NOTE: We lose type safety in serialization boundry
+#[derive(Deserialize, Serialize, Clone, Debug)]
+#[serde(rename_all = "camelCase")]
+pub struct GalleryProjectMetadata {
+    pub gallery_id: GalleryId,
+    pub id: ProjectId,
+    pub owner: String,
+    pub name: String,
+    pub origin_time: DateTime,
+    pub versions: Vec<Version>,
+}
+
+impl GalleryProjectMetadata {
+    #[must_use]
+    pub fn new(gallery: &Gallery, owner: &str, name: &str) -> Self {
+        let id = api::ProjectId::new(Uuid::new_v4().to_string());
+        let index: usize = 0;
+        let version = Version::new(&gallery.id, &id, index);
+
+        Self {
+            gallery_id: gallery.id.clone(),
+            id,
+            owner: owner.to_string(),
+            name: name.to_string(),
+            origin_time: DateTime::now(),
+            versions: vec![version],
+        }
+    }
+}
+
 impl From<Submission> for Bson {
     fn from(value: Submission) -> Bson {
         Bson::Document(doc! {
@@ -467,6 +586,32 @@ impl From<Submission> for api::Submission {
             owner: value.owner,
             origin_time: value.origin_time.to_system_time(),
         }
+    }
+}
+
+impl From<GalleryProjectMetadata> for netsblox_api_common::GalleryProjectMetadata {
+    fn from(gal_project: GalleryProjectMetadata) -> netsblox_api_common::GalleryProjectMetadata {
+        netsblox_api_common::GalleryProjectMetadata {
+            gallery_id: gal_project.gallery_id,
+            id: gal_project.id,
+            owner: gal_project.owner,
+            name: gal_project.name,
+            origin_time: gal_project.origin_time.to_system_time(),
+            versions: gal_project.versions.into_iter().map(Into::into).collect(),
+        }
+    }
+}
+
+impl From<GalleryProjectMetadata> for Bson {
+    fn from(gal_project: GalleryProjectMetadata) -> Self {
+        Bson::Document(doc! {
+            "galleryId": gal_project.gallery_id,
+            "id": gal_project.id,
+            "owner": gal_project.owner,
+            "name": gal_project.name,
+            "originTime": gal_project.origin_time,
+            "versions": gal_project.versions,
+        })
     }
 }
 

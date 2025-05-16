@@ -251,6 +251,12 @@ pub struct FriendInvite {
     pub created_at: SystemTime,
 }
 
+#[derive(Deserialize, Clone, Debug)]
+#[serde(rename_all = "camelCase")]
+pub struct ThumbnailParams {
+    pub aspect_ratio: Option<f32>,
+}
+
 #[derive(Deserialize, Serialize, Clone, Debug, PartialEq, Eq, Display, Hash, TS)]
 #[ts(export)]
 pub struct ProjectId(String);
@@ -551,6 +557,20 @@ pub struct UpdateGroupData {
 pub struct AssignmentId(String);
 
 impl AssignmentId {
+    pub fn new(id: String) -> Self {
+        Self(id)
+    }
+    #[must_use]
+    pub fn as_str(&self) -> &str {
+        &self.0
+    }
+}
+
+#[derive(Deserialize, Serialize, Clone, Debug, PartialEq, Eq, Display, Hash, FromStr, TS)]
+#[ts(export)]
+pub struct GalleryId(String);
+
+impl GalleryId {
     #[must_use]
     pub fn new(id: String) -> Self {
         Self(id)
@@ -577,10 +597,29 @@ pub struct Assignment {
 #[derive(Serialize, Deserialize, Clone, Debug, TS)]
 #[serde(rename_all = "camelCase")]
 #[ts(export)]
+pub struct CreateGalleryData {
+    pub owner: String,
+    pub name: String,
+    pub state: PublishState,
+}
+
+#[derive(Serialize, Deserialize, Clone, Debug, TS)]
+#[serde(rename_all = "camelCase")]
+#[ts(export)]
 pub struct CreateAssignmentData {
     pub name: String,
     #[ts(type = "any")] // FIXME
     pub due_date: SystemTime,
+}
+
+#[derive(Serialize, Deserialize, Clone, Debug, TS)]
+#[serde(rename_all = "camelCase")]
+#[ts(export)]
+pub struct Gallery {
+    pub id: GalleryId,
+    pub owner: String,
+    pub name: String,
+    pub state: PublishState,
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug, TS)]
@@ -624,6 +663,50 @@ pub struct Submission {
 pub struct CreateSubmissionData {
     pub owner: String,
     pub xml: String,
+}
+
+#[derive(Serialize, Deserialize, Clone, Debug, TS)]
+#[serde(rename_all = "camelCase")]
+#[ts(export)]
+pub struct ChangeGalleryData {
+    #[ts(optional)]
+    // TODO: Future, use newtype and add constraints.
+    // In general, we need to automate checking for a valid 'name'
+    //
+    pub name: Option<String>,
+    #[ts(optional)]
+    pub state: Option<PublishState>,
+}
+
+#[derive(Deserialize, Serialize, Clone, Debug, TS)]
+#[serde(rename_all = "camelCase")]
+#[ts(export)]
+pub struct Version {
+    #[ts(type = "any")] // FIXME
+    pub updated: SystemTime,
+    pub deleted: bool,
+}
+
+#[derive(Deserialize, Serialize, Clone, Debug, TS)]
+#[serde(rename_all = "camelCase")]
+#[ts(export)]
+pub struct GalleryProjectMetadata {
+    pub gallery_id: GalleryId,
+    pub id: ProjectId,
+    pub owner: String,
+    pub name: String,
+    #[ts(type = "any")] // FIXME
+    pub origin_time: SystemTime,
+    pub versions: Vec<Version>,
+}
+
+#[derive(Deserialize, Serialize, Clone, Debug, TS)]
+#[serde(rename_all = "camelCase")]
+#[ts(export)]
+pub struct CreateGalleryProjectData {
+    pub owner: String,
+    pub name: String,
+    pub project_xml: String,
 }
 
 #[derive(Deserialize, Serialize, Clone, Debug, TS)]
