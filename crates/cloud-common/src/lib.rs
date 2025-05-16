@@ -1,7 +1,8 @@
 use mongodb::bson::{self, doc, document::Document, Bson, DateTime};
 pub use netsblox_api_common as api;
 use netsblox_api_common::{
-    oauth, ClientState, LibraryMetadata, NewUser, PublishState, RoleId, UserRole,
+    oauth, AssignmentId, ClientState, LibraryMetadata, NewUser, PublishState, RoleId, SubmissionId,
+    UserRole,
 };
 use netsblox_api_common::{
     FriendInvite, FriendLinkState, GroupId, InvitationState, LinkedAccount, ProjectId, RoleData,
@@ -343,6 +344,128 @@ impl From<NetworkTraceMetadata> for netsblox_api_common::NetworkTraceMetadata {
             id: trace.id,
             start_time: trace.start_time.into(),
             end_time: trace.end_time.map(|t| t.into()),
+        }
+    }
+}
+
+/// Assignments
+#[derive(Deserialize, Serialize, Clone, Debug)]
+#[serde(rename_all = "camelCase")]
+pub struct Assignment {
+    pub id: AssignmentId,
+    pub group_id: GroupId,
+    pub name: String,
+    pub origin_time: DateTime,
+    pub due_date: DateTime,
+}
+
+impl From<Assignment> for Bson {
+    fn from(value: Assignment) -> Bson {
+        Bson::Document(doc! {
+        "id": value.id,
+        "groupId": value.group_id,
+        "name": value.name,
+        "originTime": value.origin_time,
+        "dueDate": value.due_date })
+    }
+}
+
+impl From<Assignment> for api::Assignment {
+    fn from(value: Assignment) -> api::Assignment {
+        api::Assignment {
+            id: value.id,
+            group_id: value.group_id,
+            name: value.name,
+            origin_time: value.origin_time.to_system_time(),
+            due_date: value.due_date.to_system_time(),
+        }
+    }
+}
+
+impl Assignment {
+    #[must_use]
+    pub fn new(name: String, group_id: GroupId, due_date: DateTime) -> Self {
+        Self {
+            id: api::AssignmentId::new(Uuid::new_v4().to_string()),
+            group_id,
+            name,
+            origin_time: DateTime::now(),
+            due_date,
+        }
+    }
+
+    pub fn from_data(data: api::CreateAssignmentData, group_id: GroupId) -> Assignment {
+        Assignment {
+            id: AssignmentId::new(Uuid::new_v4().to_string()),
+            group_id,
+            name: data.name,
+            origin_time: DateTime::now(),
+            due_date: DateTime::from_system_time(data.due_date),
+        }
+    }
+
+    #[must_use]
+    pub fn apply_update(&self, update: api::UpdateAssignmentData) -> Assignment {
+        let prior = self.clone();
+        Assignment {
+            id: prior.id,
+            group_id: prior.group_id,
+            name: update.name.unwrap_or(prior.name),
+            origin_time: prior.origin_time,
+            due_date: update
+                .due_date
+                .map_or(self.due_date, DateTime::from_system_time),
+        }
+    }
+}
+
+/// Submissions
+#[derive(Deserialize, Serialize, Clone, Debug)]
+#[serde(rename_all = "camelCase")]
+pub struct Submission {
+    pub id: SubmissionId,
+    pub assignment_id: AssignmentId,
+    pub owner: String,
+    pub origin_time: DateTime,
+    pub key: S3Key,
+}
+
+impl Submission {
+    #[must_use]
+    pub fn from_data(assignment_id: AssignmentId, data: api::CreateSubmissionData) -> Submission {
+        let id = api::SubmissionId::new(Uuid::new_v4().to_string());
+        let owner = data.owner;
+        let key = S3Key::new(format!(
+            "assignment/{assignment_id}/submission/{id}/{owner}.xml"
+        ));
+        Submission {
+            id,
+            assignment_id,
+            owner,
+            origin_time: DateTime::now(),
+            key,
+        }
+    }
+}
+
+impl From<Submission> for Bson {
+    fn from(value: Submission) -> Bson {
+        Bson::Document(doc! {
+        "id": value.id,
+        "assignmentId": value.assignment_id,
+        "owner": value.owner,
+        "originTime": value.origin_time,
+        "key": value.key})
+    }
+}
+
+impl From<Submission> for api::Submission {
+    fn from(value: Submission) -> api::Submission {
+        api::Submission {
+            id: value.id,
+            assignment_id: value.assignment_id,
+            owner: value.owner,
+            origin_time: value.origin_time.to_system_time(),
         }
     }
 }

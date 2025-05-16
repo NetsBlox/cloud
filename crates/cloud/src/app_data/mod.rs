@@ -22,7 +22,7 @@ use log::{error, info, warn};
 use lru::LruCache;
 use mongodb::bson::{doc, Document};
 use mongodb::options::{FindOptions, IndexOptions, UpdateOptions};
-use netsblox_cloud_common::{api, Bucket, MagicLink};
+use netsblox_cloud_common::{api, Assignment, Bucket, MagicLink, Submission};
 use serde::{Deserialize, Serialize};
 use std::collections::HashSet;
 use std::net::IpAddr;
@@ -58,6 +58,8 @@ pub struct AppData {
     pub(crate) banned_accounts: Collection<BannedAccount>,
     friends: Collection<FriendLink>,
     magic_links: Collection<MagicLink>,
+    pub(crate) assignments: Collection<Assignment>,
+    pub(crate) submissions: Collection<Submission>,
     pub(crate) project_metadata: Collection<ProjectMetadata>,
     pub(crate) libraries: Collection<Library>,
     pub(crate) authorized_services: Collection<AuthorizedServiceHost>,
@@ -144,6 +146,8 @@ impl AppData {
             db.collection::<OccupantInvite>(&(prefix.to_owned() + "occupantInvites"));
         let friends = db.collection::<FriendLink>(&(prefix.to_owned() + "friends"));
         let magic_links = db.collection::<MagicLink>(&(prefix.to_owned() + "magicLinks"));
+        let assignments = db.collection::<Assignment>(&(prefix.to_owned() + "assignments"));
+        let submissions = db.collection::<Submission>(&(prefix.to_owned() + "submissions"));
         let recorded_messages =
             db.collection::<SentMessage>(&(prefix.to_owned() + "recordedMessages"));
         let logged_messages = db.collection::<LogMessage>(&(prefix.to_owned() + "loggedMessages"));
@@ -186,6 +190,8 @@ impl AppData {
             password_tokens,
             friends,
             magic_links,
+            assignments,
+            submissions,
 
             mailer,
             sender,
@@ -558,6 +564,32 @@ impl AppData {
     }
 
     #[cfg(test)]
+    pub(crate) async fn insert_assignments(
+        &self,
+        assignments: &[Assignment],
+    ) -> Result<(), InternalError> {
+        self.assignments
+            .insert_many(assignments, None)
+            .await
+            .map_err(InternalError::DatabaseConnectionError)?;
+
+        Ok(())
+    }
+
+    #[cfg(test)]
+    pub(crate) async fn insert_submissions(
+        &self,
+        submissions: &[Submission],
+    ) -> Result<(), InternalError> {
+        self.submissions
+            .insert_many(submissions, None)
+            .await
+            .map_err(InternalError::DatabaseConnectionError)?;
+
+        Ok(())
+    }
+
+    #[cfg(test)]
     pub(crate) async fn insert_magic_links(
         &self,
         links: &[MagicLink],
@@ -597,7 +629,14 @@ impl AppData {
     }
 
     pub(crate) fn as_group_actions(&self) -> GroupActions {
-        GroupActions::new(&self.groups, &self.users)
+        GroupActions::new(
+            &self.groups,
+            &self.users,
+            &self.assignments,
+            &self.submissions,
+            &self.bucket,
+            &self.s3,
+        )
     }
 
     pub(crate) fn as_friend_actions(&self) -> FriendActions {
