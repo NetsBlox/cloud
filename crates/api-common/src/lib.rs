@@ -803,13 +803,14 @@ pub struct ClientInfo {
 #[ts(export)]
 pub struct ServiceSettings {
     /// Service settings owned by the user
-    #[ts(optional)]
-    pub user: Option<String>,
+    #[ts(type = "object", optional)]
+    pub user: Option<Value>,
     /// Service settings owned by a group in which the user is a member
-    #[ts(optional)]
-    pub member: Option<String>,
+    #[ts(type = "object", optional)]
+    pub member: Option<Value>,
     /// Service settings owned by a groups created by the user
-    pub groups: HashMap<GroupId, String>,
+    #[ts(type = "object")]
+    pub groups: HashMap<GroupId, Value>,
 }
 
 /// Send message request (for authorized services)
