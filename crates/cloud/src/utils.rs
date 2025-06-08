@@ -47,21 +47,25 @@ pub(crate) fn update_project_cache(
     cache: &Arc<RwLock<LruCache<api::ProjectId, ProjectMetadata>>>,
     metadata: ProjectMetadata,
 ) -> ProjectMetadata {
-    let mut cache = cache.write().unwrap();
-    let latest = cache
-        .get(&metadata.id)
-        .and_then(|existing| {
-            if existing.updated > metadata.updated {
-                Some(existing.to_owned())
-            } else {
-                None
-            }
-        })
-        .unwrap_or(metadata);
+    if let Ok(mut cache) = cache.write() {
+        let latest = cache
+            .get(&metadata.id)
+            .and_then(|existing| {
+                if existing.updated > metadata.updated {
+                    Some(existing.to_owned())
+                } else {
+                    None
+                }
+            })
+            .unwrap_or(metadata);
 
-    cache.put(latest.id.clone(), latest.clone());
+        cache.put(latest.id.clone(), latest.clone());
 
-    latest
+        latest
+    } else {
+        log::warn!("Unable to acquire project cache to update project");
+        metadata
+    }
 }
 
 /// Get a unique project name for the given user and preferred name.
