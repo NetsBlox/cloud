@@ -863,6 +863,11 @@ pub enum SendMessageTarget {
     #[serde(rename_all = "camelCase")]
     Client {
         #[ts(optional)]
+        /// Some messages will be conditionally delivered based on [`ClientState`].
+        ///
+        /// That is, the message will not be delivered if the state has changed from
+        /// this value. If unset, this extra filtering will be omitted and the message
+        /// will be delivered.
         state: Option<ClientState>,
         client_id: ClientId,
     },
