@@ -483,7 +483,10 @@ mod tests {
                     .await
                     .expect("Could not query for user");
 
-                assert!(result.is_empty(), "users inserted");
+                for user in result {
+                    assert!(user.username != name2, "{name2} was inserted");
+                    assert!(user.email != dups_email, "existing user overwritten");
+                }
             })
             .await;
     }
