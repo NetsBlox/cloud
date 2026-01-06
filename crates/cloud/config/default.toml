@@ -14,7 +14,7 @@ public_url = "http://127.0.0.1:7777"
 # public = true
 
 [database]
-url = "mongodb://127.0.0.1:27017/"
+url = "mongodb://127.0.0.1:27017/?replicaSet=rs0"
 name = "netsblox-rs"
 
 [s3]

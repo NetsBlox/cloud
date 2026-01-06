@@ -3,9 +3,10 @@ use std::{
     sync::{Arc, RwLock},
 };
 
-use crate::auth;
+use crate::{auth, errors::NewUserError};
 use actix::Addr;
-use futures::TryStreamExt;
+use futures::{TryFutureExt, TryStreamExt};
+use itertools::Itertools;
 use lazy_static::lazy_static;
 use lettre::{
     message::{Mailbox, MultiPart},
@@ -120,6 +121,55 @@ impl<'a> UserActions<'a> {
             let user: api::User = user.into();
             Ok(user)
         }
+    }
+
+    pub(crate) async fn create_user_batch(
+        &self,
+        cub: auth::CreateUserBatch,
+    ) -> Result<Vec<api::User>, UserError> {
+        let data = cub.data.users.into_iter().map(User::from).collect_vec();
+        let options = mongodb::options::FindOneAndUpdateOptions::builder()
+            .return_document(ReturnDocument::Before)
+            .upsert(true)
+            .build();
+        let mut session = self
+            .users
+            .client()
+            .start_session(None)
+            .await
+            .map_err(InternalError::DatabaseConnectionError)?;
+        session
+            .start_transaction(None)
+            .await
+            .map_err(InternalError::DatabaseConnectionError)?;
+
+        let mut errors = Vec::new();
+        for user in &data {
+            let query = doc! {"username": user.username.as_str()};
+            let update = doc! {"$setOnInsert": user};
+            let res = self
+                .users
+                .find_one_and_update_with_session(query, update, options.clone(), &mut session)
+                .map_err(InternalError::DatabaseConnectionError)
+                .await;
+            if let Some(user) = res? {
+                errors.push(NewUserError {
+                    username: user.username,
+                    error: UserError::UsernameExists,
+                });
+            }
+        }
+
+        if !errors.is_empty() {
+            return Err(UserError::NewUserErrorBatch { errors });
+        }
+
+        session
+            .commit_transaction()
+            .await
+            .map_err(InternalError::DatabaseConnectionError)?;
+
+        Ok(data.into_iter().map(api::User::from).collect_vec())
     }
 
     pub(crate) async fn get_user(&self, vu: &auth::ViewUser) -> Result<api::User, UserError> {

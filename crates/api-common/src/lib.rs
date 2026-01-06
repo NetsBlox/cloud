@@ -57,7 +57,7 @@ pub struct UpdateUserData {
     pub role: Option<UserRole>,
 }
 
-#[derive(Serialize, Deserialize, Debug, TS)]
+#[derive(Serialize, Deserialize, Debug, TS, Clone)]
 #[serde(rename_all = "camelCase")]
 #[ts(export)]
 pub struct NewUser {
@@ -69,6 +69,13 @@ pub struct NewUser {
     pub group_id: Option<GroupId>,
     #[ts(optional)]
     pub role: Option<UserRole>,
+}
+
+#[derive(Serialize, Deserialize, Debug, TS, Clone)]
+#[serde(rename_all = "camelCase")]
+#[ts(export)]
+pub struct NewUserBatch {
+    pub users: Vec<NewUser>,
 }
 
 #[derive(Serialize, Deserialize, Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, TS)]

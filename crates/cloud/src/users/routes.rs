@@ -44,6 +44,24 @@ async fn create_user(
     Ok(HttpResponse::Ok().json(user))
 }
 
+#[post("/batch")]
+async fn create_batch_users(
+    app: web::Data<AppData>,
+    req: HttpRequest,
+    batch_data: web::Json<api::NewUserBatch>,
+) -> Result<HttpResponse, UserError> {
+    let req_addr = req.peer_addr().map(|addr| addr.ip());
+    if let Some(addr) = req_addr {
+        app.ensure_not_tor_ip(&addr).await?;
+    }
+    let data = batch_data.into_inner();
+    let auth_cub = auth::try_batch_create_users(&app, &req, data).await?;
+    let actions: UserActions = app.as_user_actions();
+    let users = actions.create_user_batch(auth_cub).await?;
+
+    Ok(HttpResponse::Ok().json(users))
+}
+
 #[post("/login")]
 async fn login(
     req: HttpRequest,
@@ -280,6 +298,7 @@ async fn unlink_account(
 
 pub fn config(cfg: &mut web::ServiceConfig) {
     cfg.service(create_user)
+        .service(create_batch_users)
         .service(update_user)
         .service(list_users)
         .service(login)
@@ -305,6 +324,7 @@ mod tests {
 
     use super::*;
     use actix_web::{http, test, App};
+    use futures::TryStreamExt;
     use netsblox_cloud_common::{
         api::{BannedAccount, Credentials, UserRole},
         Group, User,
@@ -344,6 +364,194 @@ mod tests {
                     .expect("Could not query for user");
 
                 assert!(result.is_some(), "User not found");
+            })
+            .await;
+    }
+
+    #[actix_web::test]
+    async fn test_create_user_batch() {
+        test_utils::setup()
+            .run(|app_data| async move {
+                let app = test::init_service(
+                    App::new()
+                        .app_data(web::Data::new(app_data.clone()))
+                        .configure(config),
+                )
+                .await;
+
+                let name1 = "test1";
+                let user_data_1 = api::NewUser {
+                    username: name1.into(),
+                    email: "test@gmail.com".into(),
+                    password: Some("pwd".into()),
+                    group_id: None,
+                    role: Some(UserRole::User),
+                };
+
+                let name2 = "test2";
+                let user_data_2 = api::NewUser {
+                    username: name2.into(),
+                    email: "test@gmail.com".into(),
+                    password: Some("pwd".into()),
+                    group_id: None,
+                    role: Some(UserRole::User),
+                };
+
+                let batch_data = api::NewUserBatch {
+                    users: vec![user_data_1, user_data_2],
+                };
+
+                let req = test::TestRequest::post()
+                    .uri("/batch")
+                    .set_json(&batch_data)
+                    .to_request();
+
+                let response = test::call_service(&app, req).await;
+                assert_eq!(response.status(), http::StatusCode::OK);
+
+                let query = doc! {"username": {"$in": vec![name1, name2]}};
+                let result = app_data
+                    .users
+                    .find(query, None)
+                    .await
+                    .expect("Could not query for user")
+                    .try_collect::<Vec<User>>()
+                    .await
+                    .expect("Could not query for user");
+
+                assert!(result.len() == 2, "all users not found");
+            })
+            .await;
+    }
+
+    #[actix_web::test]
+    async fn test_create_user_batch_partial_400() {
+        let name1 = "test1";
+        let existing_user = api::NewUser {
+            username: name1.into(),
+            email: "test@gmail.com".into(),
+            password: Some("pwd".into()),
+            group_id: None,
+            role: Some(UserRole::User),
+        };
+        test_utils::setup()
+            .with_users(&vec![User::from(existing_user.clone())])
+            .run(|app_data| async move {
+                let app = test::init_service(
+                    App::new()
+                        .app_data(web::Data::new(app_data.clone()))
+                        .configure(config),
+                )
+                .await;
+
+                let dups_email = "duplicate@gmail.com";
+                let duplicate_user = api::NewUser {
+                    username: name1.into(),
+                    email: dups_email.into(),
+                    password: Some("pwd".into()),
+                    group_id: None,
+                    role: Some(UserRole::User),
+                };
+                let name2 = "test2";
+                let user_data_2 = api::NewUser {
+                    username: name2.into(),
+                    email: "test@gmail.com".into(),
+                    password: Some("pwd".into()),
+                    group_id: None,
+                    role: Some(UserRole::User),
+                };
+
+                let batch_data = api::NewUserBatch {
+                    users: vec![duplicate_user, user_data_2],
+                };
+
+                let req = test::TestRequest::post()
+                    .uri("/batch")
+                    .set_json(&batch_data)
+                    .to_request();
+
+                let response = test::call_service(&app, req).await;
+                assert_eq!(response.status(), http::StatusCode::BAD_REQUEST);
+
+                let query = doc! {"username": {"$in": vec![name1, name2]}};
+                let result = app_data
+                    .users
+                    .find(query, None)
+                    .await
+                    .expect("Could not query for user")
+                    .try_collect::<Vec<User>>()
+                    .await
+                    .expect("Could not query for user");
+
+                assert!(result.is_empty(), "users inserted");
+            })
+            .await;
+    }
+
+    #[actix_web::test]
+    async fn test_create_user_batch_partial_auth() {
+        let username = "actors_name";
+        let student: User = api::NewUser {
+            username: username.into(),
+            email: "test@gmail.com".into(),
+            password: Some("pwd".into()),
+            group_id: None,
+            role: Some(UserRole::User),
+        }
+        .into();
+
+        test_utils::setup()
+            .with_users(&vec![student])
+            .run(|app_data| async move {
+                let app = test::init_service(
+                    App::new()
+                        .wrap(test_utils::cookie::middleware())
+                        .app_data(web::Data::new(app_data.clone()))
+                        .configure(config),
+                )
+                .await;
+
+                let name1 = "test1";
+                let admin_data_1 = api::NewUser {
+                    username: name1.into(),
+                    email: "test@gmail.com".into(),
+                    password: Some("pwd".into()),
+                    group_id: None,
+                    role: Some(UserRole::Moderator),
+                };
+                let name2 = "test2";
+                let user_data_2 = api::NewUser {
+                    username: name2.into(),
+                    email: "test@gmail.com".into(),
+                    password: Some("pwd".into()),
+                    group_id: None,
+                    role: Some(UserRole::User),
+                };
+
+                let batch_data = api::NewUserBatch {
+                    users: vec![admin_data_1, user_data_2],
+                };
+
+                let req = test::TestRequest::post()
+                    .uri("/batch")
+                    .cookie(test_utils::cookie::new(username))
+                    .set_json(&batch_data)
+                    .to_request();
+
+                let response = test::call_service(&app, req).await;
+                assert_eq!(response.status(), http::StatusCode::BAD_REQUEST);
+
+                let query = doc! {"username": {"$in": vec![name1, name2]}};
+                let result = app_data
+                    .users
+                    .find(query, None)
+                    .await
+                    .expect("Could not query for user")
+                    .try_collect::<Vec<User>>()
+                    .await
+                    .expect("Could not query for user");
+
+                assert!(result.is_empty(), "users inserted");
             })
             .await;
     }

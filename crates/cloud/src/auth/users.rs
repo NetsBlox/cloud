@@ -3,19 +3,24 @@ use std::collections::HashSet;
 use actix_session::{Session, SessionExt};
 use actix_web::HttpRequest;
 use futures::TryStreamExt;
+use itertools::Itertools;
 use mongodb::bson::doc;
 use netsblox_cloud_common::api::{self, ClientId, UpdateUserData, UserRole};
 
-use crate::{
-    app_data::AppData,
-    auth,
-    errors::{InternalError, UserError},
-    utils,
-};
+use crate::app_data::AppData;
+use crate::auth;
+use crate::errors::{InternalError, NewUserError, UserError};
+use crate::utils;
 
 #[derive(Debug)]
 pub(crate) struct CreateUser {
     pub(crate) data: api::NewUser,
+    _private: (),
+}
+
+#[derive(Debug, Clone)]
+pub(crate) struct CreateUserBatch {
+    pub(crate) data: api::NewUserBatch,
     _private: (),
 }
 
@@ -123,6 +128,34 @@ pub(crate) async fn try_create_user(
     try_assign_role(app, req, &new_user_role)
         .await
         .map(|_| CreateUser { data, _private: () })
+}
+
+pub(crate) async fn try_batch_create_users(
+    app: &AppData,
+    req: &HttpRequest,
+    batch: api::NewUserBatch,
+) -> Result<CreateUserBatch, UserError> {
+    let futures = batch
+        .clone()
+        .users
+        .into_iter()
+        .map(async |user| (user.username.clone(), try_create_user(app, req, user).await));
+
+    let errors = futures::future::join_all(futures)
+        .await
+        .into_iter()
+        .filter_map(|(u, res)| res.map_err(|err| (u, err)).err())
+        .map(|(username, error)| NewUserError { username, error })
+        .collect_vec();
+
+    if errors.is_empty() {
+        Ok(CreateUserBatch {
+            data: batch,
+            _private: (),
+        })
+    } else {
+        Err(UserError::NewUserErrorBatch { errors })
+    }
 }
 
 /// Permissions for assigning a given role. Used as a helper method for related functions.

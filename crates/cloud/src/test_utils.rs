@@ -141,11 +141,12 @@ impl TestSetupBuilder {
     where
         Fut: Future<Output = ()>,
     {
-        let client = Client::with_uri_str("mongodb://127.0.0.1:27017/")
+        let mut settings = Settings::new().unwrap();
+
+        let client = Client::with_uri_str(settings.database.url.clone())
             .await
             .expect("Unable to connect to database");
 
-        let mut settings = Settings::new().unwrap();
         let db_name = format!("{}-{}", &self.prefix, settings.database.name);
         settings.database.name = db_name.clone();
         settings.s3.bucket = format!("{}-{}", &self.prefix, settings.s3.bucket);
