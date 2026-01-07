@@ -260,6 +260,23 @@ async fn update_user(
     Ok(HttpResponse::Ok().json(user))
 }
 
+#[post("/{username}/memberships/")]
+async fn redeem_join_code(
+    app: web::Data<AppData>,
+    path: web::Path<(String,)>,
+    body: web::Json<api::JoinCodeRequest>,
+    req: HttpRequest,
+) -> Result<HttpResponse, UserError> {
+    let (username,) = path.into_inner();
+    let data = body.0;
+
+    let auth_eg = auth::try_edit_user(&app, &req, None, &username).await?;
+    let actions = app.as_group_actions();
+    let code = actions.redeem_join_code(&auth_eg, data).await?;
+
+    Ok(HttpResponse::Ok().json(code))
+}
+
 #[post("/{username}/link/")]
 async fn link_account(
     app: web::Data<AppData>,
@@ -310,6 +327,7 @@ pub fn config(cfg: &mut web::ServiceConfig) {
         .service(reset_password)
         .service(change_password_page)
         .service(change_password)
+        .service(redeem_join_code)
         .service(whoami)
         .service(view_user)
         .service(link_account)

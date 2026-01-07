@@ -567,6 +567,23 @@ pub struct UpdateGroupData {
     pub name: String,
 }
 
+#[derive(Serialize, Deserialize, Clone, Debug, TS)]
+#[serde(rename_all = "camelCase")]
+#[ts(export)]
+pub struct GroupJoinCode {
+    pub group: GroupId,
+    pub code: String,
+    #[ts(type = "any")] // FIXME
+    pub created_at: SystemTime,
+}
+
+#[derive(Serialize, Deserialize, Clone, Debug, TS)]
+#[serde(rename_all = "camelCase")]
+#[ts(export)]
+pub struct JoinCodeRequest {
+    pub code: String,
+}
+
 #[derive(Deserialize, Serialize, Clone, Debug, PartialEq, Eq, Display, Hash, FromStr, TS)]
 #[ts(export)]
 pub struct AssignmentId(String);

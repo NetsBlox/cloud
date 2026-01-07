@@ -53,6 +53,8 @@ pub enum UserError {
     RoleNotFoundError,
     #[display(fmt = "Group not found.")]
     GroupNotFoundError,
+    #[display(fmt = "Group code not found.")]
+    GroupCodeNotFoundError,
     #[display(fmt = "Assignment not found.")]
     AssignmentNotFoundError,
     #[display(fmt = "Submission not found.")]
@@ -219,7 +221,8 @@ impl ResponseError for UserError {
             | Self::OAuthTokenNotFoundError
             | Self::AssignmentNotFoundError
             | Self::SubmissionNotFoundError
-            | Self::GroupNotFoundError => StatusCode::NOT_FOUND,
+            | Self::GroupNotFoundError
+            | Self::GroupCodeNotFoundError => StatusCode::NOT_FOUND,
             Self::InternalError | Self::SnapConnectionError => StatusCode::INTERNAL_SERVER_ERROR,
             Self::InvalidUsername
             | Self::InvalidRoleOrProjectName
