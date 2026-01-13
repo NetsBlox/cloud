@@ -2,6 +2,7 @@ use actix_web::{http::StatusCode, HttpResponse, HttpResponseBuilder, ResponseErr
 use derive_more::{Display, Error};
 use itertools::Itertools;
 use log::warn;
+use netsblox_cloud_common::api;
 use serde::Serialize;
 
 #[derive(Debug, Display, Error)]
@@ -184,7 +185,10 @@ impl ResponseError for UserError {
                 HttpResponse::BadRequest().json(body)
             }
             UserError::NewUserErrorBatch { errors } => {
-                let data = errors.iter().map(NewUserErrorResponse::from).collect_vec();
+                let data = errors
+                    .iter()
+                    .map(api::NewUserErrorResponse::from)
+                    .collect_vec();
                 HttpResponse::BadRequest().json(data)
             }
             _ => HttpResponseBuilder::new(self.status_code()).body(self.to_string()),
@@ -270,16 +274,9 @@ pub struct NewUserError {
     pub error: UserError,
 }
 
-#[derive(Serialize)]
-pub struct NewUserErrorResponse {
-    username: String,
-    status: u16,
-    message: String,
-}
-
-impl From<&NewUserError> for NewUserErrorResponse {
+impl From<&NewUserError> for api::NewUserErrorResponse {
     fn from(value: &NewUserError) -> Self {
-        NewUserErrorResponse {
+        api::NewUserErrorResponse {
             username: value.username.clone(),
             status: value.error.status_code().into(),
             message: value.error.to_string(),

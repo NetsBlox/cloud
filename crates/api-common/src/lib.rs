@@ -78,6 +78,20 @@ pub struct NewUserBatch {
     pub users: Vec<NewUser>,
 }
 
+#[derive(Serialize, Deserialize, Debug, TS, Clone)]
+#[serde(rename_all = "camelCase")]
+#[ts(export)]
+pub struct NewUserErrorResponse {
+    pub username: String,
+    pub status: u16,
+    pub message: String,
+}
+
+#[derive(Serialize, Deserialize, Debug, TS, Clone)]
+pub struct NewUserErrorResponseBatch {
+    pub errors: Vec<NewUserErrorResponse>,
+}
+
 #[derive(Serialize, Deserialize, Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, TS)]
 #[serde(rename_all = "camelCase")]
 #[ts(export)]
