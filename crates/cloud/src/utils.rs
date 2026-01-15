@@ -318,7 +318,7 @@ pub(crate) async fn get_authorized_host(
     authorized_services: &Collection<AuthorizedServiceHost>,
     req: &HttpRequest,
 ) -> Result<Option<AuthorizedServiceHost>, UserError> {
-    let query = req
+    let maybe_query = req
         .headers()
         .get("X-Authorization")
         .and_then(|value| value.to_str().ok())
@@ -330,12 +330,17 @@ pub(crate) async fn get_authorized_host(
         })
         .map(|(id, secret)| doc! {"id": id, "secret": secret});
 
-    let host = authorized_services
-        .find_one(query, None)
-        .await
-        .map_err(InternalError::DatabaseConnectionError)?;
+    match maybe_query {
+        None => Ok(None),
+        Some(query) => {
+            let host = authorized_services
+                .find_one(query, None)
+                .await
+                .map_err(InternalError::DatabaseConnectionError)?;
 
-    Ok(host)
+            Ok(host)
+        }
+    }
 }
 
 pub(crate) fn send_email(

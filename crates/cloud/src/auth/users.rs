@@ -135,11 +135,10 @@ pub(crate) async fn try_batch_create_users(
     req: &HttpRequest,
     batch: api::NewUserBatch,
 ) -> Result<CreateUserBatch, UserError> {
-    let futures = batch
-        .clone()
-        .users
-        .into_iter()
-        .map(async |user| (user.username.clone(), try_create_user(app, req, user).await));
+    let futures =
+        batch.clone().users.into_iter().map(|user| async move {
+            (user.username.clone(), try_create_user(app, req, user).await)
+        });
 
     let errors = futures::future::join_all(futures)
         .await
