@@ -1,7 +1,4 @@
-use crate::{
-    auth,
-    utils::{self, is_unique_key_error},
-};
+use crate::{auth, utils};
 use aws_sdk_s3 as s3;
 use mongodb::bson::DateTime;
 use std::collections::HashMap;
