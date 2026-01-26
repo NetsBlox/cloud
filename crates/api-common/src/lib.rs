@@ -52,8 +52,11 @@ pub struct User {
 #[serde(rename_all = "camelCase")]
 #[ts(export)]
 pub struct UpdateUserData {
+    #[ts(optional)]
     pub email: Option<String>,
+    #[ts(optional)]
     pub group_id: Option<GroupId>,
+    #[ts(optional)]
     pub role: Option<UserRole>,
 }
 
