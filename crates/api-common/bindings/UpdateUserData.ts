@@ -2,4 +2,4 @@
 import type { GroupId } from "./GroupId";
 import type { UserRole } from "./UserRole";
 
-export interface UpdateUserData { email: string | null, groupId: GroupId | null, role: UserRole | null, }
+export interface UpdateUserData { email?: string, groupId?: GroupId, role?: UserRole, }
