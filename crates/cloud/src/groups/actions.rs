@@ -382,7 +382,7 @@ impl<'a> GroupActions<'a> {
             set_doc.insert("name", name);
         }
         if let Some(due_date) = update_data.due_date {
-            set_doc.insert("state", DateTime::from(due_date));
+            set_doc.insert("dueDate", DateTime::from(due_date));
         }
         let update = doc! { "$set": set_doc };
 

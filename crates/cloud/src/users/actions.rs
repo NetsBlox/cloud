@@ -254,6 +254,10 @@ impl<'a> UserActions<'a> {
     }
 
     pub(crate) async fn update_user(&self, eu: &auth::UpdateUser) -> Result<api::User, UserError> {
+        if let Some(email) = &eu.update.email {
+            ensure_valid_email(email)?;
+        }
+
         let query = doc! {"username": &eu.username};
 
         // Get a doc with just the fields to set
