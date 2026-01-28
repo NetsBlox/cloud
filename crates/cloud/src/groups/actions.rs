@@ -249,7 +249,8 @@ impl<'a> GroupActions<'a> {
         let code = passwords::PasswordGenerator::new()
             .exclude_similar_characters(true)
             .generate_one()
-            .map_err(|_| UserError::InternalError)?;
+            .map_err(|_| UserError::InternalError)?
+            .to_uppercase();
         let options = mongodb::options::FindOneAndUpdateOptions::builder()
             .upsert(true)
             .return_document(ReturnDocument::After)
@@ -303,9 +304,10 @@ impl<'a> GroupActions<'a> {
         auth_eu: &auth::EditUser,
         data: api::JoinCodeRequest,
     ) -> Result<api::User, UserError> {
+        let code = data.code.to_uppercase();
         let group_id = self
             .group_join_codes
-            .find_one(doc! {"code": data.code}, None)
+            .find_one(doc! {"code": code}, None)
             .await
             .map_err(InternalError::DatabaseConnectionError)?
             .ok_or(UserError::GroupCodeNotFoundError)?
