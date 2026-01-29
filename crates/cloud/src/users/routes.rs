@@ -8,7 +8,7 @@ use crate::users::actions::UserActions;
 use crate::utils;
 use actix_session::Session;
 use actix_web::http::header;
-use actix_web::{get, patch, post, HttpRequest};
+use actix_web::{delete, get, patch, post, HttpRequest};
 use actix_web::{web, HttpResponse};
 use mongodb::bson::doc;
 use serde::Deserialize;
@@ -270,11 +270,26 @@ async fn redeem_join_code(
     let (username,) = path.into_inner();
     let data = body.0;
 
-    let auth_eg = auth::try_edit_user(&app, &req, None, &username).await?;
+    let auth_eu = auth::try_edit_user(&app, &req, None, &username).await?;
     let actions = app.as_group_actions();
-    let code = actions.redeem_join_code(&auth_eg, data).await?;
+    let code = actions.redeem_join_code(&auth_eu, data).await?;
 
     Ok(HttpResponse::Ok().json(code))
+}
+
+#[delete("/{username}/memberships/")]
+async fn leave_group(
+    app: web::Data<AppData>,
+    path: web::Path<(String,)>,
+    req: HttpRequest,
+) -> Result<HttpResponse, UserError> {
+    let (username,) = path.into_inner();
+
+    let auth_eu = auth::try_edit_user(&app, &req, None, &username).await?;
+    let actions = app.as_user_actions();
+    let user = actions.leave_group(&auth_eu).await?;
+
+    Ok(HttpResponse::Ok().json(user))
 }
 
 #[post("/{username}/link/")]
@@ -327,6 +342,7 @@ pub fn config(cfg: &mut web::ServiceConfig) {
         .service(reset_password)
         .service(change_password_page)
         .service(change_password)
+        .service(leave_group)
         .service(redeem_join_code)
         .service(whoami)
         .service(view_user)
@@ -1577,6 +1593,62 @@ mod tests {
                     .expect("Could not query for user");
 
                 assert!(result.is_none(), "User banned");
+            })
+            .await;
+    }
+
+    #[actix_web::test]
+    async fn test_leave_group() {
+        let admin: User = api::NewUser {
+            username: "admin".to_string(),
+            email: "admin@netsblox.org".into(),
+            password: None,
+            group_id: None,
+            role: Some(UserRole::Admin),
+        }
+        .into();
+
+        let group = Group::new(admin.username.clone(), "group".into());
+
+        let member: User = api::NewUser {
+            username: "member".to_string(),
+            email: "member@netsblox.org".into(),
+            password: None,
+            group_id: Some(group.id.clone()),
+            role: None,
+        }
+        .into();
+
+        test_utils::setup()
+            .with_users(&[admin, member.clone()])
+            .with_groups(&[group])
+            .run(|app_data| async move {
+                let app = test::init_service(
+                    App::new()
+                        .wrap(test_utils::cookie::middleware())
+                        .app_data(web::Data::new(app_data.clone()))
+                        .configure(config),
+                )
+                .await;
+
+                let req = test::TestRequest::delete()
+                    .uri("/member/memberships/")
+                    .cookie(test_utils::cookie::new("member"))
+                    .to_request();
+
+                let response = test::call_service(&app, req).await;
+
+                assert_eq!(response.status(), 200);
+
+                let query = doc! {"username": "member"};
+                let user = app_data
+                    .users
+                    .find_one(query, None)
+                    .await
+                    .expect("Could not query for user")
+                    .expect("User not found");
+
+                assert!(user.group_id.is_none(), "Member still in group!")
             })
             .await;
     }

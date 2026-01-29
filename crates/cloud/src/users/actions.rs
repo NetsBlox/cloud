@@ -14,7 +14,7 @@ use lettre::{
 };
 use lru::LruCache;
 use mongodb::{
-    bson::doc,
+    bson::{self, doc},
     options::{FindOneAndUpdateOptions, ReturnDocument},
     Collection,
 };
@@ -304,6 +304,22 @@ impl<'a> UserActions<'a> {
         let user = self
             .users
             .find_one_and_update(query, update, None)
+            .await
+            .map_err(InternalError::DatabaseConnectionError)?
+            .ok_or(UserError::UserNotFoundError)?;
+
+        Ok(user.into())
+    }
+
+    pub(crate) async fn leave_group(&self, eu: &auth::EditUser) -> Result<api::User, UserError> {
+        let query = doc! {"username": &eu.username};
+        let update = doc! {"$set": {"groupId": bson::Bson::Null}};
+        let options = mongodb::options::FindOneAndUpdateOptions::builder()
+            .return_document(ReturnDocument::After)
+            .build();
+        let user = self
+            .users
+            .find_one_and_update(query, update, options)
             .await
             .map_err(InternalError::DatabaseConnectionError)?
             .ok_or(UserError::UserNotFoundError)?;
