@@ -52,12 +52,15 @@ pub struct User {
 #[serde(rename_all = "camelCase")]
 #[ts(export)]
 pub struct UpdateUserData {
+    #[ts(optional)]
     pub email: Option<String>,
+    #[ts(optional)]
     pub group_id: Option<GroupId>,
+    #[ts(optional)]
     pub role: Option<UserRole>,
 }
 
-#[derive(Serialize, Deserialize, Debug, TS)]
+#[derive(Serialize, Deserialize, Debug, TS, Clone)]
 #[serde(rename_all = "camelCase")]
 #[ts(export)]
 pub struct NewUser {
@@ -69,6 +72,27 @@ pub struct NewUser {
     pub group_id: Option<GroupId>,
     #[ts(optional)]
     pub role: Option<UserRole>,
+}
+
+#[derive(Serialize, Deserialize, Debug, TS, Clone)]
+#[serde(rename_all = "camelCase")]
+#[ts(export)]
+pub struct NewUserBatch {
+    pub users: Vec<NewUser>,
+}
+
+#[derive(Serialize, Deserialize, Debug, TS, Clone)]
+#[serde(rename_all = "camelCase")]
+#[ts(export)]
+pub struct NewUserErrorResponse {
+    pub username: String,
+    pub status: u16,
+    pub message: String,
+}
+
+#[derive(Serialize, Deserialize, Debug, TS, Clone)]
+pub struct NewUserErrorResponseBatch {
+    pub errors: Vec<NewUserErrorResponse>,
 }
 
 #[derive(Serialize, Deserialize, Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, TS)]
@@ -544,6 +568,23 @@ pub struct Group {
 #[ts(export)]
 pub struct UpdateGroupData {
     pub name: String,
+}
+
+#[derive(Serialize, Deserialize, Clone, Debug, TS)]
+#[serde(rename_all = "camelCase")]
+#[ts(export)]
+pub struct GroupJoinCode {
+    pub group: GroupId,
+    pub code: String,
+    #[ts(type = "any")] // FIXME
+    pub created_at: SystemTime,
+}
+
+#[derive(Serialize, Deserialize, Clone, Debug, TS)]
+#[serde(rename_all = "camelCase")]
+#[ts(export)]
+pub struct JoinCodeRequest {
+    pub code: String,
 }
 
 #[derive(Deserialize, Serialize, Clone, Debug, PartialEq, Eq, Display, Hash, FromStr, TS)]

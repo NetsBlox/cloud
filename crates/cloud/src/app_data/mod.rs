@@ -22,7 +22,7 @@ use log::{error, info, warn};
 use lru::LruCache;
 use mongodb::bson::{doc, Document};
 use mongodb::options::{FindOptions, IndexOptions, UpdateOptions};
-use netsblox_cloud_common::{api, Assignment, Bucket, MagicLink, Submission};
+use netsblox_cloud_common::{api, Assignment, Bucket, GroupJoinCode, MagicLink, Submission};
 use serde::{Deserialize, Serialize};
 use std::collections::HashSet;
 use std::net::IpAddr;
@@ -54,6 +54,7 @@ pub struct AppData {
     pub(crate) settings: Settings,
     pub(crate) network: Addr<TopologyActor>,
     pub(crate) groups: Collection<Group>,
+    pub(crate) group_join_codes: Collection<GroupJoinCode>,
     pub(crate) users: Collection<User>,
     pub(crate) banned_accounts: Collection<BannedAccount>,
     friends: Collection<FriendLink>,
@@ -131,6 +132,8 @@ impl AppData {
         let db = client.database(&settings.database.name);
         let prefix = prefix.unwrap_or("");
         let groups = db.collection::<Group>(&(prefix.to_owned() + "groups"));
+        let group_join_codes =
+            db.collection::<GroupJoinCode>(&(prefix.to_owned() + "groupJoinCodes"));
         let password_tokens =
             db.collection::<SetPasswordToken>(&(prefix.to_owned() + "passwordTokens"));
         let users = db.collection::<User>(&(prefix.to_owned() + "users"));
@@ -179,6 +182,7 @@ impl AppData {
             s3,
             bucket,
             groups,
+            group_join_codes,
             users,
             banned_accounts,
             project_metadata,
@@ -288,6 +292,8 @@ impl AppData {
 
         // Initialize Message Logs
         self.initialize_message_log().await?;
+        // Initialize group_join_code index
+        self.initialize_group_join_codes().await?;
 
         self.tor_exit_nodes
             .create_index(IndexModel::builder().keys(doc! {"addr": 1}).build(), None)
@@ -358,6 +364,31 @@ impl AppData {
             .build();
         self.logged_messages
             .create_index(token_index, None)
+            .await
+            .map_err(InternalError::DatabaseConnectionError)?;
+
+        Ok(())
+    }
+    async fn initialize_group_join_codes(&self) -> Result<(), InternalError> {
+        let three_days = Duration::from_secs(60 * 60 * 24 * 3);
+
+        let code_index = IndexModel::builder()
+            .keys(doc! {"code": 1})
+            .options(IndexOptions::builder().unique(true).build())
+            .build();
+
+        let group_index = IndexModel::builder()
+            .keys(doc! {"group": 1})
+            .options(IndexOptions::builder().unique(true).build())
+            .build();
+
+        let ttl_index = IndexModel::builder()
+            .keys(doc! {"createdAt": 1})
+            .options(IndexOptions::builder().expire_after(three_days).build())
+            .build();
+
+        self.group_join_codes
+            .create_indexes(vec![code_index, group_index, ttl_index], None)
             .await
             .map_err(InternalError::DatabaseConnectionError)?;
 
@@ -564,6 +595,19 @@ impl AppData {
     }
 
     #[cfg(test)]
+    pub(crate) async fn insert_join_codes(
+        &self,
+        join_codes: &[GroupJoinCode],
+    ) -> Result<(), InternalError> {
+        self.group_join_codes
+            .insert_many(join_codes, None)
+            .await
+            .map_err(InternalError::DatabaseConnectionError)?;
+
+        Ok(())
+    }
+
+    #[cfg(test)]
     pub(crate) async fn insert_assignments(
         &self,
         assignments: &[Assignment],
@@ -634,6 +678,7 @@ impl AppData {
             &self.users,
             &self.assignments,
             &self.submissions,
+            &self.group_join_codes,
             &self.bucket,
             &self.s3,
         )

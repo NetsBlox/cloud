@@ -543,7 +543,7 @@ impl<'a> ProjectActions<'a> {
         )
         .await
         .into_iter()
-        .collect::<Result<_, _>>()?;
+        .collect::<Result<(), _>>()?;
 
         let metadata = utils::on_room_changed(self.network, self.project_cache, updated_metadata);
         Ok(metadata.into())

@@ -1,6 +1,8 @@
-use actix_web::{error, http::StatusCode, HttpResponse, HttpResponseBuilder};
+use actix_web::{http::StatusCode, HttpResponse, HttpResponseBuilder, ResponseError};
 use derive_more::{Display, Error};
+use itertools::Itertools;
 use log::warn;
+use netsblox_cloud_common::api;
 use serde::Serialize;
 
 #[derive(Debug, Display, Error)]
@@ -51,6 +53,8 @@ pub enum UserError {
     RoleNotFoundError,
     #[display(fmt = "Group not found.")]
     GroupNotFoundError,
+    #[display(fmt = "Group code not found.")]
+    GroupCodeNotFoundError,
     #[display(fmt = "Assignment not found.")]
     AssignmentNotFoundError,
     #[display(fmt = "Submission not found.")]
@@ -130,6 +134,9 @@ pub enum UserError {
 
     #[display(fmt = "Error occurred during OAuth authentication")]
     OAuthFlowError(OAuthFlowError),
+
+    #[display(fmt = "Error occured during batch user creation.")]
+    NewUserErrorBatch { errors: Vec<NewUserError> },
 }
 
 #[derive(Debug, Display, Error)]
@@ -171,13 +178,20 @@ impl From<&OAuthFlowError> for OAuthErrorBody {
     }
 }
 
-impl error::ResponseError for UserError {
+impl ResponseError for UserError {
     fn error_response(&self) -> HttpResponse {
         // TODO: make these JSON?
         match self {
             UserError::OAuthFlowError(err) => {
                 let body: OAuthErrorBody = err.into();
                 HttpResponse::BadRequest().json(body)
+            }
+            UserError::NewUserErrorBatch { errors } => {
+                let data = errors
+                    .iter()
+                    .map(api::NewUserErrorResponse::from)
+                    .collect_vec();
+                HttpResponse::BadRequest().json(data)
             }
             _ => HttpResponseBuilder::new(self.status_code()).body(self.to_string()),
         }
@@ -207,7 +221,8 @@ impl error::ResponseError for UserError {
             | Self::OAuthTokenNotFoundError
             | Self::AssignmentNotFoundError
             | Self::SubmissionNotFoundError
-            | Self::GroupNotFoundError => StatusCode::NOT_FOUND,
+            | Self::GroupNotFoundError
+            | Self::GroupCodeNotFoundError => StatusCode::NOT_FOUND,
             Self::InternalError | Self::SnapConnectionError => StatusCode::INTERNAL_SERVER_ERROR,
             Self::InvalidUsername
             | Self::InvalidRoleOrProjectName
@@ -236,6 +251,7 @@ impl error::ResponseError for UserError {
             | Self::ProjectUnavailableError
             | Self::MissingUrlOrXmlError
             | Self::UserUpdateFieldRequiredError
+            | Self::NewUserErrorBatch { .. }
             | Self::ProjectNotActiveError => StatusCode::BAD_REQUEST,
             Self::InviteAlreadyExistsError => StatusCode::CONFLICT,
         }
@@ -252,5 +268,21 @@ impl From<InternalError> for UserError {
 impl From<OAuthFlowError> for UserError {
     fn from(err: OAuthFlowError) -> UserError {
         UserError::OAuthFlowError(err)
+    }
+}
+
+#[derive(Debug)]
+pub struct NewUserError {
+    pub username: String,
+    pub error: UserError,
+}
+
+impl From<&NewUserError> for api::NewUserErrorResponse {
+    fn from(value: &NewUserError) -> Self {
+        api::NewUserErrorResponse {
+            username: value.username.clone(),
+            status: value.error.status_code().into(),
+            message: value.error.to_string(),
+        }
     }
 }

@@ -5,7 +5,7 @@ use lazy_static::lazy_static;
 use mongodb::{bson::doc, Client};
 use netsblox_cloud_common::{
     api, Assignment, AuthorizedServiceHost, BannedAccount, CollaborationInvite, FriendLink, Group,
-    Library, LogMessage, MagicLink, Submission, User,
+    GroupJoinCode, Library, LogMessage, MagicLink, Submission, User,
 };
 
 use crate::{
@@ -30,6 +30,7 @@ pub(crate) fn setup() -> TestSetupBuilder {
         projects: Vec::new(),
         libraries: Vec::new(),
         groups: Vec::new(),
+        join_codes: Vec::new(),
         assignments: Vec::new(),
         submissions: Vec::new(),
         clients: Vec::new(),
@@ -48,6 +49,7 @@ pub(crate) struct TestSetupBuilder {
     projects: Vec<project::ProjectFixture>,
     libraries: Vec<Library>,
     groups: Vec<Group>,
+    join_codes: Vec<GroupJoinCode>,
     assignments: Vec<Assignment>,
     submissions: Vec<Submission>,
     clients: Vec<network::Client>,
@@ -79,6 +81,11 @@ impl TestSetupBuilder {
 
     pub(crate) fn with_projects(mut self, projects: &[project::ProjectFixture]) -> Self {
         self.projects.extend_from_slice(projects);
+        self
+    }
+
+    pub(crate) fn with_group_join_codes(mut self, codes: &[GroupJoinCode]) -> Self {
+        self.join_codes.extend_from_slice(codes);
         self
     }
 
@@ -141,11 +148,12 @@ impl TestSetupBuilder {
     where
         Fut: Future<Output = ()>,
     {
-        let client = Client::with_uri_str("mongodb://127.0.0.1:27017/")
+        let mut settings = Settings::new().unwrap();
+
+        let client = Client::with_uri_str(settings.database.url.clone())
             .await
             .expect("Unable to connect to database");
 
-        let mut settings = Settings::new().unwrap();
         let db_name = format!("{}-{}", &self.prefix, settings.database.name);
         settings.database.name = db_name.clone();
         settings.s3.bucket = format!("{}-{}", &self.prefix, settings.s3.bucket);
@@ -232,6 +240,9 @@ impl TestSetupBuilder {
         }
         if !self.friends.is_empty() {
             app_data.insert_friends(&self.friends).await.unwrap();
+        }
+        if !self.join_codes.is_empty() {
+            app_data.insert_join_codes(&self.join_codes).await.unwrap();
         }
         if !self.assignments.is_empty() {
             app_data

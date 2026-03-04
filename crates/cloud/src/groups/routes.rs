@@ -101,6 +101,51 @@ async fn delete_group(
     Ok(HttpResponse::Ok().json(group))
 }
 
+#[post("/id/{id}/code")]
+async fn create_join_code(
+    app: web::Data<AppData>,
+    path: web::Path<(api::GroupId,)>,
+    req: HttpRequest,
+) -> Result<HttpResponse, UserError> {
+    let (id,) = path.into_inner();
+
+    let auth_eg = auth::try_edit_group(&app, &req, &id).await?;
+    let actions: GroupActions = app.as_group_actions();
+    let code = actions.create_join_code(&auth_eg).await?;
+
+    Ok(HttpResponse::Ok().json(code))
+}
+
+#[get("/id/{id}/code")]
+async fn view_join_code(
+    app: web::Data<AppData>,
+    path: web::Path<(api::GroupId,)>,
+    req: HttpRequest,
+) -> Result<HttpResponse, UserError> {
+    let (id,) = path.into_inner();
+
+    let auth_eg = auth::try_edit_group(&app, &req, &id).await?;
+    let actions: GroupActions = app.as_group_actions();
+    let code = actions.view_join_code(&auth_eg).await?;
+
+    Ok(HttpResponse::Ok().json(code))
+}
+
+#[delete("/id/{id}/code")]
+async fn delete_join_code(
+    app: web::Data<AppData>,
+    path: web::Path<(api::GroupId,)>,
+    req: HttpRequest,
+) -> Result<HttpResponse, UserError> {
+    let (id,) = path.into_inner();
+
+    let auth_dg = auth::try_delete_group(&app, &req, &id).await?;
+    let actions: GroupActions = app.as_group_actions();
+    let code = actions.delete_join_code(&auth_dg).await?;
+
+    Ok(HttpResponse::Ok().json(code))
+}
+
 #[post("/id/{id}/assignments/")]
 async fn create_assignment(
     app: web::Data<AppData>,
@@ -278,6 +323,9 @@ pub fn config(cfg: &mut web::ServiceConfig) {
         .service(create_group)
         .service(update_group)
         .service(delete_group)
+        .service(create_join_code)
+        .service(view_join_code)
+        .service(delete_join_code)
         .service(create_assignment)
         .service(view_group_assignments)
         .service(view_assignment)
@@ -296,6 +344,7 @@ mod tests {
     use actix_web::{body::MessageBody, http, test, App};
     use mongodb::bson::doc;
     use mongodb::bson::DateTime;
+    use netsblox_cloud_common::GroupJoinCode;
     use netsblox_cloud_common::{Assignment, Group, User};
 
     use super::*;
@@ -546,6 +595,173 @@ mod tests {
                         "/id/{}/assignments/id/{}/",
                         &group.id, &assignment.id
                     ))
+                    .cookie(test_utils::cookie::new(&user.username))
+                    .to_request();
+
+                let response = test::call_service(&app, req).await;
+
+                assert_eq!(response.status(), http::StatusCode::OK);
+            })
+            .await;
+    }
+
+    #[actix_web::test]
+    async fn test_create_join_code() {
+        let user: User = api::NewUser {
+            username: "user".into(),
+            email: "user@netsblox.org".into(),
+            password: None,
+            group_id: None,
+            role: None,
+        }
+        .into();
+        let group = Group::new(user.username.clone(), "some_group".into());
+
+        test_utils::setup()
+            .with_users(&[user.clone()])
+            .with_groups(&[group.clone()])
+            .run(|app_data| async move {
+                let app = test::init_service(
+                    App::new()
+                        .app_data(web::Data::new(app_data.clone()))
+                        .wrap(test_utils::cookie::middleware())
+                        .configure(config),
+                )
+                .await;
+
+                let req = test::TestRequest::post()
+                    .uri(&format!("/id/{}/code", &group.id))
+                    .cookie(test_utils::cookie::new(&user.username))
+                    .to_request();
+
+                let response = test::call_service(&app, req).await;
+
+                assert_eq!(response.status(), http::StatusCode::OK);
+
+                let entry = app_data
+                    .group_join_codes
+                    .find_one(doc! {"group": group.id.clone()}, None)
+                    .await
+                    .expect("Database query failure")
+                    .expect("Did not find entry after creation");
+
+                assert_eq!(entry.group, group.id);
+            })
+            .await;
+    }
+
+    #[actix_web::test]
+    async fn test_replace_join_code() {
+        let user: User = api::NewUser {
+            username: "user".into(),
+            email: "user@netsblox.org".into(),
+            password: None,
+            group_id: None,
+            role: None,
+        }
+        .into();
+        let group = Group::new(user.username.clone(), "some_group".into());
+        let join_code = GroupJoinCode::new("12341234".into(), group.id.clone());
+        test_utils::setup()
+            .with_users(std::slice::from_ref(&user))
+            .with_groups(std::slice::from_ref(&group))
+            .with_group_join_codes(std::slice::from_ref(&join_code))
+            .run(|app_data| async move {
+                let app = test::init_service(
+                    App::new()
+                        .app_data(web::Data::new(app_data.clone()))
+                        .wrap(test_utils::cookie::middleware())
+                        .configure(config),
+                )
+                .await;
+
+                let req = test::TestRequest::post()
+                    .uri(&format!("/id/{}/code", &group.id))
+                    .cookie(test_utils::cookie::new(&user.username))
+                    .to_request();
+
+                let response = test::call_service(&app, req).await;
+
+                assert_eq!(response.status(), http::StatusCode::OK);
+
+                let entry = app_data
+                    .group_join_codes
+                    .find_one(doc! {"group": group.id.clone()}, None)
+                    .await
+                    .expect("Database query failure")
+                    .expect("Did not find entry after creation");
+
+                assert_ne!(entry.code, join_code.code);
+            })
+            .await;
+    }
+
+    #[actix_web::test]
+    async fn test_view_join_code() {
+        let user: User = api::NewUser {
+            username: "user".into(),
+            email: "user@netsblox.org".into(),
+            password: None,
+            group_id: None,
+            role: None,
+        }
+        .into();
+        let group = Group::new(user.username.clone(), "some_group".into());
+        let join_code = GroupJoinCode::new("12341234".into(), group.id.clone());
+
+        test_utils::setup()
+            .with_users(std::slice::from_ref(&user))
+            .with_groups(std::slice::from_ref(&group))
+            .with_group_join_codes(std::slice::from_ref(&join_code))
+            .run(|app_data| async move {
+                let app = test::init_service(
+                    App::new()
+                        .app_data(web::Data::new(app_data.clone()))
+                        .wrap(test_utils::cookie::middleware())
+                        .configure(config),
+                )
+                .await;
+
+                let req = test::TestRequest::get()
+                    .uri(&format!("/id/{}/code", &group.id))
+                    .cookie(test_utils::cookie::new(&user.username))
+                    .to_request();
+
+                let response = test::call_service(&app, req).await;
+
+                assert_eq!(response.status(), http::StatusCode::OK);
+            })
+            .await;
+    }
+
+    #[actix_web::test]
+    async fn test_delete_join_code() {
+        let user: User = api::NewUser {
+            username: "user".into(),
+            email: "user@netsblox.org".into(),
+            password: None,
+            group_id: None,
+            role: None,
+        }
+        .into();
+        let group = Group::new(user.username.clone(), "some_group".into());
+        let join_code = GroupJoinCode::new("12341234".into(), group.id.clone());
+
+        test_utils::setup()
+            .with_users(std::slice::from_ref(&user))
+            .with_groups(std::slice::from_ref(&group))
+            .with_group_join_codes(std::slice::from_ref(&join_code))
+            .run(|app_data| async move {
+                let app = test::init_service(
+                    App::new()
+                        .app_data(web::Data::new(app_data.clone()))
+                        .wrap(test_utils::cookie::middleware())
+                        .configure(config),
+                )
+                .await;
+
+                let req = test::TestRequest::delete()
+                    .uri(&format!("/id/{}/code", &group.id))
                     .cookie(test_utils::cookie::new(&user.username))
                     .to_request();
 

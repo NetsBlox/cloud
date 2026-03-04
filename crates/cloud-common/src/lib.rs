@@ -200,6 +200,45 @@ impl From<Group> for Bson {
 
 #[derive(Serialize, Deserialize, Clone, Debug)]
 #[serde(rename_all = "camelCase")]
+pub struct GroupJoinCode {
+    pub code: String,
+    pub group: GroupId,
+    pub created_at: DateTime,
+}
+
+impl GroupJoinCode {
+    #[must_use]
+    pub fn new(code: String, group: GroupId) -> Self {
+        Self {
+            code,
+            group,
+            created_at: DateTime::from_system_time(SystemTime::now()),
+        }
+    }
+}
+
+impl From<GroupJoinCode> for netsblox_api_common::GroupJoinCode {
+    fn from(gjc: GroupJoinCode) -> Self {
+        Self {
+            code: gjc.code,
+            group: gjc.group,
+            created_at: gjc.created_at.to_system_time(),
+        }
+    }
+}
+
+impl From<GroupJoinCode> for Bson {
+    fn from(value: GroupJoinCode) -> Self {
+        Bson::Document(doc! {
+            "code": value.code,
+            "group": value.group,
+            "createdAt": value.created_at,
+        })
+    }
+}
+
+#[derive(Serialize, Deserialize, Clone, Debug)]
+#[serde(rename_all = "camelCase")]
 pub struct CollaborationInvite {
     pub id: String,
     pub sender: String,

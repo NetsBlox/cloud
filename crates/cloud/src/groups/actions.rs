@@ -5,7 +5,7 @@ use std::collections::HashMap;
 
 use futures::TryStreamExt;
 use mongodb::{bson::doc, options::ReturnDocument, Collection};
-use netsblox_cloud_common::{api, Assignment, Bucket, Group, Submission, User};
+use netsblox_cloud_common::{api, Assignment, Bucket, Group, GroupJoinCode, Submission, User};
 
 use crate::errors::{InternalError, UserError};
 
@@ -14,6 +14,7 @@ pub(crate) struct GroupActions<'a> {
     users: &'a Collection<User>,
     assignments: &'a Collection<Assignment>,
     submissions: &'a Collection<Submission>,
+    group_join_codes: &'a Collection<GroupJoinCode>,
     bucket: &'a Bucket,
     s3: &'a s3::Client,
 }
@@ -24,6 +25,7 @@ impl<'a> GroupActions<'a> {
         users: &'a Collection<User>,
         assignments: &'a Collection<Assignment>,
         submissions: &'a Collection<Submission>,
+        group_join_codes: &'a Collection<GroupJoinCode>,
         bucket: &'a Bucket,
         s3: &'a s3::Client,
     ) -> Self {
@@ -32,6 +34,7 @@ impl<'a> GroupActions<'a> {
             users,
             assignments,
             submissions,
+            group_join_codes,
             bucket,
             s3,
         }
@@ -239,6 +242,92 @@ impl<'a> GroupActions<'a> {
         Ok(members)
     }
 
+    pub(crate) async fn create_join_code(
+        &self,
+        auth_eg: &auth::EditGroup,
+    ) -> Result<api::GroupJoinCode, UserError> {
+        let code = passwords::PasswordGenerator::new()
+            .exclude_similar_characters(true)
+            .generate_one()
+            .map_err(|_| UserError::InternalError)?
+            .to_uppercase();
+        let options = mongodb::options::FindOneAndUpdateOptions::builder()
+            .upsert(true)
+            .return_document(ReturnDocument::After)
+            .build();
+        let query = doc! {"group": auth_eg.id.clone()};
+        let entry = GroupJoinCode::new(code, auth_eg.id.clone());
+        let update = doc! {"$set": entry.clone()};
+
+        let entry = self
+            .group_join_codes
+            .find_one_and_update(query, update, options)
+            .await
+            .map_err(InternalError::DatabaseConnectionError)?
+            .ok_or(UserError::InternalError)?;
+
+        Ok(entry.into())
+    }
+
+    pub(crate) async fn view_join_code(
+        &self,
+        auth_eg: &auth::EditGroup,
+    ) -> Result<api::GroupJoinCode, UserError> {
+        let query = doc! {"group": auth_eg.id.clone()};
+        let entry = self
+            .group_join_codes
+            .find_one(query, None)
+            .await
+            .map_err(InternalError::DatabaseConnectionError)?
+            .ok_or(UserError::GroupCodeNotFoundError)?;
+        Ok(entry.into())
+    }
+
+    pub(crate) async fn delete_join_code(
+        &self,
+        auth_dg: &auth::DeleteGroup,
+    ) -> Result<api::GroupJoinCode, UserError> {
+        let query = doc! {"group": &auth_dg.id};
+
+        let code = self
+            .group_join_codes
+            .find_one_and_delete(query, None)
+            .await
+            .map_err(InternalError::DatabaseConnectionError)?
+            .ok_or(UserError::GroupCodeNotFoundError)?;
+
+        Ok(code.into())
+    }
+
+    pub(crate) async fn redeem_join_code(
+        &self,
+        auth_eu: &auth::EditUser,
+        data: api::JoinCodeRequest,
+    ) -> Result<api::User, UserError> {
+        let code = data.code.to_uppercase();
+        let group_id = self
+            .group_join_codes
+            .find_one(doc! {"code": code}, None)
+            .await
+            .map_err(InternalError::DatabaseConnectionError)?
+            .ok_or(UserError::GroupCodeNotFoundError)?
+            .group;
+
+        let options = mongodb::options::FindOneAndUpdateOptions::builder()
+            .return_document(ReturnDocument::After)
+            .build();
+        let query = doc! {"username": auth_eu.username.clone()};
+        let update = doc! {"$set": {"groupId": group_id}};
+
+        let entry = self
+            .users
+            .find_one_and_update(query, update, options)
+            .await
+            .map_err(InternalError::DatabaseConnectionError)?
+            .ok_or(UserError::InternalError)?;
+        Ok(entry.into())
+    }
+
     pub(crate) async fn create_assignment(
         &self,
         auth_ca: &auth::CreateAssignment,
@@ -295,7 +384,7 @@ impl<'a> GroupActions<'a> {
             set_doc.insert("name", name);
         }
         if let Some(due_date) = update_data.due_date {
-            set_doc.insert("state", DateTime::from(due_date));
+            set_doc.insert("dueDate", DateTime::from(due_date));
         }
         let update = doc! { "$set": set_doc };
 
