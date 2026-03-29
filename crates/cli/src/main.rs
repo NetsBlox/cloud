@@ -14,6 +14,7 @@ use netsblox_api::common::{
     ServiceHostScope, UpdateUserData, UserRole,
 };
 use netsblox_api::{self, serde_json, Client};
+use serde::Serialize;
 use std::path::Path;
 use xmlparser::{Token, Tokenizer};
 
@@ -868,7 +869,7 @@ async fn do_command(mut cfg: Config, args: Cli) -> Result<(), error::Error> {
             Users::View { user } => {
                 let username = user.clone().unwrap_or_else(|| get_current_user(cfg.host()));
                 let user = client.view_user(&username).await?;
-                println!("{:?}", user);
+                print(&user);
             }
             Users::Link {
                 username,
@@ -1014,19 +1015,15 @@ async fn do_command(mut cfg: Config, args: Cli) -> Result<(), error::Error> {
                     client.list_projects(&username).await?
                 };
 
-                for project in projects {
-                    println!("{}", serde_json::to_string(&project).unwrap());
-                }
+                projects.iter().for_each(print);
             }
             Projects::Publish { project, user } => {
                 let username = user.clone().unwrap_or_else(|| get_current_user(cfg.host()));
                 let metadata = client.get_project_metadata(&username, project).await?;
                 let project_id = metadata.id;
 
-                if matches!(
-                    client.publish_project(&project_id).await?,
-                    PublishState::PendingApproval
-                ) {
+                let state = client.publish_project(&project_id).await?;
+                if matches!(state, PublishState::PendingApproval) {
                     println!("Approval is required before the project will be officially public.");
                 }
             }
@@ -1673,6 +1670,15 @@ async fn do_command(mut cfg: Config, args: Cli) -> Result<(), error::Error> {
     }
 
     Ok(())
+}
+
+// TODO: How should we handle output from the CLI?
+//   - output is not a tty, then we should print JSON (or maybe show an option, too?)
+//   - output is a tty, then we can give human readable messages
+
+// - Make a new struct wrapping these outputs for when there is a difference btwn
+fn print<T: Serialize>(data: &T) {
+    println!("{}", serde_json::to_string(data).unwrap());
 }
 
 #[derive(Debug)]
