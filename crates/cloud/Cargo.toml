@@ -37,7 +37,7 @@ lru = "0.11.1"
 lettre = {version = "0.11.2", features = ["smtp-transport", "builder"]}
 image = "0.24.7"
 base64 = "0.13.0"
-tokio = { version = "1.13.1", features = ["sync", "time"]}
+tokio = { version = "1.38.2", features = ["sync", "time"]}
 actix-web-prom = "0.6.0"
 prometheus = "0.13.3"
 aws-sdk-s3 = "0.31.2"
