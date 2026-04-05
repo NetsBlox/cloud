@@ -225,6 +225,7 @@ impl<'a> ProjectActions<'a> {
                 .write_image(image.as_bytes(), resized_width, resized_height, color)
                 .map_err(InternalError::ThumbnailEncodeError)?;
             actix_web::web::Bytes::copy_from_slice(&png_bytes.into_inner().unwrap())
+        // FIXME: remove unwrap?
         } else {
             let (width, height) = thumbnail.dimensions();
             let mut png_bytes = BufWriter::new(Vec::new());
@@ -234,6 +235,7 @@ impl<'a> ProjectActions<'a> {
                 .write_image(thumbnail.as_bytes(), width, height, color)
                 .map_err(InternalError::ThumbnailEncodeError)?;
             actix_web::web::Bytes::copy_from_slice(&png_bytes.into_inner().unwrap())
+            // FIXME: remove unwrap?
         };
 
         Ok(image_content)
@@ -639,8 +641,11 @@ impl<'a> ProjectActions<'a> {
             .into_iter()
             .collect::<Result<Vec<_>, _>>()?;
 
-        let mut cache = self.project_cache.write().unwrap();
-        cache.pop(&metadata.id);
+        if let Ok(mut cache) = self.project_cache.write() {
+            cache.pop(&metadata.id);
+        } else {
+            log::error!("Unable to acquire project cache lock to clear project.");
+        }
 
         self.network
             .do_send(topology::ProjectDeleted::new(metadata.clone()));
