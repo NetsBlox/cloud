@@ -1,8 +1,7 @@
 use mongodb::bson::{self, doc, document::Document, Bson, DateTime};
 pub use netsblox_api_common as api;
 use netsblox_api_common::{
-    oauth, AssignmentId, ClientState, LibraryMetadata, NewUser, PublishState, RoleId, SubmissionId,
-    UserRole,
+    AssignmentId, ClientState, LibraryMetadata, NewUser, PublishState, RoleId, ServiceHostId, ServiceHostSettings, ServiceName, ServiceSettings, SubmissionId, UserRole, oauth
 };
 use netsblox_api_common::{
     FriendInvite, FriendLinkState, GroupId, InvitationState, LinkedAccount, ProjectId, RoleData,
@@ -28,7 +27,7 @@ pub struct User {
     pub created_at: DateTime,
     pub linked_accounts: Vec<LinkedAccount>,
     pub services_hosts: Option<Vec<ServiceHost>>,
-    pub service_settings: HashMap<String, String>,
+    pub service_settings: HashMap<ServiceHostId, ServiceHostSettings>,
 }
 
 impl User {
@@ -145,7 +144,7 @@ pub struct Group {
     pub owner: String,
     pub name: String,
     pub services_hosts: Option<Vec<ServiceHost>>,
-    pub service_settings: HashMap<String, String>,
+    pub service_settings: HashMap<ServiceHostId, ServiceHostSettings>,
 }
 
 impl Group {

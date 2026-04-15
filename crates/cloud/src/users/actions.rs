@@ -470,11 +470,18 @@ impl<'a> UserActions<'a> {
     pub(crate) async fn set_user_settings(
         &self,
         lu: &auth::EditUser,
-        host: &str,
-        settings: &str,
+        host: &api::ServiceHostId,
+        settings: &api::ServiceHostSettings,
     ) -> Result<(), UserError> {
         let query = doc! {"username": &lu.username};
-        let update = doc! {"$set": {format!("serviceSettings.{}", &host): settings}};
+        let mut update_doc = bson::Document::new();
+        for (name, setting) in settings.inner() {
+            let key = format!("serviceSettings.{host}.{name}");
+            update_doc.insert(key, setting);
+        }
+
+        let update = doc! {"$set": update_doc};
+
         self.users
             .find_one_and_update(query, update, None)
             .await
@@ -484,10 +491,10 @@ impl<'a> UserActions<'a> {
         Ok(())
     }
 
-    pub(crate) async fn get_service_settings(
+    pub(crate) async fn get_user_settings(
         &self,
         vu: &auth::ViewUser,
-    ) -> Result<HashMap<String, String>, UserError> {
+    ) -> Result<HashMap<api::ServiceHostId, api::ServiceHostSettings>, UserError> {
         let query = doc! {"username": &vu.username};
         let user = self
             .users
@@ -502,7 +509,7 @@ impl<'a> UserActions<'a> {
     pub(crate) async fn delete_user_settings(
         &self,
         lu: &auth::EditUser,
-        host: &str,
+        host: &api::ServiceHostId,
     ) -> Result<(), UserError> {
         let query = doc! {"username": &lu.username};
         let update = doc! {"$unset": {format!("serviceSettings.{}", &host): true}};
@@ -515,6 +522,25 @@ impl<'a> UserActions<'a> {
 
         Ok(())
     }
+
+    pub(crate) async fn delete_user_service_settings(
+        &self,
+        lu: &auth::EditUser,
+        host: &api::ServiceHostId,
+        servicename: &api::ServiceName,
+    ) -> Result<(), UserError> {
+        let query = doc! {"username": &lu.username};
+        let update = doc! {"$unset": {format!("serviceSettings.{host}.{servicename}"): true}};
+
+        self.users
+            .find_one_and_update(query, update, None)
+            .await
+            .map_err(InternalError::DatabaseConnectionError)?
+            .ok_or(UserError::UserNotFoundError)?;
+
+        Ok(())
+    }
+
     pub(crate) async fn forgot_username(&self, email: &str) -> Result<(), UserError> {
         let usernames = utils::find_usernames(self.users, email).await?;
         let email = ForgotUsernameEmail {

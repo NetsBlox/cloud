@@ -1,7 +1,8 @@
 use crate::{
-    oauth, AppId, AssignmentId, ClientId, FriendInvite, FriendLinkState, GroupId, InvitationState,
-    LinkedAccount, MagicLinkId, ProjectId, PublishState, RoleId, RoleMetadata, S3Key, SaveState,
-    ServiceHost, ServiceHostScope, SubmissionId, UserRole,
+    oauth, ApiKey, AppId, AssignmentId, ClientId, FriendInvite, FriendLinkState, GroupId,
+    InvitationState, LinkedAccount, MagicLinkId, ProjectId, PublishState, RoleId, RoleMetadata,
+    S3Key, SaveState, ServiceHost, ServiceHostId, ServiceHostScope, ServiceHostSettings,
+    ServiceName, ServiceSettings, SubmissionId, UserRole,
 };
 use bson::{doc, Bson, DateTime};
 
@@ -103,6 +104,59 @@ impl From<PublishState> for Bson {
 impl From<GroupId> for Bson {
     fn from(id: GroupId) -> Bson {
         Bson::String(id.as_str().to_owned())
+    }
+}
+
+impl From<ServiceName> for Bson {
+    fn from(name: ServiceName) -> Bson {
+        Bson::String(name.0)
+    }
+}
+
+impl From<ApiKey> for Bson {
+    fn from(key: ApiKey) -> Bson {
+        Bson::String(key.0)
+    }
+}
+
+impl From<ServiceSettings> for Bson {
+    fn from(settings: ServiceSettings) -> Bson {
+        let mut doc = bson::Document::new();
+
+        if let Some(keys) = settings.api_keys {
+            let keys_doc = keys
+                .into_iter()
+                .map(|(k, v)| (k, Bson::String(v.0)))
+                .collect::<bson::Document>();
+
+            doc.insert("apiKeys", keys_doc);
+        }
+
+        if let Some(misc) = settings.misc {
+            let misc_doc: bson::Document = misc
+                .into_iter()
+                .map(|(k, v)| (k, Bson::String(v)))
+                .collect();
+            doc.insert("misc", misc_doc);
+        }
+        doc.into()
+    }
+}
+
+impl From<ServiceHostId> for Bson {
+    fn from(name: ServiceHostId) -> Bson {
+        Bson::String(name.0)
+    }
+}
+
+impl From<ServiceHostSettings> for Bson {
+    fn from(settings: ServiceHostSettings) -> Bson {
+        let doc: bson::Document = settings
+            .0
+            .into_iter()
+            .map(|(k, v)| (k.into(), v.into()))
+            .collect();
+        doc.into()
     }
 }
 

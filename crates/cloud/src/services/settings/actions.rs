@@ -1,6 +1,3 @@
-use std::collections::HashMap;
-
-use futures::TryStreamExt;
 use mongodb::{bson::doc, Collection};
 use netsblox_cloud_common::{api, Group, User};
 
@@ -21,8 +18,8 @@ impl<'a> SettingsActions<'a> {
     pub(crate) async fn get_settings(
         &self,
         vu: &auth::ViewUser,
-        host: &str,
-    ) -> Result<api::ServiceSettings, UserError> {
+        host: &api::ServiceHostId,
+    ) -> Result<api::AllServiceSettings, UserError> {
         let query = doc! {"username": &vu.username};
         let user = self
             .users
@@ -31,42 +28,31 @@ impl<'a> SettingsActions<'a> {
             .map_err(InternalError::DatabaseConnectionError)?
             .ok_or(UserError::UserNotFoundError)?;
 
-        let query = match user.group_id {
-            Some(ref group_id) => doc! {"$or": [
-                {"owner": &vu.username},
-                {"id": group_id}
-            ]},
-            None => doc! {"owner": &vu.username},
+        let user_settings = user
+            .service_settings
+            .get(&host)
+            .cloned();
+
+        let member_settings = if let Some(group_id) = user.group_id {
+            let query = doc! {"id": group_id};
+            let group = self
+                .groups
+                .find_one(query, None)
+                .await
+                .map_err(InternalError::DatabaseConnectionError)?
+                .ok_or(UserError::UserNotFoundError)?;
+
+            group
+                .service_settings
+                .get(&api::ServiceHostId::from(host.to_string()))
+                .cloned()
+        } else {
+            None
         };
-        let cursor = self
-            .groups
-            .find(query, None)
-            .await
-            .map_err(InternalError::DatabaseConnectionError)?;
 
-        let mut groups: Vec<_> = cursor
-            .try_collect::<Vec<_>>()
-            .await
-            .map_err(InternalError::DatabaseConnectionError)?;
-
-        let member_settings = user
-            .group_id
-            .and_then(|group_id| groups.iter().position(|group| group.id == group_id))
-            .map(|pos| groups.swap_remove(pos))
-            .and_then(|group| group.service_settings.get(host).map(|s| s.to_owned()));
-
-        let all_settings = api::ServiceSettings {
-            user: user.service_settings.get(host).cloned(),
+        let all_settings = api::AllServiceSettings {
+            user: user_settings,
             member: member_settings,
-            groups: groups
-                .into_iter()
-                .filter_map(|group| {
-                    group
-                        .service_settings
-                        .get(host)
-                        .map(|s| (group.id, s.to_owned()))
-                })
-                .collect::<HashMap<_, _>>(),
         };
 
         Ok(all_settings)

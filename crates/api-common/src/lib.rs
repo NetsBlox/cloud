@@ -839,18 +839,87 @@ pub struct ClientInfo {
     pub state: Option<ClientState>,
 }
 
+#[derive(Deserialize, Serialize, Clone, Debug, PartialEq, Eq, Display, Hash, FromStr, TS)]
+#[ts(export)]
+pub struct ServiceHostId(String);
+
+impl From<ServiceHostId> for String {
+    fn from(name: ServiceHostId) -> Self {
+        name.0
+    }
+}
+
+impl From<String> for ServiceHostId {
+    fn from(value: String) -> Self {
+        ServiceHostId(value)
+    }
+}
+
+#[derive(Deserialize, Serialize, Clone, Debug, PartialEq, Eq, Display, Hash, FromStr, TS)]
+#[ts(export)]
+pub struct ServiceName(String);
+
+impl From<ServiceName> for String {
+    fn from(name: ServiceName) -> Self {
+        name.0
+    }
+}
+
+impl From<String> for ServiceName {
+    fn from(value: String) -> Self {
+        ServiceName(value)
+    }
+}
+
+#[derive(Deserialize, Serialize, Clone, Debug, PartialEq, Eq, Display, Hash, FromStr, TS)]
+#[ts(export)]
+pub struct ApiKey(String);
+
+impl ApiKey {
+    #[must_use]
+    pub fn redacted(&self) -> Self {
+        let hint_index = self.0.char_indices().nth_back(2).map(|(i, _)| i);
+        let hint = hint_index.map_or("", |i| self.0.get(i..).unwrap_or(""));
+        ApiKey(format!("*************{hint}"))
+    }
+}
+
+#[derive(Deserialize, Serialize, Debug, Clone, TS, Default)]
+#[serde(rename_all = "camelCase")]
+#[ts(export)]
+pub struct ServiceSettings {
+    #[ts(optional)]
+    pub api_keys: Option<HashMap<String, ApiKey>>,
+    #[ts(optional)]
+    pub misc: Option<HashMap<String, String>>,
+}
+
+#[derive(Deserialize, Serialize, Debug, Clone, TS, Default)]
+#[ts(export)]
+pub struct ServiceHostSettings(HashMap<ServiceName, ServiceSettings>);
+
+impl ServiceHostSettings {
+    #[must_use]
+    pub fn inner(&self) -> &HashMap<ServiceName, ServiceSettings> {
+        &self.0
+    }
+
+    #[must_use]
+    pub fn inner_mut(&mut self) -> &mut HashMap<ServiceName, ServiceSettings> {
+        &mut self.0
+    }
+}
+
 /// Service settings for a given user categorized by origin
 #[derive(Deserialize, Serialize, Debug, Clone, TS)]
 #[ts(export)]
-pub struct ServiceSettings {
+pub struct AllServiceSettings {
     /// Service settings owned by the user
     #[ts(optional)]
-    pub user: Option<String>,
+    pub user: Option<ServiceHostSettings>,
     /// Service settings owned by a group in which the user is a member
     #[ts(optional)]
-    pub member: Option<String>,
-    /// Service settings owned by a groups created by the user
-    pub groups: HashMap<GroupId, String>,
+    pub member: Option<ServiceHostSettings>,
 }
 
 /// Send message request (for authorized services)

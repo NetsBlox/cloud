@@ -1040,7 +1040,7 @@ impl Client {
         &self,
         username: &str,
         service_id: &str,
-    ) -> Result<ServiceSettings, error::Error> {
+    ) -> Result<AllServiceSettings, error::Error> {
         let response = self
             .request(
                 Method::GET,
@@ -1051,7 +1051,7 @@ impl Client {
             .map_err(error::Error::RequestError)?;
 
         let response = check_response(response).await?;
-        Ok(response.json::<ServiceSettings>().await.unwrap())
+        Ok(response.json::<AllServiceSettings>().await.unwrap())
     }
 
     pub async fn get_group_settings(
