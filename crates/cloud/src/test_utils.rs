@@ -1,10 +1,11 @@
-use std::sync::{Arc, Mutex};
+#[cfg(test)]
+use std::sync::{Arc, LazyLock, Mutex};
 
 use futures::{future::join_all, Future};
-use lazy_static::lazy_static;
 use mongodb::{bson::doc, Client};
 use netsblox_cloud_common::{
-    api, Assignment, AuthorizedServiceHost, BannedAccount, CollaborationInvite, FriendLink, Group,
+    api::{self, ServiceHostSettings},
+    Assignment, AuthorizedServiceHost, BannedAccount, CollaborationInvite, FriendLink, Group,
     GroupJoinCode, Library, LogMessage, MagicLink, Submission, User,
 };
 
@@ -15,14 +16,12 @@ use crate::{
     projects::{actions::CreateProjectDataDict, ProjectActions},
 };
 
-lazy_static! {
-    static ref COUNTER: Arc<Mutex<u32>> = Arc::new(Mutex::new(0));
-}
+static COUNTER: LazyLock<Arc<Mutex<u32>>> = LazyLock::new(|| Arc::new(Mutex::new(0)));
 
 pub(crate) fn setup() -> TestSetupBuilder {
     let mut counter = COUNTER.lock().unwrap();
     *counter += 1_u32;
-    let prefix = format!("test-{}", counter);
+    let prefix = format!("test-{counter}");
     TestSetupBuilder {
         prefix,
         users: Vec::new(),
@@ -158,7 +157,6 @@ impl TestSetupBuilder {
         settings.database.name = db_name.clone();
         settings.s3.bucket = format!("{}-{}", &self.prefix, settings.s3.bucket);
 
-        //FIXME: how can I drop s3 without this being mutable
         let mut app_data = AppData::new(client.clone(), settings, None, None, None);
 
         // create the test fixtures (users, projects, etc)
@@ -217,8 +215,7 @@ impl TestSetupBuilder {
                     .users
                     .iter()
                     .find(|user| user.username == username)
-                    .map(|user| user.email.clone())
-                    .unwrap_or_else(|| String::from("none@netsblox.org"));
+                    .map_or(String::from("none@netsblox.org"), |user| user.email.clone());
 
                 BannedAccount::new(username, email)
             });
@@ -529,5 +526,49 @@ pub(crate) mod network {
             // We don't yet have any tests that require us to check received messages
             // but the handlers would go run here
         }
+    }
+}
+
+pub(crate) mod service_settings {
+    use netsblox_cloud_common::api;
+    use std::collections::HashMap;
+
+    pub(crate) fn test_settings(
+        host: &api::ServiceHostId,
+        service: &api::ServiceName,
+        setting: &api::SettingName,
+        value: &api::SettingValue,
+    ) -> HashMap<api::ServiceHostId, api::ServiceHostSettings> {
+        let settings = HashMap::from([(setting.clone(), value.clone())]);
+        let service_settings = HashMap::from([(service.clone(), settings)]);
+        let host_settings = api::ServiceHostSettings::new(service_settings);
+        HashMap::from([(host.clone(), host_settings)])
+    }
+}
+
+pub(crate) mod test_defaults {
+    use netsblox_cloud_common::api;
+    use netsblox_cloud_common::User;
+
+    pub(crate) fn default_user(username: &str) -> User {
+        api::NewUser {
+            username: username.to_string(),
+            email: format!("{username}@netsblox.org"),
+            password: None,
+            group_id: None,
+            role: None,
+        }
+        .into()
+    }
+
+    pub(crate) fn default_admin(username: &str) -> User {
+        api::NewUser {
+            username: username.to_string(),
+            email: format!("{username}@netsblox.org"),
+            password: None,
+            group_id: None,
+            role: Some(api::UserRole::Admin),
+        }
+        .into()
     }
 }

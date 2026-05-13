@@ -26,6 +26,7 @@ use netsblox_cloud_common::{api, Assignment, Bucket, GroupJoinCode, MagicLink, S
 use serde::{Deserialize, Serialize};
 use std::collections::HashSet;
 use std::net::IpAddr;
+use std::ops::Deref;
 use std::sync::{Arc, RwLock};
 use std::time::Duration;
 use tokio::sync::RwLock as AsyncRwLock;
@@ -228,7 +229,7 @@ impl AppData {
         }
 
         // Add database indexes
-        let one_hour = Duration::from_secs(60 * 60);
+        let one_hour = Duration::from_hours(1);
 
         let index_opts = IndexOptions::builder().expire_after(one_hour).build();
         let occupant_invite_indexes = vec![
@@ -255,7 +256,7 @@ impl AppData {
             .await
             .map_err(InternalError::DatabaseConnectionError)?;
 
-        let one_week = Duration::from_secs(60 * 60 * 24 * 7);
+        let one_week = Duration::from_hours(24 * 7);
         self.project_metadata
             .create_indexes(
                 vec![
@@ -320,9 +321,9 @@ impl AppData {
 
         if let Some(admin) = self.settings.admin.as_ref() {
             let user: User = NewUser {
-                username: admin.username.to_owned(),
-                password: Some(admin.password.to_owned()),
-                email: admin.email.to_owned(),
+                username: admin.username.clone(),
+                password: Some(admin.password.clone()),
+                email: admin.email.clone(),
                 group_id: None,
                 role: Some(UserRole::Admin),
             }
@@ -355,7 +356,7 @@ impl AppData {
     }
 
     async fn initialize_message_log(&self) -> Result<(), InternalError> {
-        let three_months = Duration::from_secs(60 * 60 * 24 * 30 * 3);
+        let three_months = Duration::from_hours(24 * 30 * 3);
         let index_opts = IndexOptions::builder().expire_after(three_months).build();
 
         let token_index = IndexModel::builder()
@@ -370,7 +371,7 @@ impl AppData {
         Ok(())
     }
     async fn initialize_group_join_codes(&self) -> Result<(), InternalError> {
-        let three_days = Duration::from_secs(60 * 60 * 24 * 3);
+        let three_days = Duration::from_hours(24 * 3);
 
         let code_index = IndexModel::builder()
             .keys(doc! {"code": 1})
@@ -398,7 +399,7 @@ impl AppData {
     fn start_update_interval(&self) {
         let tor_exit_nodes = self.tor_exit_nodes.clone();
         actix_web::rt::spawn(async move {
-            let one_day = Duration::from_secs(60 * 60 * 24);
+            let one_day = Duration::from_hours(24);
             let mut interval = time::interval(one_day);
             loop {
                 if let Err(error) = update_tor_nodes(&tor_exit_nodes).await {
@@ -440,9 +441,9 @@ impl AppData {
                 .map_err(InternalError::DatabaseConnectionError)?;
 
             let mut cache = self.project_cache.write().unwrap();
-            projects.iter().for_each(|project| {
+            for project in &projects {
                 cache.put(project.id.clone(), project.clone());
-            });
+            }
             results.extend(projects);
         }
 
@@ -508,9 +509,9 @@ impl AppData {
                 .map_err(InternalError::DatabaseConnectionError)?;
 
             let mut cache = self.membership_cache.write().await;
-            users.into_iter().for_each(|usr| {
+            for usr in users {
                 cache.put(usr.username, usr.group_id.is_some());
-            });
+            }
         }
 
         let mut cache = self.membership_cache.write().await;
@@ -547,8 +548,7 @@ impl AppData {
                 })
                 .ok()
                 .flatten()
-                .map(|user| matches!(user.role, UserRole::Admin))
-                .unwrap_or(false);
+                .is_some_and(|user| matches!(user.role, UserRole::Admin));
 
             let mut cache = self.admin_cache.write().await;
             cache.put(username.to_owned(), is_admin);
@@ -557,8 +557,7 @@ impl AppData {
         let mut cache = self.admin_cache.write().await;
         cache
             .get(username)
-            .map(|is_admin| is_admin.to_owned())
-            .unwrap_or(false)
+            .is_some_and(|is_admin| *is_admin)
     }
 
     // Tor-related restrictions
@@ -658,11 +657,11 @@ impl AppData {
     }
 
     // get resource actions (eg, libraries, users, etc)
-    pub(crate) fn as_library_actions(&self) -> LibraryActions {
+    pub(crate) fn as_library_actions(&self) -> LibraryActions<'_> {
         LibraryActions::new(&self.libraries)
     }
 
-    pub(crate) fn as_project_actions(&self) -> ProjectActions {
+    pub(crate) fn as_project_actions(&self) -> ProjectActions<'_> {
         ProjectActions::new(
             &self.project_metadata,
             &self.project_cache,
@@ -672,7 +671,7 @@ impl AppData {
         )
     }
 
-    pub(crate) fn as_group_actions(&self) -> GroupActions {
+    pub(crate) fn as_group_actions(&self) -> GroupActions<'_> {
         GroupActions::new(
             &self.groups,
             &self.users,
@@ -684,7 +683,7 @@ impl AppData {
         )
     }
 
-    pub(crate) fn as_friend_actions(&self) -> FriendActions {
+    pub(crate) fn as_friend_actions(&self) -> FriendActions<'_> {
         FriendActions::new(
             &self.friends,
             &self.friend_cache,
@@ -694,7 +693,7 @@ impl AppData {
         )
     }
 
-    pub(crate) fn as_magic_link_actions(&self) -> MagicLinkActions {
+    pub(crate) fn as_magic_link_actions(&self) -> MagicLinkActions<'_> {
         MagicLinkActions::new(
             &self.magic_links,
             &self.users,
@@ -704,7 +703,7 @@ impl AppData {
         )
     }
 
-    pub(crate) fn as_collab_invite_actions(&self) -> CollaborationInviteActions {
+    pub(crate) fn as_collab_invite_actions(&self) -> CollaborationInviteActions<'_> {
         CollaborationInviteActions::new(
             &self.collab_invites,
             &self.project_metadata,
@@ -713,7 +712,7 @@ impl AppData {
         )
     }
 
-    pub(crate) fn as_network_actions(&self) -> NetworkActions {
+    pub(crate) fn as_network_actions(&self) -> NetworkActions<'_> {
         NetworkActions::new(
             &self.project_metadata,
             &self.project_cache,
@@ -724,15 +723,15 @@ impl AppData {
         )
     }
 
-    pub(crate) fn as_settings_actions(&self) -> SettingsActions {
+    pub(crate) fn as_settings_actions(&self) -> SettingsActions<'_> {
         SettingsActions::new(&self.users, &self.groups)
     }
 
-    pub(crate) fn as_oauth_actions(&self) -> OAuthActions {
+    pub(crate) fn as_oauth_actions(&self) -> OAuthActions<'_> {
         OAuthActions::new(&self.oauth_clients, &self.oauth_tokens, &self.oauth_codes)
     }
 
-    pub(crate) fn as_user_actions(&self) -> UserActions {
+    pub(crate) fn as_user_actions(&self) -> UserActions<'_> {
         let data = UserActionData {
             users: &self.users,
             banned_accounts: &self.banned_accounts,
@@ -749,11 +748,11 @@ impl AppData {
         UserActions::new(data)
     }
 
-    pub(crate) fn as_host_actions(&self) -> HostActions {
+    pub(crate) fn as_host_actions(&self) -> HostActions<'_> {
         HostActions::new(&self.authorized_services)
     }
 
-    pub(crate) fn as_login_helper(&self) -> LoginHelper {
+    pub(crate) fn as_login_helper(&self) -> LoginHelper<'_> {
         LoginHelper::new(
             &self.network,
             &self.metrics,
@@ -834,13 +833,13 @@ fn is_opera_vpn(addr: &str) -> bool {
 mod tests {
 
     #[actix_web::test]
-    #[ignore]
+    #[ignore = "not implemented"]
     async fn test_save_role_blob() {
         todo!();
     }
 
     #[actix_web::test]
-    #[ignore]
+    #[ignore = "not implemented"]
     async fn test_save_role_set_transient_false() {
         todo!();
     }

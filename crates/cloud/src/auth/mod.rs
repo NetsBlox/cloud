@@ -7,6 +7,7 @@ pub(crate) mod oauth;
 pub(crate) mod projects;
 pub(crate) mod system;
 pub(crate) mod users;
+pub(crate) mod settings;
 
 pub(crate) use crate::auth::collaboration::*;
 pub(crate) use crate::auth::groups::*;
@@ -17,6 +18,7 @@ pub(crate) use crate::auth::oauth::*;
 pub(crate) use crate::auth::projects::*;
 pub(crate) use crate::auth::system::*;
 pub(crate) use crate::auth::users::*;
+pub(crate) use crate::auth::settings::*;
 
 use crate::app_data::AppData;
 use crate::errors::UserError;

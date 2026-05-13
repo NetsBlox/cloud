@@ -960,12 +960,13 @@ impl Client {
     pub async fn authorize_host(
         &self,
         url: &str,
-        id: &str,
+        id_raw: &str,
         visibility: ServiceHostScope,
     ) -> Result<String, error::Error> {
+
         let host = AuthorizedServiceHost {
             url: url.to_owned(),
-            id: id.to_owned(),
+            id: id_raw.to_string().try_into().map_err(|e: ValidationError| error::Error::InvalidInputError(e))?,
             visibility,
         };
         let response = self

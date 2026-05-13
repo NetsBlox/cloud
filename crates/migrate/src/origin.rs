@@ -51,7 +51,7 @@ impl From<User> for cloud::User {
                     .map(|acct| acct.into())
                     .collect::<Vec<_>>()
             }),
-            service_settings: HashMap::new(),
+            service_settings: Some(HashMap::new()),
         }
     }
 }
@@ -200,7 +200,7 @@ impl From<Group> for cloud::Group {
             id: cloud::api::GroupId::new(group.id.to_string()),
             name: group.name,
             owner: group.owner.unwrap_or_else(|| String::from("admin")), // old groups are transferred to the admin account
-            service_settings: HashMap::new(),
+            service_settings: Some(HashMap::new()),
             services_hosts: None,
         }
     }

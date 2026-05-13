@@ -187,7 +187,7 @@ async fn create_account(
         linked_accounts: Vec::new(),
         role: UserRole::User,
         services_hosts: None,
-        service_settings: HashMap::new(),
+        service_settings: Some(HashMap::new()),
     };
 
     let update = doc!("$setOnInsert": &user);

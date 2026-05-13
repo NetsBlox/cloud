@@ -1,7 +1,8 @@
 use mongodb::bson::{self, doc, document::Document, Bson, DateTime};
 pub use netsblox_api_common as api;
 use netsblox_api_common::{
-    AssignmentId, ClientState, LibraryMetadata, NewUser, PublishState, RoleId, ServiceHostId, ServiceHostSettings, ServiceName, ServiceSettings, SubmissionId, UserRole, oauth
+    oauth, AssignmentId, ClientState, LibraryMetadata, NewUser, PublishState, RoleId,
+    ServiceHostId, ServiceHostSettings, SubmissionId, UserRole,
 };
 use netsblox_api_common::{
     FriendInvite, FriendLinkState, GroupId, InvitationState, LinkedAccount, ProjectId, RoleData,
@@ -27,7 +28,7 @@ pub struct User {
     pub created_at: DateTime,
     pub linked_accounts: Vec<LinkedAccount>,
     pub services_hosts: Option<Vec<ServiceHost>>,
-    pub service_settings: HashMap<ServiceHostId, ServiceHostSettings>,
+    pub service_settings: Option<HashMap<ServiceHostId, ServiceHostSettings>>,
 }
 
 impl User {
@@ -93,7 +94,7 @@ impl From<NewUser> for User {
             linked_accounts: std::vec::Vec::new(),
             role: user_data.role.unwrap_or(UserRole::User),
             services_hosts: None,
-            service_settings: HashMap::new(),
+            service_settings: None,
         }
     }
 }
@@ -144,7 +145,7 @@ pub struct Group {
     pub owner: String,
     pub name: String,
     pub services_hosts: Option<Vec<ServiceHost>>,
-    pub service_settings: HashMap<ServiceHostId, ServiceHostSettings>,
+    pub service_settings: Option<HashMap<ServiceHostId, ServiceHostSettings>>,
 }
 
 impl Group {
@@ -153,7 +154,7 @@ impl Group {
             id: api::GroupId::new(Uuid::new_v4().to_string()),
             name,
             owner,
-            service_settings: HashMap::new(),
+            service_settings: None,
             services_hosts: None,
         }
     }
@@ -163,7 +164,7 @@ impl Group {
             id: api::GroupId::new(Uuid::new_v4().to_string()),
             owner,
             name: data.name,
-            service_settings: HashMap::new(),
+            service_settings: None,
             services_hosts: data.services_hosts,
         }
     }
@@ -182,16 +183,11 @@ impl From<Group> for netsblox_api_common::Group {
 
 impl From<Group> for Bson {
     fn from(group: Group) -> Self {
-        let mut settings = Document::new();
-        group.service_settings.into_iter().for_each(|(k, v)| {
-            settings.insert(k, v);
-        });
-
         Bson::Document(doc! {
             "id": group.id,
             "owner": group.owner,
             "name": group.name,
-            "serviceSettings": settings,
+            "serviceSettings": bson::to_bson(&group.service_settings).unwrap(),
             "servicesHosts": group.services_hosts,
         })
     }
@@ -828,24 +824,26 @@ impl From<SetPasswordToken> for Bson {
 #[serde(rename_all = "camelCase")]
 pub struct AuthorizedServiceHost {
     pub url: String,
-    pub id: String,
+    pub id: ServiceHostId,
     pub visibility: ServiceHostScope,
     pub secret: String,
 }
 
 impl AuthorizedServiceHost {
-    pub fn new(url: String, id: String, visibility: ServiceHostScope) -> Self {
+    #[must_use]
+    pub fn new(url: String, id: ServiceHostId, visibility: ServiceHostScope) -> Self {
         let secret = Uuid::new_v4().to_string();
         AuthorizedServiceHost {
             url,
             id,
-            secret,
             visibility,
+            secret,
         }
     }
 
+    #[must_use]
     pub fn auth_header(&self) -> (&'static str, String) {
-        let token = self.id.clone() + ":" + &self.secret;
+        let token: String = self.id.to_string() + ":" + &self.secret;
         ("X-Authorization", token)
     }
 }
@@ -1083,7 +1081,7 @@ mod tests {
         let categories = vec!["cat1".into()];
         let auth_host = AuthorizedServiceHost {
             url: "http://localhost:8000".into(),
-            id: "SomeTrustedHost".into(),
+            id: api::ServiceHostId::try_from("SomeTrustedHost".to_string()).expect("Failed to create HostId"),
             secret: "SomeSecret".into(),
             visibility: ServiceHostScope::Public(categories.clone()),
         };
@@ -1097,7 +1095,7 @@ mod tests {
     fn test_priv_auth_host_to_host_no_cats() {
         let auth_host = AuthorizedServiceHost {
             url: "http://localhost:8000".into(),
-            id: "SomeTrustedHost".into(),
+            id: api::ServiceHostId::try_from("SomeTrustedHost".to_string()).expect("Failed to create HostId"),
             secret: "SomeSecret".into(),
             visibility: ServiceHostScope::Private,
         };

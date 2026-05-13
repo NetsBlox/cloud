@@ -253,6 +253,8 @@ mod tests {
 
     use super::*;
     use crate::{errors::UserError, test_utils};
+    use netsblox_cloud_common::api::test_utils::TestFrom;
+    use std::slice;
 
     #[actix_web::test]
     async fn test_try_send_msg_auth_host() {
@@ -267,12 +269,12 @@ mod tests {
         let visibility = api::ServiceHostScope::Public(Vec::new());
         let host = AuthorizedServiceHost::new(
             "http://localhost:5656".into(),
-            "TestServices".into(),
+            api::ServiceHostId::__from("TestServices"),
             visibility,
         );
 
         test_utils::setup()
-            .with_authorized_services(&[host.clone()])
+            .with_authorized_services(slice::from_ref(&host))
             .run(|app_data| async move {
                 let app = test::init_service(
                     App::new()
@@ -357,7 +359,7 @@ mod tests {
         };
 
         test_utils::setup()
-            .with_users(&[user.clone()])
+            .with_users(slice::from_ref(&user))
             .with_clients(&[sender_client])
             .run(|app_data| async move {
                 let app = test::init_service(

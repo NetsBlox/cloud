@@ -1,8 +1,8 @@
 use crate::{
-    oauth, ApiKey, AppId, AssignmentId, ClientId, FriendInvite, FriendLinkState, GroupId,
-    InvitationState, LinkedAccount, MagicLinkId, ProjectId, PublishState, RoleId, RoleMetadata,
-    S3Key, SaveState, ServiceHost, ServiceHostId, ServiceHostScope, ServiceHostSettings,
-    ServiceName, ServiceSettings, SubmissionId, UserRole,
+    oauth, AppId, AssignmentId, ClientId, FriendInvite, FriendLinkState, GroupId, InvitationState,
+    LinkedAccount, MagicLinkId, ProjectId, PublishState, RoleId, RoleMetadata, S3Key, SaveState,
+    ServiceHost, ServiceHostId, ServiceHostScope, ServiceHostSettings, ServiceName, SettingName,
+    SettingValue, SettingVisiblity, SubmissionId, UserRole,
 };
 use bson::{doc, Bson, DateTime};
 
@@ -113,31 +113,42 @@ impl From<ServiceName> for Bson {
     }
 }
 
-impl From<ApiKey> for Bson {
-    fn from(key: ApiKey) -> Bson {
-        Bson::String(key.0)
+impl From<SettingName> for Bson {
+    fn from(name: SettingName) -> Bson {
+        Bson::String(name.0)
     }
 }
 
-impl From<ServiceSettings> for Bson {
-    fn from(settings: ServiceSettings) -> Bson {
-        let mut doc = bson::Document::new();
-
-        if let Some(keys) = settings.api_keys {
-            let keys_doc = keys
-                .into_iter()
-                .map(|(k, v)| (k, Bson::String(v.0)))
-                .collect::<bson::Document>();
-
-            doc.insert("apiKeys", keys_doc);
+impl From<SettingVisiblity> for Bson {
+    fn from(value: SettingVisiblity) -> Bson {
+        match value {
+            SettingVisiblity::Public => Bson::String("Public".to_owned()),
+            SettingVisiblity::Restricted => Bson::String("Restricted".to_owned()),
         }
+    }
+}
 
-        if let Some(misc) = settings.misc {
-            let misc_doc: bson::Document = misc
-                .into_iter()
-                .map(|(k, v)| (k, Bson::String(v)))
-                .collect();
-            doc.insert("misc", misc_doc);
+impl From<SettingValue> for Bson {
+    fn from(setting: SettingValue) -> Bson {
+        Bson::Document(doc! {
+            "value": setting.value,
+            "visibility": setting.visibility,
+        })
+    }
+}
+
+impl From<ServiceHostSettings> for Bson {
+    fn from(host_settings: ServiceHostSettings) -> Bson {
+        let mut doc = bson::Document::new();
+        for (service_name, service_settings) in {
+            let this = &host_settings;
+            &this.0
+        } {
+            let inner_doc = service_settings
+                .iter()
+                .map(|(k, v)| (k.0.clone(), Bson::from(v)))
+                .collect::<bson::Document>();
+            doc.insert(service_name.0.clone(), inner_doc);
         }
         doc.into()
     }
@@ -146,17 +157,6 @@ impl From<ServiceSettings> for Bson {
 impl From<ServiceHostId> for Bson {
     fn from(name: ServiceHostId) -> Bson {
         Bson::String(name.0)
-    }
-}
-
-impl From<ServiceHostSettings> for Bson {
-    fn from(settings: ServiceHostSettings) -> Bson {
-        let doc: bson::Document = settings
-            .0
-            .into_iter()
-            .map(|(k, v)| (k.into(), v.into()))
-            .collect();
-        doc.into()
     }
 }
 

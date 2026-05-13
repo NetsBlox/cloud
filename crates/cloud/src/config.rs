@@ -1,4 +1,5 @@
 use std::{env, num::NonZeroUsize};
+use netsblox_cloud_common::api;
 
 use figment::{
     providers::{Format, Toml},
@@ -70,7 +71,7 @@ pub struct CacheSettings {
 
 #[derive(Clone, Deserialize, Debug)]
 pub struct AuthorizedServiceHost {
-    pub(crate) id: String,
+    pub(crate) id: api::ServiceHostId,
     pub(crate) url: String,
     pub(crate) secret: String,
     pub(crate) category: Option<String>,

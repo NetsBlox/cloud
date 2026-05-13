@@ -12,6 +12,8 @@ pub enum Error {
     NotFoundError(String),
     #[display(fmt = "Internal server error occurred")]
     InternalServerError,
+    #[display(fmt = "An input was invalid: _0.to_string()")]
+    InvalidInputError(netsblox_api_common::ValidationError),
     RequestError(reqwest::Error),
     WebSocketSendError(tokio_tungstenite::tungstenite::Error),
 }

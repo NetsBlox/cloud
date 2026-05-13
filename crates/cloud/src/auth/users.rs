@@ -80,7 +80,6 @@ pub(crate) struct BanUser {
     _private: (),
 }
 
-// TODO: make a macro for making it when testing?
 #[cfg(test)]
 impl BanUser {
     pub(crate) fn test(username: String) -> Self {
@@ -198,7 +197,7 @@ pub(crate) async fn try_view_user(
     username: &str,
 ) -> Result<ViewUser, UserError> {
     // Anyone can view guest accounts
-    let is_guest = client_id.map(|id| id.as_str() == username).unwrap_or(false);
+    let is_guest = client_id.is_some_and(|id| id.as_str() == username);
     if is_guest {
         return Ok(ViewUser {
             username: username.to_owned(),
@@ -210,6 +209,7 @@ pub(crate) async fn try_view_user(
     let is_authorized_host = utils::get_authorized_host(&app.authorized_services, req)
         .await?
         .is_some();
+
     if is_authorized_host {
         return Ok(ViewUser {
             username: username.to_owned(),

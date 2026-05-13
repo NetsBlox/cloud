@@ -16,7 +16,6 @@ use image::{
     codecs::png::PngEncoder, ColorType, EncodableLayout, GenericImageView, ImageEncoder,
     ImageFormat, RgbaImage,
 };
-use log::warn;
 use lru::LruCache;
 use mongodb::bson::{doc, DateTime};
 use mongodb::options::{FindOneAndUpdateOptions, FindOptions, ReturnDocument};

@@ -343,27 +343,14 @@ pub(crate) async fn get_authorized_host(
     }
 }
 
-pub(crate) async fn redact_service_setting_secrets<'a>(
-    app: &AppData,
-    req: &HttpRequest,
-    settings_owner: &api::ServiceHostId,
-    settings: &'a mut api::ServiceHostSettings,
-) -> Result<&'a mut api::ServiceHostSettings, UserError> {
-    let host = get_authorized_host(&app.authorized_services, req).await?;
-
-    if host.is_some_and(|host| host.id == settings_owner.to_string()) {
-        return Ok(settings)
-    }
-
-    for service_settings in settings.inner_mut().values_mut() {
-        if let Some(api_keys) = service_settings.api_keys.as_mut() {
-            for key in api_keys.values_mut() {
-                *key = key.redacted();
+pub(crate) fn redact_setting_secrets(settings: &mut api::ServiceHostSettings) {
+    for service_settings in settings.as_mut().values_mut() {
+        for setting_value in service_settings.values_mut() {
+            if setting_value.visibility == api::SettingVisiblity::Restricted {
+                setting_value.redact();
             }
         }
-    };
-    
-    Ok(settings)  
+    }
 }
 
 pub(crate) fn send_email(
