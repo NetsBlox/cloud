@@ -960,12 +960,13 @@ impl Client {
     pub async fn authorize_host(
         &self,
         url: &str,
-        id: &str,
+        id_raw: &str,
         visibility: ServiceHostScope,
     ) -> Result<String, error::Error> {
+
         let host = AuthorizedServiceHost {
             url: url.to_owned(),
-            id: id.to_owned(),
+            id: id_raw.to_string().try_into().map_err(|e: ValidationError| error::Error::InvalidInputError(e))?,
             visibility,
         };
         let response = self
@@ -1040,7 +1041,7 @@ impl Client {
         &self,
         username: &str,
         service_id: &str,
-    ) -> Result<ServiceSettings, error::Error> {
+    ) -> Result<AllServiceSettings, error::Error> {
         let response = self
             .request(
                 Method::GET,
@@ -1051,7 +1052,7 @@ impl Client {
             .map_err(error::Error::RequestError)?;
 
         let response = check_response(response).await?;
-        Ok(response.json::<ServiceSettings>().await.unwrap())
+        Ok(response.json::<AllServiceSettings>().await.unwrap())
     }
 
     pub async fn get_group_settings(

@@ -1,4 +1,5 @@
 use std::{env, num::NonZeroUsize};
+use netsblox_cloud_common::api;
 
 use figment::{
     providers::{Format, Toml},
@@ -70,7 +71,7 @@ pub struct CacheSettings {
 
 #[derive(Clone, Deserialize, Debug)]
 pub struct AuthorizedServiceHost {
-    pub(crate) id: String,
+    pub(crate) id: api::ServiceHostId,
     pub(crate) url: String,
     pub(crate) secret: String,
     pub(crate) category: Option<String>,
@@ -108,7 +109,7 @@ impl Settings {
         let run_mode = env::var("RUN_MODE").unwrap_or_else(|_| "development".to_owned());
         let c: Settings = Figment::new()
             .merge(Toml::file("config/default.toml"))
-            .merge(Toml::file(format!("config/{}.toml", run_mode)))
+            .merge(Toml::file(format!("config/{run_mode}.toml")))
             .extract()?;
 
         Ok(c)

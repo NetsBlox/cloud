@@ -343,6 +343,16 @@ pub(crate) async fn get_authorized_host(
     }
 }
 
+pub(crate) fn redact_setting_secrets(settings: &mut api::ServiceHostSettings) {
+    for service_settings in settings.as_mut().values_mut() {
+        for setting_value in service_settings.values_mut() {
+            if setting_value.visibility == api::SettingVisiblity::Restricted {
+                setting_value.redact();
+            }
+        }
+    }
+}
+
 pub(crate) fn send_email(
     mailer: &SmtpTransport,
     email: impl TryInto<Message>,

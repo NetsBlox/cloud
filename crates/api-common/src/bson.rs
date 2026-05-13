@@ -1,7 +1,8 @@
 use crate::{
     oauth, AppId, AssignmentId, ClientId, FriendInvite, FriendLinkState, GroupId, InvitationState,
     LinkedAccount, MagicLinkId, ProjectId, PublishState, RoleId, RoleMetadata, S3Key, SaveState,
-    ServiceHost, ServiceHostScope, SubmissionId, UserRole,
+    ServiceHost, ServiceHostId, ServiceHostScope, ServiceHostSettings, ServiceName, SettingName,
+    SettingValue, SettingVisiblity, SubmissionId, UserRole,
 };
 use bson::{doc, Bson, DateTime};
 
@@ -103,6 +104,59 @@ impl From<PublishState> for Bson {
 impl From<GroupId> for Bson {
     fn from(id: GroupId) -> Bson {
         Bson::String(id.as_str().to_owned())
+    }
+}
+
+impl From<ServiceName> for Bson {
+    fn from(name: ServiceName) -> Bson {
+        Bson::String(name.0)
+    }
+}
+
+impl From<SettingName> for Bson {
+    fn from(name: SettingName) -> Bson {
+        Bson::String(name.0)
+    }
+}
+
+impl From<SettingVisiblity> for Bson {
+    fn from(value: SettingVisiblity) -> Bson {
+        match value {
+            SettingVisiblity::Public => Bson::String("Public".to_owned()),
+            SettingVisiblity::Restricted => Bson::String("Restricted".to_owned()),
+        }
+    }
+}
+
+impl From<SettingValue> for Bson {
+    fn from(setting: SettingValue) -> Bson {
+        Bson::Document(doc! {
+            "value": setting.value,
+            "visibility": setting.visibility,
+        })
+    }
+}
+
+impl From<ServiceHostSettings> for Bson {
+    fn from(host_settings: ServiceHostSettings) -> Bson {
+        let mut doc = bson::Document::new();
+        for (service_name, service_settings) in {
+            let this = &host_settings;
+            &this.0
+        } {
+            let inner_doc = service_settings
+                .iter()
+                .map(|(k, v)| (k.0.clone(), Bson::from(v)))
+                .collect::<bson::Document>();
+            doc.insert(service_name.0.clone(), inner_doc);
+        }
+        doc.into()
+    }
+}
+
+impl From<ServiceHostId> for Bson {
+    fn from(name: ServiceHostId) -> Bson {
+        Bson::String(name.0)
     }
 }
 

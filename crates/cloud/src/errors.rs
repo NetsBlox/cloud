@@ -99,6 +99,8 @@ pub enum UserError {
     InvalidUsername,
     #[display(fmt = "Invalid name.")]
     InvalidRoleOrProjectName,
+    #[display(fmt = "Invalid input error: {}", _0.to_string())]
+    InvalidInputError(api::ValidationError),
     #[display(fmt = "Name already exists. Please rename and try again.")]
     RoleOrProjectNameExists,
     #[display(fmt = "Invalid library name.")]
@@ -162,6 +164,7 @@ impl OAuthErrorBody {
     }
 }
 
+
 impl From<&OAuthFlowError> for OAuthErrorBody {
     fn from(err: &OAuthFlowError) -> OAuthErrorBody {
         let (name, desc) = match err {
@@ -180,7 +183,6 @@ impl From<&OAuthFlowError> for OAuthErrorBody {
 
 impl ResponseError for UserError {
     fn error_response(&self) -> HttpResponse {
-        // TODO: make these JSON?
         match self {
             UserError::OAuthFlowError(err) => {
                 let body: OAuthErrorBody = err.into();
@@ -193,6 +195,7 @@ impl ResponseError for UserError {
                     .collect_vec();
                 HttpResponse::BadRequest().json(data)
             }
+            // TODO: make these JSON? NOTE: Make JSON if we want to send more data in the error message, otherwise its fine as a string. 
             _ => HttpResponseBuilder::new(self.status_code()).body(self.to_string()),
         }
     }
@@ -230,6 +233,7 @@ impl ResponseError for UserError {
             | Self::InvalidEmailAddress
             | Self::InvalidClientIdError
             | Self::InvalidLibraryName
+            | Self::InvalidInputError(..)
             | Self::InvalidAppIdError
             | Self::InvalidServiceHostIDError
             | Self::AccountAlreadyLinkedError
@@ -284,5 +288,11 @@ impl From<&NewUserError> for api::NewUserErrorResponse {
             status: value.error.status_code().into(),
             message: value.error.to_string(),
         }
+    }
+}
+
+impl From<api::error::ValidationError> for UserError {
+    fn from(value: api::error::ValidationError) -> Self {
+        UserError::InvalidInputError(value)
     }
 }

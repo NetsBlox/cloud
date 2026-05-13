@@ -1373,7 +1373,7 @@ async fn do_command(mut cfg: Config, args: Cli) -> Result<(), error::Error> {
                             "Authorized host not found.".to_string(),
                         )
                     })?;
-                client.unauthorize_host(&host.id).await?;
+                client.unauthorize_host(&host.id.to_string()).await?;
             }
         },
         Command::ServiceSettings(cmd) => match &cmd.subcmd {

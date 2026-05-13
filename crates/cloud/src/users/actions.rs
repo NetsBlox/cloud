@@ -467,54 +467,6 @@ impl<'a> UserActions<'a> {
         Ok(users)
     }
 
-    pub(crate) async fn set_user_settings(
-        &self,
-        lu: &auth::EditUser,
-        host: &str,
-        settings: &str,
-    ) -> Result<(), UserError> {
-        let query = doc! {"username": &lu.username};
-        let update = doc! {"$set": {format!("serviceSettings.{}", &host): settings}};
-        self.users
-            .find_one_and_update(query, update, None)
-            .await
-            .map_err(InternalError::DatabaseConnectionError)?
-            .ok_or(UserError::UserNotFoundError)?;
-
-        Ok(())
-    }
-
-    pub(crate) async fn get_service_settings(
-        &self,
-        vu: &auth::ViewUser,
-    ) -> Result<HashMap<String, String>, UserError> {
-        let query = doc! {"username": &vu.username};
-        let user = self
-            .users
-            .find_one(query, None)
-            .await
-            .map_err(InternalError::DatabaseConnectionError)?
-            .ok_or(UserError::UserNotFoundError)?;
-
-        Ok(user.service_settings)
-    }
-
-    pub(crate) async fn delete_user_settings(
-        &self,
-        lu: &auth::EditUser,
-        host: &str,
-    ) -> Result<(), UserError> {
-        let query = doc! {"username": &lu.username};
-        let update = doc! {"$unset": {format!("serviceSettings.{}", &host): true}};
-
-        self.users
-            .find_one_and_update(query, update, None)
-            .await
-            .map_err(InternalError::DatabaseConnectionError)?
-            .ok_or(UserError::UserNotFoundError)?;
-
-        Ok(())
-    }
     pub(crate) async fn forgot_username(&self, email: &str) -> Result<(), UserError> {
         let usernames = utils::find_usernames(self.users, email).await?;
         let email = ForgotUsernameEmail {

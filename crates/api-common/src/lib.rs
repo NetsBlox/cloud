@@ -1,13 +1,16 @@
 #[cfg(feature = "bson")]
 mod bson;
+pub mod error;
 pub mod oauth;
 
+#[cfg(feature = "test_utils")]
+pub mod test_utils;
+
+pub use error::*;
+
 use core::fmt;
-use derive_more::{Display, Error, FromStr};
-use serde::{
-    de::{self, Visitor},
-    Deserialize, Deserializer, Serialize,
-};
+use derive_more::{AsMut, Display, Error, FromStr};
+use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use std::{collections::HashMap, str::FromStr, time::SystemTime};
 use ts_rs::TS;
@@ -320,6 +323,12 @@ impl From<&S3Key> for String {
     }
 }
 
+//TODO: Incorporate this into Project structs
+#[derive(Deserialize, Serialize, Clone, Debug, PartialEq, Eq, Display, Hash, FromStr, TS)]
+#[ts(export)]
+// #[serde(try_from = "String")]
+pub struct ProjectName(String);
+
 #[derive(Deserialize, Serialize, Clone, Debug, TS)]
 #[serde(rename_all = "camelCase")]
 #[ts(export)]
@@ -433,8 +442,9 @@ pub struct BrowserClientState {
     pub project_id: ProjectId,
 }
 
-#[derive(Debug, Serialize, Clone, Hash, Eq, PartialEq, TS)]
+#[derive(Debug, Deserialize, Serialize, Clone, Hash, Eq, PartialEq, TS)]
 #[ts(export)]
+#[serde(from = "String")]
 pub struct AppId(String);
 
 impl AppId {
@@ -447,36 +457,9 @@ impl AppId {
     }
 }
 
-impl<'de> Deserialize<'de> for AppId {
-    fn deserialize<D>(deserializer: D) -> Result<AppId, D::Error>
-    where
-        D: Deserializer<'de>,
-    {
-        let value = Value::deserialize(deserializer)?;
-        if let Value::String(s) = value {
-            Ok(AppId::new(s.as_str()))
-        } else {
-            Err(de::Error::custom("Invalid App ID expected a string"))
-        }
-    }
-}
-
-struct AppIdVisitor;
-impl<'de> Visitor<'de> for AppIdVisitor {
-    type Value = AppId;
-
-    fn expecting(&self, formatter: &mut fmt::Formatter) -> fmt::Result {
-        formatter.write_str("an App ID string")
-    }
-
-    fn visit_str<E>(self, value: &str) -> Result<Self::Value, E> {
-        println!("deserializing {}", value);
-        Ok(AppId::new(value))
-    }
-
-    fn visit_string<E>(self, value: String) -> Result<Self::Value, E> {
-        println!("deserializing {}", value);
-        Ok(AppId::new(value.as_str()))
+impl From<String> for AppId {
+    fn from(value: String) -> Self {
+        AppId::new(&value)
     }
 }
 
@@ -817,7 +800,7 @@ pub struct OccupantInviteData {
 #[ts(export)]
 pub struct AuthorizedServiceHost {
     pub url: String,
-    pub id: String,
+    pub id: ServiceHostId,
     pub visibility: ServiceHostScope,
 }
 
@@ -839,18 +822,114 @@ pub struct ClientInfo {
     pub state: Option<ClientState>,
 }
 
+#[derive(Deserialize, Serialize, Clone, Debug, PartialEq, Eq, Display, Hash, FromStr, TS)]
+#[serde(try_from = "String")]
+#[ts(export)]
+pub struct ServiceHostId(String);
+
+impl From<ServiceHostId> for String {
+    fn from(value: ServiceHostId) -> Self {
+        value.0
+    }
+}
+
+#[derive(Deserialize, Serialize, Clone, Debug, PartialEq, Eq, Display, Hash, FromStr, TS)]
+#[ts(export)]
+#[serde(try_from = "String")]
+pub struct ServiceName(String);
+
+impl From<ServiceName> for String {
+    fn from(value: ServiceName) -> Self {
+        value.0
+    }
+}
+
+#[derive(Deserialize, Serialize, Clone, Debug, PartialEq, Eq, Display, Hash, FromStr, TS)]
+#[ts(export)]
+#[serde(try_from = "String")]
+pub struct SettingName(String);
+
+impl From<SettingName> for String {
+    fn from(value: SettingName) -> Self {
+        value.0
+    }
+}
+
+#[derive(Serialize, Deserialize, Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, TS)]
+#[ts(export)]
+pub enum SettingVisiblity {
+    Public,
+    Restricted,
+}
+
+#[derive(Deserialize, Serialize, Clone, Debug, TS)]
+#[ts(export)]
+pub struct SettingValue {
+    pub value: String,
+    pub visibility: SettingVisiblity,
+}
+
+impl SettingValue {
+    #[must_use]
+    pub fn new(value: &str, vis: SettingVisiblity) -> Self{
+        SettingValue{
+            value: String::from(value),
+            visibility: vis
+        }
+    }
+
+    pub fn redact(&mut self) {
+        if self.value.len() < 25 {
+            self.value = "***************".to_string();
+        } else {
+            let hint = self
+                .value
+                .char_indices()
+                .nth_back(2)
+                .map_or("", |(idx, _)| &self.value[idx..]);
+            self.value = format!("************{hint}");
+        }
+    }
+
+    pub fn redacted(&self) -> String {
+        if self.value.len() < 25 {
+            "***************".to_string()
+        } else {
+            let hint = self
+                .value
+                .char_indices()
+                .nth_back(2)
+                .map_or("", |(idx, _)| &self.value[idx..]);
+            format!("************{hint}")
+        }
+    }
+}
+
+#[derive(Deserialize, Serialize, Default, Debug, Clone, TS, AsMut)]
+#[ts(export)]
+pub struct ServiceHostSettings(HashMap<ServiceName, HashMap<SettingName, SettingValue>>);
+
+impl ServiceHostSettings {
+    #[must_use]
+    pub fn inner(&self) -> &HashMap<ServiceName, HashMap<SettingName, SettingValue>> {
+        &self.0
+    }
+
+    #[must_use]
+    pub fn new(v: HashMap<ServiceName, HashMap<SettingName, SettingValue>>) -> Self {
+        ServiceHostSettings(v)
+    }
+}
+
 /// Service settings for a given user categorized by origin
 #[derive(Deserialize, Serialize, Debug, Clone, TS)]
-#[ts(export)]
-pub struct ServiceSettings {
+pub struct AllServiceSettings {
     /// Service settings owned by the user
     #[ts(optional)]
-    pub user: Option<String>,
+    pub user: Option<ServiceHostSettings>,
     /// Service settings owned by a group in which the user is a member
     #[ts(optional)]
-    pub member: Option<String>,
-    /// Service settings owned by a groups created by the user
-    pub groups: HashMap<GroupId, String>,
+    pub member: Option<ServiceHostSettings>,
 }
 
 /// Send message request (for authorized services)
@@ -958,14 +1037,14 @@ mod tests {
     fn deserialize_project_id() {
         let project_id_str = &format!("\"{}\"", Uuid::new_v4());
         let _project_id: ProjectId = serde_json::from_str(project_id_str)
-            .unwrap_or_else(|_err| panic!("Unable to parse ProjectId from {}", project_id_str));
+            .unwrap_or_else(|_err| panic!("Unable to parse ProjectId from {project_id_str}"));
     }
 
     #[test]
     fn deserialize_role_id() {
         let role_id_str = &format!("\"{}\"", Uuid::new_v4());
         let _role_id: RoleId = serde_json::from_str(role_id_str)
-            .unwrap_or_else(|_err| panic!("Unable to parse RoleId from {}", role_id_str));
+            .unwrap_or_else(|_err| panic!("Unable to parse RoleId from {role_id_str}"));
     }
 
     #[test]
