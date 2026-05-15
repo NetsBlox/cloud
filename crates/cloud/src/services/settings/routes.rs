@@ -278,7 +278,7 @@ mod tests {
         let service = api::ServiceName::__from("service");
         let setting = api::SettingName::__from("setting");
         let value = api::SettingValue::new("not_super_secret", api::SettingVisiblity::Public);
-        user.service_settings = Some(test_settings(&host, &service, &setting, &value));
+        user.service_settings = test_settings(&host, &service, &setting, &value);
 
         test_utils::setup()
             .with_users(&[user.clone()])
@@ -317,7 +317,7 @@ mod tests {
         let service = api::ServiceName::__from("service");
         let setting = api::SettingName::__from("setting");
         let value = api::SettingValue::new("not_super_secret", api::SettingVisiblity::Public);
-        user.service_settings = Some(test_settings(&host, &service, &setting, &value));
+        user.service_settings = test_settings(&host, &service, &setting, &value);
 
         test_utils::setup()
             .with_users(&[user.clone(), other.clone()])
@@ -354,7 +354,7 @@ mod tests {
         let service = api::ServiceName::__from("service");
         let setting = api::SettingName::__from("setting");
         let value = api::SettingValue::new("not_super_secret", api::SettingVisiblity::Public);
-        user.service_settings = Some(test_settings(&host, &service, &setting, &value));
+        user.service_settings = test_settings(&host, &service, &setting, &value);
 
         test_utils::setup()
             .with_users(&[user.clone(), admin.clone()])
@@ -391,7 +391,7 @@ mod tests {
         let service = api::ServiceName::__from("service");
         let setting = api::SettingName::__from("setting");
         let value = api::SettingValue::new("super_secret", api::SettingVisiblity::Restricted);
-        user.service_settings = Some(test_settings(&host, &service, &setting, &value));
+        user.service_settings = test_settings(&host, &service, &setting, &value);
 
         test_utils::setup()
             .with_users(&[user.clone()])
@@ -437,7 +437,7 @@ mod tests {
         let service = api::ServiceName::__from("service");
         let setting = api::SettingName::__from("setting");
         let value = api::SettingValue::new("super_secret", api::SettingVisiblity::Restricted);
-        user.service_settings = Some(test_settings(&host_id, &service, &setting, &value));
+        user.service_settings = test_settings(&host_id, &service, &setting, &value);
 
         let visibility = api::ServiceHostScope::Public(Vec::new());
         let host = AuthorizedServiceHost::new(String::from("url"), host_id.clone(), visibility);
@@ -487,7 +487,7 @@ mod tests {
         let service = api::ServiceName::__from("service");
         let setting = api::SettingName::__from("setting");
         let value = api::SettingValue::new("super_secret", api::SettingVisiblity::Restricted);
-        user.service_settings = Some(test_settings(&host_id, &service, &setting, &value));
+        user.service_settings = test_settings(&host_id, &service, &setting, &value);
 
         let visibility = api::ServiceHostScope::Public(Vec::new());
         let host = AuthorizedServiceHost::new(String::from("url"), host_id.clone(), visibility.clone());
@@ -540,7 +540,7 @@ mod tests {
         let service = api::ServiceName::__from("service");
         let setting = api::SettingName::__from("setting");
         let value = api::SettingValue::new("not_super_secret", api::SettingVisiblity::Public);
-        user.service_settings = Some(test_settings(&host, &service, &setting, &value));
+        user.service_settings = test_settings(&host, &service, &setting, &value);
 
         test_utils::setup()
             .with_users(&[user.clone()])

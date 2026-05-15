@@ -114,7 +114,7 @@ async fn list_all_hosts(
         {
             groups.push(in_group);
         }
-    };
+    }
 
     let services_hosts = user.services_hosts.unwrap_or_default().into_iter().chain(
         groups
