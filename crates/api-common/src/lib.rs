@@ -924,10 +924,10 @@ impl ServiceHostSettings {
 /// Service settings for a given user categorized by origin
 #[derive(Deserialize, Serialize, Debug, Clone, TS)]
 pub struct AllServiceSettings {
-    /// Service settings owned by the user
+    /// A hosts service settings owned by the user
     #[ts(optional)]
     pub user: Option<ServiceHostSettings>,
-    /// Service settings owned by a group in which the user is a member
+    /// A hosts service settings owned by a group in which the user is a member
     #[ts(optional)]
     pub member: Option<ServiceHostSettings>,
 }

@@ -28,7 +28,7 @@ pub struct User {
     pub created_at: DateTime,
     pub linked_accounts: Vec<LinkedAccount>,
     pub services_hosts: Option<Vec<ServiceHost>>,
-    pub service_settings: Option<HashMap<ServiceHostId, ServiceHostSettings>>,
+    pub service_settings: HashMap<ServiceHostId, ServiceHostSettings>,
 }
 
 impl User {
@@ -39,7 +39,12 @@ impl User {
 
 impl From<User> for Bson {
     fn from(user: User) -> Bson {
-        Bson::Document(doc! {
+        let mut service_settings = bson::Document::new();
+        for (key, value) in user.service_settings {
+            service_settings.insert(key, value);
+        }
+        
+        let doc = doc! {
             "username": user.username,
             "email": user.email,
             "hash": user.hash,
@@ -49,8 +54,9 @@ impl From<User> for Bson {
             "createdAt": user.created_at,
             "linkedAccounts": user.linked_accounts,
             "servicesHosts": user.services_hosts,
-            "serviceSettings": bson::to_bson(&user.service_settings).unwrap(),
-        })
+            "serviceSettings": service_settings
+        };
+        Bson::Document(doc)
     }
 }
 
@@ -94,7 +100,7 @@ impl From<NewUser> for User {
             linked_accounts: std::vec::Vec::new(),
             role: user_data.role.unwrap_or(UserRole::User),
             services_hosts: None,
-            service_settings: None,
+            service_settings: HashMap::default(),
         }
     }
 }
@@ -145,7 +151,7 @@ pub struct Group {
     pub owner: String,
     pub name: String,
     pub services_hosts: Option<Vec<ServiceHost>>,
-    pub service_settings: Option<HashMap<ServiceHostId, ServiceHostSettings>>,
+    pub service_settings: HashMap<ServiceHostId, ServiceHostSettings>,
 }
 
 impl Group {
@@ -154,7 +160,7 @@ impl Group {
             id: api::GroupId::new(Uuid::new_v4().to_string()),
             name,
             owner,
-            service_settings: None,
+            service_settings: HashMap::default(),
             services_hosts: None,
         }
     }
@@ -164,7 +170,7 @@ impl Group {
             id: api::GroupId::new(Uuid::new_v4().to_string()),
             owner,
             name: data.name,
-            service_settings: None,
+            service_settings: HashMap::default(),
             services_hosts: data.services_hosts,
         }
     }
@@ -183,11 +189,16 @@ impl From<Group> for netsblox_api_common::Group {
 
 impl From<Group> for Bson {
     fn from(group: Group) -> Self {
+        let mut service_settings = bson::Document::new();
+        for (key, value) in group.service_settings {
+            service_settings.insert(key, value);
+        }
+        
         Bson::Document(doc! {
             "id": group.id,
             "owner": group.owner,
             "name": group.name,
-            "serviceSettings": bson::to_bson(&group.service_settings).unwrap(),
+            "serviceSettings": service_settings,
             "servicesHosts": group.services_hosts,
         })
     }
@@ -244,6 +255,7 @@ pub struct CollaborationInvite {
 }
 
 impl CollaborationInvite {
+    #[must_use]
     pub fn new(sender: String, receiver: String, project_id: ProjectId) -> Self {
         CollaborationInvite {
             id: Uuid::new_v4().to_string(),
@@ -294,6 +306,7 @@ pub struct FriendLink {
 }
 
 impl FriendLink {
+    #[must_use]
     pub fn new(sender: String, recipient: String, state: Option<FriendLinkState>) -> FriendLink {
         let created_at = DateTime::from_system_time(SystemTime::now());
         FriendLink {
@@ -377,7 +390,7 @@ impl From<NetworkTraceMetadata> for netsblox_api_common::NetworkTraceMetadata {
         netsblox_api_common::NetworkTraceMetadata {
             id: trace.id,
             start_time: trace.start_time.into(),
-            end_time: trace.end_time.map(|t| t.into()),
+            end_time: trace.end_time.map(Into::into),
         }
     }
 }
@@ -428,6 +441,7 @@ impl Assignment {
         }
     }
 
+    #[must_use]
     pub fn from_data(data: api::CreateAssignmentData, group_id: GroupId) -> Assignment {
         Assignment {
             id: AssignmentId::new(Uuid::new_v4().to_string()),
@@ -542,6 +556,10 @@ pub struct ProjectMetadata {
 }
 
 impl ProjectMetadata {
+    /// # Panics
+    /// This function can panic if ten minutes from now exceeds the maximum
+    /// system time, for 32-bit unix, it will be January 19, 2038 Y2K38
+    #[must_use]
     pub fn new(
         owner: &str,
         name: &str,
@@ -550,14 +568,11 @@ impl ProjectMetadata {
     ) -> ProjectMetadata {
         let origin_time = DateTime::now();
 
-        let delete_at = match save_state {
-            SaveState::Saved => None,
-            _ => {
-                // if not saved, set the project to be deleted in 10 minutes if not joined
-                let ten_minutes = Duration::new(10 * 60, 0);
-                let ten_mins_from_now = SystemTime::now().checked_add(ten_minutes).unwrap();
-                Some(DateTime::from_system_time(ten_mins_from_now))
-            }
+        let delete_at = if let SaveState::Saved = save_state { None } else {
+            // if not saved, set the project to be deleted in 10 minutes if not joined
+            let ten_minutes = Duration::from_mins(10);
+            let ten_mins_from_now = SystemTime::now().checked_add(ten_minutes).unwrap();
+            Some(DateTime::from_system_time(ten_mins_from_now))
         };
 
         ProjectMetadata {
@@ -613,7 +628,7 @@ impl From<ProjectMetadata> for netsblox_api_common::ProjectMetadata {
             network_traces: metadata
                 .network_traces
                 .into_iter()
-                .map(|t| t.into())
+                .map(Into::into)
                 .collect(),
             roles: metadata
                 .roles
@@ -695,6 +710,7 @@ pub struct OccupantInvite {
 }
 
 impl OccupantInvite {
+    #[must_use]
     pub fn new(target: String, project_id: ProjectId, role_id: RoleId) -> Self {
         OccupantInvite {
             project_id,
@@ -760,6 +776,7 @@ impl From<LogMessage> for api::LogMessage {
 }
 
 impl SentMessage {
+    #[must_use]
     pub fn new(
         project_id: ProjectId,
         source: ClientState,
@@ -798,6 +815,7 @@ pub struct SetPasswordToken {
 }
 
 impl SetPasswordToken {
+    #[must_use]
     pub fn new(username: String) -> Self {
         let secret = Uuid::new_v4().to_string();
         let created_at = DateTime::from_system_time(SystemTime::now());

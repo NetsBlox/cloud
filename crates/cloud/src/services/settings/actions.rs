@@ -30,11 +30,7 @@ impl<'a> SettingsActions<'a> {
             .map_err(InternalError::DatabaseConnectionError)?
             .ok_or(UserError::UserNotFoundError)?;
 
-        let mut user_settings = user
-            .service_settings
-            .unwrap_or_default()
-            .get(&host)
-            .cloned();
+        let mut user_settings = user.service_settings.get(host).cloned();
 
         let mut member_settings = if let Some(group_id) = user.group_id {
             let query = doc! {"id": group_id};
@@ -45,7 +41,6 @@ impl<'a> SettingsActions<'a> {
                 .map_err(InternalError::DatabaseConnectionError)?
                 .ok_or(UserError::UserNotFoundError)?
                 .service_settings
-                .unwrap_or_default()
                 .get(host)
                 .cloned();
             settings
@@ -108,8 +103,7 @@ impl<'a> SettingsActions<'a> {
             .await
             .map_err(InternalError::DatabaseConnectionError)?
             .ok_or(UserError::UserNotFoundError)?
-            .service_settings
-            .unwrap_or_default();
+            .service_settings;
 
         settings
             .iter_mut()
@@ -132,7 +126,6 @@ impl<'a> SettingsActions<'a> {
             .map_err(InternalError::DatabaseConnectionError)?
             .ok_or(UserError::UserNotFoundError)?
             .service_settings
-            .unwrap_or_default()
             .remove(host)
             .unwrap_or_default();
 
@@ -149,7 +142,7 @@ impl<'a> SettingsActions<'a> {
     ) -> Result<(), UserError> {
         let query = doc! {"username": &ds.username};
         let key = format!("serviceSettings.{}", ds.host);
-        let update = doc! {"$unset": { key: true }};
+        let update = doc! {"$unset": {key: true}};
 
         self.users
             .find_one_and_update(query, update, None)
@@ -211,8 +204,7 @@ impl<'a> SettingsActions<'a> {
             .await
             .map_err(InternalError::DatabaseConnectionError)?
             .ok_or(UserError::UserNotFoundError)?
-            .service_settings
-            .unwrap_or_default();
+            .service_settings;
 
         settings
             .iter_mut()
@@ -235,7 +227,6 @@ impl<'a> SettingsActions<'a> {
             .map_err(InternalError::DatabaseConnectionError)?
             .ok_or(UserError::UserNotFoundError)?
             .service_settings
-            .unwrap_or_default()
             .remove(host)
             .unwrap_or_default();
 
@@ -280,9 +271,8 @@ impl<'a> SettingsActions<'a> {
         dgs: &auth::DeleteGroupSettings,
     ) -> Result<(), UserError> {
         let query = doc! {"id": &dgs.id};
-        let host = &dgs.host;
-
-        let update = doc! {"$unset": {format!("serviceSettings.{}", &host): true}};
+        let key = format!("serviceSettings.{}", &dgs.host);
+        let update = doc! {"$unset": {key: true}};
 
         let result = self
             .groups
@@ -304,7 +294,8 @@ impl<'a> SettingsActions<'a> {
     ) -> Result<(), UserError> {
         let query = doc! {"id": &dgs.id};
         let host = &dgs.host;
-        let update = doc! {"$unset": {format!("serviceSettings.{host}.{service_name}"): true}};
+        let key = format!("serviceSettings.{host}.{service_name}");
+        let update = doc! {"$unset": {key: true}};
         let result = self
             .groups
             .update_one(query, update, None)
@@ -324,9 +315,10 @@ impl<'a> SettingsActions<'a> {
         service_name: &api::ServiceName,
         setting_name: &api::SettingName,
     ) -> Result<(), UserError> {
-        let query = doc! {"id": &dgs.id};
         let host = &dgs.host;
-        let update = doc! {"$unset": {format!("serviceSettings.{host}.{service_name}.{setting_name}"): true}};
+        let query = doc! {"id": &dgs.id};
+        let key = format!("serviceSettings.{host}.{service_name}.{setting_name}");
+        let update = doc! {"$unset": {key: true}};
         let result = self
             .groups
             .update_one(query, update, None)
